@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,6 +16,18 @@ import com.app.modules.hashtag.entity.Hashtag;
 public interface HashtagRepository extends JpaRepository<Hashtag, UUID> {
 
     Optional<Hashtag> findByNameIgnoreCase(String name);
+
+    /**
+     * Inserts a hashtag if absent; relies on the unique constraint on name. No-op when the name
+     * already exists.
+     *
+     * @param name the normalized hashtag name to insert
+     */
+    @Modifying
+    @Query(
+            value = "INSERT INTO hashtags (name) VALUES (:name) ON CONFLICT (name) DO NOTHING",
+            nativeQuery = true)
+    void upsertByName(@Param("name") String name);
 
     /**
      * Fuzzy hashtag search using the pg_trgm similarity operator, ordered by popularity then name.
