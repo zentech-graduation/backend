@@ -109,6 +109,7 @@ public final class ApiConstants {
         public static final String BY_NAME = "/{name}";
         public static final String POSTS = "/{name}/posts";
         public static final String TRENDING = "/trending";
+        public static final String SEARCH = "/search";
     }
 
     public static final class Media {

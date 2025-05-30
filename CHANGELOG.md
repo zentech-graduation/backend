@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Hashtag module scaffolding: `/search` API path constant, `HASHTAG_NOT_FOUND` error code, `app.hashtag` configuration namespace, and a `HashtagProperties` bean binding the trending-job and seed settings.
 - Hashtag module API DTOs (`HashtagResponse`, `HashtagTrendingResponse`, `HashtagSearchRequest`) and a MapStruct `HashtagMapper` converting between entities, the Elasticsearch document, and response DTOs.
 - Hashtag Elasticsearch projection: `HashtagDocument` (`hashtags` index) with an ngram-analyzed `name` sub-field for prefix/fuzzy search alongside a keyword main field, its `hashtags.json` index settings, and a `HashtagSearchRepository`.
 - Hashtag module persistence layer: `Hashtag`, `PostHashtag`, and `HashtagTrending` JPA entities (with composite-key embeddables for the junction and trending tables) plus their Spring Data repositories, including a pg_trgm fuzzy hashtag search query and a bulk post-association deletion query.
