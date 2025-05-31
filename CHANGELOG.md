@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Public hashtag HTTP endpoints `GET /api/v1/hashtags/search` and `GET /api/v1/hashtags/trending`, documented via the `HashtagApi` OpenAPI interface and rate-limited per endpoint.
 - `HashtagIndexSeedRunner` seeding the Elasticsearch `hashtags` index from PostgreSQL on startup only when the index is empty and `app.hashtag.seed.enabled` is true, treating seeding failures as non-fatal so startup never blocks on the rebuildable search tier.
 - `HashtagTrendingService` computing ranked hashtag trending snapshots from a windowed `post_hashtags` aggregation and serving the latest snapshot as an offset-paginated response, driven by a scheduled, transactional snapshot job.
 - `HashtagSearchService` providing fuzzy hashtag name search backed by an Elasticsearch ngram match with automatic degradation to a PostgreSQL `pg_trgm` query, guarded by the `elasticsearchSearch` circuit breaker and returning cursor-paginated results.
