@@ -101,6 +101,9 @@ public class HashtagTrendingServiceImpl implements HashtagTrendingService {
                             .rank(rank++)
                             .build());
         }
+        // Clean-replace the snapshot for this period so a re-run drops hashtags that
+        // fell out of the top ranks rather than leaving stale rows with colliding ranks.
+        jdbcTemplate.update("DELETE FROM hashtag_trending WHERE period_start = ?", windowStart);
         return hashtagTrendingRepository.saveAll(rows);
     }
 
