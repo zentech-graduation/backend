@@ -24,4 +24,7 @@ public interface HashtagTrendingRepository
      */
     List<HashtagTrending> findByIdPeriodStartOrderByRankAsc(
             OffsetDateTime periodStart, Pageable pageable);
+
+    /** Counts trending rows for a given snapshot period. */
+    long countByIdPeriodStart(OffsetDateTime periodStart);
 }
