@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `HashtagSearchService` providing fuzzy hashtag name search backed by an Elasticsearch ngram match with automatic degradation to a PostgreSQL `pg_trgm` query, guarded by the `elasticsearchSearch` circuit breaker and returning cursor-paginated results.
 - `HashtagService` with normalization, idempotent post-hashtag association upsert, and a synchronous post-commit Elasticsearch dual-write that never rolls back the source-of-truth write on indexing failure; `hashtags.post_count` remains trigger-owned.
 - Hashtag module scaffolding: `/search` API path constant, `HASHTAG_NOT_FOUND` error code, `app.hashtag` configuration namespace, and a `HashtagProperties` bean binding the trending-job and seed settings.
 - Hashtag module API DTOs (`HashtagResponse`, `HashtagTrendingResponse`, `HashtagSearchRequest`) and a MapStruct `HashtagMapper` converting between entities, the Elasticsearch document, and response DTOs.
