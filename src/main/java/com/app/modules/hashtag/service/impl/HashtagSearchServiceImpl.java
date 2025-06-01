@@ -5,7 +5,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
@@ -44,11 +45,14 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
     public CursorPageResponse<HashtagResponse> search(String query, String cursor, int limit) {
         String normalized = normalizeQuery(query);
         int offset = decodeCursor(cursor);
-        int page = limit > 0 ? offset / limit : 0;
+        int effectiveLimit = limit > 0 ? limit : 20;
+        // Page the ES query by the exact cursor offset. PageRequest derives `from` as page * size,
+        // which truncates any offset not divisible by the page size (e.g. when the client varies
+        // the limit between requests) and silently skips or repeats results.
         NativeQuery nativeQuery =
                 NativeQuery.builder()
                         .withQuery(q -> q.match(m -> m.field("name.ngram").query(normalized)))
-                        .withPageable(PageRequest.of(page, limit > 0 ? limit : 20))
+                        .withPageable(new OffsetPageable(offset, effectiveLimit))
                         .build();
         SearchHits<HashtagDocument> hits =
                 elasticsearchOperations.search(nativeQuery, HashtagDocument.class);
@@ -57,7 +61,7 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
                         .map(SearchHit::getContent)
                         .map(hashtagMapper::fromDocument)
                         .toList();
-        return toPage(content, offset, limit);
+        return toPage(content, offset, effectiveLimit);
     }
 
     // Resilience4j fallback: invoked when the primary throws OR the circuit is open. Falls back to
@@ -104,6 +108,56 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
         } catch (IllegalArgumentException e) {
             // Malformed cursor → start from the first page rather than failing the request.
             return 0;
+        }
+    }
+
+    // Pageable whose `from` is the exact cursor offset, not page * size, so cursor paging stays
+    // correct when the offset is not a multiple of the page size.
+    private record OffsetPageable(int offset, int size) implements Pageable {
+
+        @Override
+        public int getPageNumber() {
+            return size > 0 ? offset / size : 0;
+        }
+
+        @Override
+        public int getPageSize() {
+            return size;
+        }
+
+        @Override
+        public long getOffset() {
+            return offset;
+        }
+
+        @Override
+        public Sort getSort() {
+            return Sort.unsorted();
+        }
+
+        @Override
+        public Pageable next() {
+            return new OffsetPageable(offset + size, size);
+        }
+
+        @Override
+        public Pageable previousOrFirst() {
+            return offset > 0 ? new OffsetPageable(Math.max(0, offset - size), size) : this;
+        }
+
+        @Override
+        public Pageable first() {
+            return new OffsetPageable(0, size);
+        }
+
+        @Override
+        public Pageable withPage(int pageNumber) {
+            return new OffsetPageable(pageNumber * size, size);
+        }
+
+        @Override
+        public boolean hasPrevious() {
+            return offset > 0;
         }
     }
 }
