@@ -1,0 +1,67 @@
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        permittedNumberOfCallsInHalfOpenState: 3
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true
+      resendApi:
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 60
+        permittedNumberOfCallsInHalfOpenState: 2
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true
+      r2Storage:
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        waitDurationInOpenState: 15s
+        failureRateThreshold: 60
+        permittedNumberOfCallsInHalfOpenState: 2
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true
+      openaiApi:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 60
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true
+      elasticsearch:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 15s
+        permittedNumberOfCallsInHalfOpenState: 3
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true
+      githubApi:
+        slidingWindowSize: 5
+        failureRateThreshold: 60
+        waitDurationInOpenState: 30s
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true
+      payosPayment:
+        slidingWindowSize: 10
+        failureRateThreshold: 40
+        waitDurationInOpenState: 60s
+        permittedNumberOfCallsInHalfOpenState: 2
+        slowCallDurationThreshold: 5s
+        slowCallRateThreshold: 80
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true
+      payosReconciliation:
+        slidingWindowSize: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 120s
+        permittedNumberOfCallsInHalfOpenState: 1
+        eventConsumerBufferSize: 10
+        registerHealthIndicator: true

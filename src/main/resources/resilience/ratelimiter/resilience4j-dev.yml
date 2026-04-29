@@ -1,0 +1,79 @@
+resilience4j:
+
+  ratelimiter:
+    instances:
+      # Auth
+      authStrict:
+        limitForPeriod: 20
+        limitRefreshPeriod: 60s
+        timeoutDuration: 0
+        registerHealthIndicator: true
+      authModerate:
+        limitForPeriod: 30
+        limitRefreshPeriod: 60s
+        timeoutDuration: 5s
+        registerHealthIndicator: true
+
+      # OTP
+      otpSend:
+        limitForPeriod: 5
+        limitRefreshPeriod: 300s
+        timeoutDuration: 0
+        registerHealthIndicator: true
+      otpVerify:
+        limitForPeriod: 15
+        limitRefreshPeriod: 60s
+        timeoutDuration: 0
+        registerHealthIndicator: true
+
+      # Webhook
+      webhookInbound:
+        limitForPeriod: 30
+        limitRefreshPeriod: 60s
+        timeoutDuration: 0
+        registerHealthIndicator: true
+
+      # OpenAPI
+      swagger:
+        limitForPeriod: 200
+        limitRefreshPeriod: 60s
+        timeoutDuration: 5s
+        registerHealthIndicator: true
+
+      # Base
+      lowTraffic:
+        limitForPeriod: 30
+        limitRefreshPeriod: 30s
+        timeoutDuration: 5s
+        registerHealthIndicator: true
+      mediumTraffic:
+        limitForPeriod: 60
+        limitRefreshPeriod: 30s
+        timeoutDuration: 5s
+        registerHealthIndicator: true
+      highTraffic:
+        limitForPeriod: 90
+        limitRefreshPeriod: 30s
+        timeoutDuration: 5s
+        registerHealthIndicator: true
+
+      # AI / OpenAI
+      openaiApi:
+        limitForPeriod: 50
+        limitRefreshPeriod: 60s
+        timeoutDuration: 5s
+        registerHealthIndicator: true
+
+      # JD Generator (gpt-4o, higher cost)
+      jdGenerator:
+        limitForPeriod: 10
+        limitRefreshPeriod: 60s
+        timeoutDuration: 0
+        registerHealthIndicator: true
+
+      # Admin endpoints
+      adminGeneral:
+        limitForPeriod: 60
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0
+        registerHealthIndicator: true
