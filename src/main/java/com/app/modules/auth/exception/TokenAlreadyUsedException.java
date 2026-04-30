@@ -1,4 +1,4 @@
-package com.app.common.exception;
+package com.app.modules.auth.exception;
 
 public class TokenAlreadyUsedException extends RuntimeException {
 

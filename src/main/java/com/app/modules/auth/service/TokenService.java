@@ -27,10 +27,10 @@ public interface TokenService {
      * Consumes an email-verification token, marking it used.
      *
      * @param rawToken raw token presented by the user
-     * @throws com.app.common.exception.TokenNotFoundException if no token matches the hash
-     * @throws com.app.common.exception.TokenExpiredException if the token's expiry has passed
-     * @throws com.app.common.exception.TokenAlreadyUsedException if the token has already been
-     *     consumed
+     * @throws com.app.modules.auth.exception.TokenNotFoundException if no token matches the hash
+     * @throws com.app.modules.auth.exception.TokenExpiredException if the token's expiry has passed
+     * @throws com.app.modules.auth.exception.TokenAlreadyUsedException if the token has already
+     *     been consumed
      */
     void consumeEmailVerificationToken(String rawToken);
 
@@ -46,10 +46,10 @@ public interface TokenService {
      * Consumes a password-reset token, marking it used.
      *
      * @param rawToken raw token presented by the user
-     * @throws com.app.common.exception.TokenNotFoundException if no token matches the hash
-     * @throws com.app.common.exception.TokenExpiredException if the token's expiry has passed
-     * @throws com.app.common.exception.TokenAlreadyUsedException if the token has already been
-     *     consumed
+     * @throws com.app.modules.auth.exception.TokenNotFoundException if no token matches the hash
+     * @throws com.app.modules.auth.exception.TokenExpiredException if the token's expiry has passed
+     * @throws com.app.modules.auth.exception.TokenAlreadyUsedException if the token has already
+     *     been consumed
      */
     void consumePasswordResetToken(String rawToken);
 }

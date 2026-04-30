@@ -1,4 +1,4 @@
-package com.app.common.exception;
+package com.app.modules.mail;
 
 public class MailSendException extends RuntimeException {
 
