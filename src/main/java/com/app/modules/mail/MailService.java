@@ -4,7 +4,7 @@ package com.app.common.mail;
  * Outbound transactional mail contract.
  *
  * <p>Implementations are expected to dispatch mail asynchronously and to wrap upstream provider
- * failures into {@code com.app.common.exception.MailSendException}. Recipients are addressed by raw
+ * failures into {@code com.app.common.mail.MailSendException}. Recipients are addressed by raw
  * email; templates are rendered server-side (Thymeleaf). Token expiry windows are fixed constants
  * matching the auth module's token lifetimes; callers do not parameterize them.
  */
