@@ -11,11 +11,11 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.app.common.exception.TokenAlreadyUsedException;
-import com.app.common.exception.TokenExpiredException;
-import com.app.common.exception.TokenNotFoundException;
 import com.app.modules.auth.entity.EmailVerificationToken;
 import com.app.modules.auth.entity.PasswordResetToken;
+import com.app.modules.auth.exception.TokenAlreadyUsedException;
+import com.app.modules.auth.exception.TokenExpiredException;
+import com.app.modules.auth.exception.TokenNotFoundException;
 import com.app.modules.auth.repository.EmailVerificationTokenRepository;
 import com.app.modules.auth.repository.PasswordResetTokenRepository;
 import com.app.modules.auth.service.TokenService;
