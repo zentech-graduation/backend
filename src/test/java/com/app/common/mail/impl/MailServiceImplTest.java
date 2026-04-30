@@ -19,7 +19,8 @@ import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 import com.app.common.config.MailProperties;
-import com.app.common.exception.MailSendException;
+import com.app.modules.mail.MailSendException;
+import com.app.modules.mail.impl.MailServiceImpl;
 import com.resend.Resend;
 import com.resend.core.exception.ResendException;
 import com.resend.services.emails.Emails;
