@@ -1,43 +1,93 @@
 package com.app.common.exception;
 
-import org.springframework.http.HttpStatus;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import jakarta.validation.ConstraintViolationException;
+
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.response.ApiResponse;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
- * Maps domain exceptions to HTTP error responses.
- *
- * <p>Centralizes translation of unchecked exceptions raised by the service layer to a uniform
- * {@link ErrorResponse} payload. Status codes follow REST conventions: 404 for missing resources,
- * 409 for conflicting state, 410 for resources whose lifetime has expired, and 502 for upstream
- * provider failures.
+ * Translates framework-level and generic runtime exceptions into a uniform {@link ApiResponse}
+ * envelope. Domain-specific exceptions must be converted to {@link AppException} at the service
+ * layer before they reach this handler.
  */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(TokenNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleTokenNotFound(TokenNotFoundException ex) {
-        return build(HttpStatus.NOT_FOUND, ex.getMessage());
+    @ExceptionHandler(AppException.class)
+    public ResponseEntity<ApiResponse<?>> handleAppException(AppException ex) {
+        return ResponseEntity.status(ex.getHttpStatus())
+                .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage(), null));
     }
 
-    @ExceptionHandler(TokenExpiredException.class)
-    public ResponseEntity<ErrorResponse> handleTokenExpired(TokenExpiredException ex) {
-        return build(HttpStatus.GONE, ex.getMessage());
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<?>> handleValidation(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        ex.getBindingResult()
+                .getFieldErrors()
+                .forEach(fe -> errors.put(fe.getField(), fe.getDefaultMessage()));
+        return ResponseEntity.status(ApiErrorCode.VALIDATION_ERROR.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.VALIDATION_ERROR, null, errors));
     }
 
-    @ExceptionHandler(TokenAlreadyUsedException.class)
-    public ResponseEntity<ErrorResponse> handleTokenAlreadyUsed(TokenAlreadyUsedException ex) {
-        return build(HttpStatus.CONFLICT, ex.getMessage());
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<?>> handleConstraintViolation(
+            ConstraintViolationException ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        ex.getConstraintViolations()
+                .forEach(
+                        cv -> {
+                            String path = cv.getPropertyPath().toString();
+                            errors.put(path, cv.getMessage());
+                        });
+        return ResponseEntity.status(ApiErrorCode.VALIDATION_ERROR.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.VALIDATION_ERROR, null, errors));
     }
 
-    @ExceptionHandler(MailSendException.class)
-    public ResponseEntity<ErrorResponse> handleMailSend(MailSendException ex) {
-        return build(HttpStatus.BAD_GATEWAY, ex.getMessage());
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<?>> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(ApiErrorCode.FORBIDDEN.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.FORBIDDEN));
     }
 
-    private ResponseEntity<ErrorResponse> build(HttpStatus status, String message) {
-        return ResponseEntity.status(status)
-                .body(ErrorResponse.of(status.value(), status.getReasonPhrase(), message));
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<?>> handleAuthentication(AuthenticationException ex) {
+        return ResponseEntity.status(ApiErrorCode.UNAUTHORIZED.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.UNAUTHORIZED));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<?>> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(ApiErrorCode.NOT_FOUND.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.NOT_FOUND));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<?>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex) {
+        String message = "HTTP method not supported: " + ex.getMethod();
+        return ResponseEntity.status(ApiErrorCode.BAD_REQUEST.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.BAD_REQUEST, message, null));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<?>> handleUnknown(Exception ex) {
+        log.error("Unhandled exception reached global handler", ex);
+        return ResponseEntity.status(ApiErrorCode.INTERNAL_ERROR.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.INTERNAL_ERROR));
     }
 }
