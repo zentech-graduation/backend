@@ -1,4 +1,4 @@
-package com.app.common.mail.impl;
+package com.app.modules.mail.impl;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -13,8 +13,8 @@ import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 import com.app.common.config.MailProperties;
-import com.app.common.mail.MailSendException;
-import com.app.common.mail.MailService;
+import com.app.modules.mail.MailSendException;
+import com.app.modules.mail.MailService;
 import com.resend.Resend;
 import com.resend.core.exception.ResendException;
 import com.resend.services.emails.model.CreateEmailOptions;
@@ -29,8 +29,8 @@ import com.resend.services.emails.model.CreateEmailOptions;
 @Service
 public class MailServiceImpl implements MailService {
 
-    static final int EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
-    static final int PASSWORD_RESET_EXPIRY_MINUTES = 15;
+    public static final int EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
+    public static final int PASSWORD_RESET_EXPIRY_MINUTES = 15;
 
     private static final Logger log = LoggerFactory.getLogger(MailServiceImpl.class);
 

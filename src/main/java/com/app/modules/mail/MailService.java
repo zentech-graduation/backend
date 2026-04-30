@@ -1,4 +1,4 @@
-package com.app.common.mail;
+package com.app.modules.mail;
 
 /**
  * Outbound transactional mail contract.
