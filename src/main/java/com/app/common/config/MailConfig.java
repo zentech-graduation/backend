@@ -21,7 +21,7 @@ import com.resend.Resend;
  */
 @Configuration
 @EnableAsync
-@EnableConfigurationProperties({MailProperties.class, AppProperties.class})
+@EnableConfigurationProperties(AppProperties.class)
 public class MailConfig {
 
     @Bean

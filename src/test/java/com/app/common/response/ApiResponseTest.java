@@ -2,9 +2,10 @@ package com.app.common.response;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Test;
+
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.enums.ApiSuccessCode;
-import org.junit.jupiter.api.Test;
 
 class ApiResponseTest {
 

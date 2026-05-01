@@ -2,11 +2,10 @@ package com.app.common.response;
 
 import java.time.Instant;
 
-import com.app.common.enums.ApiErrorCode;
-import com.app.common.enums.ApiSuccessCode;
 import org.springframework.util.StringUtils;
 
-import com.app.common.exception.ApiException;
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.enums.ApiSuccessCode;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -96,37 +95,5 @@ public class ApiResponse<T> {
      */
     public static <T> ApiResponse<T> failure(ApiErrorCode errorCode) {
         return failure(errorCode, errorCode.getDefaultMessage(), null);
-    }
-
-    // --- Legacy factory methods retained for backward compatibility ---
-
-    public static <T> ApiResponse<T> ok(T data) {
-        return ApiResponse.<T>builder()
-                .success(true)
-                .code("OK")
-                .message("Success")
-                .data(data)
-                .build();
-    }
-
-    public static ApiResponse<Void> ok() {
-        return ok(null);
-    }
-
-    public static <T> ApiResponse<T> created(T data) {
-        return ApiResponse.<T>builder()
-                .success(true)
-                .code("CREATED")
-                .message("Created")
-                .data(data)
-                .build();
-    }
-
-    public static <T> ApiResponse<T> error(int httpStatus, String errorCode, String message) {
-        return ApiResponse.<T>builder().success(false).code(errorCode).message(message).build();
-    }
-
-    public static ApiResponse<Void> error(ApiException ex) {
-        return error(ex.getStatusCode(), ex.getErrorCode(), ex.getMessage());
     }
 }
