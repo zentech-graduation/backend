@@ -1,0 +1,435 @@
+package com.app.modules.auth.service.impl;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.OffsetDateTime;
+import java.util.HexFormat;
+import java.util.Optional;
+import java.util.UUID;
+
+import jakarta.servlet.http.HttpServletRequest;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import com.app.common.config.AppProperties;
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
+import com.app.common.security.JwtProperties;
+import com.app.common.security.JwtTokenProvider;
+import com.app.common.security.RefreshTokenService;
+import com.app.modules.auth.dto.request.ForgotPasswordRequest;
+import com.app.modules.auth.dto.request.LoginRequest;
+import com.app.modules.auth.dto.request.RefreshRequest;
+import com.app.modules.auth.dto.request.RegisterRequest;
+import com.app.modules.auth.dto.request.ResetPasswordRequest;
+import com.app.modules.auth.dto.response.AuthResponse;
+import com.app.modules.auth.dto.response.UserSummaryResponse;
+import com.app.modules.auth.entity.PasswordResetToken;
+import com.app.modules.auth.entity.User;
+import com.app.modules.auth.entity.UserCredential;
+import com.app.modules.auth.entity.UserSettings;
+import com.app.modules.auth.enums.UserRole;
+import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.auth.mapper.AuthMapper;
+import com.app.modules.auth.repository.EmailVerificationTokenRepository;
+import com.app.modules.auth.repository.PasswordResetTokenRepository;
+import com.app.modules.auth.repository.UserCredentialRepository;
+import com.app.modules.auth.repository.UserRepository;
+import com.app.modules.auth.repository.UserSettingsRepository;
+import com.app.modules.auth.service.TokenService;
+import com.app.modules.mail.service.MailService;
+
+@ExtendWith(MockitoExtension.class)
+class AuthServiceImplTest {
+
+    @Mock private UserRepository userRepository;
+    @Mock private UserCredentialRepository credentialRepository;
+    @Mock private UserSettingsRepository settingsRepository;
+    @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
+    @Mock private EmailVerificationTokenRepository emailVerificationTokenRepository;
+    @Mock private TokenService tokenService;
+    @Mock private RefreshTokenService refreshTokenService;
+    @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private MailService mailService;
+    @Mock private AuthMapper authMapper;
+
+    private AuthServiceImpl service;
+
+    @BeforeEach
+    void setUp() {
+        JwtProperties jwtProperties =
+                new JwtProperties("test-secret-32-chars-test-secret-", "iss", 900, 3600);
+        AppProperties appProperties = new AppProperties("https://app.local");
+        lenient()
+                .when(authMapper.toUserSummaryResponse(any(User.class), anyBoolean()))
+                .thenAnswer(
+                        inv -> {
+                            User u = inv.getArgument(0);
+                            boolean ev = inv.getArgument(1);
+                            return new UserSummaryResponse(
+                                    u.getId(),
+                                    u.getUsername(),
+                                    u.getEmail(),
+                                    u.getDisplayName(),
+                                    u.getRole() == null ? null : u.getRole().name(),
+                                    ev);
+                        });
+        this.service =
+                new AuthServiceImpl(
+                        userRepository,
+                        credentialRepository,
+                        settingsRepository,
+                        passwordResetTokenRepository,
+                        emailVerificationTokenRepository,
+                        tokenService,
+                        refreshTokenService,
+                        jwtTokenProvider,
+                        jwtProperties,
+                        passwordEncoder,
+                        mailService,
+                        appProperties,
+                        authMapper);
+    }
+
+    private MockHttpServletRequest stubRequest() {
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.setRemoteAddr("4.5.6.7");
+        req.addHeader("User-Agent", "JUnit");
+        return req;
+    }
+
+    @Test
+    void register_duplicateEmail_throwsConflict() {
+        when(userRepository.existsByEmailAndDeletedAtIsNull("a@b.c")).thenReturn(true);
+        RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
+
+        assertThatThrownBy(() -> service.register(req, stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_duplicateUsername_throwsConflict() {
+        when(userRepository.existsByEmailAndDeletedAtIsNull(anyString())).thenReturn(false);
+        when(userRepository.existsByUsernameAndDeletedAtIsNull("user1")).thenReturn(true);
+        RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
+
+        assertThatThrownBy(() -> service.register(req, stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_success_persistsUserCredentialSettingsAndIssuesSession() {
+        UUID newId = UUID.randomUUID();
+        when(userRepository.save(any(User.class)))
+                .thenAnswer(
+                        inv -> {
+                            User u = inv.getArgument(0);
+                            u.setId(newId);
+                            return u;
+                        });
+        when(passwordEncoder.encode("password1")).thenReturn("HASH");
+        when(tokenService.createEmailVerificationToken(newId)).thenReturn("verify-token");
+        when(jwtTokenProvider.generateAccessToken(eq(newId), eq("a@b.c"), eq("USER")))
+                .thenReturn("access-jwt");
+        when(refreshTokenService.issue(eq(newId), any(), any(), any())).thenReturn("refresh");
+
+        AuthResponse resp =
+                service.register(
+                        new RegisterRequest("user1", "a@b.c", "password1", null), stubRequest());
+
+        assertThat(resp.accessToken()).isEqualTo("access-jwt");
+        assertThat(resp.refreshToken()).isEqualTo("refresh");
+        assertThat(resp.user().username()).isEqualTo("user1");
+        verify(userRepository).save(any(User.class));
+        verify(credentialRepository).save(any(UserCredential.class));
+        verify(settingsRepository).save(any(UserSettings.class));
+    }
+
+    @Test
+    void register_success_dispatchesVerificationAndWelcomeMail() {
+        UUID newId = UUID.randomUUID();
+        when(userRepository.save(any(User.class)))
+                .thenAnswer(
+                        inv -> {
+                            User u = inv.getArgument(0);
+                            u.setId(newId);
+                            return u;
+                        });
+        when(passwordEncoder.encode(anyString())).thenReturn("HASH");
+        when(tokenService.createEmailVerificationToken(newId)).thenReturn("vf");
+        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("a");
+        when(refreshTokenService.issue(any(), any(), any(), any())).thenReturn("r");
+
+        service.register(new RegisterRequest("user1", "a@b.c", "password1", null), stubRequest());
+
+        verify(mailService, times(1)).sendEmailVerification(eq("a@b.c"), eq("user1"), anyString());
+        verify(mailService, times(1)).sendWelcome(eq("a@b.c"), eq("user1"));
+    }
+
+    @Test
+    void login_unknownEmail_throwsInvalidCredentials() {
+        when(userRepository.findByEmailAndDeletedAtIsNull("nobody@x.y"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () ->
+                                service.login(
+                                        new LoginRequest("nobody@x.y", "password1"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_wrongPassword_throwsInvalidCredentials() {
+        User u = activeUser();
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        when(passwordEncoder.matches(eq("wrong"), eq("STORED-HASH"))).thenReturn(false);
+
+        assertThatThrownBy(
+                        () -> service.login(new LoginRequest(u.getEmail(), "wrong"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_bannedUser_throwsAccountLocked() {
+        User u = activeUser();
+        u.setStatus(UserStatus.BANNED);
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+
+        assertThatThrownBy(
+                        () -> service.login(new LoginRequest(u.getEmail(), "any"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+    }
+
+    @Test
+    void login_suspendedUser_throwsAccountInactive() {
+        User u = activeUser();
+        u.setStatus(UserStatus.SUSPENDED);
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+
+        assertThatThrownBy(
+                        () -> service.login(new LoginRequest(u.getEmail(), "any"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+    }
+
+    @Test
+    void login_nullPasswordHash_throwsInvalidCredentials() {
+        User u = activeUser();
+        UserCredential cred = credential(u.getId(), null);
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+
+        assertThatThrownBy(
+                        () -> service.login(new LoginRequest(u.getEmail(), "any"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_success_returnsAccessAndRefreshTokens() {
+        User u = activeUser();
+        UserCredential cred = credential(u.getId(), "STORED-HASH");
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq(u.getEmail()), eq("USER")))
+                .thenReturn("ACCESS");
+        when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
+
+        AuthResponse resp =
+                service.login(new LoginRequest(u.getEmail(), "password1"), stubRequest());
+
+        assertThat(resp.accessToken()).isEqualTo("ACCESS");
+        assertThat(resp.refreshToken()).isEqualTo("REFRESH");
+        assertThat(resp.user().id()).isEqualTo(u.getId());
+    }
+
+    @Test
+    void refresh_validToken_returnsNewTokenPair() {
+        UUID userId = UUID.randomUUID();
+        when(refreshTokenService.rotate(eq("OLD"), anyString()))
+                .thenReturn(new RefreshTokenService.RotationResult("NEW", userId));
+        User u = activeUser();
+        u.setId(userId);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(userId))
+                .thenReturn(Optional.of(credential(userId, "HASH")));
+        when(jwtTokenProvider.generateAccessToken(eq(userId), eq(u.getEmail()), eq("USER")))
+                .thenReturn("ACCESS-NEW");
+
+        AuthResponse resp = service.refresh(new RefreshRequest("OLD"), stubRequest());
+
+        assertThat(resp.accessToken()).isEqualTo("ACCESS-NEW");
+        assertThat(resp.refreshToken()).isEqualTo("NEW");
+    }
+
+    @Test
+    void refresh_invalidToken_propagatesAuthRefreshTokenInvalid() {
+        when(refreshTokenService.rotate(anyString(), anyString()))
+                .thenThrow(new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
+
+        assertThatThrownBy(() -> service.refresh(new RefreshRequest("BAD"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+    }
+
+    @Test
+    void logout_callsRevokeOnce() {
+        service.logout(new RefreshRequest("RAW"));
+        verify(refreshTokenService, times(1)).revoke("RAW");
+    }
+
+    @Test
+    void logout_unknownToken_doesNotPropagateException() {
+        // revoke is no-op-by-contract; the service must not propagate any exception even if
+        // the underlying repository update returns zero rows.
+        assertThatCode(() -> service.logout(new RefreshRequest("UNKNOWN")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void forgotPassword_unknownEmail_returnsSilentlyAndSendsNoMail() {
+        when(userRepository.findByEmailAndDeletedAtIsNull("ghost@x.y"))
+                .thenReturn(Optional.empty());
+
+        service.forgotPassword(new ForgotPasswordRequest("ghost@x.y"));
+
+        verify(tokenService, never()).createPasswordResetToken(any());
+        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void forgotPassword_knownEmail_dispatchesResetMail() {
+        User u = activeUser();
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(tokenService.createPasswordResetToken(u.getId())).thenReturn("RESET-RAW");
+
+        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mailService)
+                .sendPasswordReset(eq(u.getEmail()), eq(u.getDisplayName()), urlCaptor.capture());
+        assertThat(urlCaptor.getValue()).contains("RESET-RAW");
+    }
+
+    @Test
+    void resetPassword_revokesAllSessionsAndDispatchesNotification() {
+        UUID userId = UUID.randomUUID();
+        String raw = "RESET-RAW";
+        PasswordResetToken stored =
+                PasswordResetToken.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .tokenHash(sha256(raw))
+                        .expiresAt(OffsetDateTime.now().plusMinutes(10))
+                        .build();
+        when(passwordResetTokenRepository.findByTokenHash(sha256(raw)))
+                .thenReturn(Optional.of(stored));
+        UserCredential cred = credential(userId, "OLD-HASH");
+        when(credentialRepository.findByUserId(userId)).thenReturn(Optional.of(cred));
+        when(passwordEncoder.encode("newPassword1")).thenReturn("NEW-HASH");
+        User u = activeUser();
+        u.setId(userId);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+
+        service.resetPassword(new ResetPasswordRequest(raw, "newPassword1"));
+
+        verify(refreshTokenService).revokeAllForUser(userId);
+        verify(credentialRepository).save(cred);
+        assertThat(cred.getPasswordHash()).isEqualTo("NEW-HASH");
+        verify(mailService).sendPasswordChanged(u.getEmail(), u.getDisplayName());
+    }
+
+    @Test
+    void resetPassword_unknownToken_throwsResetTokenInvalid() {
+        when(passwordResetTokenRepository.findByTokenHash(anyString()))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () ->
+                                service.resetPassword(
+                                        new ResetPasswordRequest("ghost", "newPassword1")))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+        verify(refreshTokenService, never()).revokeAllForUser(any());
+    }
+
+    private static User activeUser() {
+        return User.builder()
+                .id(UUID.randomUUID())
+                .username("alice")
+                .email("alice@example.com")
+                .displayName("Alice")
+                .role(UserRole.USER)
+                .status(UserStatus.ACTIVE)
+                .isPrivate(false)
+                .isVerified(false)
+                .build();
+    }
+
+    private static UserCredential credential(UUID userId, String hash) {
+        return UserCredential.builder()
+                .userId(userId)
+                .passwordHash(hash)
+                .emailVerified(false)
+                .build();
+    }
+
+    private static String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(bytes);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private HttpServletRequest unusedToSatisfyImport() {
+        return null;
+    }
+}
