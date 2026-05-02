@@ -14,24 +14,7 @@ jpa:
       format_sql: true
       use_sql_comments: true
 
-security:
-  jwt:
-    secret: ${JWT_SECRET}
-    access-ttl: ${ACCESS_TOKEN_TTL}
-    refresh-ttl: ${REFRESH_TOKEN_TTL}
-    issuer: ${JWT_ISSUER}
-
 app:
-  base-url: ${APP_BASE_URL}
-  cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS}
-
-springdoc:
-  swagger-ui:
-    path: /vietrecruit/api-docs
-    config-url: /vietrecruit/v3/api-docs/swagger-config
-    url: /vietrecruit/v3/api-docs
-  api-docs:
-    path: /vietrecruit/v3/api-docs
-  server-url: ${APP_BASE_URL}
-
+  mail:
+    app-name: ${MAIL_APP_NAME}
+    frontend-base-url: ${MAIL_FRONTEND_BASE_URL}

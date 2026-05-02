@@ -1,0 +1,356 @@
+package com.app.modules.auth.service.impl;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.OffsetDateTime;
+import java.util.HexFormat;
+import java.util.Optional;
+import java.util.UUID;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.app.common.config.AppProperties;
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
+import com.app.common.security.JwtProperties;
+import com.app.common.security.JwtTokenProvider;
+import com.app.common.security.RefreshTokenService;
+import com.app.modules.auth.dto.request.ForgotPasswordRequest;
+import com.app.modules.auth.dto.request.LoginRequest;
+import com.app.modules.auth.dto.request.RefreshRequest;
+import com.app.modules.auth.dto.request.RegisterRequest;
+import com.app.modules.auth.dto.request.ResetPasswordRequest;
+import com.app.modules.auth.dto.response.AuthResponse;
+import com.app.modules.auth.entity.EmailVerificationToken;
+import com.app.modules.auth.entity.PasswordResetToken;
+import com.app.modules.auth.entity.User;
+import com.app.modules.auth.entity.UserCredential;
+import com.app.modules.auth.entity.UserSettings;
+import com.app.modules.auth.enums.UserRole;
+import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.auth.mapper.AuthMapper;
+import com.app.modules.auth.repository.EmailVerificationTokenRepository;
+import com.app.modules.auth.repository.PasswordResetTokenRepository;
+import com.app.modules.auth.repository.UserCredentialRepository;
+import com.app.modules.auth.repository.UserRepository;
+import com.app.modules.auth.repository.UserSettingsRepository;
+import com.app.modules.auth.service.AuthService;
+import com.app.modules.auth.service.TokenService;
+import com.app.modules.mail.service.MailService;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private static final String SHA_256 = "SHA-256";
+    private static final String VERIFY_PATH = "/api/v1/auth/verify-email?token=";
+    private static final String RESET_PATH = "/api/v1/auth/reset-password?token=";
+
+    private final UserRepository userRepository;
+    private final UserCredentialRepository credentialRepository;
+    private final UserSettingsRepository settingsRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final TokenService tokenService;
+    private final RefreshTokenService refreshTokenService;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final JwtProperties jwtProperties;
+    private final PasswordEncoder passwordEncoder;
+    private final MailService mailService;
+    private final AppProperties appProperties;
+    private final AuthMapper authMapper;
+
+    // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
+    // "email not found" is indistinguishable from "wrong password" via response timing.
+    private String dummyPasswordHash;
+
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            UserCredentialRepository credentialRepository,
+            UserSettingsRepository settingsRepository,
+            PasswordResetTokenRepository passwordResetTokenRepository,
+            EmailVerificationTokenRepository emailVerificationTokenRepository,
+            TokenService tokenService,
+            RefreshTokenService refreshTokenService,
+            JwtTokenProvider jwtTokenProvider,
+            JwtProperties jwtProperties,
+            PasswordEncoder passwordEncoder,
+            MailService mailService,
+            AppProperties appProperties,
+            AuthMapper authMapper) {
+        this.userRepository = userRepository;
+        this.credentialRepository = credentialRepository;
+        this.settingsRepository = settingsRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailVerificationTokenRepository = emailVerificationTokenRepository;
+        this.tokenService = tokenService;
+        this.refreshTokenService = refreshTokenService;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtProperties = jwtProperties;
+        this.passwordEncoder = passwordEncoder;
+        this.mailService = mailService;
+        this.appProperties = appProperties;
+        this.authMapper = authMapper;
+    }
+
+    @PostConstruct
+    void initDummyPasswordHash() {
+        // Encoded once at bean init; the value is irrelevant because this hash never matches
+        // any real user password. It exists solely to keep BCrypt cost on the failure paths.
+        this.dummyPasswordHash =
+                passwordEncoder.encode("login-timing-equalizer-" + UUID.randomUUID());
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest) {
+        if (userRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
+            throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
+        }
+        if (userRepository.existsByUsernameAndDeletedAtIsNull(request.username())) {
+            throw new AppException(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
+        }
+
+        String displayName =
+                StringUtils.hasText(request.displayName())
+                        ? request.displayName()
+                        : request.username();
+
+        User user =
+                User.builder()
+                        .username(request.username())
+                        .email(request.email())
+                        .displayName(displayName)
+                        .role(UserRole.USER)
+                        .status(UserStatus.ACTIVE)
+                        .isPrivate(false)
+                        .isVerified(false)
+                        .build();
+        user = userRepository.save(user);
+
+        UserCredential credential =
+                UserCredential.builder()
+                        .userId(user.getId())
+                        .passwordHash(passwordEncoder.encode(request.password()))
+                        .emailVerified(false)
+                        .build();
+        credentialRepository.save(credential);
+
+        settingsRepository.save(UserSettings.builder().userId(user.getId()).build());
+
+        String rawVerification = tokenService.createEmailVerificationToken(user.getId());
+        String verificationUrl = appProperties.baseUrl() + VERIFY_PATH + rawVerification;
+        mailService.sendEmailVerification(user.getEmail(), displayName, verificationUrl);
+        mailService.sendWelcome(user.getEmail(), displayName);
+
+        return issueSession(user, credential.isEmailVerified(), httpRequest);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
+        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email()).orElse(null);
+        UserCredential credential =
+                user == null ? null : credentialRepository.findByUserId(user.getId()).orElse(null);
+
+        // Run BCrypt unconditionally so unknown-email, missing-credential, and wrong-password
+        // paths are indistinguishable via response timing. The dummy hash is a real BCrypt
+        // hash that no user password can satisfy.
+        String hashForCompare =
+                credential != null && credential.getPasswordHash() != null
+                        ? credential.getPasswordHash()
+                        : dummyPasswordHash;
+        boolean passwordMatches = passwordEncoder.matches(request.password(), hashForCompare);
+
+        if (user == null || credential == null || credential.getPasswordHash() == null) {
+            throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+        }
+
+        switch (user.getStatus()) {
+            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+            case SUSPENDED, DEACTIVATED ->
+                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+            default -> {}
+        }
+
+        if (!passwordMatches) {
+            throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+        }
+
+        return issueSession(user, credential.isEmailVerified(), httpRequest);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse refresh(RefreshRequest request, HttpServletRequest httpRequest) {
+        RefreshTokenService.RotationResult rotation =
+                refreshTokenService.rotate(request.refreshToken(), extractIp(httpRequest));
+
+        User user =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(rotation.userId())
+                        .orElseThrow(
+                                () -> new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
+
+        boolean emailVerified =
+                credentialRepository
+                        .findByUserId(user.getId())
+                        .map(UserCredential::isEmailVerified)
+                        .orElse(false);
+
+        String accessToken =
+                jwtTokenProvider.generateAccessToken(
+                        user.getId(), user.getEmail(), user.getRole().name());
+
+        return new AuthResponse(
+                accessToken,
+                rotation.newRawToken(),
+                jwtProperties.accessTokenTtl(),
+                AuthResponse.BEARER,
+                authMapper.toUserSummaryResponse(user, emailVerified));
+    }
+
+    @Override
+    @Transactional
+    public void logout(RefreshRequest request) {
+        refreshTokenService.revoke(request.refreshToken());
+    }
+
+    @Override
+    @Transactional
+    public void verifyEmail(String rawToken) {
+        // Resolve the owning user from the hashed record before consuming the token, so that
+        // failures in the consume step do not leave the credential half-updated.
+        String hash = sha256(rawToken);
+        EmailVerificationToken tokenEntity =
+                emailVerificationTokenRepository
+                        .findByTokenHash(hash)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+        UUID userId = tokenEntity.getUserId();
+
+        tokenService.consumeEmailVerificationToken(rawToken);
+
+        UserCredential credential =
+                credentialRepository
+                        .findByUserId(userId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
+        credential.setEmailVerified(true);
+        credential.setEmailVerifiedAt(OffsetDateTime.now());
+        credentialRepository.save(credential);
+    }
+
+    @Override
+    @Transactional
+    public void resendVerification(String email) {
+        Optional<User> userOpt = userRepository.findByEmailAndDeletedAtIsNull(email);
+        if (userOpt.isEmpty()) {
+            return;
+        }
+        User user = userOpt.get();
+        UserCredential credential = credentialRepository.findByUserId(user.getId()).orElse(null);
+        if (credential != null && credential.isEmailVerified()) {
+            return;
+        }
+
+        String rawVerification = tokenService.createEmailVerificationToken(user.getId());
+        String verificationUrl = appProperties.baseUrl() + VERIFY_PATH + rawVerification;
+        mailService.sendEmailVerification(
+                user.getEmail(), resolveDisplayName(user), verificationUrl);
+    }
+
+    @Override
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        Optional<User> userOpt = userRepository.findByEmailAndDeletedAtIsNull(request.email());
+        if (userOpt.isEmpty()) {
+            return;
+        }
+        User user = userOpt.get();
+        String rawToken = tokenService.createPasswordResetToken(user.getId());
+        String resetUrl = appProperties.baseUrl() + RESET_PATH + rawToken;
+        mailService.sendPasswordReset(user.getEmail(), resolveDisplayName(user), resetUrl);
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        String hash = sha256(request.token());
+        PasswordResetToken tokenEntity =
+                passwordResetTokenRepository
+                        .findByTokenHash(hash)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+        UUID userId = tokenEntity.getUserId();
+
+        tokenService.consumePasswordResetToken(request.token());
+
+        UserCredential credential =
+                credentialRepository
+                        .findByUserId(userId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+        credential.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        credentialRepository.save(credential);
+
+        refreshTokenService.revokeAllForUser(userId);
+
+        userRepository
+                .findByIdAndDeletedAtIsNull(userId)
+                .ifPresent(
+                        user ->
+                                mailService.sendPasswordChanged(
+                                        user.getEmail(), resolveDisplayName(user)));
+    }
+
+    private AuthResponse issueSession(
+            User user, boolean emailVerified, HttpServletRequest httpRequest) {
+        String accessToken =
+                jwtTokenProvider.generateAccessToken(
+                        user.getId(), user.getEmail(), user.getRole().name());
+        String refreshToken =
+                refreshTokenService.issue(
+                        user.getId(),
+                        null,
+                        httpRequest.getHeader(HttpHeaders.USER_AGENT),
+                        extractIp(httpRequest));
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                jwtProperties.accessTokenTtl(),
+                AuthResponse.BEARER,
+                authMapper.toUserSummaryResponse(user, emailVerified));
+    }
+
+    private String resolveDisplayName(User user) {
+        return StringUtils.hasText(user.getDisplayName())
+                ? user.getDisplayName()
+                : user.getUsername();
+    }
+
+    private static String extractIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwarded)) {
+            int comma = forwarded.indexOf(',');
+            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    private static String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(SHA_256);
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(bytes);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm unavailable in JVM", e);
+        }
+    }
+}

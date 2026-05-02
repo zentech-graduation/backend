@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Verify your email address</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; line-height: 1.5;">
+<div style="max-width: 560px; margin: 0 auto; padding: 24px;">
+    <h1 style="font-size: 20px; margin: 0 0 16px;" th:text="${appName}">Social</h1>
+    <h2 style="font-size: 16px; margin: 0 0 16px;">Verify your email address</h2>
+    <p>Hello <span th:text="${toName}">there</span>,</p>
+    <p>Please confirm that this email address belongs to you so we can finish setting up your
+        <span th:text="${appName}">Social</span> account.</p>
+    <p style="margin: 24px 0;">
+        <a th:href="${verificationUrl}"
+           style="display: inline-block; padding: 12px 20px; background-color: #1a73e8; color: #ffffff; text-decoration: none; border-radius: 4px;">
+            Verify Email Address
+        </a>
+    </p>
+    <p>If the button does not work, copy and paste this link into your browser:</p>
+    <p><a th:href="${verificationUrl}" th:text="${verificationUrl}" style="color: #1a73e8;"></a></p>
+    <p>This link expires in <span th:text="${expiryHours}">24</span> hours.</p>
+    <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 32px 0;">
+    <p style="font-size: 12px; color: #6b6b6b;">
+        You received this email because you have an account on <span th:text="${appName}">Social</span>.
+        If this was not you, please ignore this email.
+    </p>
+</div>
+</body>
+</html>
