@@ -12,6 +12,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -34,9 +35,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
@@ -49,14 +52,11 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
         properties = {
             "spring.profiles.active=dev",
             "spring.docker.compose.enabled=false",
-            "spring.data.redis.host=localhost",
-            "spring.data.redis.port=6379",
             "spring.autoconfigure.exclude="
-                    + "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,"
-                    + "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration,"
                     + "org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration"
         })
 @Testcontainers
+@AutoConfigureTestRestTemplate
 @Import(AuthControllerIT.IntegrationTestConfig.class)
 class AuthControllerIT {
 
@@ -66,8 +66,14 @@ class AuthControllerIT {
     @Container @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
+    @Container
+    static GenericContainer<?> redis =
+            new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
+
     @DynamicPropertySource
     static void register(DynamicPropertyRegistry r) {
+        r.add("spring.data.redis.host", redis::getHost);
+        r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         r.add("JWT_SECRET", () -> TEST_JWT_SECRET);
         r.add("JWT_ISSUER", () -> TEST_JWT_ISSUER);
         r.add("ACCESS_TOKEN_TTL", () -> 900L);
@@ -268,15 +274,113 @@ class AuthControllerIT {
     }
 
     @Test
-    void verifyEmail_invalidToken_returnsBadRequest() {
-        // Implementation throws AUTH_RESET_TOKEN_INVALID (HTTP 400) for unknown email
-        // verification tokens. The audit spec listed 404 but the code returns 400 — the
-        // integration test asserts the actual contract. This is recorded as a contract
-        // discrepancy in the audit notes, not a security finding.
+    void verifyEmail_invalidToken_returnsNotFound() {
         ResponseEntity<Map> response =
                 rest.getForEntity("/api/v1/auth/verify-email?token=does-not-exist", Map.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("NOT_FOUND");
+    }
+
+    @Test
+    void verifyEmail_consumedToken_returns404() {
+        String email = uniqueEmail("consumed");
+        ResponseEntity<Map> reg =
+                postJson(
+                        "/api/v1/auth/register", registerBody("user_consumed", email, "password1"));
+        assertThat(reg.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        String token = captureLatestVerificationToken(email);
+
+        ResponseEntity<Map> first =
+                rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<Map> second =
+                rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void verifyEmail_unknownToken_returnsSameNotFoundAsConsumed() {
+        ResponseEntity<Map> response =
+                rest.getForEntity(
+                        "/api/v1/auth/verify-email?token=" + UUID.randomUUID(), Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("NOT_FOUND");
+    }
+
+    @Test
+    void login_logout_reuseAccessToken_returns401() {
+        String email = uniqueEmail("blacklist");
+        ResponseEntity<Map> reg =
+                postJson("/api/v1/auth/register", registerBody("user_bl", email, "password1"));
+        Map<?, ?> data = (Map<?, ?>) reg.getBody().get("data");
+        String access = (String) data.get("accessToken");
+        String refresh = (String) data.get("refreshToken");
+
+        ResponseEntity<Map> meBefore = getWithAuth("/api/v1/test/me", access);
+        assertThat(meBefore.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<Map> logout =
+                postJsonWithAuth("/api/v1/auth/logout", Map.of("refreshToken", refresh), access);
+        assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        ResponseEntity<Map> reused = getWithAuth("/api/v1/test/me", access);
+
+        assertThat(reused.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void login_wrongPassword_10timesSameIp_11thReturns429() {
+        String forwardedIp = uniqueIp();
+        String email = uniqueEmail("rl_login");
+        postJson(
+                "/api/v1/auth/register",
+                registerBody("user_rllogin", email, "password1"),
+                forwardedIp);
+
+        for (int i = 0; i < 10; i++) {
+            ResponseEntity<Map> response =
+                    postJson(
+                            "/api/v1/auth/login",
+                            Map.of("email", email, "password", "WRONG"),
+                            forwardedIp);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        }
+
+        ResponseEntity<Map> blocked =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("email", email, "password", "WRONG"),
+                        forwardedIp);
+
+        assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(blocked.getBody().get("code")).isEqualTo("TOO_MANY_REQUESTS");
+    }
+
+    @Test
+    void forgotPassword_3timesSameIp_4thReturns429() {
+        String forwardedIp = uniqueIp();
+
+        for (int i = 0; i < 3; i++) {
+            ResponseEntity<Map> response =
+                    postJson(
+                            "/api/v1/auth/forgot-password",
+                            Map.of("email", uniqueEmail("rl_forgot")),
+                            forwardedIp);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        }
+
+        ResponseEntity<Map> blocked =
+                postJson(
+                        "/api/v1/auth/forgot-password",
+                        Map.of("email", uniqueEmail("rl_forgot")),
+                        forwardedIp);
+
+        assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(blocked.getBody().get("code")).isEqualTo("TOO_MANY_REQUESTS");
     }
 
     @Test
@@ -295,10 +399,37 @@ class AuthControllerIT {
         return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
     }
 
+    private ResponseEntity<Map> postJson(String path, Object body, String forwardedIp) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Forwarded-For", forwardedIp);
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
+    private ResponseEntity<Map> postJsonWithAuth(String path, Object body, String accessToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(accessToken);
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
     private ResponseEntity<Map> getWithAuth(String path, String accessToken) {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         return rest.exchange(path, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+    }
+
+    private String captureLatestVerificationToken(String email) {
+        org.mockito.ArgumentCaptor<String> urlCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(mailService, org.mockito.Mockito.atLeastOnce())
+                .sendEmailVerification(
+                        org.mockito.ArgumentMatchers.eq(email),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        urlCaptor.capture());
+        String url = urlCaptor.getAllValues().get(urlCaptor.getAllValues().size() - 1);
+        int idx = url.indexOf("token=");
+        return url.substring(idx + "token=".length());
     }
 
     private static Map<String, String> registerBody(
@@ -308,6 +439,14 @@ class AuthControllerIT {
 
     private static String uniqueEmail(String tag) {
         return tag + "_" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+    }
+
+    private static String uniqueIp() {
+        // Build a 10.x.x.x address that is unique per test method so rate-limit buckets do not
+        // bleed between scenarios. The window is 15 minutes so a fresh IP guarantees a clean
+        // counter.
+        java.util.Random rand = new java.util.Random();
+        return "10." + rand.nextInt(256) + "." + rand.nextInt(256) + "." + (1 + rand.nextInt(254));
     }
 
     private static String mintTestJwt(Instant expiresAt) {
