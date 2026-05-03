@@ -2,6 +2,7 @@ package com.app.common.config;
 
 import java.util.concurrent.Executor;
 
+import com.app.common.config.app.AppProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
