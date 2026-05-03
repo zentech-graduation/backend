@@ -118,6 +118,7 @@ public class JwtTokenProvider {
 
         String email = jwt.getClaimAsString("email");
         String role = jwt.getClaimAsString("role");
-        return new JwtClaims(userId, email, role);
+        String jti = jwt.getClaimAsString("jti");
+        return new JwtClaims(userId, email, role, jti, expiresAt);
     }
 }
