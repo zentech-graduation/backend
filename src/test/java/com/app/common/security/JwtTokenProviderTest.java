@@ -49,6 +49,47 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void generateAccessToken_containsJtiClaim() {
+        String token = provider.generateAccessToken(UUID.randomUUID(), "x@example.com", "USER");
+
+        JwtClaims claims = provider.validateAndParse(token);
+
+        assertThat(claims.jti()).isNotNull();
+        assertThat(claims.jti()).isNotBlank();
+        assertThat(java.util.UUID.fromString(claims.jti())).isNotNull();
+    }
+
+    @Test
+    void generateAccessToken_eachInvocationProducesUniqueJti() {
+        String first = provider.generateAccessToken(UUID.randomUUID(), "x@example.com", "USER");
+        String second = provider.generateAccessToken(UUID.randomUUID(), "x@example.com", "USER");
+
+        JwtClaims firstClaims = provider.validateAndParse(first);
+        JwtClaims secondClaims = provider.validateAndParse(second);
+
+        assertThat(firstClaims.jti()).isNotEqualTo(secondClaims.jti());
+    }
+
+    @Test
+    void validateAndParse_returnsJtiInClaims() {
+        String token = provider.generateAccessToken(UUID.randomUUID(), "x@example.com", "USER");
+
+        JwtClaims claims = provider.validateAndParse(token);
+
+        assertThat(claims.jti()).isNotNull();
+    }
+
+    @Test
+    void validateAndParse_returnsExpiresAtInClaims() {
+        String token = provider.generateAccessToken(UUID.randomUUID(), "x@example.com", "USER");
+
+        JwtClaims claims = provider.validateAndParse(token);
+
+        assertThat(claims.expiresAt()).isNotNull();
+        assertThat(claims.expiresAt()).isAfter(Instant.now());
+    }
+
+    @Test
     void validateAndParse_expiredToken_throwsAuthTokenExpired() {
         // Encode a token with negative TTL so exp is already in the past.
         String expiredToken = mintTokenWithExpiry(SECRET, ISSUER, Instant.now().minusSeconds(60));

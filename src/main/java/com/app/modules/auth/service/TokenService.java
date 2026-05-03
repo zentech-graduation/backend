@@ -11,7 +11,9 @@ import java.util.UUID;
  * and never persisted or logged.
  *
  * <p>Issuing a new token of a given class for a user invalidates any previously issued, unused
- * token of the same class for that user.
+ * token of the same class for that user. Storage is Redis: TTL is enforced by key expiry and
+ * single-use is enforced by atomic delete on consume — an absent key (whether expired or already
+ * consumed) is reported uniformly as {@link com.app.modules.auth.exception.TokenNotFoundException}.
  */
 public interface TokenService {
 
@@ -24,15 +26,14 @@ public interface TokenService {
     String createEmailVerificationToken(UUID userId);
 
     /**
-     * Consumes an email-verification token, marking it used.
+     * Consumes an email-verification token, atomically removing it from storage.
      *
      * @param rawToken raw token presented by the user
-     * @throws com.app.modules.auth.exception.TokenNotFoundException if no token matches the hash
-     * @throws com.app.modules.auth.exception.TokenExpiredException if the token's expiry has passed
-     * @throws com.app.modules.auth.exception.TokenAlreadyUsedException if the token has already
-     *     been consumed
+     * @return the user id associated with the consumed token
+     * @throws com.app.modules.auth.exception.TokenNotFoundException if the token is unknown,
+     *     expired, or has already been consumed
      */
-    void consumeEmailVerificationToken(String rawToken);
+    UUID consumeEmailVerificationToken(String rawToken);
 
     /**
      * Issues a new password-reset token for the given user, invalidating any pending one.
@@ -43,13 +44,12 @@ public interface TokenService {
     String createPasswordResetToken(UUID userId);
 
     /**
-     * Consumes a password-reset token, marking it used.
+     * Consumes a password-reset token, atomically removing it from storage.
      *
      * @param rawToken raw token presented by the user
-     * @throws com.app.modules.auth.exception.TokenNotFoundException if no token matches the hash
-     * @throws com.app.modules.auth.exception.TokenExpiredException if the token's expiry has passed
-     * @throws com.app.modules.auth.exception.TokenAlreadyUsedException if the token has already
-     *     been consumed
+     * @return the user id associated with the consumed token
+     * @throws com.app.modules.auth.exception.TokenNotFoundException if the token is unknown,
+     *     expired, or has already been consumed
      */
-    void consumePasswordResetToken(String rawToken);
+    UUID consumePasswordResetToken(String rawToken);
 }

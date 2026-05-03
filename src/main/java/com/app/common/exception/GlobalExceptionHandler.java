@@ -16,7 +16,6 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.response.ApiResponse;
-import com.app.modules.auth.exception.TokenAlreadyUsedException;
 import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
 
@@ -79,28 +78,10 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(ApiErrorCode.NOT_FOUND));
     }
 
-    @ExceptionHandler(TokenNotFoundException.class)
-    public ResponseEntity<ApiResponse<?>> handleTokenNotFound(TokenNotFoundException ex) {
-        return ResponseEntity.status(ApiErrorCode.AUTH_RESET_TOKEN_INVALID.getHttpStatus())
-                .body(
-                        ApiResponse.failure(
-                                ApiErrorCode.AUTH_RESET_TOKEN_INVALID, ex.getMessage(), null));
-    }
-
-    @ExceptionHandler(TokenExpiredException.class)
-    public ResponseEntity<ApiResponse<?>> handleTokenExpired(TokenExpiredException ex) {
-        return ResponseEntity.status(ApiErrorCode.AUTH_RESET_TOKEN_EXPIRED.getHttpStatus())
-                .body(
-                        ApiResponse.failure(
-                                ApiErrorCode.AUTH_RESET_TOKEN_EXPIRED, ex.getMessage(), null));
-    }
-
-    @ExceptionHandler(TokenAlreadyUsedException.class)
-    public ResponseEntity<ApiResponse<?>> handleTokenAlreadyUsed(TokenAlreadyUsedException ex) {
-        return ResponseEntity.status(ApiErrorCode.AUTH_RESET_TOKEN_USED.getHttpStatus())
-                .body(
-                        ApiResponse.failure(
-                                ApiErrorCode.AUTH_RESET_TOKEN_USED, ex.getMessage(), null));
+    @ExceptionHandler({TokenNotFoundException.class, TokenExpiredException.class})
+    public ResponseEntity<ApiResponse<?>> handleInvalidToken(RuntimeException ex) {
+        return ResponseEntity.status(ApiErrorCode.NOT_FOUND.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.NOT_FOUND, ex.getMessage(), null));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

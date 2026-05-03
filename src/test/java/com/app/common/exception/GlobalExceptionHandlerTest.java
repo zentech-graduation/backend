@@ -17,6 +17,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.response.ApiResponse;
+import com.app.modules.auth.exception.TokenExpiredException;
+import com.app.modules.auth.exception.TokenNotFoundException;
 
 class GlobalExceptionHandlerTest {
 
@@ -73,6 +75,25 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody().isSuccess()).isFalse();
         assertThat(response.getBody().getCode()).isEqualTo("FORBIDDEN");
+    }
+
+    @Test
+    void tokenNotFoundException_returnsNotFound() {
+        ResponseEntity<ApiResponse<?>> response =
+                handler.handleInvalidToken(new TokenNotFoundException("missing"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().getCode()).isEqualTo("NOT_FOUND");
+        assertThat(response.getBody().getMessage()).isEqualTo("missing");
+    }
+
+    @Test
+    void tokenExpiredException_returnsNotFound() {
+        ResponseEntity<ApiResponse<?>> response =
+                handler.handleInvalidToken(new TokenExpiredException("expired"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().getCode()).isEqualTo("NOT_FOUND");
     }
 
     @Test
