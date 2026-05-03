@@ -1,4 +1,4 @@
-package com.app.common.config;
+package com.app.common.config.mail;
 
 import java.util.concurrent.Executor;
 
