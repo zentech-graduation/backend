@@ -3,6 +3,9 @@ package com.app.modules.auth.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -11,235 +14,151 @@ import static org.mockito.Mockito.when;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
-import java.time.OffsetDateTime;
 import java.util.HexFormat;
-import java.util.Optional;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
-import com.app.modules.auth.entity.EmailVerificationToken;
-import com.app.modules.auth.entity.PasswordResetToken;
-import com.app.modules.auth.exception.TokenAlreadyUsedException;
-import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
-import com.app.modules.auth.repository.EmailVerificationTokenRepository;
-import com.app.modules.auth.repository.PasswordResetTokenRepository;
 
 @ExtendWith(MockitoExtension.class)
 class TokenServiceImplTest {
 
-    @Mock private EmailVerificationTokenRepository emailRepository;
+    private static final String EMAIL_PREFIX = "auth:token:email-verification:";
+    private static final String RESET_PREFIX = "auth:token:password-reset:";
+    private static final String USER_INFIX = "user:";
 
-    @Mock private PasswordResetTokenRepository passwordRepository;
+    @Mock private StringRedisTemplate redisTemplate;
+    @Mock private ValueOperations<String, String> valueOps;
 
-    @InjectMocks private TokenServiceImpl service;
+    private TokenServiceImpl service;
 
-    @Test
-    void createEmailVerificationToken_invalidatesPendingTokens() {
-        UUID userId = UUID.randomUUID();
-
-        service.createEmailVerificationToken(userId);
-
-        verify(emailRepository).deleteByUserIdAndUsedAtIsNull(userId);
-        verify(emailRepository).save(any(EmailVerificationToken.class));
+    @BeforeEach
+    void setUp() {
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        service = new TokenServiceImpl(redisTemplate);
     }
 
     @Test
-    void createEmailVerificationToken_persistsHashedTokenWith24HourExpiry() {
+    void createEmailVerificationToken_storesHashedTokenAndReverseIndexWith24HourTtl() {
         UUID userId = UUID.randomUUID();
-        OffsetDateTime before = OffsetDateTime.now();
+        when(valueOps.get(EMAIL_PREFIX + USER_INFIX + userId)).thenReturn(null);
 
-        String rawToken = service.createEmailVerificationToken(userId);
+        String raw = service.createEmailVerificationToken(userId);
 
-        ArgumentCaptor<EmailVerificationToken> captor =
-                ArgumentCaptor.forClass(EmailVerificationToken.class);
-        verify(emailRepository).save(captor.capture());
-        EmailVerificationToken saved = captor.getValue();
+        verify(valueOps)
+                .set(
+                        eq(EMAIL_PREFIX + sha256(raw)),
+                        eq(userId.toString()),
+                        eq(Duration.ofHours(24)));
+        verify(valueOps)
+                .set(
+                        eq(EMAIL_PREFIX + USER_INFIX + userId),
+                        eq(sha256(raw)),
+                        eq(Duration.ofHours(24)));
+    }
 
-        assertThat(saved.getId()).isNotNull();
-        assertThat(saved.getUserId()).isEqualTo(userId);
-        assertThat(saved.getUsedAt()).isNull();
-        assertThat(saved.getTokenHash()).isEqualTo(sha256Hex(rawToken));
-        assertThat(saved.getTokenHash()).hasSize(64);
-        assertThat(saved.getTokenHash()).isNotEqualTo(rawToken);
+    @Test
+    void createEmailVerificationToken_invalidatesPriorPendingTokenForSameUser() {
+        UUID userId = UUID.randomUUID();
+        String oldHash = "old-hash";
+        when(valueOps.get(EMAIL_PREFIX + USER_INFIX + userId)).thenReturn(oldHash);
 
-        Duration ttl = Duration.between(before, saved.getExpiresAt());
-        assertThat(ttl)
-                .isBetween(
-                        Duration.ofHours(23).plusMinutes(59), Duration.ofHours(24).plusSeconds(5));
+        service.createEmailVerificationToken(userId);
+
+        verify(redisTemplate).delete(EMAIL_PREFIX + oldHash);
     }
 
     @Test
     void createEmailVerificationToken_returnsUniqueRawTokens() {
         UUID userId = UUID.randomUUID();
-
         String first = service.createEmailVerificationToken(userId);
         String second = service.createEmailVerificationToken(userId);
-
-        assertThat(first).isNotBlank();
-        assertThat(second).isNotBlank();
         assertThat(first).isNotEqualTo(second);
     }
 
     @Test
-    void consumeEmailVerificationToken_marksUsedAtOnHappyPath() {
-        String rawToken = UUID.randomUUID().toString();
-        EmailVerificationToken stored =
-                EmailVerificationToken.builder()
-                        .id(UUID.randomUUID())
-                        .userId(UUID.randomUUID())
-                        .tokenHash(sha256Hex(rawToken))
-                        .expiresAt(OffsetDateTime.now().plusMinutes(5))
-                        .usedAt(null)
-                        .build();
-        when(emailRepository.findByTokenHash(sha256Hex(rawToken))).thenReturn(Optional.of(stored));
-
-        service.consumeEmailVerificationToken(rawToken);
-
-        ArgumentCaptor<EmailVerificationToken> captor =
-                ArgumentCaptor.forClass(EmailVerificationToken.class);
-        verify(emailRepository).save(captor.capture());
-        assertThat(captor.getValue().getUsedAt()).isNotNull();
-    }
-
-    @Test
-    void consumeEmailVerificationToken_throwsWhenHashAbsent() {
-        when(emailRepository.findByTokenHash(any())).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.consumeEmailVerificationToken("does-not-exist"))
-                .isInstanceOf(TokenNotFoundException.class);
-        verify(emailRepository, never()).save(any());
-    }
-
-    @Test
-    void consumeEmailVerificationToken_throwsWhenExpired() {
-        String rawToken = UUID.randomUUID().toString();
-        EmailVerificationToken expired =
-                EmailVerificationToken.builder()
-                        .id(UUID.randomUUID())
-                        .userId(UUID.randomUUID())
-                        .tokenHash(sha256Hex(rawToken))
-                        .expiresAt(OffsetDateTime.now().minusSeconds(1))
-                        .usedAt(null)
-                        .build();
-        when(emailRepository.findByTokenHash(sha256Hex(rawToken))).thenReturn(Optional.of(expired));
-
-        assertThatThrownBy(() -> service.consumeEmailVerificationToken(rawToken))
-                .isInstanceOf(TokenExpiredException.class);
-        verify(emailRepository, never()).save(any());
-    }
-
-    @Test
-    void consumeEmailVerificationToken_throwsWhenAlreadyUsed() {
-        String rawToken = UUID.randomUUID().toString();
-        EmailVerificationToken used =
-                EmailVerificationToken.builder()
-                        .id(UUID.randomUUID())
-                        .userId(UUID.randomUUID())
-                        .tokenHash(sha256Hex(rawToken))
-                        .expiresAt(OffsetDateTime.now().plusMinutes(5))
-                        .usedAt(OffsetDateTime.now().minusMinutes(1))
-                        .build();
-        when(emailRepository.findByTokenHash(sha256Hex(rawToken))).thenReturn(Optional.of(used));
-
-        assertThatThrownBy(() -> service.consumeEmailVerificationToken(rawToken))
-                .isInstanceOf(TokenAlreadyUsedException.class);
-        verify(emailRepository, never()).save(any());
-    }
-
-    @Test
-    void createPasswordResetToken_invalidatesPendingAndPersistsHashed15MinToken() {
+    void consumeEmailVerificationToken_returnsUserIdOnHappyPath() {
         UUID userId = UUID.randomUUID();
-        OffsetDateTime before = OffsetDateTime.now();
+        String raw = "raw-verify-" + UUID.randomUUID();
+        when(redisTemplate.execute(any(RedisScript.class), anyList()))
+                .thenReturn(userId.toString());
 
-        String rawToken = service.createPasswordResetToken(userId);
+        UUID result = service.consumeEmailVerificationToken(raw);
 
-        verify(passwordRepository).deleteByUserIdAndUsedAtIsNull(userId);
-        ArgumentCaptor<PasswordResetToken> captor =
-                ArgumentCaptor.forClass(PasswordResetToken.class);
-        verify(passwordRepository).save(captor.capture());
-        PasswordResetToken saved = captor.getValue();
-
-        assertThat(saved.getUserId()).isEqualTo(userId);
-        assertThat(saved.getUsedAt()).isNull();
-        assertThat(saved.getTokenHash()).isEqualTo(sha256Hex(rawToken));
-
-        Duration ttl = Duration.between(before, saved.getExpiresAt());
-        assertThat(ttl)
-                .isBetween(
-                        Duration.ofMinutes(14).plusSeconds(50),
-                        Duration.ofMinutes(15).plusSeconds(5));
+        assertThat(result).isEqualTo(userId);
+        verify(redisTemplate).delete(EMAIL_PREFIX + USER_INFIX + userId);
     }
 
     @Test
-    void consumePasswordResetToken_marksUsedAtOnHappyPath() {
-        String rawToken = UUID.randomUUID().toString();
-        PasswordResetToken stored =
-                PasswordResetToken.builder()
-                        .id(UUID.randomUUID())
-                        .userId(UUID.randomUUID())
-                        .tokenHash(sha256Hex(rawToken))
-                        .expiresAt(OffsetDateTime.now().plusMinutes(5))
-                        .usedAt(null)
-                        .build();
-        when(passwordRepository.findByTokenHash(sha256Hex(rawToken)))
-                .thenReturn(Optional.of(stored));
+    void consumeEmailVerificationToken_valid_executesLuaScript() {
+        UUID userId = UUID.randomUUID();
+        String raw = "raw-script";
+        when(redisTemplate.execute(any(RedisScript.class), anyList()))
+                .thenReturn(userId.toString());
 
-        service.consumePasswordResetToken(rawToken);
+        service.consumeEmailVerificationToken(raw);
 
-        verify(passwordRepository, times(1)).save(any(PasswordResetToken.class));
-        assertThat(stored.getUsedAt()).isNotNull();
+        verify(redisTemplate, times(1))
+                .execute(any(RedisScript.class), eq(java.util.List.of(EMAIL_PREFIX + sha256(raw))));
     }
 
     @Test
-    void consumePasswordResetToken_throwsWhenHashAbsent() {
-        when(passwordRepository.findByTokenHash(any())).thenReturn(Optional.empty());
+    void consumeEmailVerificationToken_throwsWhenAbsent() {
+        when(redisTemplate.execute(any(RedisScript.class), anyList())).thenReturn(null);
+
+        assertThatThrownBy(() -> service.consumeEmailVerificationToken("ghost"))
+                .isInstanceOf(TokenNotFoundException.class);
+        verify(redisTemplate, never()).delete(any(String.class));
+    }
+
+    @Test
+    void createPasswordResetToken_storesHashedTokenAndReverseIndexWith15MinuteTtl() {
+        UUID userId = UUID.randomUUID();
+        when(valueOps.get(RESET_PREFIX + USER_INFIX + userId)).thenReturn(null);
+
+        String raw = service.createPasswordResetToken(userId);
+
+        verify(valueOps)
+                .set(
+                        eq(RESET_PREFIX + sha256(raw)),
+                        eq(userId.toString()),
+                        eq(Duration.ofMinutes(15)));
+        verify(valueOps)
+                .set(
+                        eq(RESET_PREFIX + USER_INFIX + userId),
+                        eq(sha256(raw)),
+                        eq(Duration.ofMinutes(15)));
+    }
+
+    @Test
+    void consumePasswordResetToken_returnsUserIdOnHappyPath() {
+        UUID userId = UUID.randomUUID();
+        when(redisTemplate.execute(any(RedisScript.class), anyList()))
+                .thenReturn(userId.toString());
+
+        UUID result = service.consumePasswordResetToken("raw-reset");
+
+        assertThat(result).isEqualTo(userId);
+        verify(redisTemplate).delete(RESET_PREFIX + USER_INFIX + userId);
+    }
+
+    @Test
+    void consumePasswordResetToken_throwsWhenAbsent() {
+        when(redisTemplate.execute(any(RedisScript.class), anyList())).thenReturn(null);
 
         assertThatThrownBy(() -> service.consumePasswordResetToken("nope"))
                 .isInstanceOf(TokenNotFoundException.class);
     }
 
-    @Test
-    void consumePasswordResetToken_throwsWhenExpired() {
-        String rawToken = UUID.randomUUID().toString();
-        PasswordResetToken expired =
-                PasswordResetToken.builder()
-                        .id(UUID.randomUUID())
-                        .userId(UUID.randomUUID())
-                        .tokenHash(sha256Hex(rawToken))
-                        .expiresAt(OffsetDateTime.now().minusSeconds(1))
-                        .build();
-        when(passwordRepository.findByTokenHash(sha256Hex(rawToken)))
-                .thenReturn(Optional.of(expired));
-
-        assertThatThrownBy(() -> service.consumePasswordResetToken(rawToken))
-                .isInstanceOf(TokenExpiredException.class);
-    }
-
-    @Test
-    void consumePasswordResetToken_throwsWhenAlreadyUsed() {
-        String rawToken = UUID.randomUUID().toString();
-        PasswordResetToken used =
-                PasswordResetToken.builder()
-                        .id(UUID.randomUUID())
-                        .userId(UUID.randomUUID())
-                        .tokenHash(sha256Hex(rawToken))
-                        .expiresAt(OffsetDateTime.now().plusMinutes(5))
-                        .usedAt(OffsetDateTime.now())
-                        .build();
-        when(passwordRepository.findByTokenHash(sha256Hex(rawToken))).thenReturn(Optional.of(used));
-
-        assertThatThrownBy(() -> service.consumePasswordResetToken(rawToken))
-                .isInstanceOf(TokenAlreadyUsedException.class);
-    }
-
-    private static String sha256Hex(String value) {
+    private static String sha256(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
