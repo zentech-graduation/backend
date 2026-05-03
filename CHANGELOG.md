@@ -6,7 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- LOW: documented a TOCTOU race in `TokenServiceImpl.createToken` (4-step issue flow is non-atomic so concurrent same-user issuance can briefly leak orphan single-use tokens until natural TTL); deferred per Phase 3 unit-test contract that asserts the current non-atomic shape.
+- MEDIUM: aligned `TokenNotFoundException` / `TokenExpiredException` HTTP mapping with the audit-mandated contract — verify-email with consumed/expired/unknown tokens now returns HTTP 404 (`NOT_FOUND`) instead of HTTP 400 (`AUTH_RESET_TOKEN_INVALID`), so the three states are indistinguishable to the caller.
+
+### Fixed
+- `GlobalExceptionHandler.handleInvalidToken` now maps token-not-found and token-expired exceptions to `ApiErrorCode.NOT_FOUND` (HTTP 404).
+- `ApplicationTests.contextLoads` updated to use Testcontainers for PostgreSQL and Redis; Spring Boot 4 autoconfigure exclude paths corrected (`org.springframework.boot.{jdbc,hibernate,data.jpa,flyway,data.redis,amqp}.autoconfigure.*`).
+- `AuthControllerIT` annotated with `@AutoConfigureTestRestTemplate` so the `TestRestTemplate` bean is registered under Spring Boot 4 (which moved this autoconfig out of the default `@SpringBootTest` activation set).
+
+### Changed
+- Bumped Testcontainers from 1.21.0 to 1.21.4 to ship a docker-java client compatible with Docker Engine ≥ 25 (which requires Docker API ≥ 1.40).
+- Maven Surefire now includes `**/*IT.java` in the test phase so the auth integration test runs as part of `./mvnw test`.
+
+### Tests
+- Rewrote `TokenServiceImplTest` (Redis-backed): added `consumeEmailVerificationToken_valid_executesLuaScript` to assert the atomic-consume Lua script execution.
+- Added `TokenBlacklistServiceImplTest` covering positive / zero / negative TTL stores, key-exists / key-absent / null-Redis-result reads, and null/blank `jti` defensive paths.
+- Added `RateLimiterServiceImplTest` covering under-limit, at-limit, over-limit, and null-script-result outcomes.
+- Extended `AuthServiceImplTest`: `logout_blacklistsAccessTokenAndRevokesRefreshToken`, `logout_invalidAccessToken_stillRevokesRefreshToken`, `logout_noAuthContext_blacklistsNothingAndRevokesRefreshToken`.
+- Extended `JwtTokenProviderTest`: `generateAccessToken_containsJtiClaim`, `generateAccessToken_eachInvocationProducesUniqueJti`, `validateAndParse_returnsJtiInClaims`, `validateAndParse_returnsExpiresAtInClaims`.
+- Extended `GlobalExceptionHandlerTest`: `tokenNotFoundException_returnsNotFound`, `tokenExpiredException_returnsNotFound`.
+- Extended `AuthControllerIT`: `verifyEmail_invalidToken_returnsNotFound`, `verifyEmail_consumedToken_returns404`, `verifyEmail_unknownToken_returnsSameNotFoundAsConsumed`, `login_logout_reuseAccessToken_returns401` (blacklist), `login_wrongPassword_5timesSameIp_6thReturns429`, `forgotPassword_3timesSameIp_4thReturns429`.
+- Test totals: 115 tests run, 0 failures, 0 errors.
+
+### Changed
+- Email-verification and password-reset tokens now live in Redis (24h and 15m TTL respectively), keyed by `auth:token:email-verification:{sha256}` and `auth:token:password-reset:{sha256}`; consumption is atomic via Lua and a reverse `…:user:{userId}` index ensures issuing a new token invalidates the prior pending one.
+- `TokenService.consumeEmailVerificationToken` / `consumePasswordResetToken` now return the owning `UUID` so callers no longer need a separate hash lookup.
+
+### Removed
+- PostgreSQL tables `email_verification_tokens` and `password_reset_tokens` (dropped from `V02__create_users_auth_tables.sql`); their JPA entities and repositories.
+- `TokenAlreadyUsedException` — Redis cannot distinguish "expired" from "already used"; both now surface as `TokenNotFoundException` mapped to `AUTH_RESET_TOKEN_INVALID`.
+
 ### Added
+- Redis-backed JWT access-token blacklist: logout now records the token's `jti` for its remaining lifetime so it cannot authenticate again before its natural expiry.
+- Redis-backed sliding-window rate limiter on `POST /api/v1/auth/login` (5/15min, IP+email keyed), `/forgot-password` and `/verify-email/resend` (3/hr, IP keyed), executed via an atomic `INCR`+`EXPIRE` Lua script.
+- `app.rate-limit.*` configuration namespace bound to `RateLimitProperties` for per-endpoint limit and window tuning.
 - MapStruct 1.6.3 dependency and annotation processor; `lombok-mapstruct-binding` 0.2.0 wires Lombok before MapStruct in both compile and test-compile phases
 - `AuthMapper` interface in `modules/auth/mapper/` maps `User` + `emailVerified` boolean to `UserSummaryResponse` via MapStruct Spring component model
 - `SecurityMapper` interface in `common/security/` maps `User` entity to `UserPrincipal` security principal via MapStruct Spring component model
