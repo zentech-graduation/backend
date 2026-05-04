@@ -25,7 +25,7 @@ CREATE TABLE users (
 
 CREATE TABLE user_credentials (
     user_id             UUID            PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    password_hash       TEXT            NOT NULL,
+    password_hash       TEXT,
     email_verified      BOOLEAN         NOT NULL DEFAULT FALSE,
     email_verified_at   TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
