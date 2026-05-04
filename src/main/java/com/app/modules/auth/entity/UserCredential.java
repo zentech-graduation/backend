@@ -34,7 +34,7 @@ public class UserCredential {
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
-    @Column(name = "password_hash", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "password_hash", nullable = true, columnDefinition = "TEXT")
     private String passwordHash;
 
     @Column(name = "email_verified", nullable = false)
