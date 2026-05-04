@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.app.common.ApiConstants;
+import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
@@ -24,10 +25,12 @@ import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
 import com.app.modules.auth.service.AuthService;
 
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+
 /** HTTP surface for email + password authentication flows. */
 @RestController
 @RequestMapping(ApiConstants.Auth.ROOT)
-public class AuthController {
+public class AuthController extends BaseController {
 
     private final AuthService authService;
 
@@ -40,6 +43,7 @@ public class AuthController {
      * the first session pair.
      */
     @PostMapping(ApiConstants.Auth.REGISTER)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AuthResponse>> register(
             @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
         AuthResponse body = authService.register(request, httpRequest);
@@ -49,6 +53,7 @@ public class AuthController {
 
     /** Authenticates an existing user and returns access + refresh tokens. */
     @PostMapping(ApiConstants.Auth.LOGIN)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         AuthResponse body = authService.login(request, httpRequest);
@@ -57,6 +62,7 @@ public class AuthController {
 
     /** Rotates the refresh token and returns a new session pair. */
     @PostMapping(ApiConstants.Auth.REFRESH)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(
             @Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
         AuthResponse body = authService.refresh(request, httpRequest);
@@ -65,6 +71,7 @@ public class AuthController {
 
     /** Revokes the supplied refresh token. Idempotent. */
     @PostMapping(ApiConstants.Auth.LOGOUT)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request);
         return ResponseEntity.status(HttpStatus.NO_CONTENT)
@@ -73,6 +80,7 @@ public class AuthController {
 
     /** Verifies an email address using the token embedded in the verification link. */
     @GetMapping(ApiConstants.Auth.VERIFY_EMAIL)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam("token") String token) {
         authService.verifyEmail(token);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
@@ -83,6 +91,7 @@ public class AuthController {
      * returns 200 to prevent account enumeration.
      */
     @PostMapping(ApiConstants.Auth.RESEND_VERIFY)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> resendVerification(
             @Valid @RequestBody ResendVerificationRequest request) {
         authService.resendVerification(request.email());
@@ -94,6 +103,7 @@ public class AuthController {
      * enumeration.
      */
     @PostMapping(ApiConstants.Auth.FORGOT_PASSWORD)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request);
@@ -102,6 +112,7 @@ public class AuthController {
 
     /** Consumes a password-reset token and replaces the user's password hash. */
     @PostMapping(ApiConstants.Auth.RESET_PASSWORD)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> resetPassword(
             @Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
