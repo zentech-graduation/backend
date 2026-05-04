@@ -1,10 +1,7 @@
 package com.app.modules.auth.service.impl;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,33 +9,33 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import com.app.common.config.AppProperties;
+import com.app.common.config.app.AppProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.security.JwtClaims;
 import com.app.common.security.JwtProperties;
 import com.app.common.security.JwtTokenProvider;
 import com.app.common.security.RefreshTokenService;
+import com.app.common.security.TokenBlacklistService;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
-import com.app.modules.auth.entity.EmailVerificationToken;
-import com.app.modules.auth.entity.PasswordResetToken;
 import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.UserRole;
 import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.mapper.AuthMapper;
-import com.app.modules.auth.repository.EmailVerificationTokenRepository;
-import com.app.modules.auth.repository.PasswordResetTokenRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
@@ -52,15 +49,12 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class AuthServiceImpl implements AuthService {
 
-    private static final String SHA_256 = "SHA-256";
     private static final String VERIFY_PATH = "/api/v1/auth/verify-email?token=";
     private static final String RESET_PATH = "/api/v1/auth/reset-password?token=";
 
     private final UserRepository userRepository;
     private final UserCredentialRepository credentialRepository;
     private final UserSettingsRepository settingsRepository;
-    private final PasswordResetTokenRepository passwordResetTokenRepository;
-    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final TokenService tokenService;
     private final RefreshTokenService refreshTokenService;
     private final JwtTokenProvider jwtTokenProvider;
@@ -69,6 +63,7 @@ public class AuthServiceImpl implements AuthService {
     private final MailService mailService;
     private final AppProperties appProperties;
     private final AuthMapper authMapper;
+    private final TokenBlacklistService tokenBlacklistService;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -78,8 +73,6 @@ public class AuthServiceImpl implements AuthService {
             UserRepository userRepository,
             UserCredentialRepository credentialRepository,
             UserSettingsRepository settingsRepository,
-            PasswordResetTokenRepository passwordResetTokenRepository,
-            EmailVerificationTokenRepository emailVerificationTokenRepository,
             TokenService tokenService,
             RefreshTokenService refreshTokenService,
             JwtTokenProvider jwtTokenProvider,
@@ -87,12 +80,11 @@ public class AuthServiceImpl implements AuthService {
             PasswordEncoder passwordEncoder,
             MailService mailService,
             AppProperties appProperties,
-            AuthMapper authMapper) {
+            AuthMapper authMapper,
+            TokenBlacklistService tokenBlacklistService) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
-        this.passwordResetTokenRepository = passwordResetTokenRepository;
-        this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.tokenService = tokenService;
         this.refreshTokenService = refreshTokenService;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -101,6 +93,7 @@ public class AuthServiceImpl implements AuthService {
         this.mailService = mailService;
         this.appProperties = appProperties;
         this.authMapper = authMapper;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @PostConstruct
@@ -223,22 +216,31 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void logout(RefreshRequest request) {
+        // Blacklist the current access token so it cannot authenticate again before its
+        // natural expiry. The raw token was placed on the Authentication credentials by
+        // JwtAuthenticationFilter; absence (e.g. logout without an Authorization header)
+        // is tolerated and only the refresh token is revoked.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getCredentials() instanceof String rawToken) {
+            try {
+                JwtClaims claims = jwtTokenProvider.validateAndParse(rawToken);
+                long remaining =
+                        claims.expiresAt() == null
+                                ? 0L
+                                : claims.expiresAt().getEpochSecond()
+                                        - Instant.now().getEpochSecond();
+                tokenBlacklistService.blacklist(claims.jti(), remaining);
+            } catch (AppException ignored) {
+                // Token already invalid — refresh-token revoke below still proceeds.
+            }
+        }
         refreshTokenService.revoke(request.refreshToken());
     }
 
     @Override
     @Transactional
     public void verifyEmail(String rawToken) {
-        // Resolve the owning user from the hashed record before consuming the token, so that
-        // failures in the consume step do not leave the credential half-updated.
-        String hash = sha256(rawToken);
-        EmailVerificationToken tokenEntity =
-                emailVerificationTokenRepository
-                        .findByTokenHash(hash)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
-        UUID userId = tokenEntity.getUserId();
-
-        tokenService.consumeEmailVerificationToken(rawToken);
+        UUID userId = tokenService.consumeEmailVerificationToken(rawToken);
 
         UserCredential credential =
                 credentialRepository
@@ -284,14 +286,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        String hash = sha256(request.token());
-        PasswordResetToken tokenEntity =
-                passwordResetTokenRepository
-                        .findByTokenHash(hash)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
-        UUID userId = tokenEntity.getUserId();
-
-        tokenService.consumePasswordResetToken(request.token());
+        UUID userId = tokenService.consumePasswordResetToken(request.token());
 
         UserCredential credential =
                 credentialRepository
@@ -342,15 +337,5 @@ public class AuthServiceImpl implements AuthService {
             return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
         }
         return request.getRemoteAddr();
-    }
-
-    private static String sha256(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance(SHA_256);
-            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(bytes);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm unavailable in JVM", e);
-        }
     }
 }

@@ -1,7 +1,7 @@
 -- Flyway migration V02
 -- Source: database/schema.sql lines 61-139
--- Auth module: users, user_credentials, oauth_accounts, refresh_tokens,
--- email_verification_tokens, password_reset_tokens.
+-- Auth module: users, user_credentials, oauth_accounts, refresh_tokens.
+-- Email-verification and password-reset tokens are stored in Redis (see TokenServiceImpl).
 
 CREATE TABLE users (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -58,20 +58,3 @@ CREATE TABLE refresh_tokens (
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE email_verification_tokens (
-    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash          TEXT            NOT NULL UNIQUE,
-    expires_at          TIMESTAMPTZ     NOT NULL,
-    used_at             TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE password_reset_tokens (
-    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash          TEXT            NOT NULL UNIQUE,
-    expires_at          TIMESTAMPTZ     NOT NULL,
-    used_at             TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);

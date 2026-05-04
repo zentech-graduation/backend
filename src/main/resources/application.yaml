@@ -49,3 +49,13 @@ app:
   mail:
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
+  rate-limit:
+    login:
+      max-attempts: 10
+      window-seconds: 900
+    forgot-password:
+      max-attempts: 3
+      window-seconds: 3600
+    resend-verification:
+      max-attempts: 3
+      window-seconds: 3600

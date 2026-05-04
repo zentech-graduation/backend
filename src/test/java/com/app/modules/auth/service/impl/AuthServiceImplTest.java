@@ -5,18 +5,17 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.longThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.OffsetDateTime;
-import java.util.HexFormat;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,14 +28,18 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import com.app.common.config.AppProperties;
+import com.app.common.config.app.AppProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.security.JwtClaims;
 import com.app.common.security.JwtProperties;
 import com.app.common.security.JwtTokenProvider;
 import com.app.common.security.RefreshTokenService;
+import com.app.common.security.TokenBlacklistService;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
@@ -44,15 +47,12 @@ import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
 import com.app.modules.auth.dto.response.UserSummaryResponse;
-import com.app.modules.auth.entity.PasswordResetToken;
 import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.UserRole;
 import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.mapper.AuthMapper;
-import com.app.modules.auth.repository.EmailVerificationTokenRepository;
-import com.app.modules.auth.repository.PasswordResetTokenRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
@@ -65,14 +65,13 @@ class AuthServiceImplTest {
     @Mock private UserRepository userRepository;
     @Mock private UserCredentialRepository credentialRepository;
     @Mock private UserSettingsRepository settingsRepository;
-    @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
-    @Mock private EmailVerificationTokenRepository emailVerificationTokenRepository;
     @Mock private TokenService tokenService;
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private MailService mailService;
     @Mock private AuthMapper authMapper;
+    @Mock private TokenBlacklistService tokenBlacklistService;
 
     private AuthServiceImpl service;
 
@@ -100,8 +99,6 @@ class AuthServiceImplTest {
                         userRepository,
                         credentialRepository,
                         settingsRepository,
-                        passwordResetTokenRepository,
-                        emailVerificationTokenRepository,
                         tokenService,
                         refreshTokenService,
                         jwtTokenProvider,
@@ -109,7 +106,8 @@ class AuthServiceImplTest {
                         passwordEncoder,
                         mailService,
                         appProperties,
-                        authMapper);
+                        authMapper,
+                        tokenBlacklistService);
     }
 
     private MockHttpServletRequest stubRequest() {
@@ -330,6 +328,56 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void logout_blacklistsAccessTokenAndRevokesRefreshToken() {
+        String rawAccessToken = "raw-access";
+        String jti = UUID.randomUUID().toString();
+        Instant exp = Instant.now().plusSeconds(600);
+        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "x@y.z", "USER", jti, exp);
+        when(jwtTokenProvider.validateAndParse(rawAccessToken)).thenReturn(claims);
+
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken("principal", rawAccessToken));
+        try {
+            service.logout(new RefreshRequest("REFRESH-RAW"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        verify(tokenBlacklistService).blacklist(eq(jti), longThat(ttl -> ttl > 0L && ttl <= 600L));
+        verify(refreshTokenService).revoke("REFRESH-RAW");
+    }
+
+    @Test
+    void logout_invalidAccessToken_stillRevokesRefreshToken() {
+        String rawAccessToken = "expired-access";
+        when(jwtTokenProvider.validateAndParse(rawAccessToken))
+                .thenThrow(new AppException(ApiErrorCode.AUTH_TOKEN_EXPIRED));
+
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken("principal", rawAccessToken));
+        try {
+            service.logout(new RefreshRequest("REFRESH-RAW"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        verify(tokenBlacklistService, never()).blacklist(anyString(), anyLong());
+        verify(refreshTokenService).revoke("REFRESH-RAW");
+    }
+
+    @Test
+    void logout_noAuthContext_blacklistsNothingAndRevokesRefreshToken() {
+        SecurityContextHolder.clearContext();
+
+        service.logout(new RefreshRequest("REFRESH-RAW"));
+
+        verify(tokenBlacklistService, never()).blacklist(anyString(), anyLong());
+        verify(refreshTokenService).revoke("REFRESH-RAW");
+    }
+
+    @Test
     void forgotPassword_unknownEmail_returnsSilentlyAndSendsNoMail() {
         when(userRepository.findByEmailAndDeletedAtIsNull("ghost@x.y"))
                 .thenReturn(Optional.empty());
@@ -358,15 +406,7 @@ class AuthServiceImplTest {
     void resetPassword_revokesAllSessionsAndDispatchesNotification() {
         UUID userId = UUID.randomUUID();
         String raw = "RESET-RAW";
-        PasswordResetToken stored =
-                PasswordResetToken.builder()
-                        .id(UUID.randomUUID())
-                        .userId(userId)
-                        .tokenHash(sha256(raw))
-                        .expiresAt(OffsetDateTime.now().plusMinutes(10))
-                        .build();
-        when(passwordResetTokenRepository.findByTokenHash(sha256(raw)))
-                .thenReturn(Optional.of(stored));
+        when(tokenService.consumePasswordResetToken(raw)).thenReturn(userId);
         UserCredential cred = credential(userId, "OLD-HASH");
         when(credentialRepository.findByUserId(userId)).thenReturn(Optional.of(cred));
         when(passwordEncoder.encode("newPassword1")).thenReturn("NEW-HASH");
@@ -384,16 +424,14 @@ class AuthServiceImplTest {
 
     @Test
     void resetPassword_unknownToken_throwsResetTokenInvalid() {
-        when(passwordResetTokenRepository.findByTokenHash(anyString()))
-                .thenReturn(Optional.empty());
+        when(tokenService.consumePasswordResetToken(anyString()))
+                .thenThrow(new com.app.modules.auth.exception.TokenNotFoundException("invalid"));
 
         assertThatThrownBy(
                         () ->
                                 service.resetPassword(
                                         new ResetPasswordRequest("ghost", "newPassword1")))
-                .isInstanceOf(AppException.class)
-                .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+                .isInstanceOf(com.app.modules.auth.exception.TokenNotFoundException.class);
         verify(refreshTokenService, never()).revokeAllForUser(any());
     }
 
@@ -416,16 +454,6 @@ class AuthServiceImplTest {
                 .passwordHash(hash)
                 .emailVerified(false)
                 .build();
-    }
-
-    private static String sha256(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(bytes);
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     @SuppressWarnings("unused")

@@ -22,7 +22,9 @@ import com.app.modules.auth.repository.UserRepository;
 /**
  * Authenticates requests by extracting a Bearer JWT, verifying its signature, and resolving the
  * persisted {@link User} so that account-level state (status, soft-delete) is enforced on every
- * call.
+ * call. The raw token is stored as the {@link UsernamePasswordAuthenticationToken} credentials so
+ * that downstream handlers (logout) can recover the {@code jti} and remaining lifetime without
+ * re-reading the {@code Authorization} header.
  *
  * <p>The filter never writes the response on failure: it clears the context and lets downstream
  * handlers (Spring Security's {@code AuthenticationEntryPoint}) decide how to respond.
@@ -35,14 +37,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
     private final SecurityMapper securityMapper;
+    private final TokenBlacklistService tokenBlacklistService;
 
     public JwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider,
             UserRepository userRepository,
-            SecurityMapper securityMapper) {
+            SecurityMapper securityMapper,
+            TokenBlacklistService tokenBlacklistService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userRepository = userRepository;
         this.securityMapper = securityMapper;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
@@ -60,6 +65,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(BEARER_PREFIX.length());
             JwtClaims claims = jwtTokenProvider.validateAndParse(token);
 
+            if (tokenBlacklistService.isBlacklisted(claims.jti())) {
+                SecurityContextHolder.clearContext();
+                chain.doFilter(req, res);
+                return;
+            }
+
             User user =
                     userRepository
                             .findByIdAndDeletedAtIsNull(claims.userId())
@@ -69,7 +80,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(
-                            principal, null, principal.getAuthorities());
+                            principal, token, principal.getAuthorities());
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
             SecurityContextHolder.getContext().setAuthentication(auth);
 
