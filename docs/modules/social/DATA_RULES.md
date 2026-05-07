@@ -1,10 +1,10 @@
-# Social Module — Source of Truth
+# Social Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -15,7 +15,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -54,6 +54,12 @@ These tables cannot be rebuilt from any other source if lost.
 | A blocked user must be excluded from follower/following lists, search results, and all feed queries | `[NOT YET IMPLEMENTED]` |
 | A follow request generates a `follow_request` notification; an accepted follow generates a `follow` notification | `[NOT YET IMPLEMENTED]` |
 | When a private account is made public, all `'pending'` follow rows for that account must be transitioned to `'accepted'` | `[NOT YET IMPLEMENTED]` |
+
+**Block directionality**:
+- The `blocks` table stores a single directional row: `(blocker_id, blocked_id)`.
+- However, the practical effect is bidirectional: neither party can see the other's content, follow each other, or send messages.
+- This bidirectional enforcement is an application-layer rule, not a DB constraint.
+- The DB only enforces that `blocker_id ≠ blocked_id` and that the pair is unique.
 
 ### C. Scope Simplifications
 

@@ -1,10 +1,10 @@
-# Users Module — Source of Truth
+# Users Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module beyond the `User` entity and auth-owned repositories.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -16,7 +16,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -55,6 +55,11 @@ These tables cannot be rebuilt from any other source if lost.
 | Soft delete of a user must set `deleted_at = NOW()`; must not hard-delete | `[NOT YET IMPLEMENTED]` |
 | Restoring a soft-deleted user must set `deleted_at = NULL` | `[NOT YET IMPLEMENTED]` |
 | Avatar upload uses `media_assets` storage; `users.avatar_url` stores the CDN URL, not a FK | `[NOT YET IMPLEMENTED]` |
+
+**Username and Email Retention on Soft Delete**:
+- `UNIQUE` constraints on `username` and `email` are enforced even when `deleted_at IS NOT NULL`.
+- Soft-deleted accounts retain their `username` and `email`. These identifiers are not reusable by other accounts.
+- See `GLOBAL_RULES.md` — Username and Email Retention Policy for full details.
 
 ### C. Scope Simplifications
 

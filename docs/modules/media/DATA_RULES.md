@@ -1,20 +1,22 @@
-# Media Module — Source of Truth
+# Media Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
 | `media_assets` | `id`, `user_id`, `storage_key`, `cdn_url`, `media_type`, `mime_type`, `file_size`, `width`, `height`, `duration`, `blurhash`, `created_at` | Canonical record of every uploaded media file. `storage_key` is the Cloudflare R2 object key. `cdn_url` is the public CDN URL for rendering. |
 
-This table cannot be rebuilt from any other source if lost (the R2 objects may still exist, but the metadata — `blurhash`, `width`, `height`, `duration` — would be lost).
+Full rebuild is not possible. If R2 objects still exist, basic metadata (`mime_type`, `file_size`, `width`, `height`, `duration`) can be partially re-extracted. However, `blurhash`, `alt_text`, original `user_id` ownership context, and `created_at` timestamps may be unrecoverable without the original DB records.
+
+Media records are created after a client-side upload to Cloudflare R2 via pre-signed URL. All metadata fields are submitted by the client. See `GLOBAL_RULES.md` — Media Upload Flow.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -43,10 +45,8 @@ This table cannot be rebuilt from any other source if lost (the R2 objects may s
 |------|---------------------|
 | File upload must generate a unique `storage_key` (e.g., UUID-based path) before writing to R2 | `[NOT YET IMPLEMENTED]` |
 | `cdn_url` is derived from `storage_key` using the configured CDN base URL; it must not be user-supplied | `[NOT YET IMPLEMENTED]` |
-| `width`, `height` are extracted from the image/video after upload via server-side processing | `[NOT YET IMPLEMENTED]` |
-| `duration` is extracted from video metadata after upload | `[NOT YET IMPLEMENTED]` |
-| `blurhash` is computed server-side from the image after upload; it must not be user-supplied | `[NOT YET IMPLEMENTED]` |
-| Maximum file size limits must be enforced at the API layer before upload to R2 | `[NOT YET IMPLEMENTED]` |
+| All media metadata (`width`, `height`, `duration`, `mime_type`, `file_size`, `blurhash`) is submitted by the client after direct upload to R2 via pre-signed URL; the server does not perform server-side media inspection at upload time | `[NOT YET IMPLEMENTED]` |
+| Maximum file size limits must be enforced at the API layer before issuing the pre-signed upload URL | `[NOT YET IMPLEMENTED]` |
 | Accepted `mime_type` values must be validated against an allowlist (e.g., `image/jpeg`, `image/png`, `video/mp4`) | `[NOT YET IMPLEMENTED]` |
 | Deleting a `media_assets` row must also delete the corresponding R2 object; do not leave orphaned objects in storage | `[NOT YET IMPLEMENTED]` |
 | A media asset owned by user A must not be referenceable by user B in their posts | `[NOT YET IMPLEMENTED]` |
@@ -56,7 +56,6 @@ This table cannot be rebuilt from any other source if lost (the R2 objects may s
 - `users.avatar_url` stores the CDN URL as plain `TEXT`, not a FK to `media_assets`. This means avatar assets are not referentially tracked and can become orphaned if not explicitly deleted.
 - No image processing pipeline (resizing, transcoding) is defined in v1; raw uploads are stored and served as-is.
 - No virus scanning or content moderation at upload time.
-- No pre-signed upload URLs — exact upload flow (direct-to-R2 vs server-side) is not yet defined.
 
 ---
 

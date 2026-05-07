@@ -1,10 +1,10 @@
-# Notification Module — Source of Truth
+# Notification Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -14,7 +14,7 @@ This table cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -48,6 +48,11 @@ This table cannot be rebuilt from any other source if lost.
 | Push delivery uses `push_tokens` from the users module; token failures must not block the notification write to PostgreSQL | `[NOT YET IMPLEMENTED]` |
 | Notification dispatch is done asynchronously via RabbitMQ to avoid blocking the source event transaction | `[NOT YET IMPLEMENTED]` |
 | Stale notifications (e.g., for a deleted post) must be handled gracefully on read — `entity_id` may reference a soft-deleted or hard-deleted entity | `[NOT YET IMPLEMENTED]` |
+
+**Failure Mode** `[KNOWN GAP — no retry/DLQ implemented]`:
+- Notifications are created as a result of domain events. If event delivery via RabbitMQ fails, the notification is not created.
+- There is currently no retry mechanism or dead-letter queue for failed notification events.
+- This means some notifications may be silently dropped under failure conditions.
 
 ### C. Scope Simplifications
 

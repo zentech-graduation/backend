@@ -1,10 +1,10 @@
-# Message Module — Source of Truth
+# Message Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -16,7 +16,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -57,6 +57,11 @@ These tables cannot be rebuilt from any other source if lost.
 | Group admins may add/remove participants and update `group_name` / `group_avatar_url` | `[NOT YET IMPLEMENTED]` |
 | Sending a message generates a `message` notification for all participants except the sender | `[NOT YET IMPLEMENTED]` |
 | `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `[NOT YET IMPLEMENTED]` |
+
+**`sender_id` cascade behavior** `[KNOWN GAP — pending migration fix]`:
+- The current schema defines `sender_id` with `ON DELETE CASCADE`, meaning deleting a user deletes their sent messages.
+- This is a **known data integrity risk**: deleting a user should not destroy conversation history for remaining participants.
+- The intended behavior is `ON DELETE SET NULL` on `sender_id`, so deleted users' messages are preserved with a null sender.
 
 ### C. Scope Simplifications
 

@@ -1,10 +1,10 @@
-# Story Module — Source of Truth
+# Story Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -15,7 +15,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -44,13 +44,13 @@ These tables cannot be rebuilt from any other source if lost.
 | Rule | Service / Component |
 |------|---------------------|
 | Stories must not be returned if `expires_at <= NOW()` or `deleted_at IS NOT NULL`; use the `active_stories` view or equivalent filter | `[NOT YET IMPLEMENTED]` |
-| A viewer should not see their own story-view count increment (story owner sees the viewer list, not their own view) | `[NOT YET IMPLEMENTED]` |
+| When the story owner views their own story, a row must NOT be inserted into `story_views`. This is enforced by the Service layer, not the DB. | `[NOT YET IMPLEMENTED]` |
 | Only the story owner may soft-delete their story | `[NOT YET IMPLEMENTED]` |
 | Viewing a story inserts into `story_views`; duplicate inserts (same viewer) must be ignored (`INSERT ... ON CONFLICT DO NOTHING`) | `[NOT YET IMPLEMENTED]` |
 | Stories from private accounts are only visible to accepted followers | `[NOT YET IMPLEMENTED]` |
 | Stories from blocked accounts must be excluded from the viewer's feed | `[NOT YET IMPLEMENTED]` |
 | Viewing a story generates a `story_view` notification for the story owner | `[NOT YET IMPLEMENTED]` |
-| A background cleanup job must hard-delete expired stories (`expires_at < NOW()` and `deleted_at IS NOT NULL`) to reclaim storage | `[NOT YET IMPLEMENTED]` |
+| A background cleanup job removes rows that have already been soft-deleted (`deleted_at IS NOT NULL`) AND have passed their expiry time (`expires_at < NOW()`). Stories that are expired but not yet soft-deleted are NOT targets for the cleanup job. | `[NOT YET IMPLEMENTED]` |
 | `user_settings.allow_story_replies` governs whether viewers can reply to a story | `[NOT YET IMPLEMENTED]` |
 
 ### C. Scope Simplifications

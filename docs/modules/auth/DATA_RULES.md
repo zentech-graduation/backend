@@ -1,10 +1,10 @@
-# Auth Module — Source of Truth
+# Auth Module — Data Rules
 
 **Implementation status**: Fully implemented (`AuthController`, `AuthServiceImpl`, `TokenServiceImpl`, repositories, entities).
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -17,7 +17,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -64,7 +64,14 @@ These tables cannot be rebuilt from any other source if lost.
 | A suspended or banned (`status != 'active'`) user is rejected at authentication | `AuthServiceImpl` |
 | Soft-deleted users (`deleted_at IS NOT NULL`) cannot authenticate | `AuthServiceImpl` |
 
-### C. Scope Simplifications
+### C. Field Clarifications
+
+**`users.is_verified` vs `user_credentials.email_verified`**:
+- `user_credentials.email_verified` — confirms the user owns the email address. Set to `true` after the user clicks the email verification link. This is an authentication concern.
+- `users.is_verified` — indicates the account has a verified identity badge (e.g., public figure, brand). This is a trust/display concern, set by administrators.
+- These two fields are independent. A user can have `email_verified = true` and `is_verified = false`, and vice versa.
+
+### D. Scope Simplifications
 
 - Email verification is enforced on login for local auth users but not yet blocking for OAuth users.
 - Device-level `device_id`, `user_agent`, and `ip_address` are stored on `refresh_tokens` for audit, but no active device-management UI exists yet.

@@ -1,10 +1,10 @@
-# Hashtag Module — Source of Truth
+# Hashtag Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -16,7 +16,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -50,6 +50,12 @@ These tables cannot be rebuilt from any other source if lost.
 | When a post is unpublished or soft-deleted, its `post_hashtags` rows must be deleted (triggering `post_count` decrement) | `[NOT YET IMPLEMENTED]` |
 | Hashtag search uses the `idx_hashtags_name_trgm` GIN index for fuzzy matching | `[NOT YET IMPLEMENTED]` |
 | The trending background job writes to `hashtag_trending` with a `(period_start, period_end)` window and a computed `rank` | `[NOT YET IMPLEMENTED]` |
+
+**Normalization before insert**:
+- `hashtags.name` is stored lowercase. The DB UNIQUE constraint is case-sensitive.
+- The Service layer MUST normalize hashtag names to lowercase before any insert or lookup.
+- Failure to normalize before insert will result in duplicate hashtags differing only by case, bypassing the uniqueness guarantee.
+- Rule owner: `HashtagService` — normalize to lowercase before `findByName` or `save`.
 
 ### C. Scope Simplifications
 

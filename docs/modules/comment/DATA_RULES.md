@@ -1,10 +1,10 @@
-# Comment Module — Source of Truth
+# Comment Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -15,7 +15,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -33,7 +33,6 @@ These tables cannot be rebuilt from any other source if lost.
 | Rule | Enforced By |
 |------|-------------|
 | `depth` must be between 0 and 10 (inclusive) | `CHECK (depth BETWEEN 0 AND 10)` |
-| Top-level comments have `depth = 0`, `parent_id IS NULL`, `root_id IS NULL` | Column semantics; application must set correctly |
 | `like_count` and `reply_count` are non-negative | `CHECK (column >= 0)` |
 | `comment_likes` allows at most one like per (user, comment) pair | Compound `PRIMARY KEY (user_id, comment_id)` |
 | Deleting a post cascades to all its comments | `ON DELETE CASCADE` on `comments.post_id` |
@@ -44,6 +43,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
+| Top-level comments have `depth = 0`, `parent_id IS NULL`, `root_id IS NULL` — the Service layer is responsible for setting these values correctly on insert. No CHECK constraint in the schema enforces this combination. | `[NOT YET IMPLEMENTED]` |
 | `root_id` must be set to the top-level comment's `id` for all replies at any depth | `[NOT YET IMPLEMENTED]` |
 | `depth` must be set to `parent.depth + 1` when creating a reply | `[NOT YET IMPLEMENTED]` |
 | A comment cannot be created if `depth` would exceed 10 (reject at service layer) | `[NOT YET IMPLEMENTED]` |

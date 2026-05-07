@@ -1,10 +1,10 @@
-# Admin Module — Source of Truth
+# Admin Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -14,7 +14,7 @@ This table cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
@@ -51,6 +51,12 @@ This table cannot be rebuilt from any other source if lost.
 | `restore_comment` action must clear `comments.deleted_at` in the same transaction | `[NOT YET IMPLEMENTED]` |
 | `resolve_report` and `dismiss_report` must update `reports.status` and `reports.reviewed_by` / `reviewed_at` in the same transaction | `[NOT YET IMPLEMENTED]` |
 | `admin_actions` rows must never be updated or deleted once created; they are the permanent audit trail | `[NOT YET IMPLEMENTED]` — consider a DB-level revoke of UPDATE/DELETE on this table in production |
+
+**`admin_id` cascade risk** `[KNOWN GAP — pending migration fix]`:
+- The current schema defines `admin_actions.admin_id` with `ON DELETE CASCADE`.
+- This means deleting an admin user permanently destroys their audit log history.
+- This is a **known data integrity risk**: audit logs should be immutable records, not subject to deletion when an admin account is removed.
+- Intended behavior: `ON DELETE SET NULL` on `admin_id` to preserve audit history.
 
 ### C. Scope Simplifications
 

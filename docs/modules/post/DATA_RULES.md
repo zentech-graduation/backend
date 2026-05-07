@@ -1,10 +1,10 @@
-# Post Module — Source of Truth
+# Post Module — Data Rules
 
 **Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
 
 ---
 
-## Section 1: Source-of-Truth Data
+## Section 1: Canonical Data
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
@@ -18,14 +18,14 @@ These tables cannot be rebuilt from any other source if lost.
 
 ---
 
-## Section 2: Derived / Secondary Data
+## Section 2: Derived Data / Cache / Projection
 
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
 | `posts.like_count` | `posts` table | `COUNT(*)` from `post_likes` where `post_id = post.id` | Trigger `trg_post_like_count` (V16) |
 | `posts.comment_count` | `posts` table | `COUNT(*)` from `comments` where `post_id = post.id` and `deleted_at IS NULL` | Trigger `trg_post_comment_count` (V16) |
 | `posts.save_count` | `posts` table | `COUNT(*)` from `post_saves` where `post_id = post.id` | Trigger `trg_post_save_count` (V16) |
-| `posts.view_count` | `posts` table | No trigger — maintained by application code or background job | Application write on view event |
+| `posts.view_count` | `posts` table | No trigger — updated by background job | Background job; may lag real-time activity |
 | `posts.updated_at` | `posts` table | Auto-maintained | Trigger `trg_posts_updated_at` (V16) |
 | `users.post_count` | `users` table | `COUNT(*)` from `posts` where `user_id` matches, `status='published'`, `deleted_at IS NULL` | Trigger `trg_post_count` (V16) |
 | Post feed cache | Redis | Rebuild from `posts` ordered by `created_at DESC` | Cache miss or TTL expiry |
@@ -54,19 +54,19 @@ These tables cannot be rebuilt from any other source if lost.
 | Rule | Service / Component |
 |------|---------------------|
 | A `carousel` post must have more than one `post_media` row | `[NOT YET IMPLEMENTED]` |
-| A user cannot like their own post | `[NOT YET IMPLEMENTED]` |
+| Self-like is permitted. There is no constraint preventing a user from liking their own post. | No constraint in schema |
 | Only the post owner may update or soft-delete their post | `[NOT YET IMPLEMENTED]` |
 | A soft-deleted post must set `deleted_at = NOW()` and `status = 'removed'`; do not hard-delete | `[NOT YET IMPLEMENTED]` |
 | `status = 'removed'` by admin sets `deleted_at = NOW()` via admin action | `[NOT YET IMPLEMENTED]` |
 | Posts from blocked users must be excluded from feeds | `[NOT YET IMPLEMENTED]` |
 | Posts from private accounts are only visible to accepted followers | `[NOT YET IMPLEMENTED]` |
-| `view_count` is incremented via `user_events` insert + application counter update (no trigger) | `[NOT YET IMPLEMENTED]` |
+| `posts.view_count` is updated by a background job, not a trigger. It may lag real-time activity. See `GLOBAL_RULES.md` — Counter Policy Exception. | Background job `[NOT YET IMPLEMENTED]` |
 | Hashtags in `caption` are parsed and written to `post_hashtags` at publish time | `[NOT YET IMPLEMENTED]` |
 | User mentions in `caption` generate `mention_post` notifications | `[NOT YET IMPLEMENTED]` |
 
 ### C. Scope Simplifications
 
-- `posts.view_count` is a denormalized counter but has **no trigger** maintaining it; application code is responsible. This diverges from the trigger pattern used for other counters.
+- `posts.view_count` is a denormalized counter updated by a **background job**, not a trigger. This diverges from the trigger pattern used for other counters and means `view_count` may lag behind real-time activity.
 - No post scheduling (publish at a future time); `status = 'draft'` is the only unpublished state.
 - Location data (`latitude`, `longitude`) is stored but no geospatial query support is implemented.
 

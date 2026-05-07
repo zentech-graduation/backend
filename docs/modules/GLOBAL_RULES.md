@@ -1,4 +1,4 @@
-# Global Rules — Source of Truth
+# Global Rules — Data Rules
 
 Cross-cutting conventions that apply to all modules. Do not duplicate these in per-module files — reference this document instead.
 
@@ -38,6 +38,8 @@ If a counter appears stale, the correct action is to recalculate from the source
 
 All counter columns have `CHECK (column >= 0)` enforced at the database level. Triggers use `GREATEST(counter - 1, 0)` to prevent underflow on decrement.
 
+**Exception — `posts.view_count`**: This counter is NOT maintained by a PostgreSQL trigger. It is updated by a background job due to high-volume write concerns. As a result, `view_count` may lag behind real-time activity. This is a deliberate tradeoff. Application code must not attempt to increment `view_count` directly from a request path.
+
 ---
 
 ## 3. Soft Delete Policy
@@ -55,8 +57,18 @@ Tables that use soft delete via a `deleted_at TIMESTAMPTZ` column:
 Rules:
 - All queries against soft-deleted tables must include `WHERE deleted_at IS NULL` unless explicitly retrieving deleted records.
 - Partial indexes already enforce `deleted_at IS NULL` for common access patterns; always use these indexes.
-- Cascading behavior on soft delete is defined per module in each module's `SOURCE_OF_TRUTH.md`.
+- Cascading behavior on soft delete is defined per module in each module's `DATA_RULES.md`.
 - Hard deletes are reserved for administrative actions only.
+
+### Username and Email Retention on Soft Delete
+
+**Rule**: Soft delete does NOT release a user's `username` or `email`.
+
+- The `UNIQUE` constraints on `users.username` and `users.email` remain enforced regardless of `deleted_at` value.
+- A soft-deleted account continues to hold its username and email.
+- Username and email only become available after a hard delete (permanent row removal via a scheduled purge job).
+- No purge job currently exists. Until one is implemented, soft-deleted accounts hold their username and email permanently.
+- This mirrors the behavior of Instagram, which holds deleted account identifiers for a minimum grace period before releasing them.
 
 ---
 
@@ -90,7 +102,22 @@ All timestamps use `TIMESTAMPTZ` (timezone-aware). Store and compare in UTC.
 
 ---
 
-## 7. Scope Simplifications (Deliberate Tradeoffs)
+## 7. Media Upload Flow
+
+**Rule**: The server does not receive media file bytes directly. All media uploads use pre-signed URLs.
+
+Flow:
+1. Client requests a pre-signed upload URL from the backend, providing `content-type` and `file-size`.
+2. Backend validates the request, generates a Cloudflare R2 pre-signed URL, and returns it to the client.
+3. Client performs a `PUT` request directly to R2 using the pre-signed URL.
+4. After upload completes, client sends an "upload complete" notification to the backend, including: `storage_key`, `cdn_url`, `media_type`, `mime_type`, `file_size`, `width`, `height`, `duration` (video only), `blurhash`.
+5. Backend creates the `media_assets` record using the provided metadata.
+
+**Rule**: All media metadata (`width`, `height`, `duration`, `mime_type`, `file_size`, `blurhash`) is collected client-side and submitted by the client. The server does not perform server-side media inspection at upload time.
+
+---
+
+## 8. Scope Simplifications (Deliberate Tradeoffs)
 
 | Area | Simplification | Accepted Degradation |
 |------|---------------|----------------------|
@@ -101,3 +128,18 @@ All timestamps use `TIMESTAMPTZ` (timezone-aware). Store and compare in UTC.
 | Full-text search | No Elasticsearch in v1; username/hashtag search uses PostgreSQL `pg_trgm` GIN index | Search ranking is less sophisticated than a dedicated search engine |
 | Recommendation | `user_similarity` and `post_interaction_scores` populated by external ML jobs | Recommendations may lag behind recent user behavior |
 | Story expiry | Expired stories remain in the database until a cleanup job removes them | `expires_at` must always be checked; do not rely on row absence alone |
+
+---
+
+## Metadata Configuration Tables
+
+The following tables store runtime configuration and feature policy. They are NOT business logic source-of-truth tables. They exist to allow policy changes without code deployments.
+
+| Table | Purpose |
+|-------|---------|
+| `system_settings` | System-wide configurable limits and TTL values |
+| `notification_type_configs` | Notification type registry with display and toggle settings |
+| `moderation_action_configs` | Admin moderation action registry |
+| `feature_flags` | Feature enable/disable control per environment |
+
+**Rule**: These tables must never store secrets, private keys, OAuth credentials, database URLs, or any sensitive environment-specific values. Those remain in environment variables.
