@@ -50,6 +50,7 @@ Media records are created after a client-side upload to Cloudflare R2 via pre-si
 | Accepted `mime_type` values must be validated against an allowlist (e.g., `image/jpeg`, `image/png`, `video/mp4`) | `[NOT YET IMPLEMENTED]` |
 | Deleting a `media_assets` row must also delete the corresponding R2 object; do not leave orphaned objects in storage | `[NOT YET IMPLEMENTED]` |
 | A media asset owned by user A must not be referenceable by user B in their posts | `[NOT YET IMPLEMENTED]` |
+| **Server-side metadata validation before `media_assets` insert**: Although media files are uploaded directly to Cloudflare R2 by the client (pre-signed URL flow), the server MUST validate all client-submitted metadata before creating the `media_assets` record. Validation includes: `file_size` must be within the limit defined in `system_settings.max_media_size_mb`; `media_type` must match an accepted value (`image` or `video`); `mime_type` must be within the application's allowed MIME type list; `width` and `height` must be positive integers (for image and video); `duration` must be a non-negative integer (required for video, null for image); `storage_key` must follow the expected R2 key format and must not already exist in `media_assets`. The client is not trusted to submit correct metadata. Validation failure must reject the "upload complete" request and leave no orphaned `media_assets` record. The R2 object may remain; orphan cleanup is a separate operational concern. | `[NOT YET IMPLEMENTED]` |
 
 ### C. Scope Simplifications
 

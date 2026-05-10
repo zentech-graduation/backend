@@ -131,6 +131,31 @@ Flow:
 
 ---
 
+## Enum vs. Config Table Relationship
+
+Several domain tables use PostgreSQL enum types as the column type for classification fields:
+
+| Table | Enum column | Enum type |
+|-------|-------------|-----------|
+| `notifications` | `type` | `notification_type` |
+| `admin_actions` | `action_type` | `admin_action_type` |
+| `reports` | `report_reason` | `report_reason` |
+| `reports` | `report_type` | `report_type` |
+
+Alongside these, the schema includes config tables (`notification_type_configs`, `moderation_action_configs`, `report_reason_configs`) that store display metadata and behavioral policy for each enum value.
+
+**Rule: Enums are the constraint layer. Config tables are the metadata layer.**
+
+- The enum enforces that only valid, schema-defined values can be written to the column. This is enforced at the database level with zero overhead on the write path.
+- The config table stores supplementary metadata: `display_name`, `template_key`, `is_enabled`, `is_user_toggleable`, `scope`, etc. This data is read by the application layer for rendering, routing, and policy decisions.
+- The two layers are complementary. Config tables do not replace enums.
+
+**Implication**: Adding a new notification type, report reason, or admin action type requires a schema migration (adding the value to the enum). This is intentional — these are domain primitives, not user-configurable data that an admin can add arbitrarily at runtime.
+
+**Read path**: Services read config tables to determine display behavior and policy. The enum value in the row is the source of truth for what the event IS. The config table is the source of truth for how it should be DISPLAYED and HANDLED.
+
+---
+
 ## Metadata Configuration Tables
 
 The following tables store runtime configuration and feature policy. They are NOT business logic source-of-truth tables. They exist to allow policy changes without code deployments.
