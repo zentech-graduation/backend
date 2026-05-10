@@ -109,3 +109,42 @@ INSERT INTO feature_flags (flag_key, is_enabled, description, environment) VALUE
 CREATE TRIGGER trg_feature_flags_updated_at
     BEFORE UPDATE ON feature_flags
     FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
+
+-- ============================================================
+-- TABLE: report_reason_configs
+-- Display metadata and policy configuration for each report reason.
+-- reason_key maps to values in the report_reason enum.
+-- applies_to controls which report_type values this reason is valid for;
+-- empty array means the reason applies to all report types.
+-- ============================================================
+
+CREATE TABLE report_reason_configs (
+    reason_key          VARCHAR(100)    NOT NULL,
+    display_name        VARCHAR(100)    NOT NULL,
+    description         TEXT,
+    applies_to          VARCHAR(50)[]   NOT NULL DEFAULT '{}',
+    -- Array of report_type values this reason is valid for.
+    -- e.g. ARRAY['post', 'comment', 'story'] means this reason does not appear for 'user' or 'message' reports.
+    -- Empty array means applies to all report types.
+    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
+    sort_order          SMALLINT        NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (reason_key)
+);
+
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('spam',             'Spam',                          '{}'::VARCHAR(50)[],                              TRUE, 1);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('nudity',           'Nudity or Sexual Content',      ARRAY['post','comment','story','message'],         TRUE, 2);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('violence',         'Violence or Dangerous Content', ARRAY['post','comment','story','message'],         TRUE, 3);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('hate_speech',      'Hate Speech',                   ARRAY['post','comment','story','message'],         TRUE, 4);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('harassment',       'Harassment or Bullying',        '{}'::VARCHAR(50)[],                              TRUE, 5);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('false_information','False Information',             ARRAY['post','comment','story'],                   TRUE, 6);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('scam',             'Scam or Fraud',                 '{}'::VARCHAR(50)[],                              TRUE, 7);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('other',            'Other',                         '{}'::VARCHAR(50)[],                              TRUE, 99);
