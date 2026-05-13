@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- `report_reason_configs` table appended to V18 Flyway migration: stores display metadata and per-`report_type` scope control for all 8 `report_reason` enum values, seeded with one row per reason.
+- `GLOBAL_RULES.md`: new `Enum vs. Config Table Relationship` section documenting the contract between PostgreSQL enum columns and config tables (`notification_type_configs`, `moderation_action_configs`, `report_reason_configs`).
+- `media/DATA_RULES.md`: server-side metadata validation rule for `media_assets` insert — specifies that the server must validate all client-submitted metadata before creating the record, and that validation failure must leave no orphaned row.
+
 ### Security
 - LOW: documented a TOCTOU race in `TokenServiceImpl.createToken` (4-step issue flow is non-atomic so concurrent same-user issuance can briefly leak orphan single-use tokens until natural TTL); deferred per Phase 3 unit-test contract that asserts the current non-atomic shape.
 - MEDIUM: aligned `TokenNotFoundException` / `TokenExpiredException` HTTP mapping with the audit-mandated contract — verify-email with consumed/expired/unknown tokens now returns HTTP 404 (`NOT_FOUND`) instead of HTTP 400 (`AUTH_RESET_TOKEN_INVALID`), so the three states are indistinguishable to the caller.

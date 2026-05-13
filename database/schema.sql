@@ -81,9 +81,10 @@ CREATE TABLE users (
 );
 
 -- Local credentials (email + password login)
+-- password_hash is nullable to support OAuth-only users who have no local password
 CREATE TABLE user_credentials (
     user_id             UUID            PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    password_hash       TEXT            NOT NULL,
+    password_hash       TEXT,
     email_verified      BOOLEAN         NOT NULL DEFAULT FALSE,
     email_verified_at   TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -118,25 +119,8 @@ CREATE TABLE refresh_tokens (
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
--- Email verification tokens
-CREATE TABLE email_verification_tokens (
-    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash          TEXT            NOT NULL UNIQUE,
-    expires_at          TIMESTAMPTZ     NOT NULL,
-    used_at             TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
-
--- Password reset tokens
-CREATE TABLE password_reset_tokens (
-    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash          TEXT            NOT NULL UNIQUE,
-    expires_at          TIMESTAMPTZ     NOT NULL,
-    used_at             TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
+-- Note: email verification tokens and password reset tokens are stored in Redis
+-- (see TokenServiceImpl), not in the relational database.
 
 -- ============================================================
 -- MODULE: USER PROFILE & SETTINGS
@@ -933,8 +917,8 @@ WHERE s.deleted_at IS NULL
 
 -- Pending follow requests (for private accounts)
 CREATE OR REPLACE VIEW pending_follow_requests AS
-SELECT f.*, 
-       follower.username AS follower_username,
+SELECT f.*,
+       follower.username   AS follower_username,
        follower.avatar_url AS follower_avatar
 FROM follows f
 JOIN users follower ON follower.id = f.follower_id
@@ -950,53 +934,9 @@ WHERE r.status = 'pending'
 ORDER BY r.created_at ASC;
 
 -- ============================================================
--- SAMPLE QUERIES (reference only)
+-- REFERENCE ARTIFACT
+-- This file is auto-synced from Flyway migrations V01–V17.
+-- Do NOT use this file as the authoritative schema source.
+-- Authoritative source: src/main/resources/db/migration/
+-- Last synced: 2026-05-05
 -- ============================================================
-
-/*
--- ===== Feed: get posts from followed users =====
-SELECT p.*, u.username, u.avatar_url
-FROM posts p
-JOIN users u ON u.id = p.user_id
-WHERE p.user_id IN (
-    SELECT following_id FROM follows
-    WHERE follower_id = :current_user_id AND status = 'accepted'
-)
-AND p.status = 'published'
-AND p.deleted_at IS NULL
-ORDER BY p.created_at DESC
-LIMIT 20 OFFSET :offset;
-
--- ===== Comments: top-level + first 3 replies =====
--- Step 1: fetch top-level comments
-SELECT * FROM comments
-WHERE post_id = :post_id AND parent_id IS NULL AND deleted_at IS NULL
-ORDER BY created_at ASC LIMIT 20;
-
--- Step 2: fetch all replies for those root comments using recursive CTE
-WITH RECURSIVE reply_tree AS (
-    SELECT * FROM comments WHERE id = :root_comment_id
-    UNION ALL
-    SELECT c.* FROM comments c
-    JOIN reply_tree rt ON c.parent_id = rt.id
-    WHERE c.deleted_at IS NULL
-)
-SELECT * FROM reply_tree ORDER BY depth ASC, created_at ASC;
-
--- ===== Explore: ranked posts user has not seen =====
-SELECT p.id, p.caption, pis.total_score
-FROM posts p
-JOIN post_interaction_scores pis ON pis.post_id = p.id
-WHERE p.user_id NOT IN (
-    SELECT blocked_id FROM blocks WHERE blocker_id = :current_user_id
-    UNION ALL
-    SELECT blocker_id FROM blocks WHERE blocked_id = :current_user_id
-)
-AND p.id NOT IN (
-    SELECT entity_id FROM user_events
-    WHERE user_id = :current_user_id AND event_type = 'post_view'
-)
-AND p.status = 'published' AND p.deleted_at IS NULL
-ORDER BY pis.total_score DESC
-LIMIT 30;
-*/
