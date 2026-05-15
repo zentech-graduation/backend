@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `CODEOWNERS` defining per-module review ownership with placeholder team slugs for all 14 domain modules, common infrastructure, build files, and database migrations.
+- Pull request template enforcing author and reviewer checklists for format compliance, layer conventions, response wrapping, and Flyway migration hygiene.
+- GitHub issue forms for bug reports and feature requests, covering all 14 modules plus `common` and `other`.
+- `ISSUE_TEMPLATE/config.yml` disabling blank issues and routing security reports to GitHub Security Advisories.
+- `CONTRIBUTING.md` documenting development setup, branch naming, Conventional Commits standard, PR process, code style, and project-specific invariants.
+- `SECURITY.md` establishing private vulnerability disclosure via GitHub Security Advisories, response timeline, and in-scope/out-of-scope definitions.
+- `pr-lint` workflow enforcing Conventional Commits format on PR titles with required scopes for all modules.
+- `pr-size` workflow labeling PRs by size (XS/S/M/L/XL) and blocking merges when changed lines exceed 1000.
+
+### Added
 - Integrated `springdoc-openapi-starter-webmvc-ui` 3.0.3 for interactive API documentation.
 - `OpenApiConfig` bean exposing title, version, server entry from `app.base-url`, and global Bearer JWT security scheme.
 - OpenAPI JSON endpoint at `/api-docs` and Swagger UI at `/swagger-ui` (dev profile only; disabled in prod).
