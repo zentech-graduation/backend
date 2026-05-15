@@ -57,6 +57,7 @@ import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailService;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,6 +71,7 @@ class AuthServiceImplTest {
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private MailService mailService;
+    @Mock private MailProperties mailProperties;
     @Mock private AuthMapper authMapper;
     @Mock private TokenBlacklistService tokenBlacklistService;
 
@@ -105,6 +107,7 @@ class AuthServiceImplTest {
                         jwtProperties,
                         passwordEncoder,
                         mailService,
+                        mailProperties,
                         appProperties,
                         authMapper,
                         tokenBlacklistService);
@@ -393,13 +396,17 @@ class AuthServiceImplTest {
         User u = activeUser();
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(tokenService.createPasswordResetToken(u.getId())).thenReturn("RESET-RAW");
+        when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
+        when(mailProperties.getResetPasswordPath()).thenReturn("/reset-password");
 
         service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(mailService)
                 .sendPasswordReset(eq(u.getEmail()), eq(u.getDisplayName()), urlCaptor.capture());
-        assertThat(urlCaptor.getValue()).contains("RESET-RAW");
+        assertThat(urlCaptor.getValue())
+                .startsWith("http://localhost:5173/reset-password?token=")
+                .contains("RESET-RAW");
     }
 
     @Test
@@ -431,7 +438,9 @@ class AuthServiceImplTest {
                         () ->
                                 service.resetPassword(
                                         new ResetPasswordRequest("ghost", "newPassword1")))
-                .isInstanceOf(com.app.modules.auth.exception.TokenNotFoundException.class);
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
         verify(refreshTokenService, never()).revokeAllForUser(any());
     }
 
