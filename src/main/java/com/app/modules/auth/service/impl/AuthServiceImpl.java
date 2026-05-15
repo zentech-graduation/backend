@@ -199,6 +199,18 @@ public class AuthServiceImpl implements AuthService {
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
 
+        switch (user.getStatus()) {
+            case BANNED -> {
+                refreshTokenService.revoke(rotation.newRawToken());
+                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+            }
+            case SUSPENDED, DEACTIVATED -> {
+                refreshTokenService.revoke(rotation.newRawToken());
+                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+            }
+            default -> {}
+        }
+
         boolean emailVerified =
                 credentialRepository
                         .findByUserId(user.getId())
