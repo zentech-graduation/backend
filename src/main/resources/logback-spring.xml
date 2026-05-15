@@ -3,7 +3,7 @@
 
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <property name="APP_NAME" value="VietRecruit"/>
+    <property name="APP_NAME" value="app"/>
     <property name="LOG_PATH" value="${LOG_PATH:-${user.home}/${APP_NAME}/logs}"/>
 
     <springProperty scope="context" name="ACTIVE_PROFILE" source="spring.profiles.active" defaultValue="dev"/>
