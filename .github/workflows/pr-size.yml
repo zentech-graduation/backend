@@ -30,4 +30,3 @@ jobs:
             This PR is very large (>2000 lines changed). It will not be blocked, but
             please ensure reviewers are given enough time and context to review carefully.
             Consider splitting it into smaller PRs if possible.
-          github_token: ${{ secrets.GITHUB_TOKEN }}
