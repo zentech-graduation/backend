@@ -1,0 +1,29 @@
+name: PR Size
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  label-size:
+    name: Label PR size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: codelytv/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: size/XS
+          xs_max_size: 100
+          s_label: size/S
+          s_max_size: 400
+          m_label: size/M
+          m_max_size: 1000
+          l_label: size/L
+          l_max_size: 2000
+          xl_label: size/XL
+          fail_if_xl: false
+          message_if_xl: >
+            This PR is very large (>2000 lines changed). It will not be blocked, but
+            please ensure reviewers are given enough time and context to review carefully.
+            Consider splitting it into smaller PRs if possible.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
