@@ -50,6 +50,7 @@ app:
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
     reset-password-path: ${MAIL_RESET_PASSWORD_PATH:/reset-password}
+    frontend-base-url: ${FRONTEND_BASE_URL}
   rate-limit:
     login:
       max-attempts: 10
