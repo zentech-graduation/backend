@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Integrated `springdoc-openapi-starter-webmvc-ui` 3.0.3 for interactive API documentation.
+- `OpenApiConfig` bean exposing title, version, server entry from `app.base-url`, and global Bearer JWT security scheme.
+- OpenAPI JSON endpoint at `/api-docs` and Swagger UI at `/swagger-ui` (dev profile only; disabled in prod).
+- Full `@Tag`, `@Operation`, `@ApiResponses`, and `@SecurityRequirement` annotations on all `AuthController` endpoints.
+- `@Schema` annotations with descriptions, examples, and required-mode markers on all `auth` request and response DTOs.
+- Swagger UI paths (`/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html`) added to `SecurityConfig` permit list.
+
+
 - `report_reason_configs` table appended to V18 Flyway migration: stores display metadata and per-`report_type` scope control for all 8 `report_reason` enum values, seeded with one row per reason.
 - `GLOBAL_RULES.md`: new `Enum vs. Config Table Relationship` section documenting the contract between PostgreSQL enum columns and config tables (`notification_type_configs`, `moderation_action_configs`, `report_reason_configs`).
 - `media/DATA_RULES.md`: server-side metadata validation rule for `media_assets` insert — specifies that the server must validate all client-submitted metadata before creating the record, and that validation failure must leave no orphaned row.
