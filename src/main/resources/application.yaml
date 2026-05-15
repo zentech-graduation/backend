@@ -49,6 +49,7 @@ app:
   mail:
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
+    reset-password-path: ${MAIL_RESET_PASSWORD_PATH:/reset-password}
   rate-limit:
     login:
       max-attempts: 10
