@@ -133,6 +133,12 @@ public class AuthController extends BaseController {
                 description = "Refresh token invalid or expired",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Account is banned (AUTH_ACCOUNT_LOCKED) or suspended/deactivated"
+                                + " (AUTH_ACCOUNT_INACTIVE); issued token has been revoked",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class)))
@@ -273,7 +279,13 @@ public class AuthController extends BaseController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description =
-                        "Token invalid, expired, or already consumed (AUTH_RESET_TOKEN_INVALID); or account is locked/inactive",
+                        "Token invalid, expired, or already consumed (AUTH_RESET_TOKEN_INVALID)",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Account is banned (AUTH_ACCOUNT_LOCKED) or suspended/deactivated"
+                                + " (AUTH_ACCOUNT_INACTIVE)",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "422",
