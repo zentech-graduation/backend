@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- `OpenApiConfig` bean updated to source the server URL from `AppProperties.baseUrl()` and produce API title `"App API"`, version `"1.0.0"`, and a global `bearerAuth` Bearer JWT security scheme.
+- `AuthApi` interface (`modules/auth/api`) carrying all `@Tag`, `@Operation`, `@ApiResponses`, and `@Parameter` OpenAPI annotations for the 8 auth endpoints; `AuthController` implements this interface and contains zero documentation annotations.
+- `docs/modules/OPENAPI_GUIDE.md`: developer guide explaining how to document a new module using the Interface Segregation pattern, including step-by-step instructions, rules, a reference endpoint table, and common mistakes.
+
+### Changed
+- `AuthController` refactored to implement `AuthApi`; class-level `@Tag` and `@RequestMapping` removed (now on the interface); all `@Operation`, `@ApiResponses`, and `@Parameter` annotations removed from handler methods.
+
 ### Fixed
 - Banned, suspended, and deactivated users can no longer receive or redeem a password-reset link; `forgotPassword` returns silently and `resetPassword` throws the appropriate locked/inactive error.
 - Password-reset email link now uses `mail.frontend-base-url` and the configurable `mail.reset-password-path` property (default `/reset-password`) instead of the backend API URL, making the link functional in a browser.
