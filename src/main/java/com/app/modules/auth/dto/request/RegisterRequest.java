@@ -5,13 +5,37 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "Payload for creating a new user account")
 public record RegisterRequest(
-        @NotBlank
+        @Schema(
+                        description =
+                                "Unique username; letters, digits, underscores, and dots only",
+                        example = "john_doe",
+                        requiredMode = Schema.RequiredMode.REQUIRED)
+                @NotBlank
                 @Size(min = 3, max = 30)
                 @Pattern(
                         regexp = "^[a-zA-Z0-9_.]+$",
                         message = "Username may only contain letters, digits, underscores and dots")
                 String username,
-        @NotBlank @Email String email,
-        @NotBlank @Size(min = 8, max = 128) String password,
-        @Size(max = 100) String displayName) {}
+        @Schema(
+                        description = "User's email address; used for login and verification",
+                        example = "john@example.com",
+                        requiredMode = Schema.RequiredMode.REQUIRED)
+                @NotBlank
+                @Email
+                String email,
+        @Schema(
+                        description = "Account password; 8–128 characters",
+                        example = "S3cur3P@ssword",
+                        requiredMode = Schema.RequiredMode.REQUIRED)
+                @NotBlank
+                @Size(min = 8, max = 128)
+                String password,
+        @Schema(
+                        description = "Human-readable display name shown on the profile (optional)",
+                        example = "John Doe")
+                @Size(max = 100)
+                String displayName) {}

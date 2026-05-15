@@ -104,8 +104,9 @@ public class SecurityConfig {
                                 auth.requestMatchers(
                                                 "/api/v1/auth/**",
                                                 "/actuator/health",
-                                                "/vietrecruit/api-docs/**",
-                                                "/vietrecruit/v3/api-docs/**")
+                                                "/api-docs/**",
+                                                "/swagger-ui/**",
+                                                "/swagger-ui.html")
                                         .permitAll()
                                         .requestMatchers("/actuator/**")
                                         .hasRole("ADMIN")
