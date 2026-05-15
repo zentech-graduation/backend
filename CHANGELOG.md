@@ -6,7 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Banned, suspended, and deactivated users can no longer receive or redeem a password-reset link; `forgotPassword` returns silently and `resetPassword` throws the appropriate locked/inactive error.
+- Password-reset email link now uses `mail.frontend-base-url` and the configurable `mail.reset-password-path` property (default `/reset-password`) instead of the backend API URL, making the link functional in a browser.
+- `TokenNotFoundException` thrown during password-reset token consumption is now converted to `AppException(AUTH_RESET_TOKEN_INVALID)` at the service layer before reaching `GlobalExceptionHandler`, returning HTTP 400 with the correct error code instead of HTTP 404.
+
 ### Added
+- `MailProperties.resetPasswordPath` field (default `/reset-password`) bound to `app.mail.reset-password-path` / `MAIL_RESET_PASSWORD_PATH` environment variable, making the frontend reset-form path configurable.
+
+### Added
+- Implementation plan for OpenAPI interface segregation pattern in the `auth` module at `docs/plans/openapi-interface-segregation-plan.md`.
+
+
 - Integrated `springdoc-openapi-starter-webmvc-ui` 3.0.3 for interactive API documentation.
 - `OpenApiConfig` bean exposing title, version, server entry from `app.base-url`, and global Bearer JWT security scheme.
 - OpenAPI JSON endpoint at `/api-docs` and Swagger UI at `/swagger-ui` (dev profile only; disabled in prod).
