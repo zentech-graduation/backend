@@ -78,6 +78,9 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(ApiErrorCode.NOT_FOUND));
     }
 
+    // TokenNotFoundException propagates from the email-verification flow (verifyEmail calls
+    // consumeEmailVerificationToken); the password-reset flow converts it to AppException before
+    // reaching here. Do not remove this handler without also fixing verifyEmail.
     @ExceptionHandler({TokenNotFoundException.class, TokenExpiredException.class})
     public ResponseEntity<ApiResponse<?>> handleInvalidToken(RuntimeException ex) {
         return ResponseEntity.status(ApiErrorCode.NOT_FOUND.getHttpStatus())

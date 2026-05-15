@@ -272,7 +272,8 @@ public class AuthController extends BaseController {
                 description = "Password updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "Token invalid or expired",
+                description =
+                        "Token invalid, expired, or already consumed (AUTH_RESET_TOKEN_INVALID); or account is locked/inactive",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "422",
