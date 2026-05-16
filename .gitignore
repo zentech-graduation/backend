@@ -1,9 +1,14 @@
 HELP.md
-.claude
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Agent ###
+.claude/
+.codex/
+.cursor/
+.agent/
 
 ### STS ###
 .apt_generated
