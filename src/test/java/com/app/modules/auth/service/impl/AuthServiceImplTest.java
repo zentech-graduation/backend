@@ -268,9 +268,26 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void login_success_returnsAccessAndRefreshTokens() {
+    void login_unverifiedEmail_throwsAccountInactive() {
         User u = activeUser();
         UserCredential cred = credential(u.getId(), "STORED-HASH");
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+
+        assertThatThrownBy(
+                        () ->
+                                service.login(
+                                        new LoginRequest(u.getEmail(), "password1"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+    }
+
+    @Test
+    void login_success_returnsAccessAndRefreshTokens() {
+        User u = activeUser();
+        UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
@@ -462,6 +479,14 @@ class AuthServiceImplTest {
                 .userId(userId)
                 .passwordHash(hash)
                 .emailVerified(false)
+                .build();
+    }
+
+    private static UserCredential verifiedCredential(UUID userId, String hash) {
+        return UserCredential.builder()
+                .userId(userId)
+                .passwordHash(hash)
+                .emailVerified(true)
                 .build();
     }
 

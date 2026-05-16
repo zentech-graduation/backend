@@ -141,9 +141,23 @@ class AuthControllerIT {
     }
 
     @Test
+    void login_unverifiedEmail_returns403() {
+        String email = uniqueEmail("login_unverified");
+        postJson("/api/v1/auth/register", registerBody("user_unverified", email, "password1"));
+
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/login", Map.of("email", email, "password", "password1"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_ACCOUNT_INACTIVE");
+    }
+
+    @Test
     void login_correctCredentials_returns200WithTokens() {
         String email = uniqueEmail("login_ok");
         postJson("/api/v1/auth/register", registerBody("user_login", email, "password1"));
+        String token = captureLatestVerificationToken(email);
+        rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/login", Map.of("email", email, "password", "password1"));
