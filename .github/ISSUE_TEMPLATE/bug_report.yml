@@ -1,0 +1,72 @@
+name: Bug Report
+description: Report a reproducible defect.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that reliably reproduce the issue.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Java version, Spring Boot version, OS, and any relevant configuration.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: Paste relevant log output or stack trace.
+      render: text
+    validations:
+      required: false
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: Affected module
+      options:
+        - auth
+        - mail
+        - users
+        - social
+        - media
+        - post
+        - comment
+        - hashtag
+        - story
+        - notification
+        - message
+        - report
+        - admin
+        - recommendation
+        - common
+        - other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
