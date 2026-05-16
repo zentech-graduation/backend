@@ -100,6 +100,10 @@ public class AuthController extends BaseController {
                 description = "Invalid credentials",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Email address not yet verified (AUTH_ACCOUNT_INACTIVE)",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "422",
                 description = "Validation failure",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),

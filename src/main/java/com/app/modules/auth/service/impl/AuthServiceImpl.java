@@ -184,6 +184,10 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
+        if (!credential.isEmailVerified()) {
+            throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+        }
+
         return issueSession(user, credential.isEmailVerified(), httpRequest);
     }
 
