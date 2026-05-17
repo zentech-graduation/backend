@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `DOC_FIRST.md` agent rule mandating that `GLOBAL_RULES.md` and the relevant module `DATA_RULES.md` (plus `STRUCT.md` for new module implementations) are read before any feature implementation or business-logic change.
 
 ### Fixed
+- `refresh` flow transaction boundary corrected: `rotate()` and `revoke()` in `RefreshTokenServiceImpl` now use `REQUIRES_NEW` propagation so both the old-token revocation and the new-token revocation commit to the database independently, even when the outer request transaction rolls back after a banned or suspended account check. Previously, the entire transaction rolled back and the original refresh token remained active.
+
 - Local login now blocks authentication when `email_verified = false`; attempting to log in without verifying the registered email address returns HTTP 403 `AUTH_ACCOUNT_INACTIVE`. OAuth2-authenticated users are unaffected.
 - `login` endpoint Swagger annotation updated to document the new 403 response for unverified email.
 - `refresh` endpoint now validates account status after token rotation; banned users receive 403 `AUTH_ACCOUNT_LOCKED` and suspended/deactivated users receive 403 `AUTH_ACCOUNT_INACTIVE`, with the newly rotated token revoked before the error is thrown.
