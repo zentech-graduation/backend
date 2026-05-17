@@ -304,6 +304,47 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void refresh_bannedUser_revokesNewTokenAndThrowsAccountLocked() {
+        UUID userId = UUID.randomUUID();
+        String newRawToken = "NEW-TOKEN";
+        when(refreshTokenService.rotate(eq("OLD"), anyString()))
+                .thenReturn(new RefreshTokenService.RotationResult(newRawToken, userId));
+        User u = activeUser();
+        u.setId(userId);
+        u.setStatus(UserStatus.BANNED);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+
+        assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+
+        // Proves the revocation was requested. In a mock-based test we cannot assert
+        // revoked_at IS NOT NULL on the DB row directly — that invariant is covered by
+        // AuthControllerIT.refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked().
+        verify(refreshTokenService).revoke(newRawToken);
+    }
+
+    @Test
+    void refresh_suspendedUser_revokesNewTokenAndThrowsAccountInactive() {
+        UUID userId = UUID.randomUUID();
+        String newRawToken = "NEW-TOKEN-SUSP";
+        when(refreshTokenService.rotate(eq("OLD-SUSP"), anyString()))
+                .thenReturn(new RefreshTokenService.RotationResult(newRawToken, userId));
+        User u = activeUser();
+        u.setId(userId);
+        u.setStatus(UserStatus.SUSPENDED);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+
+        assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD-SUSP"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+
+        verify(refreshTokenService).revoke(newRawToken);
+    }
+
+    @Test
     void refresh_validToken_returnsNewTokenPair() {
         UUID userId = UUID.randomUUID();
         when(refreshTokenService.rotate(eq("OLD"), anyString()))
