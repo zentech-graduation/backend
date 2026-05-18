@@ -35,12 +35,14 @@ import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.UserRole;
 import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.auth.exception.TokenNotFoundException;
 import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -50,7 +52,6 @@ import lombok.extern.slf4j.Slf4j;
 public class AuthServiceImpl implements AuthService {
 
     private static final String VERIFY_PATH = "/api/v1/auth/verify-email?token=";
-    private static final String RESET_PATH = "/api/v1/auth/reset-password?token=";
 
     private final UserRepository userRepository;
     private final UserCredentialRepository credentialRepository;
@@ -61,6 +62,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtProperties jwtProperties;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
+    private final MailProperties mailProperties;
     private final AppProperties appProperties;
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
@@ -79,6 +81,7 @@ public class AuthServiceImpl implements AuthService {
             JwtProperties jwtProperties,
             PasswordEncoder passwordEncoder,
             MailService mailService,
+            MailProperties mailProperties,
             AppProperties appProperties,
             AuthMapper authMapper,
             TokenBlacklistService tokenBlacklistService) {
@@ -91,6 +94,7 @@ public class AuthServiceImpl implements AuthService {
         this.jwtProperties = jwtProperties;
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
+        this.mailProperties = mailProperties;
         this.appProperties = appProperties;
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
@@ -180,6 +184,10 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
+        if (!credential.isEmailVerified()) {
+            throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+        }
+
         return issueSession(user, credential.isEmailVerified(), httpRequest);
     }
 
@@ -194,6 +202,18 @@ public class AuthServiceImpl implements AuthService {
                         .findByIdAndDeletedAtIsNull(rotation.userId())
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
+
+        switch (user.getStatus()) {
+            case BANNED -> {
+                refreshTokenService.revoke(rotation.newRawToken());
+                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+            }
+            case SUSPENDED, DEACTIVATED -> {
+                refreshTokenService.revoke(rotation.newRawToken());
+                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+            }
+            default -> {}
+        }
 
         boolean emailVerified =
                 credentialRepository
@@ -278,15 +298,39 @@ public class AuthServiceImpl implements AuthService {
             return;
         }
         User user = userOpt.get();
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            return;
+        }
         String rawToken = tokenService.createPasswordResetToken(user.getId());
-        String resetUrl = appProperties.baseUrl() + RESET_PATH + rawToken;
+        String resetUrl =
+                mailProperties.getFrontendBaseUrl()
+                        + mailProperties.getResetPasswordPath()
+                        + "?token="
+                        + rawToken;
         mailService.sendPasswordReset(user.getEmail(), resolveDisplayName(user), resetUrl);
     }
 
     @Override
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        UUID userId = tokenService.consumePasswordResetToken(request.token());
+        UUID userId;
+        try {
+            userId = tokenService.consumePasswordResetToken(request.token());
+        } catch (TokenNotFoundException e) {
+            throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+        }
+
+        User user =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(userId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+
+        switch (user.getStatus()) {
+            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+            case SUSPENDED, DEACTIVATED ->
+                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+            default -> {}
+        }
 
         UserCredential credential =
                 credentialRepository
@@ -297,12 +341,7 @@ public class AuthServiceImpl implements AuthService {
 
         refreshTokenService.revokeAllForUser(userId);
 
-        userRepository
-                .findByIdAndDeletedAtIsNull(userId)
-                .ifPresent(
-                        user ->
-                                mailService.sendPasswordChanged(
-                                        user.getEmail(), resolveDisplayName(user)));
+        mailService.sendPasswordChanged(user.getEmail(), resolveDisplayName(user));
     }
 
     private AuthResponse issueSession(

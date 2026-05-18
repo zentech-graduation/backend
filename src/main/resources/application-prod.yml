@@ -19,4 +19,4 @@ springdoc:
 app:
   mail:
     app-name: ${MAIL_APP_NAME}
-    frontend-base-url: ${MAIL_FRONTEND_BASE_URL}
+    frontend-base-url: ${FRONTEND_BASE_URL}

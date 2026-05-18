@@ -45,7 +45,7 @@ class ApplicationTests {
         r.add("MAIL_FROM_ADDRESS", () -> "noreply@test.local");
         r.add("MAIL_FROM_NAME", () -> "App Smoke");
         r.add("MAIL_APP_NAME", () -> "App");
-        r.add("MAIL_FRONTEND_BASE_URL", () -> "http://localhost:3000");
+        r.add("FRONTEND_BASE_URL", () -> "http://localhost:3000");
         r.add("GOOGLE_CLIENT_ID", () -> "test-client-id");
         r.add("GOOGLE_CLIENT_SECRET", () -> "test-client-secret");
         r.add("spring.datasource.hikari.data-source-properties.stringtype", () -> "unspecified");

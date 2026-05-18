@@ -57,6 +57,7 @@ import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailService;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,6 +71,7 @@ class AuthServiceImplTest {
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private MailService mailService;
+    @Mock private MailProperties mailProperties;
     @Mock private AuthMapper authMapper;
     @Mock private TokenBlacklistService tokenBlacklistService;
 
@@ -105,6 +107,7 @@ class AuthServiceImplTest {
                         jwtProperties,
                         passwordEncoder,
                         mailService,
+                        mailProperties,
                         appProperties,
                         authMapper,
                         tokenBlacklistService);
@@ -265,9 +268,26 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void login_success_returnsAccessAndRefreshTokens() {
+    void login_unverifiedEmail_throwsAccountInactive() {
         User u = activeUser();
         UserCredential cred = credential(u.getId(), "STORED-HASH");
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+
+        assertThatThrownBy(
+                        () ->
+                                service.login(
+                                        new LoginRequest(u.getEmail(), "password1"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+    }
+
+    @Test
+    void login_success_returnsAccessAndRefreshTokens() {
+        User u = activeUser();
+        UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
@@ -281,6 +301,47 @@ class AuthServiceImplTest {
         assertThat(resp.accessToken()).isEqualTo("ACCESS");
         assertThat(resp.refreshToken()).isEqualTo("REFRESH");
         assertThat(resp.user().id()).isEqualTo(u.getId());
+    }
+
+    @Test
+    void refresh_bannedUser_revokesNewTokenAndThrowsAccountLocked() {
+        UUID userId = UUID.randomUUID();
+        String newRawToken = "NEW-TOKEN";
+        when(refreshTokenService.rotate(eq("OLD"), anyString()))
+                .thenReturn(new RefreshTokenService.RotationResult(newRawToken, userId));
+        User u = activeUser();
+        u.setId(userId);
+        u.setStatus(UserStatus.BANNED);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+
+        assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+
+        // Proves the revocation was requested. In a mock-based test we cannot assert
+        // revoked_at IS NOT NULL on the DB row directly — that invariant is covered by
+        // AuthControllerIT.refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked().
+        verify(refreshTokenService).revoke(newRawToken);
+    }
+
+    @Test
+    void refresh_suspendedUser_revokesNewTokenAndThrowsAccountInactive() {
+        UUID userId = UUID.randomUUID();
+        String newRawToken = "NEW-TOKEN-SUSP";
+        when(refreshTokenService.rotate(eq("OLD-SUSP"), anyString()))
+                .thenReturn(new RefreshTokenService.RotationResult(newRawToken, userId));
+        User u = activeUser();
+        u.setId(userId);
+        u.setStatus(UserStatus.SUSPENDED);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+
+        assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD-SUSP"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+
+        verify(refreshTokenService).revoke(newRawToken);
     }
 
     @Test
@@ -393,13 +454,17 @@ class AuthServiceImplTest {
         User u = activeUser();
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(tokenService.createPasswordResetToken(u.getId())).thenReturn("RESET-RAW");
+        when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
+        when(mailProperties.getResetPasswordPath()).thenReturn("/reset-password");
 
         service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(mailService)
                 .sendPasswordReset(eq(u.getEmail()), eq(u.getDisplayName()), urlCaptor.capture());
-        assertThat(urlCaptor.getValue()).contains("RESET-RAW");
+        assertThat(urlCaptor.getValue())
+                .startsWith("http://localhost:5173/reset-password?token=")
+                .contains("RESET-RAW");
     }
 
     @Test
@@ -431,7 +496,9 @@ class AuthServiceImplTest {
                         () ->
                                 service.resetPassword(
                                         new ResetPasswordRequest("ghost", "newPassword1")))
-                .isInstanceOf(com.app.modules.auth.exception.TokenNotFoundException.class);
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
         verify(refreshTokenService, never()).revokeAllForUser(any());
     }
 
@@ -453,6 +520,14 @@ class AuthServiceImplTest {
                 .userId(userId)
                 .passwordHash(hash)
                 .emailVerified(false)
+                .build();
+    }
+
+    private static UserCredential verifiedCredential(UUID userId, String hash) {
+        return UserCredential.builder()
+                .userId(userId)
+                .passwordHash(hash)
+                .emailVerified(true)
                 .build();
     }
 

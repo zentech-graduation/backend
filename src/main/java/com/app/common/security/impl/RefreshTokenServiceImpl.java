@@ -8,6 +8,7 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
@@ -50,7 +51,9 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     @Override
-    @Transactional
+    // Rotation must commit independently so the old token is always durably revoked even if the
+    // outer refresh transaction rolls back after a subsequent account-status check.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public RotationResult rotate(String rawToken, String ipAddress) {
         String hash = sha256(rawToken);
         RefreshToken existing =
@@ -83,7 +86,9 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     @Override
-    @Transactional
+    // Revocation must commit independently so that a banned or suspended user's newly rotated
+    // token is durably revoked even if the outer refresh transaction rolls back.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void revoke(String rawToken) {
         if (rawToken == null) {
             return;

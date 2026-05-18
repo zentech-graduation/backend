@@ -7,6 +7,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `DOC_FIRST.md` agent rule mandating that `GLOBAL_RULES.md` and the relevant module `DATA_RULES.md` (plus `STRUCT.md` for new module implementations) are read before any feature implementation or business-logic change.
+
+### Fixed
+- `refresh` flow transaction boundary corrected: `rotate()` and `revoke()` in `RefreshTokenServiceImpl` now use `REQUIRES_NEW` propagation so both the old-token revocation and the new-token revocation commit to the database independently, even when the outer request transaction rolls back after a banned or suspended account check. Previously, the entire transaction rolled back and the original refresh token remained active.
+
+- Local login now blocks authentication when `email_verified = false`; attempting to log in without verifying the registered email address returns HTTP 403 `AUTH_ACCOUNT_INACTIVE`. OAuth2-authenticated users are unaffected.
+- `login` endpoint Swagger annotation updated to document the new 403 response for unverified email.
+- `refresh` endpoint now validates account status after token rotation; banned users receive 403 `AUTH_ACCOUNT_LOCKED` and suspended/deactivated users receive 403 `AUTH_ACCOUNT_INACTIVE`, with the newly rotated token revoked before the error is thrown.
+- `resetPassword` Swagger annotation corrected: account-locked and account-inactive responses now document HTTP 403 (matching `ApiErrorCode`) instead of the incorrect HTTP 400.
+- `app.mail.frontend-base-url` property added to `application.yaml` (empty fallback) and given an explicit `http://localhost:5173` default in `application-dev.yml` so the property resolves to a non-null value at runtime without requiring a `.env` file.
+- Banned, suspended, and deactivated users can no longer receive or redeem a password-reset link; `forgotPassword` returns silently and `resetPassword` throws the appropriate locked/inactive error.
+- Password-reset email link now uses `mail.frontend-base-url` and the configurable `mail.reset-password-path` property (default `/reset-password`) instead of the backend API URL, making the link functional in a browser.
+- `TokenNotFoundException` thrown during password-reset token consumption is now converted to `AppException(AUTH_RESET_TOKEN_INVALID)` at the service layer before reaching `GlobalExceptionHandler`, returning HTTP 400 with the correct error code instead of HTTP 404.
+
+### Added
+- `MailProperties.resetPasswordPath` field (default `/reset-password`) bound to `app.mail.reset-password-path` / `MAIL_RESET_PASSWORD_PATH` environment variable, making the frontend reset-form path configurable.
+
+### Added
+- Implementation plan for OpenAPI interface segregation pattern in the `auth` module at `docs/plans/openapi-interface-segregation-plan.md`.
+
+
 - `CODEOWNERS` defining per-module review ownership with placeholder team slugs for all 14 domain modules, common infrastructure, build files, and database migrations.
 - Pull request template enforcing author and reviewer checklists for format compliance, layer conventions, response wrapping, and Flyway migration hygiene.
 - GitHub issue forms for bug reports and feature requests, covering all 14 modules plus `common` and `other`.

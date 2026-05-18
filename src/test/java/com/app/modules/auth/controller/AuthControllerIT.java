@@ -3,7 +3,10 @@ package com.app.modules.auth.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 import javax.crypto.SecretKey;
@@ -44,6 +47,10 @@ import org.testcontainers.utility.DockerImageName;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.security.SecurityUtils;
+import com.app.modules.auth.entity.RefreshToken;
+import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.auth.repository.RefreshTokenRepository;
+import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.mail.service.MailService;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
@@ -84,15 +91,89 @@ class AuthControllerIT {
         r.add("MAIL_FROM_ADDRESS", () -> "noreply@test.local");
         r.add("MAIL_FROM_NAME", () -> "App IT");
         r.add("MAIL_APP_NAME", () -> "App");
-        r.add("MAIL_FRONTEND_BASE_URL", () -> "http://localhost:3000");
+        r.add("FRONTEND_BASE_URL", () -> "http://localhost:3000");
         r.add("GOOGLE_CLIENT_ID", () -> "test-client-id");
         r.add("GOOGLE_CLIENT_SECRET", () -> "test-client-secret");
         r.add("spring.datasource.hikari.data-source-properties.stringtype", () -> "unspecified");
     }
 
     @Autowired private TestRestTemplate rest;
+    @Autowired private UserRepository userRepository;
+    @Autowired private RefreshTokenRepository refreshTokenRepository;
 
     @MockitoBean private MailService mailService;
+
+    @Test
+    void refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked() {
+        String email = uniqueEmail("refresh_banned");
+        ResponseEntity<Map> reg =
+                postJson("/api/v1/auth/register", registerBody("user_bnnd", email, "password1"));
+        String oldRefreshToken =
+                (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
+
+        userRepository
+                .findByEmailAndDeletedAtIsNull(email)
+                .ifPresent(
+                        u -> {
+                            u.setStatus(UserStatus.BANNED);
+                            userRepository.save(u);
+                        });
+
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/refresh", Map.of("refreshToken", oldRefreshToken));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_ACCOUNT_LOCKED");
+
+        // Critical assertion: the old token row must have revoked_at committed even though
+        // the outer refresh transaction threw. Proves REQUIRES_NEW on rotate() is in effect.
+        RefreshToken oldRow =
+                refreshTokenRepository
+                        .findByTokenHash(sha256(oldRefreshToken))
+                        .orElseThrow(
+                                () ->
+                                        new AssertionError(
+                                                "old refresh_tokens row was deleted — expected"
+                                                        + " revoked_at to be set instead"));
+        assertThat(oldRow.getRevokedAt())
+                .as("old refresh token must have revoked_at set (durable revocation)")
+                .isNotNull();
+    }
+
+    @Test
+    void refresh_suspendedUser_returns403AndOldTokenIsDurablyRevoked() {
+        String email = uniqueEmail("refresh_susp");
+        ResponseEntity<Map> reg =
+                postJson("/api/v1/auth/register", registerBody("user_susp", email, "password1"));
+        String oldRefreshToken =
+                (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
+
+        userRepository
+                .findByEmailAndDeletedAtIsNull(email)
+                .ifPresent(
+                        u -> {
+                            u.setStatus(UserStatus.SUSPENDED);
+                            userRepository.save(u);
+                        });
+
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/refresh", Map.of("refreshToken", oldRefreshToken));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_ACCOUNT_INACTIVE");
+
+        RefreshToken oldRow =
+                refreshTokenRepository
+                        .findByTokenHash(sha256(oldRefreshToken))
+                        .orElseThrow(
+                                () ->
+                                        new AssertionError(
+                                                "old refresh_tokens row was deleted — expected"
+                                                        + " revoked_at to be set instead"));
+        assertThat(oldRow.getRevokedAt())
+                .as("old refresh token must have revoked_at set (durable revocation)")
+                .isNotNull();
+    }
 
     @Test
     void register_validPayload_returns201WithTokens() {
@@ -141,9 +222,23 @@ class AuthControllerIT {
     }
 
     @Test
+    void login_unverifiedEmail_returns403() {
+        String email = uniqueEmail("login_unverified");
+        postJson("/api/v1/auth/register", registerBody("user_unverified", email, "password1"));
+
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/login", Map.of("email", email, "password", "password1"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_ACCOUNT_INACTIVE");
+    }
+
+    @Test
     void login_correctCredentials_returns200WithTokens() {
         String email = uniqueEmail("login_ok");
         postJson("/api/v1/auth/register", registerBody("user_login", email, "password1"));
+        String token = captureLatestVerificationToken(email);
+        rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/login", Map.of("email", email, "password", "password1"));
@@ -447,6 +542,16 @@ class AuthControllerIT {
         // counter.
         java.util.Random rand = new java.util.Random();
         return "10." + rand.nextInt(256) + "." + rand.nextInt(256) + "." + (1 + rand.nextInt(254));
+    }
+
+    private static String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(bytes);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 
     private static String mintTestJwt(Instant expiresAt) {

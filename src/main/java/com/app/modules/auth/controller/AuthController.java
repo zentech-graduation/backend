@@ -100,6 +100,10 @@ public class AuthController extends BaseController {
                 description = "Invalid credentials",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Email address not yet verified (AUTH_ACCOUNT_INACTIVE)",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "422",
                 description = "Validation failure",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
@@ -131,6 +135,12 @@ public class AuthController extends BaseController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Refresh token invalid or expired",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Account is banned (AUTH_ACCOUNT_LOCKED) or suspended/deactivated"
+                                + " (AUTH_ACCOUNT_INACTIVE); issued token has been revoked",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
@@ -272,7 +282,14 @@ public class AuthController extends BaseController {
                 description = "Password updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "Token invalid or expired",
+                description =
+                        "Token invalid, expired, or already consumed (AUTH_RESET_TOKEN_INVALID)",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Account is banned (AUTH_ACCOUNT_LOCKED) or suspended/deactivated"
+                                + " (AUTH_ACCOUNT_INACTIVE)",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "422",
