@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `OpenApiConfig` bean updated to source the server URL from `AppProperties.baseUrl()` and produce API title `"App API"`, version `"1.0.0"`, and a global `bearerAuth` Bearer JWT security scheme.
+- `AuthApi` interface (`modules/auth/api`) carrying all `@Tag`, `@Operation`, `@ApiResponses`, and `@Parameter` OpenAPI annotations for the 8 auth endpoints; `AuthController` implements this interface and contains zero documentation annotations.
+- `docs/modules/OPENAPI_GUIDE.md`: developer guide explaining how to document a new module using the Interface Segregation pattern, including step-by-step instructions, rules, a reference endpoint table, and common mistakes.
+
+### Changed
+- `AuthController` refactored to implement `AuthApi`; class-level `@Tag` and `@RequestMapping` removed (now on the interface); all `@Operation`, `@ApiResponses`, and `@Parameter` annotations removed from handler methods.
 - `GIT_WORKFLOW.md` agent rule documenting branch naming, Conventional Commits format, allowed scopes, PR size labels, and discrepancies found between `CONTRIBUTING.md` and the actual pr-lint/pr-size workflow enforcement.
 - 11 agent skills under `.claude/skills/`: `skill-jpa-entity`, `skill-spring-repository`, `skill-spring-service`, `skill-rest-controller`, `skill-mapstruct-mapper`, `skill-dto`, `skill-flyway-migration`, `skill-exception-handling`, `skill-redis-key`, `skill-test-unit`, `skill-test-integration` — each derived from the implemented `auth` and `mail` modules.
 - 4 agent workflows under `.claude/workflows/`: `workflow-implement-module`, `workflow-add-flyway-migration`, `workflow-add-api-endpoint`, `workflow-code-review`.
@@ -20,11 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - `refresh` flow transaction boundary corrected: `rotate()` and `revoke()` in `RefreshTokenServiceImpl` now use `REQUIRES_NEW` propagation so both the old-token revocation and the new-token revocation commit to the database independently, even when the outer request transaction rolls back after a banned or suspended account check. Previously, the entire transaction rolled back and the original refresh token remained active.
 
-- Local login now blocks authentication when `email_verified = false`; attempting to log in without verifying the registered email address returns HTTP 403 `AUTH_ACCOUNT_INACTIVE`. OAuth2-authenticated users are unaffected.
-- `login` endpoint Swagger annotation updated to document the new 403 response for unverified email.
-- `refresh` endpoint now validates account status after token rotation; banned users receive 403 `AUTH_ACCOUNT_LOCKED` and suspended/deactivated users receive 403 `AUTH_ACCOUNT_INACTIVE`, with the newly rotated token revoked before the error is thrown.
-- `resetPassword` Swagger annotation corrected: account-locked and account-inactive responses now document HTTP 403 (matching `ApiErrorCode`) instead of the incorrect HTTP 400.
-- `app.mail.frontend-base-url` property added to `application.yaml` (empty fallback) and given an explicit `http://localhost:5173` default in `application-dev.yml` so the property resolves to a non-null value at runtime without requiring a `.env` file.
+### Fixed
 - Banned, suspended, and deactivated users can no longer receive or redeem a password-reset link; `forgotPassword` returns silently and `resetPassword` throws the appropriate locked/inactive error.
 - Password-reset email link now uses `mail.frontend-base-url` and the configurable `mail.reset-password-path` property (default `/reset-password`) instead of the backend API URL, making the link functional in a browser.
 - `TokenNotFoundException` thrown during password-reset token consumption is now converted to `AppException(AUTH_RESET_TOKEN_INVALID)` at the service layer before reaching `GlobalExceptionHandler`, returning HTTP 400 with the correct error code instead of HTTP 404.
@@ -36,16 +38,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Implementation plan for OpenAPI interface segregation pattern in the `auth` module at `docs/plans/openapi-interface-segregation-plan.md`.
 
 
-- `CODEOWNERS` defining per-module review ownership with placeholder team slugs for all 14 domain modules, common infrastructure, build files, and database migrations.
-- Pull request template enforcing author and reviewer checklists for format compliance, layer conventions, response wrapping, and Flyway migration hygiene.
-- GitHub issue forms for bug reports and feature requests, covering all 14 modules plus `common` and `other`.
-- `ISSUE_TEMPLATE/config.yml` disabling blank issues and routing security reports to GitHub Security Advisories.
-- `CONTRIBUTING.md` documenting development setup, branch naming, Conventional Commits standard, PR process, code style, and project-specific invariants.
-- `SECURITY.md` establishing private vulnerability disclosure via GitHub Security Advisories, response timeline, and in-scope/out-of-scope definitions.
-- `pr-lint` workflow enforcing Conventional Commits format on PR titles with required scopes for all modules.
-- `pr-size` workflow labeling PRs by size (XS/S/M/L/XL) and blocking merges when changed lines exceed 1000.
-
-### Added
 - Integrated `springdoc-openapi-starter-webmvc-ui` 3.0.3 for interactive API documentation.
 - `OpenApiConfig` bean exposing title, version, server entry from `app.base-url`, and global Bearer JWT security scheme.
 - OpenAPI JSON endpoint at `/api-docs` and Swagger UI at `/swagger-ui` (dev profile only; disabled in prod).
