@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- CI workflow `ci-test.yml` runs the Maven test suite on pull requests targeting `main` or `develop`; job is reporting-only and does not block merges.
+- CI secrets audit report saved to `.claude/workspace/ci-secrets-audit.md`; confirmed no GitHub Actions secrets are required — all runtime values are provided by `@ServiceConnection`, `@DynamicPropertySource`, or `@TestPropertySource` in the test classes.
 - `OpenApiConfig` bean updated to source the server URL from `AppProperties.baseUrl()` and produce API title `"App API"`, version `"1.0.0"`, and a global `bearerAuth` Bearer JWT security scheme.
 - `AuthApi` interface (`modules/auth/api`) carrying all `@Tag`, `@Operation`, `@ApiResponses`, and `@Parameter` OpenAPI annotations for the 8 auth endpoints; `AuthController` implements this interface and contains zero documentation annotations.
 - `docs/modules/OPENAPI_GUIDE.md`: developer guide explaining how to document a new module using the Interface Segregation pattern, including step-by-step instructions, rules, a reference endpoint table, and common mistakes.
