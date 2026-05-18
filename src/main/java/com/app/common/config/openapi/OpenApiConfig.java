@@ -1,10 +1,9 @@
 package com.app.common.config.openapi;
 
-import java.util.List;
-
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import com.app.common.config.app.AppProperties;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -14,35 +13,39 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 
 /**
- * Configures the OpenAPI 3.1 specification bean: API metadata, server entry, and the global Bearer
- * JWT security scheme.
+ * Configures the global OpenAPI metadata, server URL, and Bearer JWT security scheme consumed by
+ * springdoc-openapi.
  */
 @Configuration
 public class OpenApiConfig {
 
-    private static final String BEARER_AUTH = "bearerAuth";
+    private final AppProperties appProperties;
 
-    @Value("${app.base-url:http://localhost:8080}")
-    private String baseUrl;
+    public OpenApiConfig(AppProperties appProperties) {
+        this.appProperties = appProperties;
+    }
 
+    /**
+     * Produces the global {@link OpenAPI} bean. All operations inherit the {@code bearerAuth}
+     * security requirement; individual public endpoints override with {@code security = {}}.
+     *
+     * @return configured OpenAPI instance
+     */
     @Bean
-    public OpenAPI openAPI() {
+    public OpenAPI openApi() {
         return new OpenAPI()
                 .info(
                         new Info()
-                                .title("Social Network API")
+                                .title("App API")
                                 .version("1.0.0")
-                                .description(
-                                        "REST API for an Instagram-style social network: profiles,"
-                                                + " posts, stories, messaging, and social graph."))
-                .servers(List.of(new Server().url(baseUrl).description("Local")))
-                .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH))
+                                .description("REST API for the App social network"))
+                .addServersItem(new Server().url(appProperties.baseUrl()))
+                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
                 .components(
                         new Components()
                                 .addSecuritySchemes(
-                                        BEARER_AUTH,
+                                        "bearerAuth",
                                         new SecurityScheme()
-                                                .name(BEARER_AUTH)
                                                 .type(SecurityScheme.Type.HTTP)
                                                 .scheme("bearer")
                                                 .bearerFormat("JWT")));
