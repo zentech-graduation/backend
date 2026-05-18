@@ -9,7 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - CI workflow `ci-test.yml` runs the Maven test suite on pull requests targeting `main` or `develop`; job is reporting-only and does not block merges.
 - CI secrets audit report saved to `.claude/workspace/ci-secrets-audit.md`; confirmed no GitHub Actions secrets are required — all runtime values are provided by `@ServiceConnection`, `@DynamicPropertySource`, or `@TestPropertySource` in the test classes.
+- `GIT_WORKFLOW.md` agent rule documenting branch naming, Conventional Commits format, allowed scopes, PR size labels, and discrepancies found between `CONTRIBUTING.md` and the actual pr-lint/pr-size workflow enforcement.
+- 11 agent skills under `.claude/skills/`: `skill-jpa-entity`, `skill-spring-repository`, `skill-spring-service`, `skill-rest-controller`, `skill-mapstruct-mapper`, `skill-dto`, `skill-flyway-migration`, `skill-exception-handling`, `skill-redis-key`, `skill-test-unit`, `skill-test-integration` — each derived from the implemented `auth` and `mail` modules.
+- 4 agent workflows under `.claude/workflows/`: `workflow-implement-module`, `workflow-add-flyway-migration`, `workflow-add-api-endpoint`, `workflow-code-review`.
 - `DOC_FIRST.md` agent rule mandating that `GLOBAL_RULES.md` and the relevant module `DATA_RULES.md` (plus `STRUCT.md` for new module implementations) are read before any feature implementation or business-logic change.
+
+### Changed
+- `base.md`: added missing `description` field to frontmatter.
+- `changelog_rule.md`: corrected description (was a copy of struct.md's description); changed trigger from `model_decision` to `always_on` to match the rule's stated requirement.
+- `doc_first.md`: corrected description (was a copy of struct.md's description).
 
 ### Fixed
 - `refresh` flow transaction boundary corrected: `rotate()` and `revoke()` in `RefreshTokenServiceImpl` now use `REQUIRES_NEW` propagation so both the old-token revocation and the new-token revocation commit to the database independently, even when the outer request transaction rolls back after a banned or suspended account check. Previously, the entire transaction rolled back and the original refresh token remained active.
