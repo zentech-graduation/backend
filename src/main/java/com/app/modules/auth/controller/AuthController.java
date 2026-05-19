@@ -25,8 +25,6 @@ import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
 import com.app.modules.auth.service.AuthService;
 
-import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
-
 /** HTTP surface for email + password authentication flows. */
 @RestController
 public class AuthController extends BaseController implements AuthApi {
@@ -43,7 +41,6 @@ public class AuthController extends BaseController implements AuthApi {
      */
     @Override
     @PostMapping(ApiConstants.Auth.REGISTER)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AuthResponse>> register(
             @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
         AuthResponse body = authService.register(request, httpRequest);
@@ -54,7 +51,6 @@ public class AuthController extends BaseController implements AuthApi {
     /** Authenticates an existing user and returns access + refresh tokens. */
     @Override
     @PostMapping(ApiConstants.Auth.LOGIN)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         AuthResponse body = authService.login(request, httpRequest);
@@ -64,7 +60,6 @@ public class AuthController extends BaseController implements AuthApi {
     /** Rotates the refresh token and returns a new session pair. */
     @Override
     @PostMapping(ApiConstants.Auth.REFRESH)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(
             @Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
         AuthResponse body = authService.refresh(request, httpRequest);
@@ -74,7 +69,6 @@ public class AuthController extends BaseController implements AuthApi {
     /** Revokes the supplied refresh token. Idempotent. */
     @Override
     @PostMapping(ApiConstants.Auth.LOGOUT)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request);
         return ResponseEntity.status(HttpStatus.NO_CONTENT)
@@ -84,7 +78,6 @@ public class AuthController extends BaseController implements AuthApi {
     /** Verifies an email address using the token embedded in the verification link. */
     @Override
     @GetMapping(ApiConstants.Auth.VERIFY_EMAIL)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam("token") String token) {
         authService.verifyEmail(token);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
@@ -96,7 +89,6 @@ public class AuthController extends BaseController implements AuthApi {
      */
     @Override
     @PostMapping(ApiConstants.Auth.RESEND_VERIFY)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> resendVerification(
             @Valid @RequestBody ResendVerificationRequest request) {
         authService.resendVerification(request.email());
@@ -109,7 +101,6 @@ public class AuthController extends BaseController implements AuthApi {
      */
     @Override
     @PostMapping(ApiConstants.Auth.FORGOT_PASSWORD)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request);
@@ -119,7 +110,6 @@ public class AuthController extends BaseController implements AuthApi {
     /** Consumes a password-reset token and replaces the user's password hash. */
     @Override
     @PostMapping(ApiConstants.Auth.RESET_PASSWORD)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> resetPassword(
             @Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);

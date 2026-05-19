@@ -9,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -17,16 +18,18 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.app.common.ApiConstants;
 import com.app.common.config.redis.RateLimitProperties;
+import com.app.common.config.security.SecurityProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.response.ApiResponse;
 
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Rejects abusive traffic on sensitive auth endpoints (login, forgot-password, resend-verification)
- * before it reaches downstream filters or controllers. The bucket key is always namespaced by
- * request IP; for login the JSON body's {@code email} field is appended so a single-account brute
- * force cannot be hidden behind a rotating IP-only counter.
+ * Rejects abusive traffic on sensitive auth endpoints before it reaches downstream filters or
+ * controllers. The bucket key is namespaced by request IP; for login the JSON body's {@code email}
+ * field is appended so a single-account brute force cannot be hidden behind a rotating IP counter.
+ *
+ * <p>All 429 responses include a {@code Retry-After} header set to the matched rule's window.
  */
 @Component
 public class AuthRateLimitFilter extends OncePerRequestFilter {
@@ -36,18 +39,30 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             ApiConstants.Auth.ROOT + ApiConstants.Auth.FORGOT_PASSWORD;
     private static final String RESEND_PATH =
             ApiConstants.Auth.ROOT + ApiConstants.Auth.RESEND_VERIFY;
+    private static final String REGISTER_PATH = ApiConstants.Auth.ROOT + ApiConstants.Auth.REGISTER;
+    private static final String REFRESH_PATH = ApiConstants.Auth.ROOT + ApiConstants.Auth.REFRESH;
+    private static final String RESET_PASSWORD_PATH =
+            ApiConstants.Auth.ROOT + ApiConstants.Auth.RESET_PASSWORD;
+    private static final String VERIFY_EMAIL_PATH =
+            ApiConstants.Auth.ROOT + ApiConstants.Auth.VERIFY_EMAIL;
 
     private final RateLimiterService rateLimiterService;
     private final RateLimitProperties properties;
     private final ObjectMapper objectMapper;
+    private final IpExtractor ipExtractor;
+    private final SecurityProperties securityProperties;
 
     public AuthRateLimitFilter(
             RateLimiterService rateLimiterService,
             RateLimitProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            IpExtractor ipExtractor,
+            SecurityProperties securityProperties) {
         this.rateLimiterService = rateLimiterService;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.ipExtractor = ipExtractor;
+        this.securityProperties = securityProperties;
     }
 
     @Override
@@ -58,50 +73,69 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        if (!"POST".equalsIgnoreCase(method) || !isRateLimited(path)) {
+        RateLimitProperties.Rule rule = resolveRule(path, method);
+        if (rule == null) {
             chain.doFilter(request, response);
             return;
         }
 
         HttpServletRequest delivered = request;
-        String ip = extractIp(request);
+        String ip = ipExtractor.extract(request);
         String key;
-        RateLimitProperties.Rule rule;
 
-        if (LOGIN_PATH.equals(path)) {
+        if (LOGIN_PATH.equals(path) && "POST".equalsIgnoreCase(method)) {
             // Wrap so the controller can still read the body after we peek at the email.
-            CachedBodyHttpServletRequest cached = new CachedBodyHttpServletRequest(request);
+            CachedBodyHttpServletRequest cached;
+            try {
+                cached =
+                        new CachedBodyHttpServletRequest(
+                                request, securityProperties.maxLoginBodyBytes());
+            } catch (IOException e) {
+                if (e.getMessage() != null
+                        && e.getMessage().startsWith("Request body exceeds maximum")) {
+                    writeBadRequestResponse(response);
+                    return;
+                }
+                throw e;
+            }
             delivered = cached;
             String email = extractEmail(cached.getCachedBody());
             key = path + ":" + ip + (email != null ? ":" + email : "");
-            rule = properties.login();
-        } else if (FORGOT_PATH.equals(path)) {
-            key = path + ":" + ip;
-            rule = properties.forgotPassword();
         } else {
-            key = path + ":" + ip;
-            rule = properties.resendVerification();
+            key = method + ":" + path + ":" + ip;
         }
 
         if (!rateLimiterService.isAllowed(key, rule.maxAttempts(), rule.windowSeconds())) {
-            writeRateLimitResponse(response);
+            writeRateLimitResponse(response, rule.windowSeconds());
             return;
         }
 
         chain.doFilter(delivered, response);
     }
 
-    private boolean isRateLimited(String path) {
-        return LOGIN_PATH.equals(path) || FORGOT_PATH.equals(path) || RESEND_PATH.equals(path);
+    /**
+     * Returns the matching {@link RateLimitProperties.Rule} or {@code null} if not rate-limited.
+     */
+    RateLimitProperties.Rule resolveRule(String path, String method) {
+        // Named rules for existing endpoints (preserve original key scheme).
+        if ("POST".equalsIgnoreCase(method)) {
+            if (LOGIN_PATH.equals(path)) return properties.login();
+            if (FORGOT_PATH.equals(path)) return properties.forgotPassword();
+            if (RESEND_PATH.equals(path)) return properties.resendVerification();
+        }
+
+        // Per-endpoint rules from config, keyed by path regardless of method.
+        RateLimitProperties.Rule configured = properties.endpointRules().get(path);
+        if (configured != null) {
+            return configured;
+        }
+
+        return null;
     }
 
-    private String extractIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
-        }
-        return request.getRemoteAddr();
+    /** Returns whether the given path + method combination is subject to rate limiting. */
+    boolean isRateLimited(String path, String method) {
+        return resolveRule(path, method) != null;
     }
 
     @SuppressWarnings("unchecked")
@@ -121,11 +155,21 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private void writeRateLimitResponse(HttpServletResponse response) throws IOException {
+    private void writeRateLimitResponse(HttpServletResponse response, long retryAfterSeconds)
+            throws IOException {
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+        response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        ApiResponse<Void> body = ApiResponse.failure(ApiErrorCode.TOO_MANY_REQUESTS);
-        objectMapper.writeValue(response.getWriter(), body);
+        objectMapper.writeValue(
+                response.getWriter(), ApiResponse.failure(ApiErrorCode.TOO_MANY_REQUESTS));
+    }
+
+    private void writeBadRequestResponse(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpStatus.BAD_REQUEST.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        objectMapper.writeValue(
+                response.getWriter(), ApiResponse.failure(ApiErrorCode.BAD_REQUEST));
     }
 }
