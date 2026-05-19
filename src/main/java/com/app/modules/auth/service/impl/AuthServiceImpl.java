@@ -37,6 +37,7 @@ import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.UserRole;
 import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
 import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
@@ -271,7 +272,12 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void verifyEmail(String rawToken) {
-        UUID userId = tokenService.consumeEmailVerificationToken(rawToken);
+        UUID userId;
+        try {
+            userId = tokenService.consumeEmailVerificationToken(rawToken);
+        } catch (TokenNotFoundException | TokenExpiredException e) {
+            throw new AppException(ApiErrorCode.AUTH_VERIFY_TOKEN_INVALID);
+        }
 
         UserCredential credential =
                 credentialRepository
