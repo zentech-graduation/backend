@@ -19,6 +19,7 @@ import org.springframework.util.StringUtils;
 import com.app.common.config.app.AppProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.security.IpExtractor;
 import com.app.common.security.JwtClaims;
 import com.app.common.security.JwtProperties;
 import com.app.common.security.JwtTokenProvider;
@@ -66,6 +67,7 @@ public class AuthServiceImpl implements AuthService {
     private final AppProperties appProperties;
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
+    private final IpExtractor ipExtractor;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -84,7 +86,8 @@ public class AuthServiceImpl implements AuthService {
             MailProperties mailProperties,
             AppProperties appProperties,
             AuthMapper authMapper,
-            TokenBlacklistService tokenBlacklistService) {
+            TokenBlacklistService tokenBlacklistService,
+            IpExtractor ipExtractor) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -98,6 +101,7 @@ public class AuthServiceImpl implements AuthService {
         this.appProperties = appProperties;
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.ipExtractor = ipExtractor;
     }
 
     @PostConstruct
@@ -195,7 +199,8 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse refresh(RefreshRequest request, HttpServletRequest httpRequest) {
         RefreshTokenService.RotationResult rotation =
-                refreshTokenService.rotate(request.refreshToken(), extractIp(httpRequest));
+                refreshTokenService.rotate(
+                        request.refreshToken(), ipExtractor.extract(httpRequest));
 
         User user =
                 userRepository
@@ -354,7 +359,7 @@ public class AuthServiceImpl implements AuthService {
                         user.getId(),
                         null,
                         httpRequest.getHeader(HttpHeaders.USER_AGENT),
-                        extractIp(httpRequest));
+                        ipExtractor.extract(httpRequest));
         return new AuthResponse(
                 accessToken,
                 refreshToken,
@@ -367,14 +372,5 @@ public class AuthServiceImpl implements AuthService {
         return StringUtils.hasText(user.getDisplayName())
                 ? user.getDisplayName()
                 : user.getUsername();
-    }
-
-    private static String extractIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
-        }
-        return request.getRemoteAddr();
     }
 }

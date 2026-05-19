@@ -27,3 +27,7 @@ app:
   mail:
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
+  security:
+    trusted-proxy-cidrs:
+      - "127.0.0.1"
+    max-login-body-bytes: 2048

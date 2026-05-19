@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
+import com.app.common.security.IpExtractor;
 import com.app.common.security.JwtProperties;
 import com.app.common.security.JwtTokenProvider;
 import com.app.common.security.RefreshTokenService;
@@ -42,6 +43,7 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
     private final UserCredentialRepository userCredentialRepository;
     private final ObjectMapper objectMapper;
     private final AuthMapper authMapper;
+    private final IpExtractor ipExtractor;
 
     public OAuth2AuthenticationSuccessHandler(
             JwtTokenProvider jwtTokenProvider,
@@ -49,13 +51,15 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
             JwtProperties jwtProperties,
             UserCredentialRepository userCredentialRepository,
             ObjectMapper objectMapper,
-            AuthMapper authMapper) {
+            AuthMapper authMapper,
+            IpExtractor ipExtractor) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
         this.jwtProperties = jwtProperties;
         this.userCredentialRepository = userCredentialRepository;
         this.objectMapper = objectMapper;
         this.authMapper = authMapper;
+        this.ipExtractor = ipExtractor;
     }
 
     @Override
@@ -68,7 +72,7 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
 
         String deviceId = extractDeviceId(request);
         String userAgent = request.getHeader(HttpHeaders.USER_AGENT);
-        String ipAddress = extractIp(request);
+        String ipAddress = ipExtractor.extract(request);
 
         String accessToken =
                 jwtTokenProvider.generateAccessToken(
@@ -94,15 +98,6 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         objectMapper.writeValue(response.getWriter(), ApiResponse.success(ApiSuccessCode.OK, body));
-    }
-
-    private static String extractIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
-        }
-        return request.getRemoteAddr();
     }
 
     private static String extractDeviceId(HttpServletRequest request) {
