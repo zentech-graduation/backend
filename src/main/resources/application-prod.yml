@@ -5,6 +5,10 @@ spring:
       - classpath:resilience/ratelimiter/resilience4j-prod.yml
       - classpath:resilience/retry/resilience4j-prod.yml
 
+logging:
+  file:
+    path: /var/log/app
+
 jpa:
   hibernate:
     ddl-auto: validate
