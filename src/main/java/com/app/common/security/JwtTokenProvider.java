@@ -2,6 +2,7 @@ package com.app.common.security;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -10,12 +11,13 @@ import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
-import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -50,7 +52,12 @@ public class JwtTokenProvider {
                 NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
         nimbusDecoder.setJwtValidator(
                 new DelegatingOAuth2TokenValidator<>(
-                        new JwtTimestampValidator(), new JwtIssuerValidator(properties.issuer())));
+                        new JwtTimestampValidator(),
+                        new JwtClaimValidator<String>(
+                                JwtClaimNames.ISS, iss -> properties.issuer().equals(iss)),
+                        new JwtClaimValidator<List<String>>(
+                                JwtClaimNames.AUD,
+                                aud -> aud != null && aud.contains(properties.audience()))));
         this.decoder = nimbusDecoder;
     }
 
@@ -68,11 +75,13 @@ public class JwtTokenProvider {
         JwtClaimsSet claims =
                 JwtClaimsSet.builder()
                         .issuer(properties.issuer())
+                        .audience(List.of(properties.audience()))
                         .subject(userId.toString())
                         .claim("email", email)
                         .claim("role", role)
                         .claim("jti", UUID.randomUUID().toString())
                         .issuedAt(now)
+                        .notBefore(now)
                         .expiresAt(now.plusSeconds(properties.accessTokenTtl()))
                         .build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
