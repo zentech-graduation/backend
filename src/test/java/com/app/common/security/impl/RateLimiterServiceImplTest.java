@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -49,6 +50,14 @@ class RateLimiterServiceImplTest {
     @Test
     void isAllowed_scriptReturnsNull_returnsFalse() {
         when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(null);
+
+        assertThat(service.isAllowed("login:1.1.1.1:a@b.c", 5, 900)).isFalse();
+    }
+
+    @Test
+    void isAllowed_redisThrowsDataAccessException_failsClosedReturnsFalse() {
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any()))
+                .thenThrow(new QueryTimeoutException("Redis timeout"));
 
         assertThat(service.isAllowed("login:1.1.1.1:a@b.c", 5, 900)).isFalse();
     }
