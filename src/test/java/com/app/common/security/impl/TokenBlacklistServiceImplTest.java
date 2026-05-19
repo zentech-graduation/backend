@@ -1,9 +1,11 @@
 package com.app.common.security.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -16,8 +18,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 
 @ExtendWith(MockitoExtension.class)
 class TokenBlacklistServiceImplTest {
@@ -99,5 +105,26 @@ class TokenBlacklistServiceImplTest {
     @Test
     void isBlacklisted_blankJti_returnsFalse() {
         assertThat(service.isBlacklisted("")).isFalse();
+    }
+
+    @Test
+    void blacklist_redisThrowsDataAccessException_throwsAppExceptionWithInternalError() {
+        doThrow(new DataAccessException("simulated redis failure") {})
+                .when(valueOps)
+                .set(anyString(), anyString(), any(Duration.class));
+
+        assertThatThrownBy(() -> service.blacklist("jti-fail", 300L))
+                .isInstanceOf(AppException.class)
+                .satisfies(
+                        ex ->
+                                assertThat(((AppException) ex).getErrorCode())
+                                        .isEqualTo(ApiErrorCode.INTERNAL_ERROR));
+    }
+
+    @Test
+    void blacklist_redisSucceeds_noExceptionAndSetCalledWithCorrectArgs() {
+        service.blacklist("jti-ok", 120L);
+
+        verify(valueOps).set(eq(KEY_PREFIX + "jti-ok"), eq("1"), eq(Duration.ofSeconds(120)));
     }
 }

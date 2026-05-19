@@ -246,6 +246,8 @@ public class AuthServiceImpl implements AuthService {
         // JwtAuthenticationFilter; absence (e.g. logout without an Authorization header)
         // is tolerated and only the refresh token is revoked.
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        // Retained for defensive completeness — public path now requires authentication
+        // (SecurityConfig enforces authenticated() on /logout).
         if (auth != null && auth.getCredentials() instanceof String rawToken) {
             try {
                 JwtClaims claims = jwtTokenProvider.validateAndParse(rawToken);
@@ -254,6 +256,9 @@ public class AuthServiceImpl implements AuthService {
                                 ? 0L
                                 : claims.expiresAt().getEpochSecond()
                                         - Instant.now().getEpochSecond();
+                // If this throws, the refresh token has already been revoked (REQUIRES_NEW
+                // committed). The client receives 500; they should retry logout. The access
+                // token remains valid until its natural expiry.
                 tokenBlacklistService.blacklist(claims.jti(), remaining);
             } catch (AppException ignored) {
                 // Token already invalid — refresh-token revoke below still proceeds.
