@@ -92,15 +92,14 @@ CREATE TABLE user_credentials (
 );
 
 -- OAuth provider accounts (Google, etc.)
+-- Note: access_token, refresh_token, token_expires_at were dropped in V19 (AUTH-005).
+-- These columns will be re-added with encrypted storage when that feature is implemented.
 CREATE TABLE oauth_accounts (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider            oauth_provider  NOT NULL,
     provider_id         VARCHAR(255)    NOT NULL,
     provider_email      VARCHAR(255),
-    access_token        TEXT,
-    refresh_token       TEXT,
-    token_expires_at    TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     UNIQUE (provider, provider_id)
@@ -935,8 +934,8 @@ ORDER BY r.created_at ASC;
 
 -- ============================================================
 -- REFERENCE ARTIFACT
--- This file is auto-synced from Flyway migrations V01–V17.
+-- This file is auto-synced from Flyway migrations V01–V19.
 -- Do NOT use this file as the authoritative schema source.
 -- Authoritative source: src/main/resources/db/migration/
--- Last synced: 2026-05-05
+-- Last synced: 2026-05-19
 -- ============================================================
