@@ -3,9 +3,12 @@ package com.app.common.security.impl;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.OffsetDateTime;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -22,6 +25,7 @@ import com.app.modules.auth.repository.RefreshTokenRepository;
 public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     private static final String SHA_256 = "SHA-256";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final RefreshTokenRepository repository;
     private final JwtProperties jwtProperties;
@@ -34,7 +38,9 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public String issue(UUID userId, String deviceId, String userAgent, String ipAddress) {
-        String rawToken = UUID.randomUUID().toString();
+        byte[] buf = new byte[32];
+        SECURE_RANDOM.nextBytes(buf);
+        String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
         RefreshToken entity =
                 RefreshToken.builder()
                         .id(UUID.randomUUID())
@@ -56,11 +62,24 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public RotationResult rotate(String rawToken, String ipAddress) {
         String hash = sha256(rawToken);
-        RefreshToken existing =
-                repository
-                        .findByTokenHashAndRevokedAtIsNull(hash)
-                        .orElseThrow(
-                                () -> new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
+        RefreshToken existing = repository.findByTokenHash(hash).orElse(null);
+
+        if (existing == null) {
+            // Equalize timing with the known-revoked path (which performs additional UPDATEs to
+            // revoke all active sessions). A 2-8ms randomized sleep masks the DB-round-trip gap;
+            // this is a coarse mitigation, not a constant-time guarantee.
+            try {
+                Thread.sleep(ThreadLocalRandom.current().nextLong(2, 8));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+            throw new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        }
+
+        if (existing.getRevokedAt() != null) {
+            repository.revokeAllActiveByUserId(existing.getUserId(), OffsetDateTime.now());
+            throw new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        }
 
         OffsetDateTime now = OffsetDateTime.now();
         if (existing.getExpiresAt().isBefore(now)) {
