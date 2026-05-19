@@ -15,10 +15,10 @@ import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
-import com.app.common.security.IpExtractor;
-import com.app.common.security.JwtProperties;
-import com.app.common.security.JwtTokenProvider;
-import com.app.common.security.RefreshTokenService;
+import com.app.common.security.jwt.JwtProperties;
+import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.common.security.service.RefreshTokenService;
+import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.response.AuthResponse;
 import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;

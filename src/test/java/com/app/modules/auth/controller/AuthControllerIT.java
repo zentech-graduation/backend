@@ -47,7 +47,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
-import com.app.common.security.SecurityUtils;
+import com.app.common.security.util.SecurityUtils;
 import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.RefreshTokenRepository;
