@@ -1,5 +1,6 @@
 package com.app.common.base;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -18,6 +19,7 @@ public abstract class BaseController {
      */
     public ResponseEntity<ApiResponse<?>> rateLimit(RequestNotPermitted ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, "30")
                 .body(ApiResponse.failure(ApiErrorCode.TOO_MANY_REQUESTS));
     }
 
