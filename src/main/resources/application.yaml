@@ -63,6 +63,11 @@ app:
       max-attempts: 3
       window-seconds: 3600
 
+server:
+  forward-headers-strategy: framework
+  tomcat:
+    max-http-form-post-size: 1MB
+
 logging:
   level:
     org.springframework.boot.devtools: OFF
