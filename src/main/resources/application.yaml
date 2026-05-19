@@ -9,6 +9,10 @@ spring:
   threads:
     virtual:
       enabled: true
+  jackson:
+    deserialization:
+      # AUTH-022: reject request bodies that contain unknown fields to prevent mass-assignment
+      fail-on-unknown-properties: true
   datasource:
     url: ${POSTGRES_URL}
     username: ${POSTGRES_USER}
