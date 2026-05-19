@@ -3,7 +3,9 @@ package com.app.modules.auth.service.impl;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
@@ -32,6 +34,9 @@ public class TokenServiceImpl implements TokenService {
     private static final Duration PASSWORD_RESET_TTL = Duration.ofMinutes(15);
     private static final String SHA_256 = "SHA-256";
 
+    // 256-bit entropy; thread-safe — a single static instance is correct for SecureRandom.
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     // Atomic consume: GET then DEL. Returns the stored userId or nil when absent.
     private static final String CONSUME_SCRIPT =
             "local val = redis.call('GET', KEYS[1]) "
@@ -42,12 +47,29 @@ public class TokenServiceImpl implements TokenService {
                     + "  return nil "
                     + "end";
 
+    // Atomic create: delete any prior token for the user, then set new primary + reverse keys.
+    // KEYS[1] = reverseKey (e.g. "auth:token:email-verification:user:<userId>")
+    // ARGV[1] = new tokenHash
+    // ARGV[2] = userId (value stored in the primary key)
+    // ARGV[3] = prefix (prepended to tokenHash to form the primary key)
+    // ARGV[4] = ttlSeconds (cast to number inside the script)
+    private static final String CREATE_SCRIPT =
+            "local prev = redis.call('GET', KEYS[1]) "
+                    + "if prev then "
+                    + "  redis.call('DEL', ARGV[3] .. prev) "
+                    + "end "
+                    + "redis.call('SET', ARGV[3] .. ARGV[1], ARGV[2], 'EX', tonumber(ARGV[4])) "
+                    + "redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[4])) "
+                    + "return ARGV[1]";
+
     private final StringRedisTemplate redisTemplate;
     private final RedisScript<String> consumeScript;
+    private final RedisScript<String> createScript;
 
     public TokenServiceImpl(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
         this.consumeScript = new DefaultRedisScript<>(CONSUME_SCRIPT, String.class);
+        this.createScript = new DefaultRedisScript<>(CREATE_SCRIPT, String.class);
     }
 
     @Override
@@ -71,16 +93,22 @@ public class TokenServiceImpl implements TokenService {
     }
 
     private String createToken(UUID userId, String prefix, Duration ttl) {
-        String reverseKey = prefix + USER_INDEX_INFIX + userId;
-        String existingHash = redisTemplate.opsForValue().get(reverseKey);
-        if (existingHash != null) {
-            redisTemplate.delete(prefix + existingHash);
-        }
+        byte[] buf = new byte[32];
+        SECURE_RANDOM.nextBytes(buf);
+        String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
 
-        String rawToken = UUID.randomUUID().toString();
         String tokenHash = sha256(rawToken);
-        redisTemplate.opsForValue().set(prefix + tokenHash, userId.toString(), ttl);
-        redisTemplate.opsForValue().set(reverseKey, tokenHash, ttl);
+        String reverseKey = prefix + USER_INDEX_INFIX + userId;
+        long ttlSeconds = ttl.toSeconds();
+
+        redisTemplate.execute(
+                createScript,
+                List.of(reverseKey),
+                tokenHash,
+                userId.toString(),
+                prefix,
+                String.valueOf(ttlSeconds));
+
         return rawToken;
     }
 
