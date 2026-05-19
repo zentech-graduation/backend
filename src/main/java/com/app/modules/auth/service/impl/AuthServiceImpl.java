@@ -9,6 +9,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -300,7 +301,11 @@ public class AuthServiceImpl implements AuthService {
                 user.getEmail(), resolveDisplayName(user), verificationUrl);
     }
 
+    // @Async equalizes response timing across the three code paths (unknown email,
+    // non-ACTIVE status, ACTIVE) — the controller returns immediately and all
+    // DB/mail work happens on the task executor thread.
     @Override
+    @Async
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         Optional<User> userOpt = userRepository.findByEmailAndDeletedAtIsNull(request.email());
