@@ -41,7 +41,7 @@ class RefreshTokenServiceImplTest {
     @BeforeEach
     void setUp() {
         JwtProperties properties =
-                new JwtProperties("secret-32-chars-secret-32-chars--", "iss", 900, 3600);
+                new JwtProperties("secret-32-chars-secret-32-chars--", "iss", "App", 900, 3600);
         this.service = new RefreshTokenServiceImpl(repository, properties);
     }
 
@@ -76,6 +76,22 @@ class RefreshTokenServiceImplTest {
     }
 
     @Test
+    void issue_rawTokenIs43CharUrlSafeBase64() {
+        String raw = service.issue(UUID.randomUUID(), null, null, null);
+
+        assertThat(raw).hasSize(43);
+        assertThat(raw).matches("[A-Za-z0-9\\-_]+");
+    }
+
+    @Test
+    void issue_consecutiveCalls_produceDifferentTokens() {
+        String first = service.issue(UUID.randomUUID(), null, null, null);
+        String second = service.issue(UUID.randomUUID(), null, null, null);
+
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
     void rotate_validToken_revokesOldAndIssuesNew() {
         String raw = UUID.randomUUID().toString();
         String hash = sha256(raw);
@@ -87,7 +103,7 @@ class RefreshTokenServiceImplTest {
                         .tokenHash(hash)
                         .expiresAt(OffsetDateTime.now().plusMinutes(30))
                         .build();
-        when(repository.findByTokenHashAndRevokedAtIsNull(hash)).thenReturn(Optional.of(existing));
+        when(repository.findByTokenHash(hash)).thenReturn(Optional.of(existing));
         when(repository.revokeByTokenHash(eq(hash), any())).thenReturn(1);
 
         RefreshTokenService.RotationResult result = service.rotate(raw, "9.9.9.9");
@@ -103,15 +119,36 @@ class RefreshTokenServiceImplTest {
     }
 
     @Test
-    void rotate_revokedToken_throwsAuthRefreshTokenInvalid() {
+    void rotate_unknownTokenHash_throwsAuthRefreshTokenInvalid() {
+        when(repository.findByTokenHash(anyString())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.rotate("garbage", "1.1.1.1"))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void rotate_knownRevokedToken_revokesAllUserSessionsAndThrows() {
         String raw = UUID.randomUUID().toString();
-        when(repository.findByTokenHashAndRevokedAtIsNull(sha256(raw)))
-                .thenReturn(Optional.empty());
+        String hash = sha256(raw);
+        UUID userId = UUID.randomUUID();
+        RefreshToken revoked =
+                RefreshToken.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .tokenHash(hash)
+                        .expiresAt(OffsetDateTime.now().plusMinutes(30))
+                        .revokedAt(OffsetDateTime.now().minusSeconds(10))
+                        .build();
+        when(repository.findByTokenHash(hash)).thenReturn(Optional.of(revoked));
 
         assertThatThrownBy(() -> service.rotate(raw, "1.1.1.1"))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        verify(repository).revokeAllActiveByUserId(eq(userId), any());
         verify(repository, never()).save(any());
     }
 
@@ -126,7 +163,7 @@ class RefreshTokenServiceImplTest {
                         .tokenHash(hash)
                         .expiresAt(OffsetDateTime.now().minusSeconds(1))
                         .build();
-        when(repository.findByTokenHashAndRevokedAtIsNull(hash)).thenReturn(Optional.of(expired));
+        when(repository.findByTokenHash(hash)).thenReturn(Optional.of(expired));
 
         assertThatThrownBy(() -> service.rotate(raw, "1.1.1.1"))
                 .isInstanceOf(AppException.class)
@@ -134,17 +171,6 @@ class RefreshTokenServiceImplTest {
                 .isEqualTo(ApiErrorCode.AUTH_REFRESH_TOKEN_EXPIRED);
         verify(repository).revokeByTokenHash(eq(hash), any());
         verify(repository, never()).save(any());
-    }
-
-    @Test
-    void rotate_unknownToken_throwsAuthRefreshTokenInvalid() {
-        when(repository.findByTokenHashAndRevokedAtIsNull(anyString()))
-                .thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.rotate("garbage", "1.1.1.1"))
-                .isInstanceOf(AppException.class)
-                .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
     }
 
     @Test
@@ -159,7 +185,7 @@ class RefreshTokenServiceImplTest {
                         .tokenHash(hash)
                         .expiresAt(OffsetDateTime.now().plusMinutes(30))
                         .build();
-        when(repository.findByTokenHashAndRevokedAtIsNull(hash)).thenReturn(Optional.of(existing));
+        when(repository.findByTokenHash(hash)).thenReturn(Optional.of(existing));
         // Simulate a concurrent rotation that already revoked the row.
         when(repository.revokeByTokenHash(eq(hash), any())).thenReturn(0);
 
