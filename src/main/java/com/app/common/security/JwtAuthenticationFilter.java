@@ -17,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.modules.auth.entity.User;
+import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.UserRepository;
 
 /**
@@ -75,6 +76,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     userRepository
                             .findByIdAndDeletedAtIsNull(claims.userId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
+
+            // We bypass DaoAuthenticationProvider here (token-based path), so
+            // UserDetails.isEnabled()/isAccountNonLocked() on UserPrincipal are never
+            // consulted by Spring Security. Enforce account status explicitly.
+            if (user.getStatus() != UserStatus.ACTIVE) {
+                SecurityContextHolder.clearContext();
+                chain.doFilter(req, res);
+                return;
+            }
 
             UserPrincipal principal = securityMapper.toUserPrincipal(user);
 
