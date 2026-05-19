@@ -1,10 +1,33 @@
-# Changelog
+ # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+### Security
+- Enforced strict JWT issuer validation (`iss` claim now rejected when absent); added mandatory `audience` (`aud`) claim issuance and validation (AUTH-001, AUTH-024).
+- Replaced blanket `/api/v1/auth/**` `permitAll` with explicit per-endpoint security rules; `POST /api/v1/auth/logout` and `POST /api/v1/auth/change-password` now require authentication (AUTH-002).
+- `JwtAuthenticationFilter` now rejects non-ACTIVE users (BANNED/SUSPENDED/DEACTIVATED) on every request rather than waiting for access-token expiry (AUTH-003).
+- Introduced `IpExtractor` with trusted-proxy whitelist (`app.security.trusted-proxy-cidrs`); `X-Forwarded-For` is honored only for proxies that match the whitelist (AUTH-004).
+- Dropped unused plaintext-credential columns (`access_token`, `refresh_token`, `token_expires_at`) from `oauth_accounts` via V19 migration (AUTH-005).
+- `forgotPassword` now runs on the async task executor to equalize response timing across unknown/inactive/active code paths; OAuth-only accounts (no local password) receive an informational email instead of a reset token (AUTH-006, AUTH-026).
+- Email-verification token failures now return `AUTH_VERIFY_TOKEN_INVALID` (400) without leaking internal exception messages; `GlobalExceptionHandler` no longer echoes `TokenNotFoundException`/`TokenExpiredException` messages to clients (AUTH-007).
+- `RateLimiterServiceImpl` now fails closed on Redis failures, denying requests rather than allowing brute-force traffic through an outage (AUTH-008).
+- `AuthRateLimitFilter` now covers all sensitive auth endpoints (register, login, refresh, forgot-password, reset-password, verify-email, resend-verify); per-method `@RateLimiter` annotations removed from `AuthController` in favor of the single Redis-backed filter (AUTH-009).
+- One-time token creation (email verification, password reset) is now atomic via a Lua script; prior get-then-delete-then-set sequence was non-atomic (AUTH-011).
+- `CustomOidcUserService` no longer hardcodes `OAuthProvider.GOOGLE`; provider is resolved from the `OidcUserRequest` registration ID with explicit rejection for unwired providers (AUTH-013).
+- `OAuth2AuthenticationFailureHandler` no longer echoes the raw exception message to the response body; provider error details are logged server-side at WARN (AUTH-014).
+- `CachedBodyHttpServletRequest` now enforces `app.security.max-login-body-bytes` (default 2048); request bodies exceeding the limit return 400 instead of consuming unbounded memory (AUTH-015).
+- `RefreshTokenServiceImpl.rotate()` now performs equivalent DB work for unknown vs known-revoked tokens, masking the timing side-channel that previously distinguished these states (AUTH-016).
+- One-time tokens and refresh tokens are now generated from `SecureRandom` (32 bytes / 43-char URL-safe Base64) instead of `UUID.randomUUID()` (AUTH-017).
+- `TokenBlacklistServiceImpl.blacklist()` now fails explicitly on Redis failure (throws `AppException(INTERNAL_ERROR)`); logout no longer silently leaves an unrevoked access token (AUTH-018).
+- All 429 responses now include a `Retry-After` header (filter path uses the matched rule window; `BaseController` fallback uses 30s) (AUTH-019).
+- CORS configuration expanded: `Accept`, `Accept-Language`, `X-Requested-With`, `X-Device-ID` are now allowed; `Retry-After` and `X-Total-Count` are exposed (AUTH-020).
+- JWT access tokens now include a `nbf` (not-before) claim equal to `iat`, validated by `JwtTimestampValidator` (AUTH-021).
+- Strict request body deserialization enabled globally (`spring.jackson.deserialization.fail-on-unknown-properties=true`) plus `@JsonIgnoreProperties(ignoreUnknown = false)` on `RegisterRequest` and `ResetPasswordRequest` (AUTH-022).
+- Production profile sets `logging.file.path: /var/log/app` so the `${user.home}` fallback applies only to dev/test (AUTH-023).
 
 ### Added
 - CI workflow `ci-test.yml` runs the Maven test suite on pull requests targeting `main` or `develop`; job is reporting-only and does not block merges.
