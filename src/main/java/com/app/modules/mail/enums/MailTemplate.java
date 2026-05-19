@@ -6,10 +6,11 @@ import lombok.Getter;
 @Getter
 public enum MailTemplate {
     // spotless:off
-    EMAIL_VERIFICATION ("mail/email-verification", "Verify your email address"),
-    PASSWORD_RESET      ("mail/password-reset",    "Reset your password"),
-    WELCOME             ("mail/welcome",            "Welcome to Social"),
-    PASSWORD_CHANGED    ("mail/password-changed",  "Your password has been changed");
+    EMAIL_VERIFICATION       ("mail/email-verification",        "Verify your email address"),
+    PASSWORD_RESET           ("mail/password-reset",            "Reset your password"),
+    WELCOME                  ("mail/welcome",                   "Welcome to Social"),
+    PASSWORD_CHANGED         ("mail/password-changed",          "Your password has been changed"),
+    OAUTH_ACCOUNT_NO_PASSWORD("mail/oauth-account-no-password", "Sign in with Google to access your account");
     // spotless:on
 
     private final String templatePath;

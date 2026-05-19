@@ -43,4 +43,13 @@ public interface MailService {
      * @param toName recipient display name used in the greeting
      */
     void sendPasswordChanged(String toEmail, String toName);
+
+    /**
+     * Informs an OAuth-only account holder that password reset is not available for their account
+     * and instructs them to use their social sign-in provider instead.
+     *
+     * @param toEmail recipient mailbox
+     * @param displayName recipient display name used in the greeting
+     */
+    void sendOAuthAccountNoPassword(String toEmail, String displayName);
 }

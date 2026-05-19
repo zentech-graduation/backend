@@ -322,6 +322,14 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() != UserStatus.ACTIVE) {
             return;
         }
+
+        Optional<UserCredential> cred = credentialRepository.findByUserId(user.getId());
+        if (cred.isEmpty() || cred.get().getPasswordHash() == null) {
+            // OAuth-only account — send informational email, do not issue reset token
+            mailService.sendOAuthAccountNoPassword(user.getEmail(), resolveDisplayName(user));
+            return;
+        }
+
         String rawToken = tokenService.createPasswordResetToken(user.getId());
         String resetUrl =
                 mailProperties.getFrontendBaseUrl()
@@ -357,6 +365,9 @@ public class AuthServiceImpl implements AuthService {
                 credentialRepository
                         .findByUserId(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+        if (credential.getPasswordHash() == null) {
+            throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+        }
         credential.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         credentialRepository.save(credential);
 

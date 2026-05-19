@@ -116,4 +116,32 @@ class MailServiceImplTest {
                                 assertThat(((AppException) ex).getErrorCode())
                                         .isEqualTo(ApiErrorCode.SERVICE_UNAVAILABLE));
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void sendOAuthAccountNoPassword_assemblesCorrectVariableMapAndDispatchesEmail()
+            throws Exception {
+        when(emails.send(any(CreateEmailOptions.class)))
+                .thenReturn(mock(CreateEmailResponse.class));
+
+        service.sendOAuthAccountNoPassword(TO_EMAIL, TO_NAME);
+
+        ArgumentCaptor<Map<String, Object>> varCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(mailTemplateRenderer)
+                .render(eq(MailTemplate.OAUTH_ACCOUNT_NO_PASSWORD), varCaptor.capture());
+        Map<String, Object> vars = varCaptor.getValue();
+        assertThat(vars)
+                .containsEntry("toName", TO_NAME)
+                .containsEntry("appName", APP_NAME)
+                .containsEntry("frontendBaseUrl", "http://localhost:3000");
+
+        ArgumentCaptor<CreateEmailOptions> optionsCaptor =
+                ArgumentCaptor.forClass(CreateEmailOptions.class);
+        verify(emails).send(optionsCaptor.capture());
+        CreateEmailOptions opts = optionsCaptor.getValue();
+        assertThat(opts.getFrom()).isEqualTo(FROM_NAME + " <" + FROM_ADDRESS + ">");
+        assertThat(opts.getTo()).containsExactly(TO_EMAIL);
+        assertThat(opts.getSubject()).isEqualTo("Sign in with Google to access your account");
+        assertThat(opts.getHtml()).isEqualTo(RENDERED_HTML);
+    }
 }
