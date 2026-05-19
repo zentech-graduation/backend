@@ -22,6 +22,7 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -35,6 +36,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.app.common.ApiConstants;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.response.ApiResponse;
 import com.app.modules.auth.oauth2.CustomOidcUserService;
@@ -48,13 +50,32 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <p>Declares exactly one {@link SecurityFilterChain} bean: the JWT-based REST chain that disables
  * sessions, registers {@link JwtAuthenticationFilter}, and routes authentication and authorization
- * failures back through the {@link ApiResponse} envelope.
+ * failures back through the {@link ApiResponse} envelope. Authorization rules are organized by
+ * semantic category via private helper methods invoked from {@link #securityFilterChain}.
  */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 @EnableConfigurationProperties({JwtProperties.class, CorsProperties.class})
 public class SecurityConfig {
+
+    private static final String[] PUBLIC_POST_AUTH_PATHS = {
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.REGISTER,
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.LOGIN,
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.REFRESH,
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.FORGOT_PASSWORD,
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.RESET_PASSWORD,
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.RESEND_VERIFY,
+    };
+
+    private static final String[] AUTHENTICATED_POST_AUTH_PATHS = {
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.LOGOUT,
+        ApiConstants.Auth.ROOT + ApiConstants.Auth.CHANGE_PASSWORD,
+    };
+
+    private static final String[] PUBLIC_INFRA_PATHS = {
+        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
+    };
 
     private final JwtProperties jwtProperties;
     private final CorsProperties corsProperties;
@@ -100,22 +121,14 @@ public class SecurityConfig {
                         sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(
-                        auth ->
-                                auth.requestMatchers(
-                                                "/api/v1/auth/**",
-                                                "/actuator/health",
-                                                "/api-docs/**",
-                                                "/swagger-ui/**",
-                                                "/swagger-ui.html")
-                                        .permitAll()
-                                        .requestMatchers("/actuator/**")
-                                        .hasRole("ADMIN")
-                                        .requestMatchers("/api/v1/admin/**")
-                                        .hasRole("ADMIN")
-                                        .requestMatchers("/api/v1/moderator/**")
-                                        .hasAnyRole("MODERATOR", "ADMIN")
-                                        .anyRequest()
-                                        .authenticated())
+                        auth -> {
+                            configurePublicAuthEndpoints(auth);
+                            configureOAuth2Endpoints(auth);
+                            configureAuthenticatedEndpoints(auth);
+                            configureInfrastructureEndpoints(auth);
+                            configureRoleBasedEndpoints(auth);
+                            auth.anyRequest().authenticated();
+                        })
                 .addFilterBefore(
                         jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(authRateLimitFilter, JwtAuthenticationFilter.class)
@@ -134,6 +147,50 @@ public class SecurityConfig {
                                 ex.authenticationEntryPoint(authenticationEntryPoint())
                                         .accessDeniedHandler(accessDeniedHandler()));
         return http.build();
+    }
+
+    /** Permits anonymous access to token-issuing and account-management auth endpoints. */
+    private void configurePublicAuthEndpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers(HttpMethod.POST, PUBLIC_POST_AUTH_PATHS).permitAll();
+        auth.requestMatchers(
+                        HttpMethod.GET, ApiConstants.Auth.ROOT + ApiConstants.Auth.VERIFY_EMAIL)
+                .permitAll();
+    }
+
+    /** Permits anonymous access to Spring OAuth2 client initiation and callback paths. */
+    private void configureOAuth2Endpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers(HttpMethod.GET, ApiConstants.Auth.ROOT + "/oauth2/**").permitAll();
+        auth.requestMatchers(HttpMethod.POST, ApiConstants.Auth.ROOT + "/oauth2/**").permitAll();
+    }
+
+    /** Restricts session-scoped auth operations to authenticated users. */
+    private void configureAuthenticatedEndpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers(HttpMethod.POST, AUTHENTICATED_POST_AUTH_PATHS).authenticated();
+    }
+
+    /**
+     * Opens health and API-documentation endpoints to all callers; restricts remaining actuator
+     * endpoints to ADMIN.
+     */
+    private void configureInfrastructureEndpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers(PUBLIC_INFRA_PATHS).permitAll();
+        auth.requestMatchers("/actuator/**").hasRole("ADMIN");
+    }
+
+    /** Restricts admin API paths to ADMIN and moderator API paths to MODERATOR or ADMIN. */
+    private void configureRoleBasedEndpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN");
+        auth.requestMatchers("/api/v1/moderator/**").hasAnyRole("MODERATOR", "ADMIN");
     }
 
     @Bean
