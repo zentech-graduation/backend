@@ -7,7 +7,7 @@ spring:
 
 logging:
   file:
-    path: /var/log/app
+    path: /var/log/luvax
 
 jpa:
   hibernate:
