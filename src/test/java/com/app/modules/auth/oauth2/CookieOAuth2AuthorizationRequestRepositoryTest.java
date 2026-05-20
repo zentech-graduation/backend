@@ -182,7 +182,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
         repository.saveAuthorizationRequest(
                 buildAuthorizationRequest("s1"), new MockHttpServletRequest(), response);
 
-        assertThat(response.getHeader("Set-Cookie")).contains("Path=/");
+        assertThat(response.getHeader("Set-Cookie")).contains("Path=/api/v1/auth/oauth2");
     }
 
     @Test
@@ -260,6 +260,36 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
         assertThat(removed).isNotNull();
         assertThat(removed.getState()).isEqualTo("remove-state");
         assertThat(removeResp.getHeader("Set-Cookie")).contains("Max-Age=0");
+    }
+
+    @Test
+    void removeAuthorizationRequest_whenCookieIsCorrupted_shouldStillExpireCookie() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(
+                new Cookie(
+                        CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME,
+                        "corrupted.invalidsignature"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        OAuth2AuthorizationRequest result =
+                repository.removeAuthorizationRequest(request, response);
+
+        assertThat(result).isNull();
+        assertThat(response.getHeader("Set-Cookie"))
+                .contains("oauth2_auth_request")
+                .contains("Max-Age=0");
+    }
+
+    @Test
+    void cookie_path_should_be_oauth2_scoped() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        repository.saveAuthorizationRequest(
+                buildAuthorizationRequest("path-check"), new MockHttpServletRequest(), response);
+
+        String header = response.getHeader("Set-Cookie");
+        assertThat(header).contains("Path=/api/v1/auth/oauth2");
+        assertThat(header).doesNotContain("Path=/;").doesNotContain("Path=/ ");
     }
 
     // ── helpers ───────────────────────────────────────────────────────────

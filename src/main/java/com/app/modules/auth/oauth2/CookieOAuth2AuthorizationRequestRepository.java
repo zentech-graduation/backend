@@ -96,7 +96,7 @@ public class CookieOAuth2AuthorizationRequestRepository
                         .httpOnly(true)
                         .secure(secureCookie)
                         .sameSite("Lax")
-                        .path("/")
+                        .path("/api/v1/auth/oauth2")
                         .maxAge(MAX_AGE_SECONDS)
                         .build()
                         .toString());
@@ -106,9 +106,7 @@ public class CookieOAuth2AuthorizationRequestRepository
     public OAuth2AuthorizationRequest removeAuthorizationRequest(
             HttpServletRequest request, HttpServletResponse response) {
         OAuth2AuthorizationRequest authorizationRequest = loadAuthorizationRequest(request);
-        if (authorizationRequest != null) {
-            expireCookie(response);
-        }
+        expireCookie(response);
         return authorizationRequest;
     }
 
@@ -119,7 +117,7 @@ public class CookieOAuth2AuthorizationRequestRepository
                         .httpOnly(true)
                         .secure(secureCookie)
                         .sameSite("Lax")
-                        .path("/")
+                        .path("/api/v1/auth/oauth2")
                         .maxAge(0)
                         .build()
                         .toString());
