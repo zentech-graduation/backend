@@ -43,6 +43,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.security.filter.AuthRateLimitFilter;
 import com.app.common.security.filter.JwtAuthenticationFilter;
 import com.app.common.security.jwt.JwtProperties;
+import com.app.modules.auth.oauth2.CookieOAuth2AuthorizationRequestRepository;
 import com.app.modules.auth.oauth2.CustomOidcUserService;
 import com.app.modules.auth.oauth2.OAuth2AuthenticationFailureHandler;
 import com.app.modules.auth.oauth2.OAuth2AuthenticationSuccessHandler;
@@ -88,6 +89,8 @@ public class SecurityConfig {
     private final CustomOidcUserService customOidcUserService;
     private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
     private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
+    private final CookieOAuth2AuthorizationRequestRepository
+            cookieOAuth2AuthorizationRequestRepository;
 
     @Autowired private ObjectMapper objectMapper;
 
@@ -98,7 +101,8 @@ public class SecurityConfig {
             AuthRateLimitFilter authRateLimitFilter,
             CustomOidcUserService customOidcUserService,
             OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler,
-            OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler) {
+            OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler,
+            CookieOAuth2AuthorizationRequestRepository cookieOAuth2AuthorizationRequestRepository) {
         this.jwtProperties = jwtProperties;
         this.corsProperties = corsProperties;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
@@ -106,6 +110,8 @@ public class SecurityConfig {
         this.customOidcUserService = customOidcUserService;
         this.oAuth2AuthenticationSuccessHandler = oAuth2AuthenticationSuccessHandler;
         this.oAuth2AuthenticationFailureHandler = oAuth2AuthenticationFailureHandler;
+        this.cookieOAuth2AuthorizationRequestRepository =
+                cookieOAuth2AuthorizationRequestRepository;
     }
 
     @PostConstruct
@@ -120,7 +126,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.disable())
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .sessionManagement(
                         sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -139,7 +145,10 @@ public class SecurityConfig {
                 .oauth2Login(
                         oauth2 ->
                                 oauth2.authorizationEndpoint(
-                                                ep -> ep.baseUri("/api/v1/auth/oauth2/authorize"))
+                                                ep ->
+                                                        ep.baseUri("/api/v1/auth/oauth2/authorize")
+                                                                .authorizationRequestRepository(
+                                                                        cookieOAuth2AuthorizationRequestRepository))
                                         .redirectionEndpoint(
                                                 ep -> ep.baseUri("/api/v1/auth/oauth2/callback/*"))
                                         .userInfoEndpoint(
