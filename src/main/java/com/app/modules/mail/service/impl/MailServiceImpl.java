@@ -89,6 +89,18 @@ public class MailServiceImpl implements MailService {
         send(toEmail, MailTemplate.PASSWORD_CHANGED.getDefaultSubject(), html);
     }
 
+    @Override
+    @Async("mailTaskExecutor")
+    public void sendOAuthAccountNoPassword(String toEmail, String displayName) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("toName", displayName);
+        variables.put("appName", mailProperties.getAppName());
+        variables.put("frontendBaseUrl", mailProperties.getFrontendBaseUrl());
+        String html =
+                mailTemplateRenderer.render(MailTemplate.OAUTH_ACCOUNT_NO_PASSWORD, variables);
+        send(toEmail, MailTemplate.OAUTH_ACCOUNT_NO_PASSWORD.getDefaultSubject(), html);
+    }
+
     private void send(String toEmail, String subject, String htmlBody) {
         String from = mailProperties.getFromName() + " <" + mailProperties.getFromAddress() + ">";
         CreateEmailOptions options =

@@ -27,12 +27,12 @@ import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 
 /**
- * OIDC user service that resolves a Google sign-in to a local {@link User}.
+ * OIDC user service that resolves an OAuth2 sign-in to a local {@link User}.
  *
  * <p>OAuth2 login resolution:
  *
  * <ol>
- *   <li>Google redirects the user to {@code /api/v1/auth/oauth2/callback/google}.
+ *   <li>The provider redirects the user to {@code /api/v1/auth/oauth2/callback/{registrationId}}.
  *   <li>Spring Security exchanges the auth code for tokens, then invokes {@link
  *       #loadUser(OidcUserRequest)}.
  *   <li>If an {@code oauth_accounts} row exists for the provider id, the linked user is loaded.
@@ -76,14 +76,14 @@ public class CustomOidcUserService extends OidcUserService {
     }
 
     private OidcUser processOidcUser(OidcUserRequest request, OidcUser oidcUser) {
+        OAuthProvider provider = resolveProvider(request);
         String email = oidcUser.getEmail();
         String providerId = oidcUser.getSubject();
         String displayName = oidcUser.getFullName();
         String avatarUrl = oidcUser.getPicture();
 
         Optional<OAuthAccount> existing =
-                oauthAccountRepository.findByProviderAndProviderId(
-                        OAuthProvider.GOOGLE, providerId);
+                oauthAccountRepository.findByProviderAndProviderId(provider, providerId);
 
         User user;
         if (existing.isPresent()) {
@@ -108,20 +108,34 @@ public class CustomOidcUserService extends OidcUserService {
                 user = createNewOAuthUser(email, displayName, avatarUrl);
             }
 
-            // Access token from the IdP is not consumed by any downstream call. Retaining it
-            // would only widen the database-compromise blast radius.
             OAuthAccount oauthAccount =
                     OAuthAccount.builder()
                             .userId(user.getId())
-                            .provider(OAuthProvider.GOOGLE)
+                            .provider(provider)
                             .providerId(providerId)
                             .providerEmail(email)
-                            .accessToken(null)
                             .build();
             oauthAccountRepository.save(oauthAccount);
         }
 
         return new CustomOidcUser(oidcUser, user);
+    }
+
+    /**
+     * Maps OAuth2 registration IDs to the application's OAuthProvider enum. Add cases here when
+     * wiring new providers; each new provider requires dedicated validation before being enabled.
+     */
+    // VisibleForTesting
+    OAuthProvider resolveProvider(OidcUserRequest userRequest) {
+        String registrationId = userRequest.getClientRegistration().getRegistrationId();
+        return switch (registrationId.toLowerCase()) {
+            case "google" -> OAuthProvider.GOOGLE;
+            // Additional providers can be added here as they are wired.
+            default ->
+                    throw new OAuth2AuthenticationException(
+                            new OAuth2Error("unsupported_provider"),
+                            "OAuth2 provider '" + registrationId + "' is not supported");
+        };
     }
 
     private User createNewOAuthUser(String email, String displayName, String avatarUrl) {

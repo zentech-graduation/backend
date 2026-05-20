@@ -61,15 +61,6 @@ public class OAuthAccount {
     @Column(name = "provider_email", length = 255)
     private String providerEmail;
 
-    @Column(name = "access_token", columnDefinition = "TEXT")
-    private String accessToken;
-
-    @Column(name = "refresh_token", columnDefinition = "TEXT")
-    private String refreshToken;
-
-    @Column(name = "token_expires_at")
-    private OffsetDateTime tokenExpiresAt;
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

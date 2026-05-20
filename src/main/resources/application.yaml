@@ -9,6 +9,10 @@ spring:
   threads:
     virtual:
       enabled: true
+  jackson:
+    deserialization:
+      # AUTH-022: reject request bodies that contain unknown fields to prevent mass-assignment
+      fail-on-unknown-properties: true
   datasource:
     url: ${POSTGRES_URL}
     username: ${POSTGRES_USER}
@@ -42,6 +46,7 @@ app:
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}
+    audience: ${JWT_AUDIENCE:App}
     access-token-ttl: ${ACCESS_TOKEN_TTL}
     refresh-token-ttl: ${REFRESH_TOKEN_TTL}
   cors:
@@ -61,6 +66,11 @@ app:
     resend-verification:
       max-attempts: 3
       window-seconds: 3600
+
+server:
+  forward-headers-strategy: framework
+  tomcat:
+    max-http-form-post-size: 1MB
 
 logging:
   level:

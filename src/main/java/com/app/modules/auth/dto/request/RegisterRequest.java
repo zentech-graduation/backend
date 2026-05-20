@@ -5,8 +5,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
+// AUTH-022: reject payloads with unrecognised fields to prevent mass-assignment attacks
+@JsonIgnoreProperties(ignoreUnknown = false)
 @Schema(description = "Payload for creating a new user account")
 public record RegisterRequest(
         @Schema(

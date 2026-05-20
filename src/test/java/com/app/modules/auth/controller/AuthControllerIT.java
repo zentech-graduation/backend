@@ -2,6 +2,7 @@ package com.app.modules.auth.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -46,7 +47,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
-import com.app.common.security.SecurityUtils;
+import com.app.common.security.util.SecurityUtils;
 import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.RefreshTokenRepository;
@@ -69,6 +70,7 @@ class AuthControllerIT {
 
     private static final String TEST_JWT_SECRET = "integration-test-secret-32-chars-minimum-len!!";
     private static final String TEST_JWT_ISSUER = "https://it.test.local";
+    private static final String TEST_JWT_AUDIENCE = "App";
 
     @Container @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -83,6 +85,7 @@ class AuthControllerIT {
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         r.add("JWT_SECRET", () -> TEST_JWT_SECRET);
         r.add("JWT_ISSUER", () -> TEST_JWT_ISSUER);
+        r.add("JWT_AUDIENCE", () -> TEST_JWT_AUDIENCE);
         r.add("ACCESS_TOKEN_TTL", () -> 900L);
         r.add("REFRESH_TOKEN_TTL", () -> 3600L);
         r.add("APP_BASE_URL", () -> "http://localhost:8080");
@@ -294,8 +297,10 @@ class AuthControllerIT {
         String email = uniqueEmail("refresh_revoked");
         ResponseEntity<Map> reg =
                 postJson("/api/v1/auth/register", registerBody("user_rrv", email, "password1"));
-        String refresh = (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
-        postJson("/api/v1/auth/logout", Map.of("refreshToken", refresh));
+        Map<?, ?> regData = (Map<?, ?>) reg.getBody().get("data");
+        String refresh = (String) regData.get("refreshToken");
+        String access = (String) regData.get("accessToken");
+        postJsonWithAuth("/api/v1/auth/logout", Map.of("refreshToken", refresh), access);
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/refresh", Map.of("refreshToken", refresh));
@@ -326,12 +331,65 @@ class AuthControllerIT {
         String email = uniqueEmail("logout");
         ResponseEntity<Map> reg =
                 postJson("/api/v1/auth/register", registerBody("user_lout", email, "password1"));
+        Map<?, ?> regData = (Map<?, ?>) reg.getBody().get("data");
+        String refresh = (String) regData.get("refreshToken");
+        String access = (String) regData.get("accessToken");
+
+        ResponseEntity<Map> response =
+                postJsonWithAuth("/api/v1/auth/logout", Map.of("refreshToken", refresh), access);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    void logout_noAuthHeader_returns401() {
+        String email = uniqueEmail("logout_noauth");
+        ResponseEntity<Map> reg =
+                postJson("/api/v1/auth/register", registerBody("user_lna", email, "password1"));
         String refresh = (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/logout", Map.of("refreshToken", refresh));
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void logout_validBearerToken_returns204() {
+        String email = uniqueEmail("logout_auth");
+        ResponseEntity<Map> reg =
+                postJson("/api/v1/auth/register", registerBody("user_lauth", email, "password1"));
+        Map<?, ?> regData = (Map<?, ?>) reg.getBody().get("data");
+        String refresh = (String) regData.get("refreshToken");
+        String access = (String) regData.get("accessToken");
+
+        ResponseEntity<Map> response =
+                postJsonWithAuth("/api/v1/auth/logout", Map.of("refreshToken", refresh), access);
+
+        assertThat(response.getStatusCode()).isIn(HttpStatus.OK, HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    void login_noAuthHeader_isPubliclyReachable() {
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("email", uniqueEmail("login_pub"), "password", "password1"));
+
+        // The endpoint is public; Spring Security must not block with 401-because-no-bearer.
+        // A 401 here means bad credentials, not a missing token — that's still acceptable.
+        assertThat(response.getStatusCode().value()).isNotEqualTo(HttpStatus.FORBIDDEN.value());
+        assertThat(response.getStatusCode()).isNotEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Test
+    void register_noAuthHeader_isPubliclyReachable() {
+        String email = uniqueEmail("reg_pub");
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/register", registerBody("user_regpub", email, "password1"));
+
+        assertThat(response.getStatusCode())
+                .isIn(HttpStatus.CREATED, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     @Test
@@ -344,6 +402,26 @@ class AuthControllerIT {
         ResponseEntity<Map> response = getWithAuth("/api/v1/test/me", access);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void protectedEndpoint_bannedUser_validAccessToken_returns401() {
+        String email = uniqueEmail("prot_banned");
+        ResponseEntity<Map> reg =
+                postJson("/api/v1/auth/register", registerBody("user_prtbn", email, "password1"));
+        String access = (String) ((Map<?, ?>) reg.getBody().get("data")).get("accessToken");
+
+        userRepository
+                .findByEmailAndDeletedAtIsNull(email)
+                .ifPresent(
+                        u -> {
+                            u.setStatus(UserStatus.BANNED);
+                            userRepository.save(u);
+                        });
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/test/me", access);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -369,16 +447,16 @@ class AuthControllerIT {
     }
 
     @Test
-    void verifyEmail_invalidToken_returnsNotFound() {
+    void verifyEmail_invalidToken_returnsBadRequest() {
         ResponseEntity<Map> response =
                 rest.getForEntity("/api/v1/auth/verify-email?token=does-not-exist", Map.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(response.getBody().get("code")).isEqualTo("NOT_FOUND");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_VERIFY_TOKEN_INVALID");
     }
 
     @Test
-    void verifyEmail_consumedToken_returns404() {
+    void verifyEmail_consumedToken_returnsBadRequest() {
         String email = uniqueEmail("consumed");
         ResponseEntity<Map> reg =
                 postJson(
@@ -393,17 +471,18 @@ class AuthControllerIT {
 
         ResponseEntity<Map> second =
                 rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
-        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(second.getBody().get("code")).isEqualTo("AUTH_VERIFY_TOKEN_INVALID");
     }
 
     @Test
-    void verifyEmail_unknownToken_returnsSameNotFoundAsConsumed() {
+    void verifyEmail_unknownToken_returnsSameBadRequestAsConsumed() {
         ResponseEntity<Map> response =
                 rest.getForEntity(
                         "/api/v1/auth/verify-email?token=" + UUID.randomUUID(), Map.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(response.getBody().get("code")).isEqualTo("NOT_FOUND");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_VERIFY_TOKEN_INVALID");
     }
 
     @Test
@@ -488,6 +567,74 @@ class AuthControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
+    @Test
+    void login_pastRateLimit_returns429WithRetryAfterHeader() {
+        String forwardedIp = uniqueIp();
+        String email = uniqueEmail("rl_retry_after");
+        postJson(
+                "/api/v1/auth/register", registerBody("user_rra", email, "password1"), forwardedIp);
+
+        for (int i = 0; i < 10; i++) {
+            postJson(
+                    "/api/v1/auth/login", Map.of("email", email, "password", "WRONG"), forwardedIp);
+        }
+
+        ResponseEntity<Map> blocked =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("email", email, "password", "WRONG"),
+                        forwardedIp);
+
+        assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        String retryAfter =
+                blocked.getHeaders().getFirst(org.springframework.http.HttpHeaders.RETRY_AFTER);
+        assertThat(retryAfter).as("429 response must include Retry-After header").isNotNull();
+        assertThat(Long.parseLong(retryAfter))
+                .as("Retry-After must be a positive number of seconds")
+                .isGreaterThan(0);
+    }
+
+    @Test
+    void login_bodyExceedsMaxLoginBodyBytes_returns400WithApiResponseEnvelope() {
+        // Default maxLoginBodyBytes is 2048; build ~5KB of JSON padding.
+        StringBuilder padding = new StringBuilder(5000);
+        for (int i = 0; i < 5000; i++) {
+            padding.append('x');
+        }
+        String body =
+                "{\"email\":\"foo@example.com\",\"password\":\"p\",\"junk\":\"" + padding + "\"}";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/auth/login",
+                        HttpMethod.POST,
+                        new HttpEntity<>(body, headers),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("code")).isEqualTo("BAD_REQUEST");
+        assertThat(response.getBody().get("success")).isEqualTo(false);
+    }
+
+    @Test
+    void authController_hasNoRateLimiterAnnotations() {
+        Method[] methods = AuthController.class.getDeclaredMethods();
+        for (Method m : methods) {
+            assertThat(
+                            m.getAnnotation(
+                                    io.github.resilience4j.ratelimiter.annotation.RateLimiter
+                                            .class))
+                    .as(
+                            "Method %s should not carry @RateLimiter (now handled by"
+                                    + " AuthRateLimitFilter)",
+                            m.getName())
+                    .isNull();
+        }
+    }
+
     private ResponseEntity<Map> postJson(String path, Object body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -559,13 +706,16 @@ class AuthControllerIT {
                 new SecretKeySpec(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         NimbusJwtEncoder encoder = new NimbusJwtEncoder(new ImmutableSecret<>(key));
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
+        Instant issuedAt = expiresAt.minusSeconds(60);
         JwtClaimsSet claims =
                 JwtClaimsSet.builder()
                         .issuer(TEST_JWT_ISSUER)
+                        .audience(java.util.List.of(TEST_JWT_AUDIENCE))
                         .subject(UUID.randomUUID().toString())
                         .claim("email", "x@example.com")
                         .claim("role", "USER")
-                        .issuedAt(expiresAt.minusSeconds(60))
+                        .issuedAt(issuedAt)
+                        .notBefore(issuedAt)
                         .expiresAt(expiresAt)
                         .build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

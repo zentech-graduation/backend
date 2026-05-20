@@ -9,6 +9,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,11 +20,12 @@ import org.springframework.util.StringUtils;
 import com.app.common.config.app.AppProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
-import com.app.common.security.JwtClaims;
-import com.app.common.security.JwtProperties;
-import com.app.common.security.JwtTokenProvider;
-import com.app.common.security.RefreshTokenService;
-import com.app.common.security.TokenBlacklistService;
+import com.app.common.security.jwt.JwtClaims;
+import com.app.common.security.jwt.JwtProperties;
+import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.common.security.service.RefreshTokenService;
+import com.app.common.security.service.TokenBlacklistService;
+import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
@@ -35,6 +37,7 @@ import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.UserRole;
 import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
 import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
@@ -66,6 +69,7 @@ public class AuthServiceImpl implements AuthService {
     private final AppProperties appProperties;
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
+    private final IpExtractor ipExtractor;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -84,7 +88,8 @@ public class AuthServiceImpl implements AuthService {
             MailProperties mailProperties,
             AppProperties appProperties,
             AuthMapper authMapper,
-            TokenBlacklistService tokenBlacklistService) {
+            TokenBlacklistService tokenBlacklistService,
+            IpExtractor ipExtractor) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -98,6 +103,7 @@ public class AuthServiceImpl implements AuthService {
         this.appProperties = appProperties;
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.ipExtractor = ipExtractor;
     }
 
     @PostConstruct
@@ -195,7 +201,8 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse refresh(RefreshRequest request, HttpServletRequest httpRequest) {
         RefreshTokenService.RotationResult rotation =
-                refreshTokenService.rotate(request.refreshToken(), extractIp(httpRequest));
+                refreshTokenService.rotate(
+                        request.refreshToken(), ipExtractor.extract(httpRequest));
 
         User user =
                 userRepository
@@ -241,6 +248,8 @@ public class AuthServiceImpl implements AuthService {
         // JwtAuthenticationFilter; absence (e.g. logout without an Authorization header)
         // is tolerated and only the refresh token is revoked.
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        // Retained for defensive completeness — public path now requires authentication
+        // (SecurityConfig enforces authenticated() on /logout).
         if (auth != null && auth.getCredentials() instanceof String rawToken) {
             try {
                 JwtClaims claims = jwtTokenProvider.validateAndParse(rawToken);
@@ -249,6 +258,9 @@ public class AuthServiceImpl implements AuthService {
                                 ? 0L
                                 : claims.expiresAt().getEpochSecond()
                                         - Instant.now().getEpochSecond();
+                // If this throws, the refresh token has already been revoked (REQUIRES_NEW
+                // committed). The client receives 500; they should retry logout. The access
+                // token remains valid until its natural expiry.
                 tokenBlacklistService.blacklist(claims.jti(), remaining);
             } catch (AppException ignored) {
                 // Token already invalid — refresh-token revoke below still proceeds.
@@ -260,7 +272,12 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void verifyEmail(String rawToken) {
-        UUID userId = tokenService.consumeEmailVerificationToken(rawToken);
+        UUID userId;
+        try {
+            userId = tokenService.consumeEmailVerificationToken(rawToken);
+        } catch (TokenNotFoundException | TokenExpiredException e) {
+            throw new AppException(ApiErrorCode.AUTH_VERIFY_TOKEN_INVALID);
+        }
 
         UserCredential credential =
                 credentialRepository
@@ -290,7 +307,11 @@ public class AuthServiceImpl implements AuthService {
                 user.getEmail(), resolveDisplayName(user), verificationUrl);
     }
 
+    // @Async equalizes response timing across the three code paths (unknown email,
+    // non-ACTIVE status, ACTIVE) — the controller returns immediately and all
+    // DB/mail work happens on the task executor thread.
     @Override
+    @Async
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         Optional<User> userOpt = userRepository.findByEmailAndDeletedAtIsNull(request.email());
@@ -301,6 +322,14 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() != UserStatus.ACTIVE) {
             return;
         }
+
+        Optional<UserCredential> cred = credentialRepository.findByUserId(user.getId());
+        if (cred.isEmpty() || cred.get().getPasswordHash() == null) {
+            // OAuth-only account — send informational email, do not issue reset token
+            mailService.sendOAuthAccountNoPassword(user.getEmail(), resolveDisplayName(user));
+            return;
+        }
+
         String rawToken = tokenService.createPasswordResetToken(user.getId());
         String resetUrl =
                 mailProperties.getFrontendBaseUrl()
@@ -336,6 +365,9 @@ public class AuthServiceImpl implements AuthService {
                 credentialRepository
                         .findByUserId(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+        if (credential.getPasswordHash() == null) {
+            throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+        }
         credential.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         credentialRepository.save(credential);
 
@@ -354,7 +386,7 @@ public class AuthServiceImpl implements AuthService {
                         user.getId(),
                         null,
                         httpRequest.getHeader(HttpHeaders.USER_AGENT),
-                        extractIp(httpRequest));
+                        ipExtractor.extract(httpRequest));
         return new AuthResponse(
                 accessToken,
                 refreshToken,
@@ -367,14 +399,5 @@ public class AuthServiceImpl implements AuthService {
         return StringUtils.hasText(user.getDisplayName())
                 ? user.getDisplayName()
                 : user.getUsername();
-    }
-
-    private static String extractIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
-        }
-        return request.getRemoteAddr();
     }
 }

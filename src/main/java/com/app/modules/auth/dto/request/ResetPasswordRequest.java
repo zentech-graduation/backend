@@ -3,8 +3,12 @@ package com.app.modules.auth.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
+// AUTH-022: reject payloads with unrecognised fields to prevent mass-assignment attacks
+@JsonIgnoreProperties(ignoreUnknown = false)
 @Schema(description = "Payload to complete a password reset using the one-time token")
 public record ResetPasswordRequest(
         @Schema(

@@ -16,8 +16,6 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.response.ApiResponse;
-import com.app.modules.auth.exception.TokenExpiredException;
-import com.app.modules.auth.exception.TokenNotFoundException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -76,15 +74,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleNoResource(NoResourceFoundException ex) {
         return ResponseEntity.status(ApiErrorCode.NOT_FOUND.getHttpStatus())
                 .body(ApiResponse.failure(ApiErrorCode.NOT_FOUND));
-    }
-
-    // TokenNotFoundException propagates from the email-verification flow (verifyEmail calls
-    // consumeEmailVerificationToken); the password-reset flow converts it to AppException before
-    // reaching here. Do not remove this handler without also fixing verifyEmail.
-    @ExceptionHandler({TokenNotFoundException.class, TokenExpiredException.class})
-    public ResponseEntity<ApiResponse<?>> handleInvalidToken(RuntimeException ex) {
-        return ResponseEntity.status(ApiErrorCode.NOT_FOUND.getHttpStatus())
-                .body(ApiResponse.failure(ApiErrorCode.NOT_FOUND, ex.getMessage(), null));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

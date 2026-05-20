@@ -85,3 +85,26 @@ These tables cannot be rebuilt from any other source if lost.
 | `users` (self) | inbound | All other modules reference `users.id`; auth module owns the `users` table |
 | `mail` | outbound | Auth calls `MailService` to send verification and password-reset emails |
 | `social` | none | Social graph is a separate module; auth has no direct dependency |
+
+---
+
+## Known Security Gaps
+
+### AUTH-012 — OAuth2 callback delivers tokens in response body (deferred)
+
+The OAuth2 success handler currently writes the access and refresh token pair
+directly into the HTTP response body at the callback URL
+(`/api/v1/auth/oauth2/callback/{provider}`). This means tokens are delivered
+via a browser GET response, leaving the authorization code and state parameters
+in browser history.
+
+**Deferred because:** the front-end OAuth2 redirect integration is not yet
+implemented. A `POST /api/v1/auth/oauth2/exchange` endpoint is declared in
+`ApiConstants.Auth.OAUTH2_EXCHANGE` for the future PKCE back-channel exchange.
+
+**Resolution path:** when the front-end is wired, implement the exchange
+endpoint and change `OAuth2AuthenticationSuccessHandler` to redirect to the
+SPA route with tokens in the URL fragment, or issue a short-lived exchange code
+and complete the handshake via the back-channel endpoint.
+
+**CWE:** CWE-598. **Severity:** MEDIUM. **Priority:** P3.

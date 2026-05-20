@@ -27,3 +27,30 @@ app:
   mail:
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
+  security:
+    trusted-proxy-cidrs:
+      - "127.0.0.1"
+    max-login-body-bytes: 2048
+  rate-limit:
+    endpoint-rules:
+      "/api/v1/auth/register":
+        max-attempts: 5
+        window-seconds: 60
+      "/api/v1/auth/login":
+        max-attempts: 10
+        window-seconds: 60
+      "/api/v1/auth/refresh":
+        max-attempts: 30
+        window-seconds: 60
+      "/api/v1/auth/forgot-password":
+        max-attempts: 3
+        window-seconds: 300
+      "/api/v1/auth/reset-password":
+        max-attempts: 5
+        window-seconds: 300
+      "/api/v1/auth/verify-email":
+        max-attempts: 10
+        window-seconds: 60
+      "/api/v1/auth/verify-email/resend":
+        max-attempts: 3
+        window-seconds: 300

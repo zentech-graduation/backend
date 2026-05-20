@@ -35,11 +35,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.app.common.config.app.AppProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
-import com.app.common.security.JwtClaims;
-import com.app.common.security.JwtProperties;
-import com.app.common.security.JwtTokenProvider;
-import com.app.common.security.RefreshTokenService;
-import com.app.common.security.TokenBlacklistService;
+import com.app.common.security.jwt.JwtClaims;
+import com.app.common.security.jwt.JwtProperties;
+import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.common.security.service.RefreshTokenService;
+import com.app.common.security.service.TokenBlacklistService;
+import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
@@ -52,6 +53,8 @@ import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.UserRole;
 import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.auth.exception.TokenExpiredException;
+import com.app.modules.auth.exception.TokenNotFoundException;
 import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
@@ -74,14 +77,16 @@ class AuthServiceImplTest {
     @Mock private MailProperties mailProperties;
     @Mock private AuthMapper authMapper;
     @Mock private TokenBlacklistService tokenBlacklistService;
+    @Mock private IpExtractor ipExtractor;
 
     private AuthServiceImpl service;
 
     @BeforeEach
     void setUp() {
         JwtProperties jwtProperties =
-                new JwtProperties("test-secret-32-chars-test-secret-", "iss", 900, 3600);
+                new JwtProperties("test-secret-32-chars-test-secret-", "iss", "App", 900, 3600);
         AppProperties appProperties = new AppProperties("https://app.local");
+        lenient().when(ipExtractor.extract(any(HttpServletRequest.class))).thenReturn("4.5.6.7");
         lenient()
                 .when(authMapper.toUserSummaryResponse(any(User.class), anyBoolean()))
                 .thenAnswer(
@@ -110,7 +115,8 @@ class AuthServiceImplTest {
                         mailProperties,
                         appProperties,
                         authMapper,
-                        tokenBlacklistService);
+                        tokenBlacklistService,
+                        ipExtractor);
     }
 
     private MockHttpServletRequest stubRequest() {
@@ -452,7 +458,9 @@ class AuthServiceImplTest {
     @Test
     void forgotPassword_knownEmail_dispatchesResetMail() {
         User u = activeUser();
+        UserCredential cred = credential(u.getId(), "HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(tokenService.createPasswordResetToken(u.getId())).thenReturn("RESET-RAW");
         when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
         when(mailProperties.getResetPasswordPath()).thenReturn("/reset-password");
@@ -490,7 +498,7 @@ class AuthServiceImplTest {
     @Test
     void resetPassword_unknownToken_throwsResetTokenInvalid() {
         when(tokenService.consumePasswordResetToken(anyString()))
-                .thenThrow(new com.app.modules.auth.exception.TokenNotFoundException("invalid"));
+                .thenThrow(new TokenNotFoundException("invalid"));
 
         assertThatThrownBy(
                         () ->
@@ -500,6 +508,138 @@ class AuthServiceImplTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
         verify(refreshTokenService, never()).revokeAllForUser(any());
+    }
+
+    // FIX-6: forgotPassword async timing — unknown email path
+    @Test
+    void forgotPassword_unknownEmail_doesNotCreateTokenOrSendMail() {
+        when(userRepository.findByEmailAndDeletedAtIsNull("ghost@x.y"))
+                .thenReturn(Optional.empty());
+
+        service.forgotPassword(new ForgotPasswordRequest("ghost@x.y"));
+
+        verify(tokenService, never()).createPasswordResetToken(any());
+        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
+        verify(mailService, never()).sendOAuthAccountNoPassword(anyString(), anyString());
+    }
+
+    // FIX-6: forgotPassword async timing — non-ACTIVE user path
+    @Test
+    void forgotPassword_inactiveUser_doesNotCreateTokenOrSendResetMail() {
+        User u = activeUser();
+        u.setStatus(UserStatus.SUSPENDED);
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+
+        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
+
+        verify(tokenService, never()).createPasswordResetToken(any());
+        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
+    }
+
+    // FIX-6 + FIX-23: forgotPassword — ACTIVE user with local password sends reset mail
+    @Test
+    void forgotPassword_activeUserWithPassword_sendsResetMail() {
+        User u = activeUser();
+        UserCredential cred = credential(u.getId(), "HASH");
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(tokenService.createPasswordResetToken(u.getId())).thenReturn("RESET-RAW");
+        when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
+        when(mailProperties.getResetPasswordPath()).thenReturn("/reset-password");
+
+        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
+
+        verify(tokenService).createPasswordResetToken(u.getId());
+        verify(mailService)
+                .sendPasswordReset(eq(u.getEmail()), eq(u.getDisplayName()), anyString());
+        verify(mailService, never()).sendOAuthAccountNoPassword(anyString(), anyString());
+    }
+
+    // FIX-23: forgotPassword — OAuth-only user (null passwordHash) sends informational mail
+    @Test
+    void forgotPassword_oauthOnlyUser_sendsOAuthMailAndDoesNotCreateToken() {
+        User u = activeUser();
+        UserCredential cred = credential(u.getId(), null);
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+
+        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
+
+        verify(mailService).sendOAuthAccountNoPassword(u.getEmail(), u.getDisplayName());
+        verify(tokenService, never()).createPasswordResetToken(any());
+        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
+    }
+
+    // FIX-23: forgotPassword — OAuth-only user with no credential row sends informational mail
+    @Test
+    void forgotPassword_oauthOnlyUserNoCred_sendsOAuthMailAndDoesNotCreateToken() {
+        User u = activeUser();
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.empty());
+
+        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
+
+        verify(mailService).sendOAuthAccountNoPassword(u.getEmail(), u.getDisplayName());
+        verify(tokenService, never()).createPasswordResetToken(any());
+    }
+
+    // FIX-23: resetPassword — credential with null passwordHash throws AUTH_RESET_TOKEN_INVALID
+    @Test
+    void resetPassword_oauthOnlyCredential_throwsResetTokenInvalid() {
+        UUID userId = UUID.randomUUID();
+        when(tokenService.consumePasswordResetToken("RESET-RAW")).thenReturn(userId);
+        User u = activeUser();
+        u.setId(userId);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+        UserCredential cred = credential(userId, null);
+        when(credentialRepository.findByUserId(userId)).thenReturn(Optional.of(cred));
+
+        assertThatThrownBy(
+                        () ->
+                                service.resetPassword(
+                                        new ResetPasswordRequest("RESET-RAW", "newPassword1")))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+        verify(refreshTokenService, never()).revokeAllForUser(any());
+    }
+
+    // FIX-7: verifyEmail — TokenNotFoundException converts to AUTH_VERIFY_TOKEN_INVALID
+    @Test
+    void verifyEmail_tokenNotFound_throwsVerifyTokenInvalid() {
+        when(tokenService.consumeEmailVerificationToken("BAD-TOKEN"))
+                .thenThrow(new TokenNotFoundException("not found"));
+
+        assertThatThrownBy(() -> service.verifyEmail("BAD-TOKEN"))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_VERIFY_TOKEN_INVALID);
+    }
+
+    // FIX-7: verifyEmail — TokenExpiredException converts to AUTH_VERIFY_TOKEN_INVALID
+    @Test
+    void verifyEmail_tokenExpired_throwsVerifyTokenInvalid() {
+        when(tokenService.consumeEmailVerificationToken("EXPIRED-TOKEN"))
+                .thenThrow(new TokenExpiredException("expired"));
+
+        assertThatThrownBy(() -> service.verifyEmail("EXPIRED-TOKEN"))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_VERIFY_TOKEN_INVALID);
+    }
+
+    // FIX-7: verifyEmail — valid token completes successfully
+    @Test
+    void verifyEmail_validToken_marksEmailVerified() {
+        UUID userId = UUID.randomUUID();
+        when(tokenService.consumeEmailVerificationToken("VALID-TOKEN")).thenReturn(userId);
+        UserCredential cred = credential(userId, "HASH");
+        when(credentialRepository.findByUserId(userId)).thenReturn(Optional.of(cred));
+
+        assertThatCode(() -> service.verifyEmail("VALID-TOKEN")).doesNotThrowAnyException();
+
+        verify(credentialRepository).save(cred);
+        assertThat(cred.isEmailVerified()).isTrue();
     }
 
     private static User activeUser() {
