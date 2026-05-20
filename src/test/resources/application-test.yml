@@ -9,5 +9,5 @@ CORS_ALLOWED_ORIGINS: http://localhost:3000
 RESEND_API_KEY: re_test_placeholder_key
 MAIL_FROM_ADDRESS: noreply@test.local
 MAIL_FROM_NAME: Test App
-MAIL_APP_NAME: TestApp
+MAIL_APP_NAME: TestLuvax
 FRONTEND_BASE_URL: http://localhost:3000

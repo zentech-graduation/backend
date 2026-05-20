@@ -1,6 +1,6 @@
 spring:
   application:
-    name: app
+    name: luvax
   profiles:
     active: dev
   config:
@@ -59,7 +59,7 @@ app:
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}
-    audience: ${JWT_AUDIENCE:App}
+    audience: ${JWT_AUDIENCE}
     access-token-ttl: ${ACCESS_TOKEN_TTL}
     refresh-token-ttl: ${REFRESH_TOKEN_TTL}
   cors:

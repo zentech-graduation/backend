@@ -9,10 +9,10 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.app</groupId>
-    <artifactId>app</artifactId>
+    <artifactId>luvax</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>app</name>
-    <description>app</description>
+    <name>luvax</name>
+    <description>luvax</description>
     <url/>
     <licenses>
         <license/>
@@ -33,7 +33,7 @@
         <testcontainers.version>1.21.4</testcontainers.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <sonar.organization>zentech-graduation</sonar.organization>
-        <sonar.projectKey>zentech-graduation_app</sonar.projectKey>
+        <sonar.projectKey>zentech-graduation_luvax</sonar.projectKey>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
