@@ -15,7 +15,6 @@ import org.hibernate.type.SqlTypes;
 
 import com.app.common.outbox.enums.OutboxEventStatus;
 import com.app.common.outbox.model.DomainEventEnvelope;
-import com.app.common.persistence.GeneratedPostgresUuid;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,8 +38,7 @@ import lombok.Setter;
 public class OutboxEvent {
 
     @Id
-    @GeneratedPostgresUuid
-    @Column(name = "id", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, insertable = false, updatable = false)
     private UUID id;
 
     @Column(name = "event_id", nullable = false, unique = true, updatable = false)

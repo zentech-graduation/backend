@@ -43,7 +43,7 @@ class OutboxEventRepositoryIT {
     }
 
     @Test
-    void save_usesDatabaseGeneratedPrimaryKeyAndPersistsJsonPayload() {
+    void insertPending_usesDatabaseGeneratedPrimaryKeyAndPersistsJsonPayload() {
         UUID eventId = UUID.randomUUID();
         UUID aggregateId = UUID.randomUUID();
         OffsetDateTime occurredAt = OffsetDateTime.now(ZoneOffset.UTC);
@@ -69,7 +69,7 @@ class OutboxEventRepositoryIT {
                         .nextRetryAt(occurredAt)
                         .build();
 
-        OutboxEvent saved = outboxEventRepository.saveAndFlush(event);
+        OutboxEvent saved = outboxEventRepository.insertPending(event);
         entityManager.clear();
         OutboxEvent persisted = outboxEventRepository.findById(saved.getId()).orElseThrow();
 

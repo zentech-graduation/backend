@@ -69,16 +69,24 @@ public class OutboxServiceImpl implements OutboxService {
                         .attemptCount(0)
                         .nextRetryAt(occurredAt)
                         .build();
-        return outboxEventRepository.save(event);
+        return outboxEventRepository.insertPending(event);
     }
 
     private void validateNoSensitiveDataKeys(Map<String, Object> data) {
         for (Map.Entry<String, Object> entry : data.entrySet()) {
             String key = entry.getKey().toLowerCase();
             Assert.isTrue(!isSensitiveKey(key), SENSITIVE_DATA_KEY_MESSAGE);
-            if (entry.getValue() instanceof Map<?, ?> nestedData) {
-                validateNoSensitiveDataKeys(castNestedData(nestedData));
-            }
+            validateNestedSensitiveDataKeys(entry.getValue());
+        }
+    }
+
+    private void validateNestedSensitiveDataKeys(Object value) {
+        if (value instanceof Map<?, ?> nestedData) {
+            validateNoSensitiveDataKeys(castNestedData(nestedData));
+            return;
+        }
+        if (value instanceof Iterable<?> values) {
+            values.forEach(this::validateNestedSensitiveDataKeys);
         }
     }
 

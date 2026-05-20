@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,7 +29,7 @@ class OutboxServiceImplTest {
 
     @Test
     void enqueueStoresRoutingKeyEventTypeAggregateIdsAndPayload() {
-        when(outboxEventRepository.save(any(OutboxEvent.class)))
+        when(outboxEventRepository.insertPending(any(OutboxEvent.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         OutboxServiceImpl service = new OutboxServiceImpl(outboxEventRepository);
         UUID aggregateId = UUID.randomUUID();
@@ -45,7 +46,7 @@ class OutboxServiceImplTest {
                         data);
 
         ArgumentCaptor<OutboxEvent> eventCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
-        verify(outboxEventRepository).save(eventCaptor.capture());
+        verify(outboxEventRepository).insertPending(eventCaptor.capture());
         OutboxEvent event = eventCaptor.getValue();
         assertThat(result).isSameAs(event);
         assertThat(event.getEventId()).isNotNull();
@@ -66,7 +67,7 @@ class OutboxServiceImplTest {
 
     @Test
     void enqueueUsesEmptyPayloadWhenDataIsNull() {
-        when(outboxEventRepository.save(any(OutboxEvent.class)))
+        when(outboxEventRepository.insertPending(any(OutboxEvent.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         OutboxServiceImpl service = new OutboxServiceImpl(outboxEventRepository);
 
@@ -112,6 +113,25 @@ class OutboxServiceImplTest {
                                         UUID.randomUUID(),
                                         null,
                                         Map.of("resetToken", "raw-token")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not contain token");
+    }
+
+    @Test
+    void enqueueRejectsSensitiveDataKeysInsideCollections() {
+        OutboxServiceImpl service = new OutboxServiceImpl(outboxEventRepository);
+
+        assertThatThrownBy(
+                        () ->
+                                service.enqueue(
+                                        "auth.email-verification.requested.v1",
+                                        "auth.email-verification.requested.v1",
+                                        "user",
+                                        UUID.randomUUID(),
+                                        null,
+                                        Map.of(
+                                                "links",
+                                                List.of(Map.of("verificationToken", "raw-token")))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must not contain token");
     }
