@@ -2,12 +2,15 @@ name: SonarCloud Analysis
 
 on:
   push:
+    workflow_dispatch:
     branches:
       - main
+      - develop
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
       - main
+      - develop
 
 permissions:
   contents: read
