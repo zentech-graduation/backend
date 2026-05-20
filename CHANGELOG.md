@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Merged `verify` and `sonar:sonar` Maven invocations into a single step in `sonarcloud.yml` to preserve CI pull-request context required for SonarCloud PR decoration; added a dedicated Sonar plugin cache step.
+
 ### Security
 - Enforced strict JWT issuer validation (`iss` claim now rejected when absent); added mandatory `audience` (`aud`) claim issuance and validation (AUTH-001, AUTH-024).
 - Replaced blanket `/api/v1/auth/**` `permitAll` with explicit per-endpoint security rules; `POST /api/v1/auth/logout` and `POST /api/v1/auth/change-password` now require authentication (AUTH-002).
