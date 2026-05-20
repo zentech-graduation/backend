@@ -4,12 +4,13 @@ package com.app.common.security.service;
 public interface RateLimiterService {
 
     /**
-     * Atomically increments the counter for the supplied key and returns whether the request is
-     * permitted. The window TTL is established on the first request only.
+     * Records this request in a sliding window and returns whether it is permitted. Any window of
+     * {@code windowSeconds} length will contain at most {@code maxAttempts} admitted requests.
      *
      * @param key fully-qualified bucket identifier (caller is responsible for namespacing)
-     * @param maxAttempts maximum number of requests permitted within the window
-     * @param windowSeconds window length in seconds
+     * @param maxAttempts maximum number of requests permitted within any window of length {@code
+     *     windowSeconds}
+     * @param windowSeconds sliding window length in seconds
      * @return {@code true} when the request is allowed, {@code false} when the limit has been
      *     exceeded
      */

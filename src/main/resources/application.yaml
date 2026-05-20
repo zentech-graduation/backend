@@ -56,6 +56,8 @@ spring:
 
 app:
   base-url: ${APP_BASE_URL}
+  security:
+    cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET}
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}
@@ -70,15 +72,28 @@ app:
     reset-password-path: ${MAIL_RESET_PASSWORD_PATH:/reset-password}
     frontend-base-url: ${FRONTEND_BASE_URL}
   rate-limit:
-    login:
-      max-attempts: 10
-      window-seconds: 900
-    forgot-password:
-      max-attempts: 3
-      window-seconds: 3600
-    resend-verification:
-      max-attempts: 3
-      window-seconds: 3600
+    endpoint-rules:
+      "[/api/v1/auth/login]":
+        max-attempts: 10
+        window-seconds: 900
+      "[/api/v1/auth/register]":
+        max-attempts: 5
+        window-seconds: 3600
+      "[/api/v1/auth/refresh]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/auth/forgot-password]":
+        max-attempts: 3
+        window-seconds: 3600
+      "[/api/v1/auth/reset-password]":
+        max-attempts: 3
+        window-seconds: 3600
+      "[/api/v1/auth/verify-email]":
+        max-attempts: 5
+        window-seconds: 3600
+      "[/api/v1/auth/verify-email/resend]":
+        max-attempts: 3
+        window-seconds: 3600
 
 server:
   forward-headers-strategy: framework
