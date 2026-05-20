@@ -31,6 +31,7 @@ app:
     trusted-proxy-cidrs:
       - "127.0.0.1"
     max-login-body-bytes: 2048
+    cookie-signing-secret: "dev-insecure-cookie-signing-secret-change-me"
   rate-limit:
     endpoint-rules:
       "/api/v1/auth/register":

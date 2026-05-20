@@ -12,7 +12,8 @@ import com.app.common.config.security.SecurityProperties;
 class IpExtractorTest {
 
     private IpExtractor extractor(List<String> cidrs) {
-        SecurityProperties props = new SecurityProperties(cidrs, 2048);
+        SecurityProperties props =
+                new SecurityProperties(cidrs, 2048, "test-cookie-signing-secret-placeholder-32ch");
         return new IpExtractor(props);
     }
 

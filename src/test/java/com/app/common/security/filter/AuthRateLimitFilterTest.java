@@ -72,7 +72,9 @@ class AuthRateLimitFilterTest {
                                 REFRESH_PATH, new Rule(30, 60),
                                 RESET_PATH, new Rule(5, 300),
                                 VERIFY_PATH, new Rule(10, 60)));
-        SecurityProperties securityProperties = new SecurityProperties(java.util.List.of(), 2048);
+        SecurityProperties securityProperties =
+                new SecurityProperties(
+                        java.util.List.of(), 2048, "test-cookie-signing-secret-placeholder-32ch");
         filter =
                 new AuthRateLimitFilter(
                         rateLimiterService,

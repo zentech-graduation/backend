@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Set;
 
 import jakarta.servlet.http.Cookie;
@@ -18,10 +19,14 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 
+import com.app.common.config.security.SecurityProperties;
+
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class CookieOAuth2AuthorizationRequestRepositoryTest {
+
+    private static final String TEST_SIGNING_SECRET = "test-insecure-signing-secret-for-unit-tests";
 
     @Mock private Environment environment;
 
@@ -30,8 +35,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
     @BeforeEach
     void setUp() {
         lenient().when(environment.matchesProfiles("prod")).thenReturn(false);
-        repository =
-                new CookieOAuth2AuthorizationRequestRepository(new ObjectMapper(), environment);
+        repository = newRepository(TEST_SIGNING_SECRET);
     }
 
     // ── load ──────────────────────────────────────────────────────────────
@@ -60,6 +64,69 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
                         "!!!not-valid-base64!!!"));
 
         assertThat(repository.loadAuthorizationRequest(request)).isNull();
+    }
+
+    @Test
+    void loadAuthorizationRequest_unsignedCookieValue_returnsNull() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(
+                new Cookie(
+                        CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME,
+                        "dGhpcyBoYXMgbm8gc2lnbmF0dXJl"));
+
+        assertThat(repository.loadAuthorizationRequest(request)).isNull();
+    }
+
+    @Test
+    void loadAuthorizationRequest_tamperedSignature_returnsNull() {
+        OAuth2AuthorizationRequest original = buildAuthorizationRequest("state-tamper-sig");
+        MockHttpServletResponse saveResponse = new MockHttpServletResponse();
+        repository.saveAuthorizationRequest(original, new MockHttpServletRequest(), saveResponse);
+        String cookieValue = extractCookieValue(saveResponse.getHeader("Set-Cookie"));
+
+        int dot = cookieValue.lastIndexOf('.');
+        String tamperedValue =
+                cookieValue.substring(0, dot + 1) + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+        MockHttpServletRequest loadRequest = new MockHttpServletRequest();
+        loadRequest.setCookies(
+                new Cookie(CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME, tamperedValue));
+
+        assertThat(repository.loadAuthorizationRequest(loadRequest)).isNull();
+    }
+
+    @Test
+    void loadAuthorizationRequest_tamperedPayload_returnsNull() {
+        OAuth2AuthorizationRequest original = buildAuthorizationRequest("state-tamper-payload");
+        MockHttpServletResponse saveResponse = new MockHttpServletResponse();
+        repository.saveAuthorizationRequest(original, new MockHttpServletRequest(), saveResponse);
+        String cookieValue = extractCookieValue(saveResponse.getHeader("Set-Cookie"));
+
+        int dot = cookieValue.lastIndexOf('.');
+        String tamperedPayload = "dGFtcGVyZWRwYXlsb2Fk";
+        String tamperedValue = tamperedPayload + cookieValue.substring(dot);
+
+        MockHttpServletRequest loadRequest = new MockHttpServletRequest();
+        loadRequest.setCookies(
+                new Cookie(CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME, tamperedValue));
+
+        assertThat(repository.loadAuthorizationRequest(loadRequest)).isNull();
+    }
+
+    @Test
+    void loadAuthorizationRequest_signedWithDifferentSecret_returnsNull() {
+        CookieOAuth2AuthorizationRequestRepository other =
+                newRepository("other-signing-secret-that-is-at-least-32ch");
+        OAuth2AuthorizationRequest original = buildAuthorizationRequest("state-wrong-key");
+        MockHttpServletResponse saveResponse = new MockHttpServletResponse();
+        other.saveAuthorizationRequest(original, new MockHttpServletRequest(), saveResponse);
+        String cookieValue = extractCookieValue(saveResponse.getHeader("Set-Cookie"));
+
+        MockHttpServletRequest loadRequest = new MockHttpServletRequest();
+        loadRequest.setCookies(
+                new Cookie(CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME, cookieValue));
+
+        assertThat(repository.loadAuthorizationRequest(loadRequest)).isNull();
     }
 
     @Test
@@ -140,8 +207,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
     @Test
     void saveAuthorizationRequest_nonProdProfile_doesNotSetSecureFlag() {
         when(environment.matchesProfiles("prod")).thenReturn(false);
-        repository =
-                new CookieOAuth2AuthorizationRequestRepository(new ObjectMapper(), environment);
+        repository = newRepository(TEST_SIGNING_SECRET);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         repository.saveAuthorizationRequest(
@@ -154,8 +220,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
     @Test
     void saveAuthorizationRequest_prodProfile_setsSecureFlag() {
         when(environment.matchesProfiles("prod")).thenReturn(true);
-        repository =
-                new CookieOAuth2AuthorizationRequestRepository(new ObjectMapper(), environment);
+        repository = newRepository(TEST_SIGNING_SECRET);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         repository.saveAuthorizationRequest(
@@ -198,6 +263,12 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
+
+    private CookieOAuth2AuthorizationRequestRepository newRepository(String secret) {
+        SecurityProperties props = new SecurityProperties(List.of(), 2048, secret);
+        return new CookieOAuth2AuthorizationRequestRepository(
+                new ObjectMapper(), environment, props);
+    }
 
     private static OAuth2AuthorizationRequest buildAuthorizationRequest(String state) {
         return OAuth2AuthorizationRequest.authorizationCode()
