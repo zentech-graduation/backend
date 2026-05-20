@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Binding;
@@ -23,7 +24,7 @@ class RabbitMqTopologyConfigTest {
                     Set<String> queueNames =
                             context.getBeansOfType(Queue.class).values().stream()
                                     .map(Queue::getName)
-                                    .collect(java.util.stream.Collectors.toSet());
+                                    .collect(Collectors.toSet());
 
                     assertThat(queueNames)
                             .containsExactlyInAnyOrder(
@@ -35,6 +36,8 @@ class RabbitMqTopologyConfigTest {
                                     RabbitMqTopologyConfig.AUDIT_LOG_QUEUE,
                                     RabbitMqTopologyConfig.MODERATION_QUEUE,
                                     RabbitMqTopologyConfig.SEARCH_INDEX_QUEUE);
+                    assertThat(context.getBeansOfType(Queue.class).values())
+                            .allSatisfy(queue -> assertThat(queue.isDurable()).isTrue());
                 });
     }
 
@@ -51,6 +54,8 @@ class RabbitMqTopologyConfigTest {
                             .containsExactlyInAnyOrder(
                                     RabbitMqTopologyConfig.SOCIAL_EVENTS_EXCHANGE,
                                     RabbitMqTopologyConfig.SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE);
+                    assertThat(context.getBeansOfType(TopicExchange.class).values())
+                            .allSatisfy(exchange -> assertThat(exchange.isDurable()).isTrue());
                 });
     }
 
@@ -74,6 +79,15 @@ class RabbitMqTopologyConfigTest {
                     assertThat(mailRoutingKeys)
                             .containsExactlyInAnyOrderElementsOf(
                                     RabbitMqTopologyConfig.MAIL_EVENT_ROUTING_KEYS);
+                    assertThat(context.getBeansOfType(Binding.class).values())
+                            .filteredOn(
+                                    binding ->
+                                            RabbitMqTopologyConfig.MAIL_QUEUE.equals(
+                                                    binding.getDestination()))
+                            .allSatisfy(
+                                    binding ->
+                                            assertThat(binding.getDestinationType())
+                                                    .isEqualTo(Binding.DestinationType.QUEUE));
                 });
     }
 
@@ -90,6 +104,7 @@ class RabbitMqTopologyConfigTest {
 
                     assertThat(context.getBeansOfType(Binding.class).values())
                             .noneMatch(binding -> futureQueues.contains(binding.getDestination()));
+                    assertThat(context.getBeansOfType(Binding.class)).hasSize(6);
                 });
     }
 
