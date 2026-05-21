@@ -3,6 +3,7 @@ package com.app.common.outbox.repository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -11,21 +12,10 @@ import org.springframework.stereotype.Repository;
 
 import com.app.common.outbox.entity.OutboxEvent;
 import com.app.common.outbox.enums.OutboxEventStatus;
-import com.app.common.outbox.model.DomainEventEnvelope;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.app.common.outbox.model.DomainEventEnvelopeJson;
 
 @Repository
 public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
-
-    private static final ObjectMapper JSON_MAPPER =
-            JsonMapper.builder()
-                    .addModule(new JavaTimeModule())
-                    .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                    .build();
 
     private static final String INSERT_PENDING_SQL =
             """
@@ -67,6 +57,61 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
 				published_at
 			""";
 
+    private static final String FIND_PUBLISHABLE_BATCH_SQL =
+            """
+			SELECT
+				id,
+				event_id,
+				aggregate_type,
+				aggregate_id,
+				event_type,
+				routing_key,
+				payload,
+				status,
+				attempt_count,
+				next_retry_at,
+				last_error,
+				created_at,
+				published_at
+			FROM outbox_events
+			WHERE status IN ('PENDING', 'PROCESSING')
+				AND next_retry_at <= :now
+			ORDER BY created_at
+			LIMIT :batchSize
+			FOR UPDATE SKIP LOCKED
+			""";
+
+    private static final String MARK_PUBLISHED_SQL =
+            """
+			UPDATE outbox_events
+			SET status = 'PUBLISHED',
+				published_at = :publishedAt,
+				last_error = NULL
+			WHERE id = :id
+			""";
+
+    private static final String MARK_FAILED_SQL =
+            """
+			UPDATE outbox_events
+			SET status = 'PENDING',
+				attempt_count = :attemptCount,
+				next_retry_at = :nextRetryAt,
+				last_error = :lastError,
+				published_at = NULL
+			WHERE id = :id
+			""";
+
+    private static final String MARK_DEAD_SQL =
+            """
+			UPDATE outbox_events
+			SET status = 'DEAD',
+				attempt_count = :attemptCount,
+				next_retry_at = :deadAt,
+				last_error = :lastError,
+				published_at = NULL
+			WHERE id = :id
+			""";
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public OutboxEventRepositoryImpl(NamedParameterJdbcTemplate jdbcTemplate) {
@@ -82,12 +127,53 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
                         .addValue("aggregateId", event.getAggregateId())
                         .addValue("eventType", event.getEventType())
                         .addValue("routingKey", event.getRoutingKey())
-                        .addValue("payload", writePayload(event.getPayload()))
+                        .addValue("payload", DomainEventEnvelopeJson.write(event.getPayload()))
                         .addValue("status", event.getStatus().name())
                         .addValue("attemptCount", event.getAttemptCount())
                         .addValue("nextRetryAt", event.getNextRetryAt());
 
         return jdbcTemplate.queryForObject(INSERT_PENDING_SQL, params, this::mapEvent);
+    }
+
+    @Override
+    public List<OutboxEvent> findPublishableBatch(OffsetDateTime now, int batchSize) {
+        MapSqlParameterSource params =
+                new MapSqlParameterSource().addValue("now", now).addValue("batchSize", batchSize);
+
+        return jdbcTemplate.query(FIND_PUBLISHABLE_BATCH_SQL, params, this::mapEvent);
+    }
+
+    @Override
+    public void markPublished(UUID id, OffsetDateTime publishedAt) {
+        MapSqlParameterSource params =
+                new MapSqlParameterSource().addValue("id", id).addValue("publishedAt", publishedAt);
+
+        jdbcTemplate.update(MARK_PUBLISHED_SQL, params);
+    }
+
+    @Override
+    public void markFailed(
+            UUID id, int attemptCount, OffsetDateTime nextRetryAt, String lastError) {
+        MapSqlParameterSource params =
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("attemptCount", attemptCount)
+                        .addValue("nextRetryAt", nextRetryAt)
+                        .addValue("lastError", lastError);
+
+        jdbcTemplate.update(MARK_FAILED_SQL, params);
+    }
+
+    @Override
+    public void markDead(UUID id, int attemptCount, OffsetDateTime deadAt, String lastError) {
+        MapSqlParameterSource params =
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("attemptCount", attemptCount)
+                        .addValue("deadAt", deadAt)
+                        .addValue("lastError", lastError);
+
+        jdbcTemplate.update(MARK_DEAD_SQL, params);
     }
 
     private OutboxEvent mapEvent(ResultSet rs, int rowNum) throws SQLException {
@@ -98,7 +184,7 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
                 .aggregateId(rs.getObject("aggregate_id", UUID.class))
                 .eventType(rs.getString("event_type"))
                 .routingKey(rs.getString("routing_key"))
-                .payload(readPayload(rs.getString("payload")))
+                .payload(DomainEventEnvelopeJson.read(rs.getString("payload")))
                 .status(OutboxEventStatus.valueOf(rs.getString("status")))
                 .attemptCount(rs.getInt("attempt_count"))
                 .nextRetryAt(rs.getObject("next_retry_at", OffsetDateTime.class))
@@ -106,22 +192,5 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
                 .createdAt(rs.getObject("created_at", OffsetDateTime.class))
                 .publishedAt(rs.getObject("published_at", OffsetDateTime.class))
                 .build();
-    }
-
-    private String writePayload(DomainEventEnvelope payload) {
-        try {
-            return JSON_MAPPER.writeValueAsString(payload);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException(
-                    "Outbox event payload must be JSON serializable", ex);
-        }
-    }
-
-    private DomainEventEnvelope readPayload(String payload) {
-        try {
-            return JSON_MAPPER.readValue(payload, DomainEventEnvelope.class);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Stored outbox event payload is not readable", ex);
-        }
     }
 }

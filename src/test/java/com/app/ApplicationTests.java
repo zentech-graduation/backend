@@ -49,6 +49,7 @@ class ApplicationTests {
         r.add("GOOGLE_CLIENT_ID", () -> "test-client-id");
         r.add("GOOGLE_CLIENT_SECRET", () -> "test-client-secret");
         r.add("spring.datasource.hikari.data-source-properties.stringtype", () -> "unspecified");
+        r.add("app.outbox.publisher.enabled", () -> false);
     }
 
     @MockitoBean private MailService mailService;
