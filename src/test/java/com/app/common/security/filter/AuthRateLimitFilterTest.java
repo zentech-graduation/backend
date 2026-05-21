@@ -64,15 +64,17 @@ class AuthRateLimitFilterTest {
         objectMapper = new ObjectMapper();
         properties =
                 new RateLimitProperties(
-                        LOGIN_RULE,
-                        FORGOT_RULE,
-                        RESEND_RULE,
                         Map.of(
+                                LOGIN_PATH, LOGIN_RULE,
+                                FORGOT_PATH, FORGOT_RULE,
+                                RESEND_PATH, RESEND_RULE,
                                 REGISTER_PATH, LOW_TRAFFIC_RULE,
                                 REFRESH_PATH, new Rule(30, 60),
                                 RESET_PATH, new Rule(5, 300),
                                 VERIFY_PATH, new Rule(10, 60)));
-        SecurityProperties securityProperties = new SecurityProperties(java.util.List.of(), 2048);
+        SecurityProperties securityProperties =
+                new SecurityProperties(
+                        java.util.List.of(), 2048, "test-cookie-signing-secret-placeholder-32ch");
         filter =
                 new AuthRateLimitFilter(
                         rateLimiterService,

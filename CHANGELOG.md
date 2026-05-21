@@ -28,6 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Replaced split SonarCloud Maven steps with a single `verify sonar-maven-plugin:sonar` invocation; added SonarCloud package cache and `GITHUB_TOKEN` env declaration.
 
 ### Security
+- OAuth2 authorization-request cookie is now signed with HMAC-SHA256 using a secret configured via `app.security.cookie-signing-secret` (`APP_COOKIE_SIGNING_SECRET`); cookies with an absent or invalid signature are silently rejected before deserialization, preventing `state`-parameter forgery (AUTH-027).
+- Replaced blanket `csrf.disable()` with `csrf.ignoringRequestMatchers("/api/**")` so CSRF protection remains active on the OAuth2 callback paths (`/login/oauth2/code/**`); Spring Security now verifies the `state` parameter on every callback (AUTH-027).
+- Introduced `CookieOAuth2AuthorizationRequestRepository` to store the pending `OAuth2AuthorizationRequest` in an `HttpOnly`, `SameSite=Lax`, `Path=/`, 5-minute cookie instead of the HTTP session, preserving `SessionCreationPolicy.STATELESS` while keeping `state`-parameter CSRF protection intact; the `Secure` flag is enabled only under the `prod` Spring profile (AUTH-027).
 - Enforced strict JWT issuer validation (`iss` claim now rejected when absent); added mandatory `audience` (`aud`) claim issuance and validation (AUTH-001, AUTH-024).
 - Replaced blanket `/api/v1/auth/**` `permitAll` with explicit per-endpoint security rules; `POST /api/v1/auth/logout` and `POST /api/v1/auth/change-password` now require authentication (AUTH-002).
 - `JwtAuthenticationFilter` now rejects non-ACTIVE users (BANNED/SUSPENDED/DEACTIVATED) on every request rather than waiting for access-token expiry (AUTH-003).

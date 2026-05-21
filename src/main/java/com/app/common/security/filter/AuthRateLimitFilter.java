@@ -38,16 +38,6 @@ import tools.jackson.databind.ObjectMapper;
 public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     private static final String LOGIN_PATH = ApiConstants.Auth.ROOT + ApiConstants.Auth.LOGIN;
-    private static final String FORGOT_PATH =
-            ApiConstants.Auth.ROOT + ApiConstants.Auth.FORGOT_PASSWORD;
-    private static final String RESEND_PATH =
-            ApiConstants.Auth.ROOT + ApiConstants.Auth.RESEND_VERIFY;
-    private static final String REGISTER_PATH = ApiConstants.Auth.ROOT + ApiConstants.Auth.REGISTER;
-    private static final String REFRESH_PATH = ApiConstants.Auth.ROOT + ApiConstants.Auth.REFRESH;
-    private static final String RESET_PASSWORD_PATH =
-            ApiConstants.Auth.ROOT + ApiConstants.Auth.RESET_PASSWORD;
-    private static final String VERIFY_EMAIL_PATH =
-            ApiConstants.Auth.ROOT + ApiConstants.Auth.VERIFY_EMAIL;
 
     private final RateLimiterService rateLimiterService;
     private final RateLimitProperties properties;
@@ -120,20 +110,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
      * Returns the matching {@link RateLimitProperties.Rule} or {@code null} if not rate-limited.
      */
     RateLimitProperties.Rule resolveRule(String path, String method) {
-        // Named rules for existing endpoints (preserve original key scheme).
-        if ("POST".equalsIgnoreCase(method)) {
-            if (LOGIN_PATH.equals(path)) return properties.login();
-            if (FORGOT_PATH.equals(path)) return properties.forgotPassword();
-            if (RESEND_PATH.equals(path)) return properties.resendVerification();
-        }
-
-        // Per-endpoint rules from config, keyed by path regardless of method.
-        RateLimitProperties.Rule configured = properties.endpointRules().get(path);
-        if (configured != null) {
-            return configured;
-        }
-
-        return null;
+        // Single lookup — all rules live in endpointRules; method is encoded in the bucket key.
+        return properties.endpointRules().get(path);
     }
 
     /** Returns whether the given path + method combination is subject to rate limiting. */

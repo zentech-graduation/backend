@@ -28,35 +28,39 @@ class RateLimiterServiceImplTest {
 
     @Test
     void isAllowed_underLimit_returnsTrue() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(3L);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any()))
+                .thenReturn(3L);
 
         assertThat(service.isAllowed("login:1.1.1.1:a@b.c", 5, 900)).isTrue();
     }
 
     @Test
     void isAllowed_atLimit_returnsTrue() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(5L);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any()))
+                .thenReturn(5L);
 
         assertThat(service.isAllowed("login:1.1.1.1:a@b.c", 5, 900)).isTrue();
     }
 
     @Test
     void isAllowed_overLimit_returnsFalse() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(6L);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any()))
+                .thenReturn(6L);
 
         assertThat(service.isAllowed("login:1.1.1.1:a@b.c", 5, 900)).isFalse();
     }
 
     @Test
     void isAllowed_scriptReturnsNull_returnsFalse() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(null);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any()))
+                .thenReturn(null);
 
         assertThat(service.isAllowed("login:1.1.1.1:a@b.c", 5, 900)).isFalse();
     }
 
     @Test
     void isAllowed_redisThrowsDataAccessException_failsClosedReturnsFalse() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any()))
                 .thenThrow(new QueryTimeoutException("Redis timeout"));
 
         assertThat(service.isAllowed("login:1.1.1.1:a@b.c", 5, 900)).isFalse();
