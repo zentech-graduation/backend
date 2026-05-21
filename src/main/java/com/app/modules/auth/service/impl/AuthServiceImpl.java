@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import com.app.common.config.app.AppProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.security.jwt.JwtClaims;
@@ -54,8 +53,6 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class AuthServiceImpl implements AuthService {
 
-    private static final String VERIFY_PATH = "/api/v1/auth/verify-email?token=";
-
     private final UserRepository userRepository;
     private final UserCredentialRepository credentialRepository;
     private final UserSettingsRepository settingsRepository;
@@ -66,7 +63,6 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final MailProperties mailProperties;
-    private final AppProperties appProperties;
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
     private final IpExtractor ipExtractor;
@@ -86,7 +82,6 @@ public class AuthServiceImpl implements AuthService {
             PasswordEncoder passwordEncoder,
             MailService mailService,
             MailProperties mailProperties,
-            AppProperties appProperties,
             AuthMapper authMapper,
             TokenBlacklistService tokenBlacklistService,
             IpExtractor ipExtractor) {
@@ -100,7 +95,6 @@ public class AuthServiceImpl implements AuthService {
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
         this.mailProperties = mailProperties;
-        this.appProperties = appProperties;
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
         this.ipExtractor = ipExtractor;
@@ -152,7 +146,11 @@ public class AuthServiceImpl implements AuthService {
         settingsRepository.save(UserSettings.builder().userId(user.getId()).build());
 
         String rawVerification = tokenService.createEmailVerificationToken(user.getId());
-        String verificationUrl = appProperties.baseUrl() + VERIFY_PATH + rawVerification;
+        String verificationUrl =
+                mailProperties.getFrontendBaseUrl()
+                        + mailProperties.getVerifyEmailPath()
+                        + "?token="
+                        + rawVerification;
         mailService.sendEmailVerification(user.getEmail(), displayName, verificationUrl);
         mailService.sendWelcome(user.getEmail(), displayName);
 
@@ -302,7 +300,11 @@ public class AuthServiceImpl implements AuthService {
         }
 
         String rawVerification = tokenService.createEmailVerificationToken(user.getId());
-        String verificationUrl = appProperties.baseUrl() + VERIFY_PATH + rawVerification;
+        String verificationUrl =
+                mailProperties.getFrontendBaseUrl()
+                        + mailProperties.getVerifyEmailPath()
+                        + "?token="
+                        + rawVerification;
         mailService.sendEmailVerification(
                 user.getEmail(), resolveDisplayName(user), verificationUrl);
     }

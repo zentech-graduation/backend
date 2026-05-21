@@ -32,7 +32,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import com.app.common.config.app.AppProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.security.jwt.JwtClaims;
@@ -85,7 +84,8 @@ class AuthServiceImplTest {
     void setUp() {
         JwtProperties jwtProperties =
                 new JwtProperties("test-secret-32-chars-test-secret-", "iss", "App", 900, 3600);
-        AppProperties appProperties = new AppProperties("https://app.local");
+        lenient().when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
+        lenient().when(mailProperties.getVerifyEmailPath()).thenReturn("/verify-email");
         lenient().when(ipExtractor.extract(any(HttpServletRequest.class))).thenReturn("4.5.6.7");
         lenient()
                 .when(authMapper.toUserSummaryResponse(any(User.class), anyBoolean()))
@@ -113,7 +113,6 @@ class AuthServiceImplTest {
                         passwordEncoder,
                         mailService,
                         mailProperties,
-                        appProperties,
                         authMapper,
                         tokenBlacklistService,
                         ipExtractor);
