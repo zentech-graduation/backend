@@ -18,6 +18,7 @@ public class OutboxPublisherProperties {
     private int batchSize = 100;
     private int maxAttempts = 3;
     private Duration confirmTimeout = Duration.ofSeconds(10);
+    private Duration processingTimeout = Duration.ofMinutes(2);
     private Duration initialDelay = Duration.ofSeconds(10);
     private Duration fixedDelay = Duration.ofSeconds(5);
     private List<Duration> retryBackoffs =
@@ -33,5 +34,14 @@ public class OutboxPublisherProperties {
             return Duration.ZERO;
         }
         return backoff;
+    }
+
+    public Duration resolvedProcessingTimeout() {
+        if (processingTimeout == null
+                || processingTimeout.isNegative()
+                || processingTimeout.isZero()) {
+            return Duration.ofMinutes(2);
+        }
+        return processingTimeout;
     }
 }

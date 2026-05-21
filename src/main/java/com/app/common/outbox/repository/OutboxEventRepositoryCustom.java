@@ -10,11 +10,27 @@ public interface OutboxEventRepositoryCustom {
 
     OutboxEvent insertPending(OutboxEvent event);
 
-    List<OutboxEvent> findPublishableBatch(OffsetDateTime now, int batchSize);
+    List<OutboxEvent> claimPublishableBatch(
+            OffsetDateTime now,
+            OffsetDateTime claimedAt,
+            OffsetDateTime claimedUntil,
+            int batchSize);
 
-    void markPublished(UUID id, OffsetDateTime publishedAt);
+    boolean markPublished(UUID id, UUID eventId, UUID claimId, OffsetDateTime publishedAt);
 
-    void markFailed(UUID id, int attemptCount, OffsetDateTime nextRetryAt, String lastError);
+    boolean markFailed(
+            UUID id,
+            UUID eventId,
+            UUID claimId,
+            int attemptCount,
+            OffsetDateTime nextRetryAt,
+            String lastError);
 
-    void markDead(UUID id, int attemptCount, OffsetDateTime deadAt, String lastError);
+    boolean markDead(
+            UUID id,
+            UUID eventId,
+            UUID claimId,
+            int attemptCount,
+            OffsetDateTime deadAt,
+            String lastError);
 }

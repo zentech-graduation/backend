@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -29,18 +30,19 @@ import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.outbox.config.OutboxPublisherProperties;
 import com.app.common.outbox.entity.OutboxEvent;
 import com.app.common.outbox.enums.OutboxEventStatus;
 import com.app.common.outbox.model.DomainEventEnvelope;
-import com.app.common.outbox.repository.OutboxEventRepository;
+import com.app.common.outbox.service.OutboxPublisherStateService;
 
 @ExtendWith(MockitoExtension.class)
 class OutboxPublisherServiceImplTest {
 
-    @Mock private OutboxEventRepository outboxEventRepository;
+    @Mock private OutboxPublisherStateService outboxPublisherStateService;
     @Mock private RabbitTemplate rabbitTemplate;
 
     private OutboxPublisherProperties properties;
@@ -50,14 +52,18 @@ class OutboxPublisherServiceImplTest {
     void setUp() {
         properties = new OutboxPublisherProperties();
         properties.setConfirmTimeout(Duration.ofMillis(20));
-        service = new OutboxPublisherServiceImpl(outboxEventRepository, rabbitTemplate, properties);
+        service =
+                new OutboxPublisherServiceImpl(
+                        outboxPublisherStateService, rabbitTemplate, properties);
     }
 
     @Test
     void publishDueEvents_confirmSuccessMarksPublished() {
         OutboxEvent event = outboxEvent(0);
-        when(outboxEventRepository.findPublishableBatch(any(OffsetDateTime.class), eq(100)))
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
                 .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markPublished(eq(event), any(OffsetDateTime.class)))
+                .thenReturn(true);
         completeConfirm(true, null);
 
         int attempted = service.publishDueEvents();
@@ -69,18 +75,21 @@ class OutboxPublisherServiceImplTest {
                         eq(event.getRoutingKey()),
                         any(Message.class),
                         any(CorrelationData.class));
-        verify(outboxEventRepository).markPublished(eq(event.getId()), any(OffsetDateTime.class));
-        verify(outboxEventRepository, never())
-                .markFailed(any(UUID.class), anyInt(), any(OffsetDateTime.class), any());
-        verify(outboxEventRepository, never())
-                .markDead(any(UUID.class), anyInt(), any(OffsetDateTime.class), any());
+        verify(outboxPublisherStateService).markPublished(eq(event), any(OffsetDateTime.class));
+        verify(outboxPublisherStateService, never())
+                .markFailed(any(OutboxEvent.class), anyInt(), any(OffsetDateTime.class), any());
+        verify(outboxPublisherStateService, never())
+                .markDead(any(OutboxEvent.class), anyInt(), any(OffsetDateTime.class), any());
     }
 
     @Test
     void publishDueEvents_publishFailureSchedulesRetry() {
         OutboxEvent event = outboxEvent(0);
-        when(outboxEventRepository.findPublishableBatch(any(OffsetDateTime.class), eq(100)))
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
                 .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markFailed(
+                        eq(event), eq(1), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
         doThrow(new AmqpException("broker unavailable"))
                 .when(rabbitTemplate)
                 .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
@@ -89,73 +98,94 @@ class OutboxPublisherServiceImplTest {
 
         ArgumentCaptor<OffsetDateTime> nextRetryCaptor =
                 ArgumentCaptor.forClass(OffsetDateTime.class);
-        verify(outboxEventRepository)
-                .markFailed(eq(event.getId()), eq(1), nextRetryCaptor.capture(), any());
+        verify(outboxPublisherStateService)
+                .markFailed(eq(event), eq(1), nextRetryCaptor.capture(), any());
         assertThat(nextRetryCaptor.getValue()).isAfter(OffsetDateTime.now(ZoneOffset.UTC));
-        verify(outboxEventRepository, never()).markPublished(any(), any());
-        verify(outboxEventRepository, never()).markDead(any(), anyInt(), any(), any());
+        verify(outboxPublisherStateService, never()).markPublished(any(), any());
+        verify(outboxPublisherStateService, never()).markDead(any(), anyInt(), any(), any());
     }
 
     @Test
     void publishDueEvents_maxAttemptsMarksDead() {
         OutboxEvent event = outboxEvent(2);
-        when(outboxEventRepository.findPublishableBatch(any(OffsetDateTime.class), eq(100)))
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
                 .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markDead(
+                        eq(event), eq(3), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
         doThrow(new AmqpException("broker unavailable"))
                 .when(rabbitTemplate)
                 .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
 
         service.publishDueEvents();
 
-        verify(outboxEventRepository)
-                .markDead(eq(event.getId()), eq(3), any(OffsetDateTime.class), any());
-        verify(outboxEventRepository, never()).markPublished(any(), any());
-        verify(outboxEventRepository, never())
-                .markFailed(any(UUID.class), anyInt(), any(OffsetDateTime.class), any());
+        verify(outboxPublisherStateService)
+                .markDead(eq(event), eq(3), any(OffsetDateTime.class), any());
+        verify(outboxPublisherStateService, never()).markPublished(any(), any());
+        verify(outboxPublisherStateService, never())
+                .markFailed(any(OutboxEvent.class), anyInt(), any(OffsetDateTime.class), any());
     }
 
     @Test
     void publishDueEvents_nackDoesNotMarkPublished() {
         OutboxEvent event = outboxEvent(0);
-        when(outboxEventRepository.findPublishableBatch(any(OffsetDateTime.class), eq(100)))
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
                 .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markFailed(
+                        eq(event), eq(1), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
         completeConfirm(false, "nack");
 
         service.publishDueEvents();
 
-        verify(outboxEventRepository).markFailed(eq(event.getId()), eq(1), any(), any());
-        verify(outboxEventRepository, never()).markPublished(any(), any());
+        verify(outboxPublisherStateService).markFailed(eq(event), eq(1), any(), any());
+        verify(outboxPublisherStateService, never()).markPublished(any(), any());
     }
 
     @Test
-    void publishDueEvents_markPublishedFailureDoesNotRecordPublishFailure() {
-        OutboxEvent event = outboxEvent(0);
-        when(outboxEventRepository.findPublishableBatch(any(OffsetDateTime.class), eq(100)))
-                .thenReturn(List.of(event));
+    void publishDueEvents_markPublishedFailureDoesNotRollbackPreviousEventState() {
+        OutboxEvent first = outboxEvent(0);
+        OutboxEvent second = outboxEvent(0);
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
+                .thenReturn(List.of(first, second));
         completeConfirm(true, null);
         doThrow(new IllegalStateException("database unavailable"))
-                .when(outboxEventRepository)
-                .markPublished(eq(event.getId()), any(OffsetDateTime.class));
+                .when(outboxPublisherStateService)
+                .markPublished(eq(second), any(OffsetDateTime.class));
+        when(outboxPublisherStateService.markPublished(eq(first), any(OffsetDateTime.class)))
+                .thenReturn(true);
 
         assertThatThrownBy(() -> service.publishDueEvents())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("database unavailable");
 
-        verify(outboxEventRepository, never()).markFailed(any(UUID.class), anyInt(), any(), any());
-        verify(outboxEventRepository, never()).markDead(any(UUID.class), anyInt(), any(), any());
+        verify(outboxPublisherStateService).markPublished(eq(first), any(OffsetDateTime.class));
+        verify(outboxPublisherStateService).markPublished(eq(second), any(OffsetDateTime.class));
+        verify(outboxPublisherStateService, never()).markFailed(any(), anyInt(), any(), any());
+        verify(outboxPublisherStateService, never()).markDead(any(), anyInt(), any(), any());
     }
 
     @Test
     void publishDueEvents_timeoutDoesNotMarkPublishedBeforeConfirm() {
         OutboxEvent event = outboxEvent(0);
         properties.setConfirmTimeout(Duration.ofMillis(1));
-        when(outboxEventRepository.findPublishableBatch(any(OffsetDateTime.class), eq(100)))
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
                 .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markFailed(
+                        eq(event), eq(1), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
 
         service.publishDueEvents();
 
-        verify(outboxEventRepository).markFailed(eq(event.getId()), eq(1), any(), any());
-        verify(outboxEventRepository, never()).markPublished(any(), any());
+        verify(outboxPublisherStateService).markFailed(eq(event), eq(1), any(), any());
+        verify(outboxPublisherStateService, never()).markPublished(any(), any());
+    }
+
+    @Test
+    void publishDueEvents_isNotTransactional() throws NoSuchMethodException {
+        Method method = OutboxPublisherServiceImpl.class.getMethod("publishDueEvents");
+
+        assertThat(method.getAnnotation(Transactional.class)).isNull();
     }
 
     private void completeConfirm(boolean ack, String reason) {
@@ -188,6 +218,7 @@ class OutboxPublisherServiceImplTest {
         return OutboxEvent.builder()
                 .id(id)
                 .eventId(eventId)
+                .claimId(UUID.randomUUID())
                 .aggregateType("user")
                 .aggregateId(aggregateId)
                 .eventType("user.registered.v1")

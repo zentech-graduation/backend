@@ -576,12 +576,24 @@ CREATE TABLE outbox_events (
         CHECK (status IN ('PENDING', 'PROCESSING', 'PUBLISHED', 'DEAD')),
     attempt_count       INTEGER         NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
     next_retry_at       TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    claim_id            UUID,
+    claimed_at          TIMESTAMPTZ,
+    claimed_until       TIMESTAMPTZ,
     last_error          TEXT,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     published_at        TIMESTAMPTZ,
     CHECK (
         (status = 'PUBLISHED' AND published_at IS NOT NULL)
         OR (status <> 'PUBLISHED' AND published_at IS NULL)
+    ),
+    CHECK (
+        status <> 'PROCESSING'
+        OR (
+            claim_id IS NOT NULL
+            AND claimed_at IS NOT NULL
+            AND claimed_until IS NOT NULL
+            AND claimed_until > claimed_at
+        )
     )
 );
 

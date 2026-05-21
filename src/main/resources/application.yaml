@@ -64,6 +64,7 @@ app:
       batch-size: ${OUTBOX_PUBLISHER_BATCH_SIZE:100}
       max-attempts: ${OUTBOX_PUBLISHER_MAX_ATTEMPTS:3}
       confirm-timeout: ${OUTBOX_PUBLISHER_CONFIRM_TIMEOUT:PT10S}
+      processing-timeout: ${OUTBOX_PUBLISHER_PROCESSING_TIMEOUT:PT2M}
       initial-delay: ${OUTBOX_PUBLISHER_INITIAL_DELAY:PT10S}
       fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT5S}
       retry-backoffs:

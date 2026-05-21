@@ -70,6 +70,15 @@ public class OutboxEvent {
     @Column(name = "next_retry_at", nullable = false)
     private OffsetDateTime nextRetryAt;
 
+    @Column(name = "claim_id")
+    private UUID claimId;
+
+    @Column(name = "claimed_at")
+    private OffsetDateTime claimedAt;
+
+    @Column(name = "claimed_until")
+    private OffsetDateTime claimedUntil;
+
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 

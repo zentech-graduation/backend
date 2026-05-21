@@ -16,12 +16,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Default async executor selection is explicit when scheduled outbox publishing is enabled.
 - RabbitMQ template mandatory publishing is enabled so unroutable outbox messages can be detected by publisher returns.
+- Outbox publisher now uses short transactional claim leases and per-event state commits instead of holding one batch transaction across RabbitMQ publisher confirms.
 
 ### Tests
 - Added RabbitMQ topology tests covering active mail queues, mail event bindings, dead-letter binding, and inactive future queues.
 - Added outbox enqueue tests covering event metadata, JSON payload envelope, required field validation, and absence of direct RabbitMQ publishing.
 - Added outbox publisher tests covering confirm success, publish failure retry scheduling, max-attempt dead state, nack handling, timeout handling, and database publisher updates.
 - Added RabbitMQ Testcontainer coverage for outbox publisher delivery and unroutable-message retry behavior.
+- Added outbox claim-lease tests covering expired `PROCESSING` event reclaim and stale-claim result guards.
 - Added processed-message inbox tests covering first processing, duplicate skipping, and rollback on failed processing.
 
 ### CI

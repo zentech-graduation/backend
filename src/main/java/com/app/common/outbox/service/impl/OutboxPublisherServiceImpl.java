@@ -10,6 +10,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
@@ -18,15 +20,14 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.outbox.config.OutboxPublisherProperties;
 import com.app.common.outbox.entity.OutboxEvent;
 import com.app.common.outbox.exception.OutboxPublishException;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
-import com.app.common.outbox.repository.OutboxEventRepository;
 import com.app.common.outbox.service.OutboxPublisherService;
+import com.app.common.outbox.service.OutboxPublisherStateService;
 
 @Service
 @ConditionalOnProperty(
@@ -36,31 +37,30 @@ import com.app.common.outbox.service.OutboxPublisherService;
         matchIfMissing = true)
 public class OutboxPublisherServiceImpl implements OutboxPublisherService {
 
+    private static final Logger log = LoggerFactory.getLogger(OutboxPublisherServiceImpl.class);
     private static final int MAX_ERROR_LENGTH = 2000;
 
-    private final OutboxEventRepository outboxEventRepository;
+    private final OutboxPublisherStateService outboxPublisherStateService;
     private final RabbitTemplate rabbitTemplate;
     private final OutboxPublisherProperties properties;
 
     public OutboxPublisherServiceImpl(
-            OutboxEventRepository outboxEventRepository,
+            OutboxPublisherStateService outboxPublisherStateService,
             RabbitTemplate rabbitTemplate,
             OutboxPublisherProperties properties) {
-        this.outboxEventRepository = outboxEventRepository;
+        this.outboxPublisherStateService = outboxPublisherStateService;
         this.rabbitTemplate = rabbitTemplate;
         this.properties = properties;
     }
 
     @Override
-    // The transaction keeps selected rows locked until their broker confirm outcome is recorded.
-    @Transactional
     @Scheduled(
             initialDelayString = "${app.outbox.publisher.initial-delay:PT10S}",
             fixedDelayString = "${app.outbox.publisher.fixed-delay:PT5S}")
     public int publishDueEvents() {
         OffsetDateTime now = now();
         List<OutboxEvent> events =
-                outboxEventRepository.findPublishableBatch(now, resolvedBatchSize());
+                outboxPublisherStateService.claimPublishableBatch(now, resolvedBatchSize());
         events.forEach(this::publishOne);
         return events.size();
     }
@@ -72,7 +72,13 @@ public class OutboxPublisherServiceImpl implements OutboxPublisherService {
             recordFailure(event, ex);
             return;
         }
-        outboxEventRepository.markPublished(event.getId(), now());
+        boolean marked = outboxPublisherStateService.markPublished(event, now());
+        if (!marked) {
+            log.warn(
+                    "Skipped marking outbox event {} as PUBLISHED because claim {} is no longer active",
+                    event.getEventId(),
+                    event.getClaimId());
+        }
     }
 
     private void publishToRabbit(OutboxEvent event) {
@@ -131,11 +137,25 @@ public class OutboxPublisherServiceImpl implements OutboxPublisherService {
         String lastError = truncate(ex.getMessage());
         OffsetDateTime failedAt = now();
         if (nextAttempt >= resolvedMaxAttempts()) {
-            outboxEventRepository.markDead(event.getId(), nextAttempt, failedAt, lastError);
+            boolean marked =
+                    outboxPublisherStateService.markDead(event, nextAttempt, failedAt, lastError);
+            if (!marked) {
+                log.warn(
+                        "Skipped marking outbox event {} as DEAD because claim {} is no longer active",
+                        event.getEventId(),
+                        event.getClaimId());
+            }
             return;
         }
         OffsetDateTime nextRetryAt = failedAt.plus(properties.retryBackoffForAttempt(nextAttempt));
-        outboxEventRepository.markFailed(event.getId(), nextAttempt, nextRetryAt, lastError);
+        boolean marked =
+                outboxPublisherStateService.markFailed(event, nextAttempt, nextRetryAt, lastError);
+        if (!marked) {
+            log.warn(
+                    "Skipped marking outbox event {} as PENDING because claim {} is no longer active",
+                    event.getEventId(),
+                    event.getClaimId());
+        }
     }
 
     private String truncate(String message) {
