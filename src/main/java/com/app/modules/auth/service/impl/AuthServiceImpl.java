@@ -45,6 +45,7 @@ import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.auth.validation.UserStateValidator;
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailService;
 
@@ -70,6 +71,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
     private final IpExtractor ipExtractor;
+    private final UserStateValidator userStateValidator;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -89,7 +91,8 @@ public class AuthServiceImpl implements AuthService {
             AppProperties appProperties,
             AuthMapper authMapper,
             TokenBlacklistService tokenBlacklistService,
-            IpExtractor ipExtractor) {
+            IpExtractor ipExtractor,
+            UserStateValidator userStateValidator) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -104,6 +107,7 @@ public class AuthServiceImpl implements AuthService {
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
         this.ipExtractor = ipExtractor;
+        this.userStateValidator = userStateValidator;
     }
 
     @PostConstruct
@@ -116,7 +120,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest) {
+    public void register(RegisterRequest request) {
         if (userRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
             throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
         }
@@ -155,8 +159,6 @@ public class AuthServiceImpl implements AuthService {
         String verificationUrl = appProperties.baseUrl() + VERIFY_PATH + rawVerification;
         mailService.sendEmailVerification(user.getEmail(), displayName, verificationUrl);
         mailService.sendWelcome(user.getEmail(), displayName);
-
-        return issueSession(user, credential.isEmailVerified(), httpRequest);
     }
 
     @Override
@@ -179,20 +181,13 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
-        switch (user.getStatus()) {
-            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            case SUSPENDED, DEACTIVATED ->
-                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            default -> {}
-        }
+        userStateValidator.enforceActive(user);
 
         if (!passwordMatches) {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
-        if (!credential.isEmailVerified()) {
-            throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-        }
+        userStateValidator.enforceEmailVerified(credential);
 
         return issueSession(user, credential.isEmailVerified(), httpRequest);
     }
@@ -210,16 +205,11 @@ public class AuthServiceImpl implements AuthService {
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
 
-        switch (user.getStatus()) {
-            case BANNED -> {
-                refreshTokenService.revoke(rotation.newRawToken());
-                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            }
-            case SUSPENDED, DEACTIVATED -> {
-                refreshTokenService.revoke(rotation.newRawToken());
-                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            }
-            default -> {}
+        try {
+            userStateValidator.enforceActive(user);
+        } catch (AppException ex) {
+            refreshTokenService.revoke(rotation.newRawToken());
+            throw ex;
         }
 
         boolean emailVerified =
@@ -271,7 +261,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public void verifyEmail(String rawToken) {
+    public AuthResponse verifyEmail(String rawToken, HttpServletRequest httpRequest) {
         UUID userId;
         try {
             userId = tokenService.consumeEmailVerificationToken(rawToken);
@@ -286,6 +276,12 @@ public class AuthServiceImpl implements AuthService {
         credential.setEmailVerified(true);
         credential.setEmailVerifiedAt(OffsetDateTime.now());
         credentialRepository.save(credential);
+
+        User user =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(userId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
+        return issueSession(user, true, httpRequest);
     }
 
     @Override
@@ -354,12 +350,7 @@ public class AuthServiceImpl implements AuthService {
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
 
-        switch (user.getStatus()) {
-            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            case SUSPENDED, DEACTIVATED ->
-                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            default -> {}
-        }
+        userStateValidator.enforceActive(user);
 
         UserCredential credential =
                 credentialRepository
