@@ -60,6 +60,7 @@ import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.auth.validation.UserStatusGuard;
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailService;
 
@@ -116,7 +117,8 @@ class AuthServiceImplTest {
                         appProperties,
                         authMapper,
                         tokenBlacklistService,
-                        ipExtractor);
+                        ipExtractor,
+                        new UserStatusGuard());
     }
 
     private MockHttpServletRequest stubRequest() {

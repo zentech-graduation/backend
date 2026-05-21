@@ -45,6 +45,7 @@ import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.auth.validation.UserStatusGuard;
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailService;
 
@@ -70,6 +71,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
     private final IpExtractor ipExtractor;
+    private final UserStatusGuard userStatusGuard;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -89,7 +91,8 @@ public class AuthServiceImpl implements AuthService {
             AppProperties appProperties,
             AuthMapper authMapper,
             TokenBlacklistService tokenBlacklistService,
-            IpExtractor ipExtractor) {
+            IpExtractor ipExtractor,
+            UserStatusGuard userStatusGuard) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -104,6 +107,7 @@ public class AuthServiceImpl implements AuthService {
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
         this.ipExtractor = ipExtractor;
+        this.userStatusGuard = userStatusGuard;
     }
 
     @PostConstruct
@@ -177,12 +181,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
-        switch (user.getStatus()) {
-            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            case SUSPENDED, DEACTIVATED ->
-                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            default -> {}
-        }
+        userStatusGuard.requireActive(user);
 
         if (!passwordMatches) {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
@@ -208,16 +207,9 @@ public class AuthServiceImpl implements AuthService {
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
 
-        switch (user.getStatus()) {
-            case BANNED -> {
-                refreshTokenService.revoke(rotation.newRawToken());
-                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            }
-            case SUSPENDED, DEACTIVATED -> {
-                refreshTokenService.revoke(rotation.newRawToken());
-                throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            }
-            default -> {}
+        if (!userStatusGuard.isActive(user)) {
+            refreshTokenService.revoke(rotation.newRawToken());
+            userStatusGuard.requireActive(user);
         }
 
         boolean emailVerified =
@@ -290,12 +282,7 @@ public class AuthServiceImpl implements AuthService {
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
 
-        switch (user.getStatus()) {
-            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            case SUSPENDED, DEACTIVATED ->
-                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            default -> {}
-        }
+        userStatusGuard.requireActive(user);
 
         return issueSession(user, true, httpRequest);
     }
@@ -331,7 +318,7 @@ public class AuthServiceImpl implements AuthService {
             return;
         }
         User user = userOpt.get();
-        if (user.getStatus() != UserStatus.ACTIVE) {
+        if (!userStatusGuard.isActive(user)) {
             return;
         }
 
@@ -366,12 +353,7 @@ public class AuthServiceImpl implements AuthService {
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
 
-        switch (user.getStatus()) {
-            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            case SUSPENDED, DEACTIVATED ->
-                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            default -> {}
-        }
+        userStatusGuard.requireActive(user);
 
         UserCredential credential =
                 credentialRepository
