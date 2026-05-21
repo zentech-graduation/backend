@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -134,6 +136,35 @@ class OutboxServiceImplTest {
                                                 List.of(Map.of("verificationToken", "raw-token")))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must not contain token");
+    }
+
+    @Test
+    void enqueueRejectsSensitiveValuesInsideNeutralKeys() {
+        OutboxServiceImpl service = new OutboxServiceImpl(outboxEventRepository);
+
+        assertThatThrownBy(
+                        () ->
+                                service.enqueue(
+                                        "auth.email-verification.requested.v1",
+                                        "auth.email-verification.requested.v1",
+                                        "user",
+                                        UUID.randomUUID(),
+                                        null,
+                                        Map.of(
+                                                "url",
+                                                "https://app.example/verify?token=raw-token")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not contain raw tokens");
+    }
+
+    @Test
+    void repositoryApiDoesNotExposeGenericSave() {
+        boolean exposesSave =
+                Arrays.stream(OutboxEventRepository.class.getMethods())
+                        .map(Method::getName)
+                        .anyMatch("save"::equals);
+
+        assertThat(exposesSave).isFalse();
     }
 
     @Test

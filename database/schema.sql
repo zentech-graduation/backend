@@ -579,7 +579,10 @@ CREATE TABLE outbox_events (
     last_error          TEXT,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     published_at        TIMESTAMPTZ,
-    CHECK (published_at IS NULL OR status = 'PUBLISHED')
+    CHECK (
+        (status = 'PUBLISHED' AND published_at IS NOT NULL)
+        OR (status <> 'PUBLISHED' AND published_at IS NULL)
+    )
 );
 
 -- ============================================================

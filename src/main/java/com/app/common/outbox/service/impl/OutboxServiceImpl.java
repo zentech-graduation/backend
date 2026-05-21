@@ -2,6 +2,7 @@ package com.app.common.outbox.service.impl;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,6 +22,8 @@ public class OutboxServiceImpl implements OutboxService {
 
     private static final String SENSITIVE_DATA_KEY_MESSAGE =
             "Outbox event data must not contain token, password, secret, or credential fields";
+    private static final String SENSITIVE_DATA_VALUE_MESSAGE =
+            "Outbox event data must not contain raw tokens, passwords, secrets, credentials, or URLs carrying them";
 
     private final OutboxEventRepository outboxEventRepository;
 
@@ -74,13 +77,17 @@ public class OutboxServiceImpl implements OutboxService {
 
     private void validateNoSensitiveDataKeys(Map<String, Object> data) {
         for (Map.Entry<String, Object> entry : data.entrySet()) {
-            String key = entry.getKey().toLowerCase();
+            String key = entry.getKey().toLowerCase(Locale.ROOT);
             Assert.isTrue(!isSensitiveKey(key), SENSITIVE_DATA_KEY_MESSAGE);
             validateNestedSensitiveDataKeys(entry.getValue());
         }
     }
 
     private void validateNestedSensitiveDataKeys(Object value) {
+        if (value instanceof CharSequence text) {
+            validateNoSensitiveStringValue(text.toString());
+            return;
+        }
         if (value instanceof Map<?, ?> nestedData) {
             validateNoSensitiveDataKeys(castNestedData(nestedData));
             return;
@@ -95,6 +102,23 @@ public class OutboxServiceImpl implements OutboxService {
                 || key.contains("password")
                 || key.contains("secret")
                 || key.contains("credential");
+    }
+
+    private void validateNoSensitiveStringValue(String value) {
+        String normalized = value.toLowerCase(Locale.ROOT);
+        Assert.isTrue(!containsSensitiveValue(normalized), SENSITIVE_DATA_VALUE_MESSAGE);
+    }
+
+    private boolean containsSensitiveValue(String value) {
+        return value.contains("bearer ")
+                || value.contains("token=")
+                || value.contains("password=")
+                || value.contains("secret=")
+                || value.contains("credential=")
+                || value.contains("access_token")
+                || value.contains("refresh_token")
+                || value.contains("reset_token")
+                || value.contains("verification_token");
     }
 
     private Map<String, Object> castNestedData(Map<?, ?> data) {
