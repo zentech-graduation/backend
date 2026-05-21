@@ -25,6 +25,7 @@ import com.app.modules.auth.repository.OAuthAccountRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
+import com.app.modules.auth.validation.UserStatusGuard;
 
 /**
  * OIDC user service that resolves an OAuth2 sign-in to a local {@link User}.
@@ -51,16 +52,19 @@ public class CustomOidcUserService extends OidcUserService {
     private final UserRepository userRepository;
     private final UserCredentialRepository userCredentialRepository;
     private final UserSettingsRepository userSettingsRepository;
+    private final UserStatusGuard userStatusGuard;
 
     public CustomOidcUserService(
             OAuthAccountRepository oauthAccountRepository,
             UserRepository userRepository,
             UserCredentialRepository userCredentialRepository,
-            UserSettingsRepository userSettingsRepository) {
+            UserSettingsRepository userSettingsRepository,
+            UserStatusGuard userStatusGuard) {
         this.oauthAccountRepository = oauthAccountRepository;
         this.userRepository = userRepository;
         this.userCredentialRepository = userCredentialRepository;
         this.userSettingsRepository = userSettingsRepository;
+        this.userStatusGuard = userStatusGuard;
     }
 
     @Override
@@ -91,7 +95,7 @@ public class CustomOidcUserService extends OidcUserService {
                     userRepository
                             .findByIdAndDeletedAtIsNull(existing.get().getUserId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
-            enforceStatus(user);
+            userStatusGuard.requireActive(user);
         } else {
             Optional<User> existingByEmail = userRepository.findByEmailAndDeletedAtIsNull(email);
 
@@ -103,7 +107,7 @@ public class CustomOidcUserService extends OidcUserService {
                     throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
                 }
                 user = existingByEmail.get();
-                enforceStatus(user);
+                userStatusGuard.requireActive(user);
             } else {
                 user = createNewOAuthUser(email, displayName, avatarUrl);
             }
@@ -189,14 +193,5 @@ public class CustomOidcUserService extends OidcUserService {
             }
         }
         throw new AppException(ApiErrorCode.INTERNAL_ERROR);
-    }
-
-    private void enforceStatus(User user) {
-        switch (user.getStatus()) {
-            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            case SUSPENDED, DEACTIVATED ->
-                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            default -> {}
-        }
     }
 }
