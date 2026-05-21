@@ -24,6 +24,7 @@ import com.app.modules.auth.repository.OAuthAccountRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
+import com.app.modules.auth.validation.UserStateValidator;
 
 @ExtendWith(MockitoExtension.class)
 class CustomOidcUserServiceTest {
@@ -32,6 +33,7 @@ class CustomOidcUserServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private UserCredentialRepository userCredentialRepository;
     @Mock private UserSettingsRepository userSettingsRepository;
+    @Mock private UserStateValidator userStateValidator;
 
     private CustomOidcUserService service;
 
@@ -42,7 +44,8 @@ class CustomOidcUserServiceTest {
                         oauthAccountRepository,
                         userRepository,
                         userCredentialRepository,
-                        userSettingsRepository);
+                        userSettingsRepository,
+                        userStateValidator);
     }
 
     private OidcUserRequest buildRequestForRegistrationId(String registrationId) {
