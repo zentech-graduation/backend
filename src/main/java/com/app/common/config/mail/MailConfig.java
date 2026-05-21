@@ -30,7 +30,7 @@ public class MailConfig {
         return new Resend(apiKey);
     }
 
-    @Bean(name = "mailTaskExecutor")
+    @Bean(name = {"mailTaskExecutor", "taskExecutor"})
     public Executor mailTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(4);

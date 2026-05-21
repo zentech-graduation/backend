@@ -10,10 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RabbitMQ topology now declares the `social.events` topic exchange, `social.events.dlx`, `mail.queue`, and `mail.dlq` for mail side-effect events only.
 - RabbitMQ environment variables are documented in the environment template with publisher confirms and returns enabled.
 - Transactional outbox storage now records versioned domain event envelopes in PostgreSQL before RabbitMQ publishing.
+- Scheduled outbox publisher now publishes due events to RabbitMQ with correlated publisher confirms, bounded retry metadata, and dead-letter terminal state.
+- Consumer inbox storage now records processed message IDs for idempotent RabbitMQ consumers.
+
+### Fixed
+- Default async executor selection is explicit when scheduled outbox publishing is enabled.
+- RabbitMQ template mandatory publishing is enabled so unroutable outbox messages can be detected by publisher returns.
+- Outbox publisher now uses short transactional claim leases and per-event state commits instead of holding one batch transaction across RabbitMQ publisher confirms.
 
 ### Tests
 - Added RabbitMQ topology tests covering active mail queues, mail event bindings, dead-letter binding, and inactive future queues.
 - Added outbox enqueue tests covering event metadata, JSON payload envelope, required field validation, and absence of direct RabbitMQ publishing.
+- Added outbox publisher tests covering confirm success, publish failure retry scheduling, max-attempt dead state, nack handling, timeout handling, and database publisher updates.
+- Added RabbitMQ Testcontainer coverage for outbox publisher delivery and unroutable-message retry behavior.
+- Added outbox claim-lease tests covering expired `PROCESSING` event reclaim and stale-claim result guards.
+- Added processed-message inbox tests covering first processing, duplicate skipping, and rollback on failed processing.
 
 ### CI
 - Replaced split SonarCloud Maven steps with a single `verify sonar-maven-plugin:sonar` invocation; added SonarCloud package cache and `GITHUB_TOKEN` env declaration.
