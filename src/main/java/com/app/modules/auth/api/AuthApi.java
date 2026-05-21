@@ -41,17 +41,13 @@ public interface AuthApi {
     @Operation(
             summary = "Register a new user",
             description =
-                    "Creates a user account, sends a verification email asynchronously, and returns"
-                            + " an initial access/refresh token pair.",
+                    "Creates a user account and sends a verification and welcome email"
+                            + " asynchronously. Tokens are issued after email verification.",
             security = {})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Account created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AuthResponse.class))),
+                description = "Account created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description = "Username or email already in use",
@@ -75,7 +71,7 @@ public interface AuthApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping(ApiConstants.Auth.REGISTER)
-    ResponseEntity<ApiResponse<AuthResponse>> register(
+    ResponseEntity<ApiResponse<Void>> register(
             @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest);
 
     /** Authenticates an existing user and returns access + refresh tokens. */
@@ -193,7 +189,7 @@ public interface AuthApi {
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                                schema = @Schema(implementation = AuthResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Token invalid or expired",
@@ -210,13 +206,14 @@ public interface AuthApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Auth.VERIFY_EMAIL)
-    ResponseEntity<ApiResponse<Void>> verifyEmail(
+    ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(
             @Parameter(
                             description =
                                     "One-time email verification token from the verification link",
                             required = true)
                     @RequestParam("token")
-                    String token);
+                    String token,
+            HttpServletRequest httpRequest);
 
     /**
      * Re-issues a verification email when an account exists for the supplied address. Always

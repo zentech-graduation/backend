@@ -116,7 +116,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest) {
+    public void register(RegisterRequest request, HttpServletRequest httpRequest) {
         if (userRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
             throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
         }
@@ -155,8 +155,6 @@ public class AuthServiceImpl implements AuthService {
         String verificationUrl = appProperties.baseUrl() + VERIFY_PATH + rawVerification;
         mailService.sendEmailVerification(user.getEmail(), displayName, verificationUrl);
         mailService.sendWelcome(user.getEmail(), displayName);
-
-        return issueSession(user, credential.isEmailVerified(), httpRequest);
     }
 
     @Override
@@ -271,7 +269,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public void verifyEmail(String rawToken) {
+    public AuthResponse verifyEmail(String rawToken, HttpServletRequest httpRequest) {
         UUID userId;
         try {
             userId = tokenService.consumeEmailVerificationToken(rawToken);
@@ -286,6 +284,20 @@ public class AuthServiceImpl implements AuthService {
         credential.setEmailVerified(true);
         credential.setEmailVerifiedAt(OffsetDateTime.now());
         credentialRepository.save(credential);
+
+        User user =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(userId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
+
+        switch (user.getStatus()) {
+            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
+            case SUSPENDED, DEACTIVATED ->
+                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+            default -> {}
+        }
+
+        return issueSession(user, true, httpRequest);
     }
 
     @Override

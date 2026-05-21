@@ -16,14 +16,13 @@ import com.app.modules.auth.dto.response.AuthResponse;
 public interface AuthService {
 
     /**
-     * Registers a new user, dispatches the verification and welcome emails asynchronously, and
-     * issues the first session pair.
+     * Registers a new user and dispatches the verification and welcome emails asynchronously. No
+     * tokens are issued at this stage; the session pair is created only after email verification.
      *
      * @param request validated registration payload
      * @param httpRequest underlying servlet request, used to capture device metadata
-     * @return access + refresh tokens with the persisted user summary
      */
-    AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest);
+    void register(RegisterRequest request, HttpServletRequest httpRequest);
 
     /**
      * Authenticates an existing user by email and password and issues a fresh session pair.
@@ -51,11 +50,14 @@ public interface AuthService {
     void logout(RefreshRequest request);
 
     /**
-     * Consumes the email-verification token and marks the corresponding credential as verified.
+     * Consumes the email-verification token, marks the corresponding credential as verified, and
+     * issues the first session pair.
      *
      * @param rawToken raw verification token from the link the user followed
+     * @param httpRequest underlying servlet request, used to capture device metadata
+     * @return access + refresh tokens with the persisted user summary
      */
-    void verifyEmail(String rawToken);
+    AuthResponse verifyEmail(String rawToken, HttpServletRequest httpRequest);
 
     /**
      * Re-sends a fresh verification email if an account with the supplied email exists. Behaviour

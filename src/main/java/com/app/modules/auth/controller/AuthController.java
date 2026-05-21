@@ -36,16 +36,16 @@ public class AuthController extends BaseController implements AuthApi {
     }
 
     /**
-     * Registers a new user, dispatches verification + welcome emails asynchronously, and returns
-     * the first session pair.
+     * Registers a new user and dispatches verification + welcome emails asynchronously. No tokens
+     * are returned; the client must complete email verification to obtain a session.
      */
     @Override
     @PostMapping(ApiConstants.Auth.REGISTER)
-    public ResponseEntity<ApiResponse<AuthResponse>> register(
+    public ResponseEntity<ApiResponse<Void>> register(
             @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-        AuthResponse body = authService.register(request, httpRequest);
+        authService.register(request, httpRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(ApiSuccessCode.CREATED, body));
+                .body(ApiResponse.success(ApiSuccessCode.CREATED));
     }
 
     /** Authenticates an existing user and returns access + refresh tokens. */
@@ -78,9 +78,10 @@ public class AuthController extends BaseController implements AuthApi {
     /** Verifies an email address using the token embedded in the verification link. */
     @Override
     @GetMapping(ApiConstants.Auth.VERIFY_EMAIL)
-    public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam("token") String token) {
-        authService.verifyEmail(token);
-        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(
+            @RequestParam("token") String token, HttpServletRequest httpRequest) {
+        AuthResponse body = authService.verifyEmail(token, httpRequest);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
     /**
