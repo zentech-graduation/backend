@@ -35,7 +35,43 @@ public enum ApiErrorCode {
 
 	// Users
 	USER_EMAIL_ALREADY_EXISTS("USER_EMAIL_ALREADY_EXISTS", "An account with this email already exists", HttpStatus.CONFLICT),
-	USER_USERNAME_ALREADY_EXISTS("USER_USERNAME_ALREADY_EXISTS", "Username is already taken", HttpStatus.CONFLICT);
+	USER_USERNAME_ALREADY_EXISTS("USER_USERNAME_ALREADY_EXISTS", "Username is already taken", HttpStatus.CONFLICT),
+
+    // Social
+    SOCIAL_SELF_FOLLOW(
+            "SOCIAL_SELF_FOLLOW",
+            "You cannot follow yourself",
+            HttpStatus.BAD_REQUEST),
+
+    SOCIAL_ALREADY_FOLLOWING(
+            "SOCIAL_ALREADY_FOLLOWING",
+            "You are already following this user",
+            HttpStatus.CONFLICT),
+
+    SOCIAL_ALREADY_REQUESTED(
+            "SOCIAL_ALREADY_REQUESTED",
+            "Follow request already sent",
+            HttpStatus.CONFLICT),
+
+    SOCIAL_REQUEST_NOT_FOUND(
+            "SOCIAL_REQUEST_NOT_FOUND",
+            "Follow request not found",
+            HttpStatus.NOT_FOUND),
+
+    SOCIAL_SELF_BLOCK(
+            "SOCIAL_SELF_BLOCK",
+            "You cannot block yourself",
+            HttpStatus.BAD_REQUEST),
+
+    SOCIAL_ALREADY_BLOCKED(
+            "SOCIAL_ALREADY_BLOCKED",
+            "User already blocked",
+            HttpStatus.CONFLICT),
+
+    SOCIAL_BLOCKED(
+            "SOCIAL_BLOCKED",
+            "This action is not allowed because of a block relationship",
+            HttpStatus.FORBIDDEN);
 
 	// spotless:on
 
