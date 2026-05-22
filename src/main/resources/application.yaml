@@ -58,6 +58,10 @@ spring:
 
 app:
   base-url: ${APP_BASE_URL}
+  auth:
+    forgot-password:
+      min-response-time: ${AUTH_FORGOT_PASSWORD_MIN_RESPONSE_TIME:200ms}
+      max-jitter: ${AUTH_FORGOT_PASSWORD_MAX_JITTER:50ms}
   outbox:
     publisher:
       enabled: ${OUTBOX_PUBLISHER_ENABLED:true}

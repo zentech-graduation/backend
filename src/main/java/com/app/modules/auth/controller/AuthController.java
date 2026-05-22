@@ -36,8 +36,8 @@ public class AuthController extends BaseController implements AuthApi {
     }
 
     /**
-     * Registers a new user, dispatches verification + welcome emails asynchronously. No tokens are
-     * issued — the user must verify their email before logging in.
+     * Registers a new user and records verification + welcome mail events. No tokens are issued —
+     * the user must verify their email before logging in.
      */
     @Override
     @PostMapping(ApiConstants.Auth.REGISTER)
@@ -84,7 +84,7 @@ public class AuthController extends BaseController implements AuthApi {
     }
 
     /**
-     * Re-issues a verification email when an account exists for the supplied address. Always
+     * Records a verification mail event when an account exists for the supplied address. Always
      * returns 200 to prevent account enumeration.
      */
     @Override
@@ -96,8 +96,8 @@ public class AuthController extends BaseController implements AuthApi {
     }
 
     /**
-     * Triggers a password-reset email when an account exists. Always returns 200 to prevent account
-     * enumeration.
+     * Records a password-reset mail event when an account exists. Always returns 200 to prevent
+     * account enumeration.
      */
     @Override
     @PostMapping(ApiConstants.Auth.FORGOT_PASSWORD)

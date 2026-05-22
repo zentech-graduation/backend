@@ -25,7 +25,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -59,10 +58,10 @@ import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
+import com.app.modules.auth.service.AuthForgotPasswordEventService;
+import com.app.modules.auth.service.AuthMailEventService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
-import com.app.modules.mail.config.MailProperties;
-import com.app.modules.mail.service.MailService;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
@@ -74,8 +73,9 @@ class AuthServiceImplTest {
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private PasswordEncoder passwordEncoder;
-    @Mock private MailService mailService;
-    @Mock private MailProperties mailProperties;
+    @Mock private AuthMailEventService authMailEventService;
+    @Mock private AuthForgotPasswordEventService authForgotPasswordEventService;
+    @Mock private ForgotPasswordTimingEqualizer forgotPasswordTimingEqualizer;
     @Mock private AuthMapper authMapper;
     @Mock private TokenBlacklistService tokenBlacklistService;
     @Mock private IpExtractor ipExtractor;
@@ -87,8 +87,6 @@ class AuthServiceImplTest {
     void setUp() {
         JwtProperties jwtProperties =
                 new JwtProperties("test-secret-32-chars-test-secret-", "iss", "App", 900, 3600);
-        lenient().when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
-        lenient().when(mailProperties.getVerifyEmailPath()).thenReturn("/verify-email");
         lenient().when(ipExtractor.extract(any(HttpServletRequest.class))).thenReturn("4.5.6.7");
         lenient()
                 .when(authMapper.toUserSummaryResponse(any(User.class), anyBoolean()))
@@ -114,8 +112,9 @@ class AuthServiceImplTest {
                         jwtTokenProvider,
                         jwtProperties,
                         passwordEncoder,
-                        mailService,
-                        mailProperties,
+                        authMailEventService,
+                        authForgotPasswordEventService,
+                        forgotPasswordTimingEqualizer,
                         authMapper,
                         tokenBlacklistService,
                         ipExtractor,
@@ -165,7 +164,6 @@ class AuthServiceImplTest {
                             return u;
                         });
         when(passwordEncoder.encode("password1")).thenReturn("HASH");
-        when(tokenService.createEmailVerificationToken(newId)).thenReturn("verify-token");
 
         service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
 
@@ -175,7 +173,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void register_success_dispatchesVerificationAndWelcomeMail() {
+    void register_success_recordsMailEventsWithoutCreatingRawToken() {
         UUID newId = UUID.randomUUID();
         when(userRepository.save(any(User.class)))
                 .thenAnswer(
@@ -185,12 +183,12 @@ class AuthServiceImplTest {
                             return u;
                         });
         when(passwordEncoder.encode(anyString())).thenReturn("HASH");
-        when(tokenService.createEmailVerificationToken(newId)).thenReturn("vf");
 
         service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
 
-        verify(mailService, times(1)).sendEmailVerification(eq("a@b.c"), eq("user1"), anyString());
-        verify(mailService, times(1)).sendWelcome(eq("a@b.c"), eq("user1"));
+        verify(authMailEventService).publishUserRegistered(any(User.class));
+        verify(authMailEventService).publishEmailVerificationRequested(any(User.class), eq(newId));
+        verify(tokenService, never()).createEmailVerificationToken(any());
     }
 
     @Test
@@ -446,38 +444,68 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void forgotPassword_unknownEmail_returnsSilentlyAndSendsNoMail() {
+    void resendVerification_unknownEmail_returnsSilentlyAndCreatesNoEvent() {
         when(userRepository.findByEmailAndDeletedAtIsNull("ghost@x.y"))
                 .thenReturn(Optional.empty());
 
-        service.forgotPassword(new ForgotPasswordRequest("ghost@x.y"));
+        service.resendVerification("ghost@x.y");
 
-        verify(tokenService, never()).createPasswordResetToken(any());
-        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
+        verify(authMailEventService, never()).publishEmailVerificationRequested(any(), any());
+        verify(tokenService, never()).createEmailVerificationToken(any());
     }
 
     @Test
-    void forgotPassword_knownEmail_dispatchesResetMail() {
+    void resendVerification_verifiedAccount_returnsSilentlyAndCreatesNoEvent() {
         User u = activeUser();
-        UserCredential cred = credential(u.getId(), "HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
-        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-        when(tokenService.createPasswordResetToken(u.getId())).thenReturn("RESET-RAW");
-        when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
-        when(mailProperties.getResetPasswordPath()).thenReturn("/reset-password");
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(verifiedCredential(u.getId(), "HASH")));
 
-        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
+        service.resendVerification(u.getEmail());
 
-        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
-        verify(mailService)
-                .sendPasswordReset(eq(u.getEmail()), eq(u.getDisplayName()), urlCaptor.capture());
-        assertThat(urlCaptor.getValue())
-                .startsWith("http://localhost:5173/reset-password?token=")
-                .contains("RESET-RAW");
+        verify(authMailEventService, never()).publishEmailVerificationRequested(any(), any());
+        verify(tokenService, never()).createEmailVerificationToken(any());
     }
 
     @Test
-    void resetPassword_revokesAllSessionsAndDispatchesNotification() {
+    void resendVerification_unverifiedAccount_recordsVerificationEventWithoutCreatingRawToken() {
+        User u = activeUser();
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(credential(u.getId(), "HASH")));
+
+        service.resendVerification(u.getEmail());
+
+        verify(authMailEventService).publishEmailVerificationRequested(u, null);
+        verify(tokenService, never()).createEmailVerificationToken(any());
+    }
+
+    @Test
+    void forgotPassword_delegatesDurableEventRecordingAndEqualizesTiming() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("alice@example.com");
+
+        service.forgotPassword(request);
+
+        verify(authForgotPasswordEventService).recordForgotPasswordRequest(request.email());
+        verify(forgotPasswordTimingEqualizer).equalizeFrom(anyLong());
+        verify(tokenService, never()).createPasswordResetToken(any());
+    }
+
+    @Test
+    void forgotPassword_equalizesTimingWhenEventRecordingFails() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("alice@example.com");
+        doThrow(new IllegalStateException("db down"))
+                .when(authForgotPasswordEventService)
+                .recordForgotPasswordRequest(request.email());
+
+        assertThatThrownBy(() -> service.forgotPassword(request))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(forgotPasswordTimingEqualizer).equalizeFrom(anyLong());
+    }
+
+    @Test
+    void resetPassword_revokesAllSessionsAndRecordsNotificationEvent() {
         UUID userId = UUID.randomUUID();
         String raw = "RESET-RAW";
         when(tokenService.consumePasswordResetToken(raw)).thenReturn(userId);
@@ -493,7 +521,7 @@ class AuthServiceImplTest {
         verify(refreshTokenService).revokeAllForUser(userId);
         verify(credentialRepository).save(cred);
         assertThat(cred.getPasswordHash()).isEqualTo("NEW-HASH");
-        verify(mailService).sendPasswordChanged(u.getEmail(), u.getDisplayName());
+        verify(authMailEventService).publishPasswordChanged(u);
     }
 
     @Test
@@ -509,79 +537,6 @@ class AuthServiceImplTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
         verify(refreshTokenService, never()).revokeAllForUser(any());
-    }
-
-    // FIX-6: forgotPassword async timing — unknown email path
-    @Test
-    void forgotPassword_unknownEmail_doesNotCreateTokenOrSendMail() {
-        when(userRepository.findByEmailAndDeletedAtIsNull("ghost@x.y"))
-                .thenReturn(Optional.empty());
-
-        service.forgotPassword(new ForgotPasswordRequest("ghost@x.y"));
-
-        verify(tokenService, never()).createPasswordResetToken(any());
-        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
-        verify(mailService, never()).sendOAuthAccountNoPassword(anyString(), anyString());
-    }
-
-    // FIX-6: forgotPassword async timing — non-ACTIVE user path
-    @Test
-    void forgotPassword_inactiveUser_doesNotCreateTokenOrSendResetMail() {
-        User u = activeUser();
-        u.setStatus(UserStatus.SUSPENDED);
-        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
-
-        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
-
-        verify(tokenService, never()).createPasswordResetToken(any());
-        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
-    }
-
-    // FIX-6 + FIX-23: forgotPassword — ACTIVE user with local password sends reset mail
-    @Test
-    void forgotPassword_activeUserWithPassword_sendsResetMail() {
-        User u = activeUser();
-        UserCredential cred = credential(u.getId(), "HASH");
-        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
-        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-        when(tokenService.createPasswordResetToken(u.getId())).thenReturn("RESET-RAW");
-        when(mailProperties.getFrontendBaseUrl()).thenReturn("http://localhost:5173");
-        when(mailProperties.getResetPasswordPath()).thenReturn("/reset-password");
-
-        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
-
-        verify(tokenService).createPasswordResetToken(u.getId());
-        verify(mailService)
-                .sendPasswordReset(eq(u.getEmail()), eq(u.getDisplayName()), anyString());
-        verify(mailService, never()).sendOAuthAccountNoPassword(anyString(), anyString());
-    }
-
-    // FIX-23: forgotPassword — OAuth-only user (null passwordHash) sends informational mail
-    @Test
-    void forgotPassword_oauthOnlyUser_sendsOAuthMailAndDoesNotCreateToken() {
-        User u = activeUser();
-        UserCredential cred = credential(u.getId(), null);
-        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
-        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-
-        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
-
-        verify(mailService).sendOAuthAccountNoPassword(u.getEmail(), u.getDisplayName());
-        verify(tokenService, never()).createPasswordResetToken(any());
-        verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
-    }
-
-    // FIX-23: forgotPassword — OAuth-only user with no credential row sends informational mail
-    @Test
-    void forgotPassword_oauthOnlyUserNoCred_sendsOAuthMailAndDoesNotCreateToken() {
-        User u = activeUser();
-        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
-        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.empty());
-
-        service.forgotPassword(new ForgotPasswordRequest(u.getEmail()));
-
-        verify(mailService).sendOAuthAccountNoPassword(u.getEmail(), u.getDisplayName());
-        verify(tokenService, never()).createPasswordResetToken(any());
     }
 
     // FIX-23: resetPassword — credential with null passwordHash throws AUTH_RESET_TOKEN_INVALID

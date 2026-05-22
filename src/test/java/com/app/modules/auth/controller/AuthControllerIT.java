@@ -1,5 +1,7 @@
 package com.app.modules.auth.controller;
 
+import static com.app.common.config.rabbit.RabbitMqTopologyConfig.AUTH_EMAIL_VERIFICATION_REQUESTED_V1;
+import static com.app.common.config.rabbit.RabbitMqTopologyConfig.USER_REGISTERED_V1;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Method;
@@ -28,6 +30,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -35,7 +38,6 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -52,7 +54,7 @@ import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.RefreshTokenRepository;
 import com.app.modules.auth.repository.UserRepository;
-import com.app.modules.mail.service.MailService;
+import com.app.modules.auth.service.TokenService;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 @SpringBootTest(
@@ -104,8 +106,8 @@ class AuthControllerIT {
     @Autowired private TestRestTemplate rest;
     @Autowired private UserRepository userRepository;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
-
-    @MockitoBean private MailService mailService;
+    @Autowired private TokenService tokenService;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     @Test
     void refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked() {
@@ -183,6 +185,21 @@ class AuthControllerIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody().get("data")).isNull();
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        Integer outboxCount =
+                jdbcTemplate.queryForObject(
+                        """
+						SELECT COUNT(*)
+						FROM outbox_events
+						WHERE aggregate_id = ?
+						AND event_type IN (?, ?)
+						AND payload::text NOT ILIKE '%token%'
+						""",
+                        Integer.class,
+                        userId,
+                        USER_REGISTERED_V1,
+                        AUTH_EMAIL_VERIFICATION_REQUESTED_V1);
+        assertThat(outboxCount).isEqualTo(2);
     }
 
     @Test
@@ -232,7 +249,7 @@ class AuthControllerIT {
     void login_correctCredentials_returns200WithTokens() {
         String email = uniqueEmail("login_ok");
         postJson("/api/v1/auth/register", registerBody("user_login", email, "password1"));
-        String token = captureLatestVerificationToken(email);
+        String token = createVerificationToken(email);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
         ResponseEntity<Map> response =
@@ -447,7 +464,7 @@ class AuthControllerIT {
                         "/api/v1/auth/register", registerBody("user_consumed", email, "password1"));
         assertThat(reg.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
-        String token = captureLatestVerificationToken(email);
+        String token = createVerificationToken(email);
 
         ResponseEntity<Map> first =
                 rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
@@ -473,7 +490,7 @@ class AuthControllerIT {
     void verifyEmail_validToken_returns200WithTokens() {
         String email = uniqueEmail("verify_ok");
         postJson("/api/v1/auth/register", registerBody("user_vok", email, "password1"));
-        String token = captureLatestVerificationToken(email);
+        String token = createVerificationToken(email);
 
         ResponseEntity<Map> response =
                 rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
@@ -661,24 +678,16 @@ class AuthControllerIT {
 
     private Map<?, ?> registerVerifyAndLogin(String username, String email, String password) {
         postJson("/api/v1/auth/register", registerBody(username, email, password));
-        String verToken = captureLatestVerificationToken(email);
+        String verToken = createVerificationToken(email);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + verToken, Map.class);
         ResponseEntity<Map> login =
                 postJson("/api/v1/auth/login", Map.of("email", email, "password", password));
         return (Map<?, ?>) login.getBody().get("data");
     }
 
-    private String captureLatestVerificationToken(String email) {
-        org.mockito.ArgumentCaptor<String> urlCaptor =
-                org.mockito.ArgumentCaptor.forClass(String.class);
-        org.mockito.Mockito.verify(mailService, org.mockito.Mockito.atLeastOnce())
-                .sendEmailVerification(
-                        org.mockito.ArgumentMatchers.eq(email),
-                        org.mockito.ArgumentMatchers.anyString(),
-                        urlCaptor.capture());
-        String url = urlCaptor.getAllValues().get(urlCaptor.getAllValues().size() - 1);
-        int idx = url.indexOf("token=");
-        return url.substring(idx + "token=".length());
+    private String createVerificationToken(String email) {
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        return tokenService.createEmailVerificationToken(userId);
     }
 
     private static Map<String, String> registerBody(

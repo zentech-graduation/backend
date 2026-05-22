@@ -12,11 +12,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Transactional outbox storage now records versioned domain event envelopes in PostgreSQL before RabbitMQ publishing.
 - Scheduled outbox publisher now publishes due events to RabbitMQ with correlated publisher confirms, bounded retry metadata, and dead-letter terminal state.
 - Consumer inbox storage now records processed message IDs for idempotent RabbitMQ consumers.
+- Auth registration, verification resend, password reset, password changed, and OAuth-only reset flows now record mail side-effect events through the transactional outbox instead of sending mail directly.
+- Forgot-password handling now records durable outbox events inside a short transaction and applies a configurable response-time floor after the transaction to reduce account-enumeration timing signals.
 
 ### Fixed
 - Default async executor selection is explicit when scheduled outbox publishing is enabled.
 - RabbitMQ template mandatory publishing is enabled so unroutable outbox messages can be detected by publisher returns.
 - Outbox publisher now uses short transactional claim leases and per-event state commits instead of holding one batch transaction across RabbitMQ publisher confirms.
+
+### Changed
+- Auth mail side-effect documentation now points to outbox events and the mail consumer token-generation flow; raw verification/reset tokens are no longer created in the auth request path.
+- Auth mail events now use `actorId = null` for unauthenticated verification resend and forgot-password requests while keeping `aggregateId` as the target user id.
 
 ### Tests
 - Added RabbitMQ topology tests covering active mail queues, mail event bindings, dead-letter binding, and inactive future queues.
@@ -25,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added RabbitMQ Testcontainer coverage for outbox publisher delivery and unroutable-message retry behavior.
 - Added outbox claim-lease tests covering expired `PROCESSING` event reclaim and stale-claim result guards.
 - Added processed-message inbox tests covering first processing, duplicate skipping, and rollback on failed processing.
+- Added auth mail-event tests covering minimal outbox payloads and the absence of raw verification/reset token creation in auth mail request paths.
+- Added forgot-password event-routing and timing-equalizer tests, plus controller integration coverage that register writes auth mail outbox events without token-bearing payloads.
 
 ### CI
 - Replaced split SonarCloud Maven steps with a single `verify sonar-maven-plugin:sonar` invocation; added SonarCloud package cache and `GITHUB_TOKEN` env declaration.
@@ -38,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `JwtAuthenticationFilter` now rejects non-ACTIVE users (BANNED/SUSPENDED/DEACTIVATED) on every request rather than waiting for access-token expiry (AUTH-003).
 - Introduced `IpExtractor` with trusted-proxy whitelist (`app.security.trusted-proxy-cidrs`); `X-Forwarded-For` is honored only for proxies that match the whitelist (AUTH-004).
 - Dropped unused plaintext-credential columns (`access_token`, `refresh_token`, `token_expires_at`) from `oauth_accounts` via V19 migration (AUTH-005).
-- `forgotPassword` now runs on the async task executor to equalize response timing across unknown/inactive/active code paths; OAuth-only accounts (no local password) receive an informational email instead of a reset token (AUTH-006, AUTH-026).
+- `forgotPassword` keeps a generic response across unknown/inactive/active code paths; OAuth-only accounts (no local password) receive an informational mail event instead of a reset token (AUTH-006, AUTH-026).
 - Email-verification token failures now return `AUTH_VERIFY_TOKEN_INVALID` (400) without leaking internal exception messages; `GlobalExceptionHandler` no longer echoes `TokenNotFoundException`/`TokenExpiredException` messages to clients (AUTH-007).
 - `RateLimiterServiceImpl` now fails closed on Redis failures, denying requests rather than allowing brute-force traffic through an outage (AUTH-008).
 - `AuthRateLimitFilter` now covers all sensitive auth endpoints (register, login, refresh, forgot-password, reset-password, verify-email, resend-verify); per-method `@RateLimiter` annotations removed from `AuthController` in favor of the single Redis-backed filter (AUTH-009).
