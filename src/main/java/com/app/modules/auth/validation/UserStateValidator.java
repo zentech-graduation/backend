@@ -21,7 +21,7 @@ public class UserStateValidator {
 
     public void enforceEmailVerified(UserCredential credential) {
         if (!credential.isEmailVerified()) {
-            throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+            throw new AppException(ApiErrorCode.AUTH_EMAIL_NOT_VERIFIED);
         }
     }
 }

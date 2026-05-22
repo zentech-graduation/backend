@@ -269,13 +269,13 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void login_unverifiedEmail_throwsAccountInactive() {
+    void login_unverifiedEmail_throwsEmailNotVerified() {
         User u = activeUser();
         UserCredential cred = credential(u.getId(), "STORED-HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
-        doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE))
+        doThrow(new AppException(ApiErrorCode.AUTH_EMAIL_NOT_VERIFIED))
                 .when(userStateValidator)
                 .enforceEmailVerified(cred);
 
@@ -285,7 +285,7 @@ class AuthServiceImplTest {
                                         new LoginRequest(u.getEmail(), "password1"), stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+                .isEqualTo(ApiErrorCode.AUTH_EMAIL_NOT_VERIFIED);
     }
 
     @Test
@@ -533,6 +533,21 @@ class AuthServiceImplTest {
                         () ->
                                 service.resetPassword(
                                         new ResetPasswordRequest("ghost", "newPassword1")))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+        verify(refreshTokenService, never()).revokeAllForUser(any());
+    }
+
+    @Test
+    void resetPassword_expiredToken_throwsResetTokenInvalid() {
+        when(tokenService.consumePasswordResetToken(anyString()))
+                .thenThrow(new TokenExpiredException("expired"));
+
+        assertThatThrownBy(
+                        () ->
+                                service.resetPassword(
+                                        new ResetPasswordRequest("expired-token", "newPassword1")))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);

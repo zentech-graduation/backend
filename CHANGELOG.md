@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Forgot-password handling now records durable outbox events inside a short transaction and applies a configurable response-time floor after the transaction to reduce account-enumeration timing signals.
 
 ### Fixed
+- `UserStateValidator.enforceEmailVerified` now throws `AppException(AUTH_EMAIL_NOT_VERIFIED)` instead of `AUTH_ACCOUNT_INACTIVE`, giving callers a dedicated, distinguishable error code for the unverified-email case.
+- `AuthServiceImpl.resetPassword` catch clause extended to `TokenNotFoundException | TokenExpiredException` so an expired password-reset token is mapped to `AUTH_RESET_TOKEN_INVALID` (HTTP 400) rather than propagating as an unhandled exception, mirroring the `verifyEmail` flow.
 - Default async executor selection is explicit when scheduled outbox publishing is enabled.
 - RabbitMQ template mandatory publishing is enabled so unroutable outbox messages can be detected by publisher returns.
 - Outbox publisher now uses short transactional claim leases and per-event state commits instead of holding one batch transaction across RabbitMQ publisher confirms.

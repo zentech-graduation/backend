@@ -242,7 +242,7 @@ class AuthControllerIT {
                 postJson("/api/v1/auth/login", Map.of("email", email, "password", "password1"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(response.getBody().get("code")).isEqualTo("AUTH_ACCOUNT_INACTIVE");
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_EMAIL_NOT_VERIFIED");
     }
 
     @Test

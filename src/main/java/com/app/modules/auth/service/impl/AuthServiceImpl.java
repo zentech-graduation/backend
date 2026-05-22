@@ -310,7 +310,7 @@ public class AuthServiceImpl implements AuthService {
         UUID userId;
         try {
             userId = tokenService.consumePasswordResetToken(request.token());
-        } catch (TokenNotFoundException e) {
+        } catch (TokenNotFoundException | TokenExpiredException e) {
             throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
         }
 
