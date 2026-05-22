@@ -66,13 +66,13 @@ class UserStateValidatorTest {
     // --- enforceEmailVerified ---
 
     @Test
-    void enforceEmailVerified_unverifiedCredential_throwsAccountInactive() {
+    void enforceEmailVerified_unverifiedCredential_throwsEmailNotVerified() {
         UserCredential cred = credentialVerified(false);
 
         assertThatThrownBy(() -> validator.enforceEmailVerified(cred))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
+                .isEqualTo(ApiErrorCode.AUTH_EMAIL_NOT_VERIFIED);
     }
 
     @Test

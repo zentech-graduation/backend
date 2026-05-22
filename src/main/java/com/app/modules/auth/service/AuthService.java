@@ -16,8 +16,8 @@ import com.app.modules.auth.dto.response.AuthResponse;
 public interface AuthService {
 
     /**
-     * Registers a new user, dispatches the verification and welcome emails asynchronously. No
-     * session is issued — the user must verify their email before logging in.
+     * Registers a new user and records mail side-effect events for verification and welcome
+     * messages. No session is issued — the user must verify their email before logging in.
      *
      * @param request validated registration payload
      */
@@ -59,16 +59,16 @@ public interface AuthService {
     AuthResponse verifyEmail(String rawToken, HttpServletRequest httpRequest);
 
     /**
-     * Re-sends a fresh verification email if an account with the supplied email exists. Behaviour
-     * is silent when the address is unknown to avoid account enumeration.
+     * Records a fresh verification-mail request if an account with the supplied email exists.
+     * Behaviour is silent when the address is unknown to avoid account enumeration.
      *
      * @param email candidate email address
      */
     void resendVerification(String email);
 
     /**
-     * Triggers a password-reset flow if an account with the supplied email exists. Behaviour is
-     * silent when the address is unknown.
+     * Records a password-reset mail request if an account with the supplied email exists. Behaviour
+     * is silent when the address is unknown.
      *
      * @param request payload containing the email address
      */
@@ -76,7 +76,7 @@ public interface AuthService {
 
     /**
      * Consumes a password-reset token, replaces the password hash, revokes every active session for
-     * that user, and dispatches a security notification.
+     * that user, and records a security-notification mail event.
      *
      * @param request payload containing the raw token and the new password
      */

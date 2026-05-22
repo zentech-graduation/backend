@@ -37,13 +37,13 @@ public interface AuthApi {
     @Operation(
             summary = "Register a new user",
             description =
-                    "Creates a user account and dispatches a verification email. No tokens are"
-                            + " issued — the client must call /verify-email before logging in.",
+                    "Creates a user account and records verification/welcome mail events. No"
+                            + " tokens are issued — the client must call /verify-email before logging in.",
             security = {})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Account created — verification email dispatched",
+                description = "Account created — verification mail events recorded",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -216,13 +216,13 @@ public interface AuthApi {
             HttpServletRequest httpRequest);
 
     /**
-     * Re-issues a verification email when an account exists for the supplied address. Always
+     * Records a verification mail event when an account exists for the supplied address. Always
      * returns 200 to prevent account enumeration.
      */
     @Operation(
             summary = "Resend verification email",
             description =
-                    "Re-sends the email verification link. Always returns 200 to prevent account"
+                    "Records a verification mail event. Always returns 200 to prevent account"
                             + " enumeration.",
             security = {})
     @ApiResponses({
@@ -246,14 +246,14 @@ public interface AuthApi {
             @Valid @RequestBody ResendVerificationRequest request);
 
     /**
-     * Triggers a password-reset email when an account exists. Always returns 200 to prevent account
-     * enumeration.
+     * Records a password-reset mail event when an account exists. Always returns 200 to prevent
+     * account enumeration.
      */
     @Operation(
             summary = "Request password reset",
             description =
-                    "Sends a password-reset link to the supplied email. Always returns 200 to"
-                            + " prevent account enumeration.",
+                    "Records a password-reset mail event for the supplied email. Always returns"
+                            + " 200 to prevent account enumeration.",
             security = {})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
