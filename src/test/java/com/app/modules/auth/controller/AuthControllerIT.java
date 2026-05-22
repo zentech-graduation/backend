@@ -1,7 +1,7 @@
 package com.app.modules.auth.controller;
 
-import static com.app.common.config.rabbit.RabbitMqTopologyConfig.AUTH_EMAIL_VERIFICATION_REQUESTED_V1;
-import static com.app.common.config.rabbit.RabbitMqTopologyConfig.USER_REGISTERED_V1;
+import static com.app.modules.auth.messaging.AuthEventTypes.AUTH_EMAIL_VERIFICATION_REQUESTED_V1;
+import static com.app.modules.auth.messaging.AuthEventTypes.USER_REGISTERED_V1;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Method;

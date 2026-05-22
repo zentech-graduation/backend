@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Consumer inbox storage now records processed message IDs for idempotent RabbitMQ consumers.
 - Auth registration, verification resend, password reset, password changed, and OAuth-only reset flows now record mail side-effect events through the transactional outbox instead of sending mail directly.
 - Forgot-password handling now records durable outbox events inside a short transaction and applies a configurable response-time floor after the transaction to reduce account-enumeration timing signals.
+- Auth mail RabbitMQ consumer now processes `mail.queue` events with manual ack, idempotent inbox deduplication, bounded retry, and DLQ routing.
+- Synchronous Resend mail sender added for RabbitMQ consumers while keeping the existing async mail facade for non-consumer callers.
 
 ### Fixed
 - `UserStateValidator.enforceEmailVerified` now throws `AppException(AUTH_EMAIL_NOT_VERIFIED)` instead of `AUTH_ACCOUNT_INACTIVE`, giving callers a dedicated, distinguishable error code for the unverified-email case.
@@ -25,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Auth mail side-effect documentation now points to outbox events and the mail consumer token-generation flow; raw verification/reset tokens are no longer created in the auth request path.
 - Auth mail events now use `actorId = null` for unauthenticated verification resend and forgot-password requests while keeping `aggregateId` as the target user id.
+- Auth mail RabbitMQ bindings now live with the auth module event contracts instead of the shared RabbitMQ infrastructure config.
 
 ### Tests
 - Added RabbitMQ topology tests covering active mail queues, mail event bindings, dead-letter binding, and inactive future queues.
@@ -35,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added processed-message inbox tests covering first processing, duplicate skipping, and rollback on failed processing.
 - Added auth mail-event tests covering minimal outbox payloads and the absence of raw verification/reset token creation in auth mail request paths.
 - Added forgot-password event-routing and timing-equalizer tests, plus controller integration coverage that register writes auth mail outbox events without token-bearing payloads.
+- Added auth mail consumer unit and RabbitMQ Testcontainer coverage for successful delivery, duplicate skipping, transient retry, invalid payload DLQ routing, and DLQ publish failure requeue behavior.
 
 ### CI
 - Replaced split SonarCloud Maven steps with a single `verify sonar-maven-plugin:sonar` invocation; added SonarCloud package cache and `GITHUB_TOKEN` env declaration.

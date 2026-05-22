@@ -1,10 +1,10 @@
 package com.app.modules.auth.service.impl;
 
-import static com.app.common.config.rabbit.RabbitMqTopologyConfig.AUTH_EMAIL_VERIFICATION_REQUESTED_V1;
-import static com.app.common.config.rabbit.RabbitMqTopologyConfig.AUTH_OAUTH_ACCOUNT_NO_PASSWORD_V1;
-import static com.app.common.config.rabbit.RabbitMqTopologyConfig.AUTH_PASSWORD_CHANGED_V1;
-import static com.app.common.config.rabbit.RabbitMqTopologyConfig.AUTH_PASSWORD_RESET_REQUESTED_V1;
-import static com.app.common.config.rabbit.RabbitMqTopologyConfig.USER_REGISTERED_V1;
+import static com.app.modules.auth.messaging.AuthEventTypes.AUTH_EMAIL_VERIFICATION_REQUESTED_V1;
+import static com.app.modules.auth.messaging.AuthEventTypes.AUTH_OAUTH_ACCOUNT_NO_PASSWORD_V1;
+import static com.app.modules.auth.messaging.AuthEventTypes.AUTH_PASSWORD_CHANGED_V1;
+import static com.app.modules.auth.messaging.AuthEventTypes.AUTH_PASSWORD_RESET_REQUESTED_V1;
+import static com.app.modules.auth.messaging.AuthEventTypes.USER_REGISTERED_V1;
 
 import java.util.Map;
 import java.util.UUID;

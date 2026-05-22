@@ -12,10 +12,17 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import com.app.modules.auth.messaging.AuthEventTypes;
+import com.app.modules.auth.messaging.AuthMailRabbitBindingConfig;
+
 class RabbitMqTopologyConfigTest {
 
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner().withUserConfiguration(RabbitMqTopologyConfig.class);
+    private final ApplicationContextRunner authMailBindingContextRunner =
+            new ApplicationContextRunner()
+                    .withUserConfiguration(
+                            RabbitMqTopologyConfig.class, AuthMailRabbitBindingConfig.class);
 
     @Test
     void declaresOnlyMailQueuesAsActiveQueues() {
@@ -61,7 +68,7 @@ class RabbitMqTopologyConfigTest {
 
     @Test
     void bindsMailQueueToMailEventRoutingKeysOnly() {
-        contextRunner.run(
+        authMailBindingContextRunner.run(
                 context -> {
                     List<String> mailRoutingKeys =
                             context.getBeansOfType(Binding.class).values().stream()
@@ -78,7 +85,7 @@ class RabbitMqTopologyConfigTest {
 
                     assertThat(mailRoutingKeys)
                             .containsExactlyInAnyOrderElementsOf(
-                                    RabbitMqTopologyConfig.MAIL_EVENT_ROUTING_KEYS);
+                                    AuthEventTypes.MAIL_EVENT_ROUTING_KEYS);
                     assertThat(context.getBeansOfType(Binding.class).values())
                             .filteredOn(
                                     binding ->
@@ -104,7 +111,7 @@ class RabbitMqTopologyConfigTest {
 
                     assertThat(context.getBeansOfType(Binding.class).values())
                             .noneMatch(binding -> futureQueues.contains(binding.getDestination()));
-                    assertThat(context.getBeansOfType(Binding.class)).hasSize(6);
+                    assertThat(context.getBeansOfType(Binding.class)).hasSize(1);
                 });
     }
 
