@@ -58,6 +58,8 @@ These tables cannot be rebuilt from any other source if lost.
 | Revoked refresh tokens have `revoked_at` set to `NOW()` — they are not deleted | `TokenServiceImpl.revokeRefreshToken()` |
 | Email verification flow: record outbox event in the auth transaction → mail consumer generates token → store in Redis with TTL → send email link → verify on click | `AuthServiceImpl`, `AuthMailEventServiceImpl`, `TokenServiceImpl` |
 | Password reset flow: record outbox event after account lookup → mail consumer generates token → store in Redis with TTL → send email link → verify → update `password_hash` | `AuthServiceImpl`, `AuthMailEventServiceImpl`, `TokenServiceImpl` |
+| Auth mail event consumption is at-least-once: consumer validates the event envelope, deduplicates via `processed_messages`, generates Redis tokens only inside the consumer, sends mail synchronously, then acknowledges the RabbitMQ message | `AuthMailEventConsumer`, `AuthMailEventHandler`, `ProcessedMessageServiceImpl` |
+| Invalid auth mail event payloads are treated as permanent failures and routed to `mail.dlq`; temporary mail/Redis/DB failures use bounded retry before DLQ | `AuthMailEventConsumer` |
 | OAuth flow: look up `oauth_accounts` by `(provider, provider_id)`; create `users` + `user_credentials` + `oauth_account` row on first login | `CustomOidcUserService`, `OAuth2AuthenticationSuccessHandler` |
 | Revoked / expired access tokens are blacklisted in Redis for the remainder of their TTL | `TokenBlacklistServiceImpl` |
 | All auth endpoints are rate-limited via Redis sliding-window counters | `AuthRateLimitFilter`, `RateLimiterServiceImpl` |

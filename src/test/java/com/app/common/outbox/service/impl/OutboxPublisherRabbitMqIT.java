@@ -30,6 +30,7 @@ import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
 import com.app.common.outbox.repository.OutboxEventRepository;
 import com.app.common.outbox.service.OutboxPublisherService;
+import com.app.modules.auth.messaging.AuthEventTypes;
 import com.app.modules.mail.service.MailService;
 
 @SpringBootTest(
@@ -41,7 +42,8 @@ import com.app.modules.mail.service.MailService;
             "app.outbox.publisher.confirm-timeout=PT5S",
             "spring.rabbitmq.publisher-confirm-type=correlated",
             "spring.rabbitmq.publisher-returns=true",
-            "spring.rabbitmq.template.mandatory=true"
+            "spring.rabbitmq.template.mandatory=true",
+            "app.mail.consumer.enabled=false"
         })
 @Testcontainers
 class OutboxPublisherRabbitMqIT {
@@ -91,7 +93,7 @@ class OutboxPublisherRabbitMqIT {
 
     @Test
     void publishDueEvents_deliversRoutedMessageToMailQueueAndMarksPublished() {
-        OutboxEvent event = insertEvent(RabbitMqTopologyConfig.USER_REGISTERED_V1);
+        OutboxEvent event = insertEvent(AuthEventTypes.USER_REGISTERED_V1);
 
         int attempted = outboxPublisherService.publishDueEvents();
 
@@ -106,7 +108,7 @@ class OutboxPublisherRabbitMqIT {
         assertThat(message.getMessageProperties().getMessageId())
                 .isEqualTo(event.getEventId().toString());
         assertThat(message.getMessageProperties().getReceivedRoutingKey())
-                .isEqualTo(RabbitMqTopologyConfig.USER_REGISTERED_V1);
+                .isEqualTo(AuthEventTypes.USER_REGISTERED_V1);
         assertThat(persisted.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
         assertThat(persisted.getPublishedAt()).isNotNull();
         assertThat(persisted.getLastError()).isNull();
@@ -135,7 +137,7 @@ class OutboxPublisherRabbitMqIT {
         DomainEventEnvelope payload =
                 new DomainEventEnvelope(
                         eventId,
-                        RabbitMqTopologyConfig.USER_REGISTERED_V1,
+                        AuthEventTypes.USER_REGISTERED_V1,
                         now,
                         aggregateId,
                         "user",
@@ -146,7 +148,7 @@ class OutboxPublisherRabbitMqIT {
                         .eventId(eventId)
                         .aggregateType("user")
                         .aggregateId(aggregateId)
-                        .eventType(RabbitMqTopologyConfig.USER_REGISTERED_V1)
+                        .eventType(AuthEventTypes.USER_REGISTERED_V1)
                         .routingKey(routingKey)
                         .payload(payload)
                         .status(OutboxEventStatus.PENDING)
