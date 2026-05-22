@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.longThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -59,6 +60,7 @@ import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.auth.validation.UserStateValidator;
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailService;
 
@@ -77,6 +79,7 @@ class AuthServiceImplTest {
     @Mock private AuthMapper authMapper;
     @Mock private TokenBlacklistService tokenBlacklistService;
     @Mock private IpExtractor ipExtractor;
+    @Mock private UserStateValidator userStateValidator;
 
     private AuthServiceImpl service;
 
@@ -115,7 +118,8 @@ class AuthServiceImplTest {
                         mailProperties,
                         authMapper,
                         tokenBlacklistService,
-                        ipExtractor);
+                        ipExtractor,
+                        userStateValidator);
     }
 
     private MockHttpServletRequest stubRequest() {
@@ -130,7 +134,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmailAndDeletedAtIsNull("a@b.c")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
-        assertThatThrownBy(() -> service.register(req, stubRequest()))
+        assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
@@ -143,7 +147,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByUsernameAndDeletedAtIsNull("user1")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
-        assertThatThrownBy(() -> service.register(req, stubRequest()))
+        assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
@@ -151,7 +155,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void register_success_persistsUserCredentialSettingsAndIssuesSession() {
+    void register_success_persistsUserCredentialAndSettings() {
         UUID newId = UUID.randomUUID();
         when(userRepository.save(any(User.class)))
                 .thenAnswer(
@@ -162,17 +166,9 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode("password1")).thenReturn("HASH");
         when(tokenService.createEmailVerificationToken(newId)).thenReturn("verify-token");
-        when(jwtTokenProvider.generateAccessToken(eq(newId), eq("a@b.c"), eq("USER")))
-                .thenReturn("access-jwt");
-        when(refreshTokenService.issue(eq(newId), any(), any(), any())).thenReturn("refresh");
 
-        AuthResponse resp =
-                service.register(
-                        new RegisterRequest("user1", "a@b.c", "password1", null), stubRequest());
+        service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
 
-        assertThat(resp.accessToken()).isEqualTo("access-jwt");
-        assertThat(resp.refreshToken()).isEqualTo("refresh");
-        assertThat(resp.user().username()).isEqualTo("user1");
         verify(userRepository).save(any(User.class));
         verify(credentialRepository).save(any(UserCredential.class));
         verify(settingsRepository).save(any(UserSettings.class));
@@ -190,10 +186,8 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(anyString())).thenReturn("HASH");
         when(tokenService.createEmailVerificationToken(newId)).thenReturn("vf");
-        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("a");
-        when(refreshTokenService.issue(any(), any(), any(), any())).thenReturn("r");
 
-        service.register(new RegisterRequest("user1", "a@b.c", "password1", null), stubRequest());
+        service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
 
         verify(mailService, times(1)).sendEmailVerification(eq("a@b.c"), eq("user1"), anyString());
         verify(mailService, times(1)).sendWelcome(eq("a@b.c"), eq("user1"));
@@ -231,10 +225,12 @@ class AuthServiceImplTest {
     @Test
     void login_bannedUser_throwsAccountLocked() {
         User u = activeUser();
-        u.setStatus(UserStatus.BANNED);
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId()))
                 .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED))
+                .when(userStateValidator)
+                .enforceActive(u);
 
         assertThatThrownBy(
                         () -> service.login(new LoginRequest(u.getEmail(), "any"), stubRequest()))
@@ -246,10 +242,12 @@ class AuthServiceImplTest {
     @Test
     void login_suspendedUser_throwsAccountInactive() {
         User u = activeUser();
-        u.setStatus(UserStatus.SUSPENDED);
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId()))
                 .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE))
+                .when(userStateValidator)
+                .enforceActive(u);
 
         assertThatThrownBy(
                         () -> service.login(new LoginRequest(u.getEmail(), "any"), stubRequest()))
@@ -279,6 +277,9 @@ class AuthServiceImplTest {
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE))
+                .when(userStateValidator)
+                .enforceEmailVerified(cred);
 
         assertThatThrownBy(
                         () ->
@@ -316,17 +317,16 @@ class AuthServiceImplTest {
                 .thenReturn(new RefreshTokenService.RotationResult(newRawToken, userId));
         User u = activeUser();
         u.setId(userId);
-        u.setStatus(UserStatus.BANNED);
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+        doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED))
+                .when(userStateValidator)
+                .enforceActive(u);
 
         assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD"), stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
 
-        // Proves the revocation was requested. In a mock-based test we cannot assert
-        // revoked_at IS NOT NULL on the DB row directly — that invariant is covered by
-        // AuthControllerIT.refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked().
         verify(refreshTokenService).revoke(newRawToken);
     }
 
@@ -338,8 +338,10 @@ class AuthServiceImplTest {
                 .thenReturn(new RefreshTokenService.RotationResult(newRawToken, userId));
         User u = activeUser();
         u.setId(userId);
-        u.setStatus(UserStatus.SUSPENDED);
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
+        doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE))
+                .when(userStateValidator)
+                .enforceActive(u);
 
         assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD-SUSP"), stubRequest()))
                 .isInstanceOf(AppException.class)
@@ -609,7 +611,7 @@ class AuthServiceImplTest {
         when(tokenService.consumeEmailVerificationToken("BAD-TOKEN"))
                 .thenThrow(new TokenNotFoundException("not found"));
 
-        assertThatThrownBy(() -> service.verifyEmail("BAD-TOKEN"))
+        assertThatThrownBy(() -> service.verifyEmail("BAD-TOKEN", stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_VERIFY_TOKEN_INVALID);
@@ -621,24 +623,34 @@ class AuthServiceImplTest {
         when(tokenService.consumeEmailVerificationToken("EXPIRED-TOKEN"))
                 .thenThrow(new TokenExpiredException("expired"));
 
-        assertThatThrownBy(() -> service.verifyEmail("EXPIRED-TOKEN"))
+        assertThatThrownBy(() -> service.verifyEmail("EXPIRED-TOKEN", stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_VERIFY_TOKEN_INVALID);
     }
 
-    // FIX-7: verifyEmail — valid token completes successfully
+    // FIX-7: verifyEmail — valid token marks email verified and issues session
     @Test
-    void verifyEmail_validToken_marksEmailVerified() {
+    void verifyEmail_validToken_marksEmailVerifiedAndIssuesSession() {
         UUID userId = UUID.randomUUID();
         when(tokenService.consumeEmailVerificationToken("VALID-TOKEN")).thenReturn(userId);
         UserCredential cred = credential(userId, "HASH");
         when(credentialRepository.findByUserId(userId)).thenReturn(Optional.of(cred));
+        User user = activeUser();
+        user.setId(userId);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
+        when(jwtTokenProvider.generateAccessToken(eq(userId), anyString(), anyString()))
+                .thenReturn("ACCESS");
+        when(refreshTokenService.issue(eq(userId), any(), any(), any())).thenReturn("REFRESH");
 
-        assertThatCode(() -> service.verifyEmail("VALID-TOKEN")).doesNotThrowAnyException();
+        AuthResponse resp = service.verifyEmail("VALID-TOKEN", stubRequest());
 
+        assertThat(resp.accessToken()).isEqualTo("ACCESS");
+        assertThat(resp.refreshToken()).isEqualTo("REFRESH");
+        assertThat(resp.user().emailVerified()).isTrue();
         verify(credentialRepository).save(cred);
         assertThat(cred.isEmailVerified()).isTrue();
+        assertThat(cred.getEmailVerifiedAt()).isNotNull();
     }
 
     private static User activeUser() {

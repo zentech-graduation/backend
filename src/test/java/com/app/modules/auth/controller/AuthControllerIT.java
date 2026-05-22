@@ -110,10 +110,8 @@ class AuthControllerIT {
     @Test
     void refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked() {
         String email = uniqueEmail("refresh_banned");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_bnnd", email, "password1"));
-        String oldRefreshToken =
-                (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
+        Map<?, ?> sessionData = registerVerifyAndLogin("user_bnnd", email, "password1");
+        String oldRefreshToken = (String) sessionData.get("refreshToken");
 
         userRepository
                 .findByEmailAndDeletedAtIsNull(email)
@@ -147,10 +145,8 @@ class AuthControllerIT {
     @Test
     void refresh_suspendedUser_returns403AndOldTokenIsDurablyRevoked() {
         String email = uniqueEmail("refresh_susp");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_susp", email, "password1"));
-        String oldRefreshToken =
-                (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
+        Map<?, ?> sessionData = registerVerifyAndLogin("user_susp", email, "password1");
+        String oldRefreshToken = (String) sessionData.get("refreshToken");
 
         userRepository
                 .findByEmailAndDeletedAtIsNull(email)
@@ -180,18 +176,13 @@ class AuthControllerIT {
     }
 
     @Test
-    void register_validPayload_returns201WithTokens() {
+    void register_validPayload_returns201WithNoTokens() {
         String email = uniqueEmail("ok");
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/register", registerBody("user_ok", email, "password1"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
-                .asString()
-                .isNotBlank();
-        assertThat(((Map<?, ?>) response.getBody().get("data")).get("refreshToken"))
-                .asString()
-                .isNotBlank();
+        assertThat(response.getBody().get("data")).isNull();
     }
 
     @Test
@@ -279,9 +270,8 @@ class AuthControllerIT {
     @Test
     void refresh_validToken_returns200WithNewPair() {
         String email = uniqueEmail("refresh_ok");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_refr", email, "password1"));
-        String refresh = (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
+        Map<?, ?> sessionData = registerVerifyAndLogin("user_refr", email, "password1");
+        String refresh = (String) sessionData.get("refreshToken");
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/refresh", Map.of("refreshToken", refresh));
@@ -296,9 +286,7 @@ class AuthControllerIT {
     @Test
     void refresh_revokedToken_returns401() {
         String email = uniqueEmail("refresh_revoked");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_rrv", email, "password1"));
-        Map<?, ?> regData = (Map<?, ?>) reg.getBody().get("data");
+        Map<?, ?> regData = registerVerifyAndLogin("user_rrv", email, "password1");
         String refresh = (String) regData.get("refreshToken");
         String access = (String) regData.get("accessToken");
         postJsonWithAuth("/api/v1/auth/logout", Map.of("refreshToken", refresh), access);
@@ -313,9 +301,10 @@ class AuthControllerIT {
     @Test
     void refresh_alreadyUsedToken_returns401() {
         String email = uniqueEmail("refresh_used");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_rused", email, "password1"));
-        String firstRefresh = (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
+        String firstRefresh =
+                (String)
+                        registerVerifyAndLogin("user_rused", email, "password1")
+                                .get("refreshToken");
         // First rotation succeeds and revokes the original.
         postJson("/api/v1/auth/refresh", Map.of("refreshToken", firstRefresh));
 
@@ -330,9 +319,7 @@ class AuthControllerIT {
     @Test
     void logout_returns204() {
         String email = uniqueEmail("logout");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_lout", email, "password1"));
-        Map<?, ?> regData = (Map<?, ?>) reg.getBody().get("data");
+        Map<?, ?> regData = registerVerifyAndLogin("user_lout", email, "password1");
         String refresh = (String) regData.get("refreshToken");
         String access = (String) regData.get("accessToken");
 
@@ -345,9 +332,8 @@ class AuthControllerIT {
     @Test
     void logout_noAuthHeader_returns401() {
         String email = uniqueEmail("logout_noauth");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_lna", email, "password1"));
-        String refresh = (String) ((Map<?, ?>) reg.getBody().get("data")).get("refreshToken");
+        String refresh =
+                (String) registerVerifyAndLogin("user_lna", email, "password1").get("refreshToken");
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/logout", Map.of("refreshToken", refresh));
@@ -358,9 +344,7 @@ class AuthControllerIT {
     @Test
     void logout_validBearerToken_returns204() {
         String email = uniqueEmail("logout_auth");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_lauth", email, "password1"));
-        Map<?, ?> regData = (Map<?, ?>) reg.getBody().get("data");
+        Map<?, ?> regData = registerVerifyAndLogin("user_lauth", email, "password1");
         String refresh = (String) regData.get("refreshToken");
         String access = (String) regData.get("accessToken");
 
@@ -396,9 +380,8 @@ class AuthControllerIT {
     @Test
     void protectedEndpoint_validJwt_returns200() {
         String email = uniqueEmail("prot_ok");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_prot", email, "password1"));
-        String access = (String) ((Map<?, ?>) reg.getBody().get("data")).get("accessToken");
+        String access =
+                (String) registerVerifyAndLogin("user_prot", email, "password1").get("accessToken");
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/test/me", access);
 
@@ -408,9 +391,9 @@ class AuthControllerIT {
     @Test
     void protectedEndpoint_bannedUser_validAccessToken_returns401() {
         String email = uniqueEmail("prot_banned");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_prtbn", email, "password1"));
-        String access = (String) ((Map<?, ?>) reg.getBody().get("data")).get("accessToken");
+        String access =
+                (String)
+                        registerVerifyAndLogin("user_prtbn", email, "password1").get("accessToken");
 
         userRepository
                 .findByEmailAndDeletedAtIsNull(email)
@@ -487,11 +470,25 @@ class AuthControllerIT {
     }
 
     @Test
+    void verifyEmail_validToken_returns200WithTokens() {
+        String email = uniqueEmail("verify_ok");
+        postJson("/api/v1/auth/register", registerBody("user_vok", email, "password1"));
+        String token = captureLatestVerificationToken(email);
+
+        ResponseEntity<Map> response =
+                rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("accessToken")).asString().isNotBlank();
+        assertThat(data.get("refreshToken")).asString().isNotBlank();
+        assertThat(((Map<?, ?>) data.get("user")).get("emailVerified")).isEqualTo(true);
+    }
+
+    @Test
     void login_logout_reuseAccessToken_returns401() {
         String email = uniqueEmail("blacklist");
-        ResponseEntity<Map> reg =
-                postJson("/api/v1/auth/register", registerBody("user_bl", email, "password1"));
-        Map<?, ?> data = (Map<?, ?>) reg.getBody().get("data");
+        Map<?, ?> data = registerVerifyAndLogin("user_bl", email, "password1");
         String access = (String) data.get("accessToken");
         String refresh = (String) data.get("refreshToken");
 
@@ -660,6 +657,15 @@ class AuthControllerIT {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         return rest.exchange(path, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+    }
+
+    private Map<?, ?> registerVerifyAndLogin(String username, String email, String password) {
+        postJson("/api/v1/auth/register", registerBody(username, email, password));
+        String verToken = captureLatestVerificationToken(email);
+        rest.getForEntity("/api/v1/auth/verify-email?token=" + verToken, Map.class);
+        ResponseEntity<Map> login =
+                postJson("/api/v1/auth/login", Map.of("email", email, "password", password));
+        return (Map<?, ?>) login.getBody().get("data");
     }
 
     private String captureLatestVerificationToken(String email) {
