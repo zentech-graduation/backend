@@ -3,7 +3,7 @@ package com.app.common.security.user;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.app.modules.auth.entity.User;
+import com.app.modules.users.entity.User;
 
 /** Maps {@link User} entities to security-layer principals. */
 @Mapper(componentModel = "spring")
