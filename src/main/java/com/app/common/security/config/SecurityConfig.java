@@ -137,6 +137,7 @@ public class SecurityConfig {
                             configureAuthenticatedEndpoints(auth);
                             configureInfrastructureEndpoints(auth);
                             configureRoleBasedEndpoints(auth);
+                            configurePublicUsersEndpoints(auth);
                             auth.anyRequest().authenticated();
                         })
                 .addFilterBefore(
@@ -204,6 +205,14 @@ public class SecurityConfig {
                     auth) {
         auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN");
         auth.requestMatchers("/api/v1/moderator/**").hasAnyRole("MODERATOR", "ADMIN");
+    }
+
+    /** Permits unauthenticated access to public user profile lookups. */
+    private void configurePublicUsersEndpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers(HttpMethod.GET, ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID)
+                .permitAll();
     }
 
     @Bean

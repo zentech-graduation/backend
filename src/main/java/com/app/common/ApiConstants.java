@@ -34,6 +34,7 @@ public final class ApiConstants {
         public static final String BY_ID = "/{userId}";
         public static final String SEARCH = "/search";
         public static final String SUGGESTIONS = "/suggestions";
+        public static final String ME_SETTINGS = "/me/settings";
     }
 
     public static final class Posts {
