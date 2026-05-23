@@ -9,12 +9,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
-import com.app.modules.auth.entity.User;
-import com.app.modules.auth.enums.UserStatus;
-import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.MailSender;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
 
 /** Handles auth-owned mail events delivered from RabbitMQ. */
 @Component

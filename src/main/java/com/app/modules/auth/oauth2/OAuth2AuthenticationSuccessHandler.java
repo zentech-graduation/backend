@@ -20,10 +20,10 @@ import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.common.security.service.RefreshTokenService;
 import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.response.AuthResponse;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
+import com.app.modules.users.entity.User;
 
 import tools.jackson.databind.ObjectMapper;
 
