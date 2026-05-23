@@ -47,21 +47,21 @@ import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
 import com.app.modules.auth.dto.response.UserSummaryResponse;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
-import com.app.modules.auth.entity.UserSettings;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
 import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
-import com.app.modules.auth.repository.UserRepository;
-import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.entity.UserSettings;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.repository.UserSettingsRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {

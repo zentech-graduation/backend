@@ -10,10 +10,10 @@ import org.junit.jupiter.api.Test;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
 
 class UserStateValidatorTest {
 

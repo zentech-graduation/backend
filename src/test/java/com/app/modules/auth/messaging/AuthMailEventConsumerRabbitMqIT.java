@@ -29,11 +29,11 @@ import org.testcontainers.utility.DockerImageName;
 import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
-import com.app.modules.auth.entity.User;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
-import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.mail.service.MailSender;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
 
 @SpringBootTest(
         properties = {

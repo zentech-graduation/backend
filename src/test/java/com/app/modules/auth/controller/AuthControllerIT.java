@@ -51,10 +51,10 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.auth.entity.RefreshToken;
-import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.RefreshTokenRepository;
-import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 @SpringBootTest(
