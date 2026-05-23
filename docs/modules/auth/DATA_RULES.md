@@ -56,11 +56,14 @@ These tables cannot be rebuilt from any other source if lost.
 | Passwords are bcrypt-hashed before storage; plaintext is never stored | `AuthServiceImpl` |
 | JWT access tokens are stateless (not stored in DB); only refresh token hash is stored | `TokenServiceImpl` |
 | Revoked refresh tokens have `revoked_at` set to `NOW()` — they are not deleted | `TokenServiceImpl.revokeRefreshToken()` |
-| Email verification flow: generate token → store in Redis with TTL → send email link → verify on click | `TokenServiceImpl`, `AuthServiceImpl` |
-| Password reset flow: generate token → store in Redis with TTL → send email link → verify → update `password_hash` | `TokenServiceImpl`, `AuthServiceImpl` |
+| Email verification flow: record outbox event in the auth transaction → mail consumer generates token → store in Redis with TTL → send email link → verify on click | `AuthServiceImpl`, `AuthMailEventServiceImpl`, `TokenServiceImpl` |
+| Password reset flow: record outbox event after account lookup → mail consumer generates token → store in Redis with TTL → send email link → verify → update `password_hash` | `AuthServiceImpl`, `AuthMailEventServiceImpl`, `TokenServiceImpl` |
+| Auth mail event consumption is at-least-once: consumer validates the event envelope, deduplicates via `processed_messages`, generates Redis tokens only inside the consumer, sends mail synchronously, then acknowledges the RabbitMQ message | `AuthMailEventConsumer`, `AuthMailEventHandler`, `ProcessedMessageServiceImpl` |
+| Invalid auth mail event payloads are treated as permanent failures and routed to `mail.dlq`; temporary mail/Redis/DB failures use bounded retry before DLQ | `AuthMailEventConsumer` |
 | OAuth flow: look up `oauth_accounts` by `(provider, provider_id)`; create `users` + `user_credentials` + `oauth_account` row on first login | `CustomOidcUserService`, `OAuth2AuthenticationSuccessHandler` |
 | Revoked / expired access tokens are blacklisted in Redis for the remainder of their TTL | `TokenBlacklistServiceImpl` |
 | All auth endpoints are rate-limited via Redis sliding-window counters | `AuthRateLimitFilter`, `RateLimiterServiceImpl` |
+| Forgot-password response timing uses a configurable minimum duration after durable event recording to reduce account enumeration signal | `AuthServiceImpl`, `ForgotPasswordTimingEqualizer` |
 | A suspended or banned (`status != 'active'`) user is rejected at authentication | `AuthServiceImpl` |
 | Soft-deleted users (`deleted_at IS NOT NULL`) cannot authenticate | `AuthServiceImpl` |
 
@@ -83,7 +86,7 @@ These tables cannot be rebuilt from any other source if lost.
 | Dependency | Direction | Nature |
 |------------|-----------|--------|
 | `users` (self) | inbound | All other modules reference `users.id`; auth module owns the `users` table |
-| `mail` | outbound | Auth calls `MailService` to send verification and password-reset emails |
+| `mail` | outbound async | Auth records transactional outbox events; the mail consumer owns token generation for outbound verification/reset links |
 | `social` | none | Social graph is a separate module; auth has no direct dependency |
 
 ---

@@ -9,7 +9,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpHeaders;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -42,11 +41,11 @@ import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
+import com.app.modules.auth.service.AuthForgotPasswordEventService;
+import com.app.modules.auth.service.AuthMailEventService;
 import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
-import com.app.modules.mail.config.MailProperties;
-import com.app.modules.mail.service.MailService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -62,8 +61,9 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final PasswordEncoder passwordEncoder;
-    private final MailService mailService;
-    private final MailProperties mailProperties;
+    private final AuthMailEventService authMailEventService;
+    private final AuthForgotPasswordEventService authForgotPasswordEventService;
+    private final ForgotPasswordTimingEqualizer forgotPasswordTimingEqualizer;
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
     private final IpExtractor ipExtractor;
@@ -82,8 +82,9 @@ public class AuthServiceImpl implements AuthService {
             JwtTokenProvider jwtTokenProvider,
             JwtProperties jwtProperties,
             PasswordEncoder passwordEncoder,
-            MailService mailService,
-            MailProperties mailProperties,
+            AuthMailEventService authMailEventService,
+            AuthForgotPasswordEventService authForgotPasswordEventService,
+            ForgotPasswordTimingEqualizer forgotPasswordTimingEqualizer,
             AuthMapper authMapper,
             TokenBlacklistService tokenBlacklistService,
             IpExtractor ipExtractor,
@@ -96,8 +97,9 @@ public class AuthServiceImpl implements AuthService {
         this.jwtTokenProvider = jwtTokenProvider;
         this.jwtProperties = jwtProperties;
         this.passwordEncoder = passwordEncoder;
-        this.mailService = mailService;
-        this.mailProperties = mailProperties;
+        this.authMailEventService = authMailEventService;
+        this.authForgotPasswordEventService = authForgotPasswordEventService;
+        this.forgotPasswordTimingEqualizer = forgotPasswordTimingEqualizer;
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
         this.ipExtractor = ipExtractor;
@@ -149,14 +151,8 @@ public class AuthServiceImpl implements AuthService {
 
         settingsRepository.save(UserSettings.builder().userId(user.getId()).build());
 
-        String rawVerification = tokenService.createEmailVerificationToken(user.getId());
-        String verificationUrl =
-                mailProperties.getFrontendBaseUrl()
-                        + mailProperties.getVerifyEmailPath()
-                        + "?token="
-                        + rawVerification;
-        mailService.sendEmailVerification(user.getEmail(), displayName, verificationUrl);
-        mailService.sendWelcome(user.getEmail(), displayName);
+        authMailEventService.publishUserRegistered(user);
+        authMailEventService.publishEmailVerificationRequested(user, user.getId());
     }
 
     @Override
@@ -295,46 +291,17 @@ public class AuthServiceImpl implements AuthService {
             return;
         }
 
-        String rawVerification = tokenService.createEmailVerificationToken(user.getId());
-        String verificationUrl =
-                mailProperties.getFrontendBaseUrl()
-                        + mailProperties.getVerifyEmailPath()
-                        + "?token="
-                        + rawVerification;
-        mailService.sendEmailVerification(
-                user.getEmail(), resolveDisplayName(user), verificationUrl);
+        authMailEventService.publishEmailVerificationRequested(user, null);
     }
 
-    // @Async equalizes response timing across the three code paths (unknown email,
-    // non-ACTIVE status, ACTIVE) — the controller returns immediately and all
-    // DB/mail work happens on the task executor thread.
     @Override
-    @Async
-    @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
-        Optional<User> userOpt = userRepository.findByEmailAndDeletedAtIsNull(request.email());
-        if (userOpt.isEmpty()) {
-            return;
+        long startNanos = System.nanoTime();
+        try {
+            authForgotPasswordEventService.recordForgotPasswordRequest(request.email());
+        } finally {
+            forgotPasswordTimingEqualizer.equalizeFrom(startNanos);
         }
-        User user = userOpt.get();
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            return;
-        }
-
-        Optional<UserCredential> cred = credentialRepository.findByUserId(user.getId());
-        if (cred.isEmpty() || cred.get().getPasswordHash() == null) {
-            // OAuth-only account — send informational email, do not issue reset token
-            mailService.sendOAuthAccountNoPassword(user.getEmail(), resolveDisplayName(user));
-            return;
-        }
-
-        String rawToken = tokenService.createPasswordResetToken(user.getId());
-        String resetUrl =
-                mailProperties.getFrontendBaseUrl()
-                        + mailProperties.getResetPasswordPath()
-                        + "?token="
-                        + rawToken;
-        mailService.sendPasswordReset(user.getEmail(), resolveDisplayName(user), resetUrl);
     }
 
     @Override
@@ -343,7 +310,7 @@ public class AuthServiceImpl implements AuthService {
         UUID userId;
         try {
             userId = tokenService.consumePasswordResetToken(request.token());
-        } catch (TokenNotFoundException e) {
+        } catch (TokenNotFoundException | TokenExpiredException e) {
             throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
         }
 
@@ -366,7 +333,7 @@ public class AuthServiceImpl implements AuthService {
 
         refreshTokenService.revokeAllForUser(userId);
 
-        mailService.sendPasswordChanged(user.getEmail(), resolveDisplayName(user));
+        authMailEventService.publishPasswordChanged(user);
     }
 
     private AuthResponse issueSession(
@@ -386,11 +353,5 @@ public class AuthServiceImpl implements AuthService {
                 jwtProperties.accessTokenTtl(),
                 AuthResponse.BEARER,
                 authMapper.toUserSummaryResponse(user, emailVerified));
-    }
-
-    private String resolveDisplayName(User user) {
-        return StringUtils.hasText(user.getDisplayName())
-                ? user.getDisplayName()
-                : user.getUsername();
     }
 }

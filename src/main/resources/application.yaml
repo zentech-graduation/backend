@@ -58,6 +58,10 @@ spring:
 
 app:
   base-url: ${APP_BASE_URL}
+  auth:
+    forgot-password:
+      min-response-time: ${AUTH_FORGOT_PASSWORD_MIN_RESPONSE_TIME:200ms}
+      max-jitter: ${AUTH_FORGOT_PASSWORD_MAX_JITTER:50ms}
   outbox:
     publisher:
       enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
@@ -71,6 +75,13 @@ app:
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_1:PT10S}
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_2:PT30S}
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_3:PT60S}
+  messaging:
+    consumer:
+      max-attempts: ${RABBIT_CONSUMER_MAX_ATTEMPTS:3}
+      retry-backoffs:
+        - ${RABBIT_CONSUMER_RETRY_BACKOFF_1:PT10S}
+        - ${RABBIT_CONSUMER_RETRY_BACKOFF_2:PT30S}
+        - ${RABBIT_CONSUMER_RETRY_BACKOFF_3:PT60S}
   security:
     cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET}
   jwt:
@@ -82,9 +93,13 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   mail:
+    consumer:
+      enabled: ${MAIL_CONSUMER_ENABLED:false}
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
+    app-name: ${MAIL_APP_NAME}
     reset-password-path: ${MAIL_RESET_PASSWORD_PATH:/reset-password}
+    verify-email-path: ${MAIL_VERIFY_EMAIL_PATH:/verify-email}
     frontend-base-url: ${FRONTEND_BASE_URL}
   rate-limit:
     endpoint-rules:
