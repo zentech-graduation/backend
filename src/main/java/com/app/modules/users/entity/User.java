@@ -1,4 +1,4 @@
-package com.app.modules.auth.entity;
+package com.app.modules.users.entity;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -14,10 +14,10 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import com.app.modules.auth.converter.UserRoleConverter;
-import com.app.modules.auth.converter.UserStatusConverter;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
+import com.app.modules.users.converter.UserRoleConverter;
+import com.app.modules.users.converter.UserStatusConverter;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -30,7 +30,7 @@ import lombok.Setter;
  *
  * <p>Maps to the {@code users} table. The denormalized counter columns ({@code follower_count},
  * {@code following_count}, {@code post_count}) are maintained by Postgres triggers (V16) and are
- * intentionally not mapped here to prevent application code from corrupting them.
+ * intentionally marked {@code insertable = false, updatable = false}.
  */
 @Entity
 @Table(name = "users")
@@ -77,6 +77,18 @@ public class User {
 
     @Column(name = "is_verified", nullable = false)
     private boolean isVerified;
+
+    /** Maintained exclusively by Postgres trigger {@code trg_follow_counts} (V16). */
+    @Column(name = "follower_count", insertable = false, updatable = false)
+    private int followerCount;
+
+    /** Maintained exclusively by Postgres trigger {@code trg_follow_counts} (V16). */
+    @Column(name = "following_count", insertable = false, updatable = false)
+    private int followingCount;
+
+    /** Maintained exclusively by Postgres trigger {@code trg_post_count} (V16). */
+    @Column(name = "post_count", insertable = false, updatable = false)
+    private int postCount;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

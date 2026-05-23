@@ -1,9 +1,9 @@
-package com.app.modules.auth.converter;
+package com.app.modules.users.converter;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 
-import com.app.modules.auth.enums.UserRole;
+import com.app.modules.users.enums.UserRole;
 
 /**
  * Bridges the uppercase Java {@link UserRole} enum to the lowercase Postgres {@code user_role}
