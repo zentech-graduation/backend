@@ -1,10 +1,8 @@
 package com.app.modules.social.controller;
 
-
 import java.util.List;
 import java.util.UUID;
 
-import com.app.common.security.util.SecurityUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.app.common.ApiConstants;
 import com.app.common.base.BaseController;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.security.util.SecurityUtils;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 import com.app.modules.social.dto.response.SocialUserSummaryResponse;
@@ -63,14 +62,16 @@ public class SocialController extends BaseController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Approve a pending follow request")
     public void approveFollowRequest(@PathVariable UUID requesterId) {
-        socialService.respondToFollowRequest(SecurityUtils.getCurrentUserId(), requesterId, "approve");
+        socialService.respondToFollowRequest(
+                SecurityUtils.getCurrentUserId(), requesterId, "approve");
     }
 
     @PatchMapping("/follow-requests/{requesterId}/reject")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Reject a pending follow request")
     public void rejectFollowRequest(@PathVariable UUID requesterId) {
-        socialService.respondToFollowRequest(SecurityUtils.getCurrentUserId(), requesterId, "reject");
+        socialService.respondToFollowRequest(
+                SecurityUtils.getCurrentUserId(), requesterId, "reject");
     }
 
     @PostMapping("/block/{targetUserId}")
