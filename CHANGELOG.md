@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `POST /api/v1/auth/oauth2/exchange` back-channel endpoint: redeems a one-time opaque exchange code for a standard access/refresh token pair; rate-limited via `lowTraffic` Resilience4j instance and Redis sliding-window filter.
+- `OAuth2ExchangeCodeService` with a Redis-backed implementation that stores 32-byte hex exchange codes under `auth:oauth2:exchange:{code}` (TTL 120 s) and consumes them atomically via a GET-then-DEL Lua script.
+- `OAuth2ExchangeRequest` DTO with `@Schema` annotations for the new exchange endpoint.
+- `AUTH_OAUTH2_EXCHANGE_CODE_INVALID` error code (HTTP 400) returned when an exchange code is absent or expired.
+
+### Changed
+- `OAuth2AuthenticationSuccessHandler` no longer writes tokens into the callback response body; instead generates an exchange code and redirects the browser to `{frontendBaseUrl}/oauth2/callback?code={code}`, eliminating token exposure in the browser redirect (resolves AUTH-012).
+- `AuthService` extended with `exchangeOAuth2Code` to support the new back-channel exchange flow.
+
+### Security
+- Resolved AUTH-012 (CWE-598, MEDIUM): OAuth2 tokens are no longer delivered through the browser redirect. The success handler now issues a short-lived opaque exchange code and completes the handshake via the authenticated back-channel `POST /api/v1/auth/oauth2/exchange` endpoint.
+
+### Added
 - RabbitMQ topology now declares the `social.events` topic exchange, `social.events.dlx`, `mail.queue`, and `mail.dlq` for mail side-effect events only.
 - RabbitMQ environment variables are documented in the environment template with publisher confirms and returns enabled.
 - Transactional outbox storage now records versioned domain event envelopes in PostgreSQL before RabbitMQ publishing.
