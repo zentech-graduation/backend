@@ -26,8 +26,6 @@ import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
 import com.app.modules.auth.service.AuthService;
 
-import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
-
 /** HTTP surface for email + password authentication flows. */
 @RestController
 public class AuthController extends BaseController implements AuthApi {
@@ -122,7 +120,6 @@ public class AuthController extends BaseController implements AuthApi {
     /** Redeems a short-lived OAuth2 exchange code for an access/refresh token pair. */
     @Override
     @PostMapping(ApiConstants.Auth.OAUTH2_EXCHANGE)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AuthResponse>> exchangeOAuth2Code(
             @Valid @RequestBody OAuth2ExchangeRequest request, HttpServletRequest httpRequest) {
         AuthResponse body = authService.exchangeOAuth2Code(request, httpRequest);
