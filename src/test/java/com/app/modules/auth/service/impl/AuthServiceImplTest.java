@@ -54,6 +54,7 @@ import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
 import com.app.modules.users.entity.User;
@@ -80,6 +81,7 @@ class AuthServiceImplTest {
     @Mock private TokenBlacklistService tokenBlacklistService;
     @Mock private IpExtractor ipExtractor;
     @Mock private UserStateValidator userStateValidator;
+    @Mock private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
     private AuthServiceImpl service;
 
@@ -118,7 +120,8 @@ class AuthServiceImplTest {
                         authMapper,
                         tokenBlacklistService,
                         ipExtractor,
-                        userStateValidator);
+                        userStateValidator,
+                        oauth2ExchangeCodeService);
     }
 
     private MockHttpServletRequest stubRequest() {
@@ -130,7 +133,7 @@ class AuthServiceImplTest {
 
     @Test
     void register_duplicateEmail_throwsConflict() {
-        when(userRepository.existsByEmailAndDeletedAtIsNull("a@b.c")).thenReturn(true);
+        when(userRepository.existsByEmail("a@b.c")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
         assertThatThrownBy(() -> service.register(req))
@@ -142,8 +145,8 @@ class AuthServiceImplTest {
 
     @Test
     void register_duplicateUsername_throwsConflict() {
-        when(userRepository.existsByEmailAndDeletedAtIsNull(anyString())).thenReturn(false);
-        when(userRepository.existsByUsernameAndDeletedAtIsNull("user1")).thenReturn(true);
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(userRepository.existsByUsername("user1")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
         assertThatThrownBy(() -> service.register(req))

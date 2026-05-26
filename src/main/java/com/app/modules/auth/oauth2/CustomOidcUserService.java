@@ -97,16 +97,22 @@ public class CustomOidcUserService extends OidcUserService {
                             .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
             userStateValidator.enforceActive(user);
         } else {
-            Optional<User> existingByEmail = userRepository.findByEmailAndDeletedAtIsNull(email);
+            Optional<User> existingByEmail = userRepository.findByEmail(email);
 
             if (existingByEmail.isPresent()) {
+                User found = existingByEmail.get();
+                // A soft-deleted account retains its email (DB UNIQUE constraint is table-wide).
+                // Silently creating a new account would hit the constraint; surface a clear error.
+                if (found.getDeletedAt() != null) {
+                    throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
+                }
                 // Refuse to link an OAuth identity to a pre-existing local account unless the
                 // IdP confirms the email is verified. Without this gate, a hostile or
                 // misconfigured IdP could be used to take over any account by email.
                 if (!Boolean.TRUE.equals(oidcUser.getEmailVerified())) {
                     throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
                 }
-                user = existingByEmail.get();
+                user = found;
                 userStateValidator.enforceActive(user);
             } else {
                 user = createNewOAuthUser(email, displayName, avatarUrl);
@@ -177,18 +183,18 @@ public class CustomOidcUserService extends OidcUserService {
     }
 
     private String resolveUniqueUsername(String base) {
-        if (!userRepository.existsByUsernameAndDeletedAtIsNull(base)) {
+        if (!userRepository.existsByUsername(base)) {
             return base;
         }
         for (int i = 2; i <= MAX_USERNAME_ATTEMPTS; i++) {
             String candidate = base + "_" + i;
-            if (!userRepository.existsByUsernameAndDeletedAtIsNull(candidate)) {
+            if (!userRepository.existsByUsername(candidate)) {
                 return candidate;
             }
         }
         for (int i = 0; i < 5; i++) {
             String candidate = base + "_" + (1000 + ThreadLocalRandom.current().nextInt(9000));
-            if (!userRepository.existsByUsernameAndDeletedAtIsNull(candidate)) {
+            if (!userRepository.existsByUsername(candidate)) {
                 return candidate;
             }
         }

@@ -26,6 +26,7 @@ import com.app.common.security.service.TokenBlacklistService;
 import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
+import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
@@ -38,6 +39,7 @@ import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
 import com.app.modules.auth.service.AuthService;
+import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
 import com.app.modules.users.entity.User;
@@ -68,6 +70,7 @@ public class AuthServiceImpl implements AuthService {
     private final TokenBlacklistService tokenBlacklistService;
     private final IpExtractor ipExtractor;
     private final UserStateValidator userStateValidator;
+    private final OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -88,7 +91,8 @@ public class AuthServiceImpl implements AuthService {
             AuthMapper authMapper,
             TokenBlacklistService tokenBlacklistService,
             IpExtractor ipExtractor,
-            UserStateValidator userStateValidator) {
+            UserStateValidator userStateValidator,
+            OAuth2ExchangeCodeService oauth2ExchangeCodeService) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -104,6 +108,7 @@ public class AuthServiceImpl implements AuthService {
         this.tokenBlacklistService = tokenBlacklistService;
         this.ipExtractor = ipExtractor;
         this.userStateValidator = userStateValidator;
+        this.oauth2ExchangeCodeService = oauth2ExchangeCodeService;
     }
 
     @PostConstruct
@@ -117,10 +122,10 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void register(RegisterRequest request) {
-        if (userRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
+        if (userRepository.existsByEmail(request.email())) {
             throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
         }
-        if (userRepository.existsByUsernameAndDeletedAtIsNull(request.username())) {
+        if (userRepository.existsByUsername(request.username())) {
             throw new AppException(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
         }
 
@@ -334,6 +339,32 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenService.revokeAllForUser(userId);
 
         authMailEventService.publishPasswordChanged(user);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse exchangeOAuth2Code(
+            OAuth2ExchangeRequest request, HttpServletRequest httpRequest) {
+        UUID userId = oauth2ExchangeCodeService.consumeExchangeCode(request.code());
+
+        User user =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(userId)
+                        .orElseThrow(
+                                () ->
+                                        new AppException(
+                                                ApiErrorCode.AUTH_OAUTH2_EXCHANGE_CODE_INVALID));
+
+        userStateValidator.enforceActive(user);
+
+        boolean emailVerified =
+                credentialRepository
+                        .findByUserId(user.getId())
+                        .map(UserCredential::isEmailVerified)
+                        // OAuth-authenticated users have their email verified by the IdP.
+                        .orElse(true);
+
+        return issueSession(user, emailVerified, httpRequest);
     }
 
     private AuthResponse issueSession(

@@ -14,6 +14,7 @@ import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
+import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResendVerificationRequest;
@@ -314,4 +315,46 @@ public interface AuthApi {
     @PostMapping(ApiConstants.Auth.RESET_PASSWORD)
     ResponseEntity<ApiResponse<Void>> resetPassword(
             @Valid @RequestBody ResetPasswordRequest request);
+
+    /** Redeems a short-lived OAuth2 exchange code for an access/refresh token pair. */
+    @Operation(
+            summary = "Exchange OAuth2 code for tokens",
+            description =
+                    "Consumes the one-time exchange code issued by the OAuth2 success handler and"
+                            + " returns a standard access/refresh token pair. The code is valid for"
+                            + " 120 seconds and is deleted on first use.",
+            security = {})
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Exchange successful — access + refresh tokens returned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AuthResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Exchange code invalid or expired",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "422",
+                description = "Validation failure",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping(ApiConstants.Auth.OAUTH2_EXCHANGE)
+    ResponseEntity<ApiResponse<AuthResponse>> exchangeOAuth2Code(
+            @Valid @RequestBody OAuth2ExchangeRequest request, HttpServletRequest httpRequest);
 }

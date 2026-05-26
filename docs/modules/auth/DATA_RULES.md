@@ -29,6 +29,7 @@ These tables cannot be rebuilt from any other source if lost.
 | Password reset token | Redis | Cannot rebuild — must re-send | TTL-based expiry in Redis |
 | Token blacklist entries | Redis | Cannot rebuild — revoke all active tokens as failsafe | TTL tied to JWT access token lifetime |
 | Rate-limit counters | Redis | Rebuild by resetting (no data loss consequence) | Request arrival |
+| OAuth2 exchange code | Redis (`auth:oauth2:exchange:{code}`) | Cannot rebuild — must re-initiate OAuth2 flow | TTL 120 s |
 
 ---
 
@@ -61,6 +62,8 @@ These tables cannot be rebuilt from any other source if lost.
 | Auth mail event consumption is at-least-once: consumer validates the event envelope, deduplicates via `processed_messages`, generates Redis tokens only inside the consumer, sends mail synchronously, then acknowledges the RabbitMQ message | `AuthMailEventConsumer`, `AuthMailEventHandler`, `ProcessedMessageServiceImpl` |
 | Invalid auth mail event payloads are treated as permanent failures and routed to `mail.dlq`; temporary mail/Redis/DB failures use bounded retry before DLQ | `AuthMailEventConsumer` |
 | OAuth flow: look up `oauth_accounts` by `(provider, provider_id)`; create `users` + `user_credentials` + `oauth_account` row on first login | `CustomOidcUserService`, `OAuth2AuthenticationSuccessHandler` |
+| OAuth2 exchange flow: on success, generate a 32-byte hex exchange code, store it in Redis (`auth:oauth2:exchange:{code}`, TTL 120 s, value = userId), redirect browser to `{frontendBaseUrl}/oauth2/callback?code={code}`; the exchange endpoint atomically consumes the code (GET-then-DEL Lua script) and issues a token pair | `OAuth2AuthenticationSuccessHandler`, `OAuth2ExchangeCodeServiceImpl`, `AuthServiceImpl.exchangeOAuth2Code` |
+| OAuth2 exchange codes are one-time use; the atomic Lua consume script prevents concurrent redemption from succeeding twice | `OAuth2ExchangeCodeServiceImpl` |
 | Revoked / expired access tokens are blacklisted in Redis for the remainder of their TTL | `TokenBlacklistServiceImpl` |
 | All auth endpoints are rate-limited via Redis sliding-window counters | `AuthRateLimitFilter`, `RateLimiterServiceImpl` |
 | Forgot-password response timing uses a configurable minimum duration after durable event recording to reduce account enumeration signal | `AuthServiceImpl`, `ForgotPasswordTimingEqualizer` |
@@ -93,21 +96,4 @@ These tables cannot be rebuilt from any other source if lost.
 
 ## Known Security Gaps
 
-### AUTH-012 — OAuth2 callback delivers tokens in response body (deferred)
-
-The OAuth2 success handler currently writes the access and refresh token pair
-directly into the HTTP response body at the callback URL
-(`/api/v1/auth/oauth2/callback/{provider}`). This means tokens are delivered
-via a browser GET response, leaving the authorization code and state parameters
-in browser history.
-
-**Deferred because:** the front-end OAuth2 redirect integration is not yet
-implemented. A `POST /api/v1/auth/oauth2/exchange` endpoint is declared in
-`ApiConstants.Auth.OAUTH2_EXCHANGE` for the future PKCE back-channel exchange.
-
-**Resolution path:** when the front-end is wired, implement the exchange
-endpoint and change `OAuth2AuthenticationSuccessHandler` to redirect to the
-SPA route with tokens in the URL fragment, or issue a short-lived exchange code
-and complete the handshake via the back-channel endpoint.
-
-**CWE:** CWE-598. **Severity:** MEDIUM. **Priority:** P3.
+_No open gaps in this module._

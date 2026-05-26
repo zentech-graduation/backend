@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
+import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
@@ -81,4 +82,20 @@ public interface AuthService {
      * @param request payload containing the raw token and the new password
      */
     void resetPassword(ResetPasswordRequest request);
+
+    /**
+     * Consumes a short-lived OAuth2 exchange code and issues an access/refresh token pair for the
+     * resolved user.
+     *
+     * <p>The exchange code is deleted atomically on first use so it cannot be redeemed twice. The
+     * returned token pair is identical in structure to the one returned by the login endpoint.
+     *
+     * @param request payload containing the raw exchange code
+     * @param httpRequest underlying servlet request, used to capture device metadata
+     * @return access + refresh tokens with the authenticated user summary
+     * @throws com.app.common.exception.AppException with {@link
+     *     com.app.common.enums.ApiErrorCode#AUTH_OAUTH2_EXCHANGE_CODE_INVALID} when the code is
+     *     absent or expired
+     */
+    AuthResponse exchangeOAuth2Code(OAuth2ExchangeRequest request, HttpServletRequest httpRequest);
 }
