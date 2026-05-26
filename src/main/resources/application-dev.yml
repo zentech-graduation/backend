@@ -55,3 +55,6 @@ app:
       "[/api/v1/auth/verify-email/resend]":
         max-attempts: 50
         window-seconds: 300
+      "[/api/v1/auth/oauth2/exchange]":
+        max-attempts: 10
+        window-seconds: 60
