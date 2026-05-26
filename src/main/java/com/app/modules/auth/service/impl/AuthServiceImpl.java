@@ -122,10 +122,10 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void register(RegisterRequest request) {
-        if (userRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
+        if (userRepository.existsByEmail(request.email())) {
             throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
         }
-        if (userRepository.existsByUsernameAndDeletedAtIsNull(request.username())) {
+        if (userRepository.existsByUsername(request.username())) {
             throw new AppException(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
         }
 

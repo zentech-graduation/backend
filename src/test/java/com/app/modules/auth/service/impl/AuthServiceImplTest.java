@@ -133,7 +133,7 @@ class AuthServiceImplTest {
 
     @Test
     void register_duplicateEmail_throwsConflict() {
-        when(userRepository.existsByEmailAndDeletedAtIsNull("a@b.c")).thenReturn(true);
+        when(userRepository.existsByEmail("a@b.c")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
         assertThatThrownBy(() -> service.register(req))
@@ -145,8 +145,8 @@ class AuthServiceImplTest {
 
     @Test
     void register_duplicateUsername_throwsConflict() {
-        when(userRepository.existsByEmailAndDeletedAtIsNull(anyString())).thenReturn(false);
-        when(userRepository.existsByUsernameAndDeletedAtIsNull("user1")).thenReturn(true);
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(userRepository.existsByUsername("user1")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
         assertThatThrownBy(() -> service.register(req))

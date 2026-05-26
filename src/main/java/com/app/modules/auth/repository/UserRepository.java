@@ -20,4 +20,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByEmailAndDeletedAtIsNull(String email);
 
     boolean existsByUsernameAndDeletedAtIsNull(String username);
+
+    // Table-wide checks — used for uniqueness validation consistent with DB UNIQUE constraints
+    // that have no partial index excluding soft-deleted rows.
+    Optional<User> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+
+    boolean existsByUsername(String username);
 }

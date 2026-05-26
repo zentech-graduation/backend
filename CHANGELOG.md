@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Registration now rejects an email or username that belongs to a soft-deleted account with a 409 domain error instead of propagating a database unique-constraint violation as a 500.
+- OAuth2 sign-in no longer attempts to create a new account when the provider email matches a soft-deleted user; a 409 domain error is returned instead.
+- Username generation for new OAuth2 users now checks the full `users` table (not just non-deleted rows), consistent with the table-wide `UNIQUE` constraint on `users.username`.
+
 ### Added
+- `UserRepository` exposes table-wide `existsByEmail`, `existsByUsername`, and `findByEmail` methods aligned with the database `UNIQUE` constraints that have no soft-delete partial index.
 - `POST /api/v1/auth/oauth2/exchange` back-channel endpoint: redeems a one-time opaque exchange code for a standard access/refresh token pair; rate-limited via `lowTraffic` Resilience4j instance and Redis sliding-window filter.
 - `OAuth2ExchangeCodeService` with a Redis-backed implementation that stores 32-byte hex exchange codes under `auth:oauth2:exchange:{code}` (TTL 120 s) and consumes them atomically via a GET-then-DEL Lua script.
 - `OAuth2ExchangeRequest` DTO with `@Schema` annotations for the new exchange endpoint.
