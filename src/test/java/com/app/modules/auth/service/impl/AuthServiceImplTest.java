@@ -60,6 +60,7 @@ import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
 
@@ -80,6 +81,7 @@ class AuthServiceImplTest {
     @Mock private TokenBlacklistService tokenBlacklistService;
     @Mock private IpExtractor ipExtractor;
     @Mock private UserStateValidator userStateValidator;
+    @Mock private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
     private AuthServiceImpl service;
 
@@ -118,7 +120,8 @@ class AuthServiceImplTest {
                         authMapper,
                         tokenBlacklistService,
                         ipExtractor,
-                        userStateValidator);
+                        userStateValidator,
+                        oauth2ExchangeCodeService);
     }
 
     private MockHttpServletRequest stubRequest() {
