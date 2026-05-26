@@ -9,9 +9,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.mail.config.MailProperties;
+import com.app.modules.users.entity.User;
 
 /**
  * Bridges a successful Google sign-in to the frontend back-channel exchange flow.
