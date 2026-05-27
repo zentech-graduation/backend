@@ -46,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Forgot-password handling now records durable outbox events inside a short transaction and applies a configurable response-time floor after the transaction to reduce account-enumeration timing signals.
 - Auth mail RabbitMQ consumer now processes `mail.queue` events with manual ack, idempotent inbox deduplication, bounded retry, and DLQ routing.
 - Synchronous Resend mail sender added for RabbitMQ consumers while keeping the existing async mail facade for non-consumer callers.
+- Social follow endpoint now creates accepted follows for public accounts, pending follow requests for private accounts, and records follow events through the transactional outbox.
 
 ### Fixed
 - `UserMapper.toProfileResponse` and `toPublicProfileResponse` now correctly map `isPrivate` and `isVerified` from the `User` entity; previously, MapStruct's JavaBeans convention stripped the `is` prefix from the boolean getter names (`isPrivate()` → property `private`, `isVerified()` → property `verified`), which did not match the record constructor parameter names (`isPrivate`, `isVerified`), causing both fields to silently default to `false` in every response.
@@ -72,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added auth mail-event tests covering minimal outbox payloads and the absence of raw verification/reset token creation in auth mail request paths.
 - Added forgot-password event-routing and timing-equalizer tests, plus controller integration coverage that register writes auth mail outbox events without token-bearing payloads.
 - Added auth mail consumer unit and RabbitMQ Testcontainer coverage for successful delivery, duplicate skipping, transient retry, invalid payload DLQ routing, and DLQ publish failure requeue behavior.
+- Added social follow service, outbox event, repository, and trigger-counter coverage.
 
 ### CI
 - Replaced split SonarCloud Maven steps with a single `verify sonar-maven-plugin:sonar` invocation; added SonarCloud package cache and `GITHUB_TOKEN` env declaration.
