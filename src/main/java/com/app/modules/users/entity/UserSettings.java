@@ -1,4 +1,4 @@
-package com.app.modules.auth.entity;
+package com.app.modules.users.entity;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;

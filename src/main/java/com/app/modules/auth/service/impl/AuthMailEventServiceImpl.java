@@ -13,8 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
 import com.app.common.outbox.service.OutboxService;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.users.entity.User;
 
 @Service
 public class AuthMailEventServiceImpl implements AuthMailEventService {

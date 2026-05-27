@@ -11,7 +11,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 /**
  * Authenticated principal kept on the {@code SecurityContext}. The role string mirrors {@link
- * com.app.modules.auth.enums.UserRole#name()} and is converted to a {@code ROLE_*} authority for
+ * com.app.modules.users.enums.UserRole#name()} and is converted to a {@code ROLE_*} authority for
  * Spring Security's hierarchical role-based checks.
  */
 public record UserPrincipal(UUID userId, String email, String role, String status)

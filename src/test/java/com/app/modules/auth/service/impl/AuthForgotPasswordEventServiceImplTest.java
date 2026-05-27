@@ -14,13 +14,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.UserCredentialRepository;
-import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AuthForgotPasswordEventServiceImplTest {

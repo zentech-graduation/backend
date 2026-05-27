@@ -2,7 +2,7 @@ package com.app.modules.auth.service;
 
 import java.util.UUID;
 
-import com.app.modules.auth.entity.User;
+import com.app.modules.users.entity.User;
 
 /** Publishes auth-related mail side-effect events through the transactional outbox. */
 public interface AuthMailEventService {

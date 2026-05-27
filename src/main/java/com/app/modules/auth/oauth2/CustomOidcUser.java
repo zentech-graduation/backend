@@ -9,7 +9,7 @@ import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
-import com.app.modules.auth.entity.User;
+import com.app.modules.users.entity.User;
 
 /**
  * Decorator over Spring Security's {@link OidcUser} that carries the resolved local {@link User}

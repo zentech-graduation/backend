@@ -26,6 +26,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Resolved AUTH-012 (CWE-598, MEDIUM): OAuth2 tokens are no longer delivered through the browser redirect. The success handler now issues a short-lived opaque exchange code and completes the handshake via the authenticated back-channel `POST /api/v1/auth/oauth2/exchange` endpoint.
 
 ### Added
+- Users module: `UserService`, `UserController`, and `UserApi` implementing profile view and update, public profile lookup with private-account enforcement, and settings view and update endpoints.
+
+### Documentation
+- `UserProfileResponse` and `PublicUserProfileResponse` Javadoc and `@Schema` descriptions now explicitly distinguish `isVerified` (administrator-granted platform badge, `users.is_verified`, always `false` for regular users) from email confirmation status (`user_credentials.email_verified`, exposed as `emailVerified` in the auth response). Investigation confirmed `isVerified` returning `false` after email verification is correct behavior — the two fields are unrelated.
+- Users module: `User` and `UserSettings` JPA entities, `UserRepository` and `UserSettingsRepository` moved from the auth module to `com.app.modules.users`.
+- Users module: `UserRole`, `UserStatus` enums and their JPA converters moved from the auth module to `com.app.modules.users`.
+- `GET /api/v1/users/me` — returns the authenticated user's full profile.
+- `PATCH /api/v1/users/me` — partial profile update with username uniqueness enforcement.
+- `GET /api/v1/users/{userId}` — public profile lookup; private accounts return 401; counter fields omitted for unauthenticated callers.
+- `GET /api/v1/users/me/settings` — returns the authenticated user's notification and privacy settings.
+- `PATCH /api/v1/users/me/settings` — partial settings update with patch semantics.
 - RabbitMQ topology now declares the `social.events` topic exchange, `social.events.dlx`, `mail.queue`, and `mail.dlq` for mail side-effect events only.
 - RabbitMQ environment variables are documented in the environment template with publisher confirms and returns enabled.
 - Transactional outbox storage now records versioned domain event envelopes in PostgreSQL before RabbitMQ publishing.
@@ -37,6 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Synchronous Resend mail sender added for RabbitMQ consumers while keeping the existing async mail facade for non-consumer callers.
 
 ### Fixed
+- `UserMapper.toProfileResponse` and `toPublicProfileResponse` now correctly map `isPrivate` and `isVerified` from the `User` entity; previously, MapStruct's JavaBeans convention stripped the `is` prefix from the boolean getter names (`isPrivate()` → property `private`, `isVerified()` → property `verified`), which did not match the record constructor parameter names (`isPrivate`, `isVerified`), causing both fields to silently default to `false` in every response.
+- `UserServiceImpl.getUserProfile` no longer rejects authenticated callers viewing a private account; the visibility guard now reads `if (user.isPrivate() && !isAuthenticated)` so only unauthenticated requests receive HTTP 401 for private profiles.
 - `UserStateValidator.enforceEmailVerified` now throws `AppException(AUTH_EMAIL_NOT_VERIFIED)` instead of `AUTH_ACCOUNT_INACTIVE`, giving callers a dedicated, distinguishable error code for the unverified-email case.
 - `AuthServiceImpl.resetPassword` catch clause extended to `TokenNotFoundException | TokenExpiredException` so an expired password-reset token is mapped to `AUTH_RESET_TOKEN_INVALID` (HTTP 400) rather than propagating as an unhandled exception, mirroring the `verifyEmail` flow.
 - Default async executor selection is explicit when scheduled outbox publishing is enabled.
@@ -44,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Outbox publisher now uses short transactional claim leases and per-event state commits instead of holding one batch transaction across RabbitMQ publisher confirms.
 
 ### Changed
+- `User` and `UserSettings` entities, enums, converters, and repositories relocated from `com.app.modules.auth` to `com.app.modules.users`; all auth module import references updated accordingly.
 - Auth mail side-effect documentation now points to outbox events and the mail consumer token-generation flow; raw verification/reset tokens are no longer created in the auth request path.
 - Auth mail events now use `actorId = null` for unauthenticated verification resend and forgot-password requests while keeping `aggregateId` as the target user id.
 - Auth mail RabbitMQ bindings now live with the auth module event contracts instead of the shared RabbitMQ infrastructure config.

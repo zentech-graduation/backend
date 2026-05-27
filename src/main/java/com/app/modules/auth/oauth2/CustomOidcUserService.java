@@ -15,17 +15,17 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.modules.auth.entity.OAuthAccount;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
-import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.OAuthProvider;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.OAuthAccountRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
-import com.app.modules.auth.repository.UserRepository;
-import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.entity.UserSettings;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.repository.UserSettingsRepository;
 
 /**
  * OIDC user service that resolves an OAuth2 sign-in to a local {@link User}.
