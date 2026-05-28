@@ -32,6 +32,7 @@
         <spring-cloud.version>2025.1.1</spring-cloud.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <mapstruct.version>1.6.3</mapstruct.version>
+        <aws-sdk.version>2.25.60</aws-sdk.version>
         <sonar.organization>zentech-graduation</sonar.organization>
         <sonar.projectKey>zentech-graduation_luvax</sonar.projectKey>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
@@ -98,6 +99,11 @@
             <groupId>com.resend</groupId>
             <artifactId>resend-java</artifactId>
             <version>3.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws-sdk.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>

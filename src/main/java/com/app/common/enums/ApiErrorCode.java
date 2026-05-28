@@ -43,6 +43,12 @@ public enum ApiErrorCode {
 	SOCIAL_SELF_FOLLOW_NOT_ALLOWED("SOCIAL_SELF_FOLLOW_NOT_ALLOWED", "You cannot follow yourself", HttpStatus.BAD_REQUEST),
 	SOCIAL_FOLLOW_ALREADY_EXISTS("SOCIAL_FOLLOW_ALREADY_EXISTS", "Follow relationship already exists", HttpStatus.CONFLICT),
 	SOCIAL_FOLLOW_BLOCKED("SOCIAL_FOLLOW_BLOCKED", "Follow is not allowed because a block relationship exists", HttpStatus.FORBIDDEN);
+	// Media
+	MEDIA_INVALID_METADATA("MEDIA_INVALID_METADATA", "Media metadata is invalid", HttpStatus.BAD_REQUEST),
+	MEDIA_STORAGE_KEY_ALREADY_EXISTS("MEDIA_STORAGE_KEY_ALREADY_EXISTS", "Media storage key already exists", HttpStatus.CONFLICT),
+	MEDIA_CDN_NOT_CONFIGURED("MEDIA_CDN_NOT_CONFIGURED", "Media CDN is not configured", HttpStatus.SERVICE_UNAVAILABLE),
+	MEDIA_STORAGE_NOT_CONFIGURED("MEDIA_STORAGE_NOT_CONFIGURED", "Media object storage is not configured", HttpStatus.SERVICE_UNAVAILABLE),
+	MEDIA_UPLOAD_URL_FAILED("MEDIA_UPLOAD_URL_FAILED", "Media upload URL could not be generated", HttpStatus.SERVICE_UNAVAILABLE);
 
 	// spotless:on
 

@@ -47,6 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Auth mail RabbitMQ consumer now processes `mail.queue` events with manual ack, idempotent inbox deduplication, bounded retry, and DLQ routing.
 - Synchronous Resend mail sender added for RabbitMQ consumers while keeping the existing async mail facade for non-consumer callers.
 - Social follow endpoint now creates accepted follows for public accounts, pending follow requests for private accounts, and records follow events through the transactional outbox.
+- Media upload-complete now persists validated media metadata, derives CDN URLs server-side, and records `media.uploaded.v1` outbox events after successful inserts.
+- Media upload URL endpoint now returns short-lived Cloudflare R2 pre-signed PUT URLs with backend-generated storage keys.
 
 ### Fixed
 - `UserMapper.toProfileResponse` and `toPublicProfileResponse` now correctly map `isPrivate` and `isVerified` from the `User` entity; previously, MapStruct's JavaBeans convention stripped the `is` prefix from the boolean getter names (`isPrivate()` → property `private`, `isVerified()` → property `verified`), which did not match the record constructor parameter names (`isPrivate`, `isVerified`), causing both fields to silently default to `false` in every response.
@@ -56,12 +58,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Default async executor selection is explicit when scheduled outbox publishing is enabled.
 - RabbitMQ template mandatory publishing is enabled so unroutable outbox messages can be detected by publisher returns.
 - Outbox publisher now uses short transactional claim leases and per-event state commits instead of holding one batch transaction across RabbitMQ publisher confirms.
+- Media upload-complete now only maps PostgreSQL unique violations to duplicate storage-key conflicts instead of masking unrelated database integrity failures.
 
 ### Changed
 - `User` and `UserSettings` entities, enums, converters, and repositories relocated from `com.app.modules.auth` to `com.app.modules.users`; all auth module import references updated accordingly.
 - Auth mail side-effect documentation now points to outbox events and the mail consumer token-generation flow; raw verification/reset tokens are no longer created in the auth request path.
 - Auth mail events now use `actorId = null` for unauthenticated verification resend and forgot-password requests while keeping `aggregateId` as the target user id.
 - Auth mail RabbitMQ bindings now live with the auth module event contracts instead of the shared RabbitMQ infrastructure config.
+- Media API now exposes OpenAPI documentation for direct-upload URL issuance and upload confirmation.
 
 ### Tests
 - Added RabbitMQ topology tests covering active mail queues, mail event bindings, dead-letter binding, and inactive future queues.
@@ -74,6 +78,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added forgot-password event-routing and timing-equalizer tests, plus controller integration coverage that register writes auth mail outbox events without token-bearing payloads.
 - Added auth mail consumer unit and RabbitMQ Testcontainer coverage for successful delivery, duplicate skipping, transient retry, invalid payload DLQ routing, and DLQ publish failure requeue behavior.
 - Added social follow service, outbox event, repository, and trigger-counter coverage.
+- Added media upload-complete tests covering metadata validation, synchronous media persistence, outbox event payloads, and database-generated media IDs.
+- Added media upload URL validation, storage key generation, and R2 presigner configuration tests.
+- Added media upload-complete tests covering current-user storage-key ownership and non-unique database integrity failures.
 
 ### CI
 - Replaced split SonarCloud Maven steps with a single `verify sonar-maven-plugin:sonar` invocation; added SonarCloud package cache and `GITHUB_TOKEN` env declaration.
@@ -103,6 +110,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - JWT access tokens now include a `nbf` (not-before) claim equal to `iat`, validated by `JwtTimestampValidator` (AUTH-021).
 - Strict request body deserialization enabled globally (`spring.jackson.deserialization.fail-on-unknown-properties=true`) plus `@JsonIgnoreProperties(ignoreUnknown = false)` on `RegisterRequest` and `ResetPasswordRequest` (AUTH-022).
 - Production profile sets `logging.file.path: /var/log/app` so the `${user.home}` fallback applies only to dev/test (AUTH-023).
+- Media upload-complete now rejects client-submitted storage keys outside the authenticated user's generated upload prefix.
 
 ### Added
 - SonarCloud static analysis integrated into CI: `sonarcloud.yml` workflow runs on every push to `main` and on every pull request targeting `main`; JaCoCo coverage report at `target/site/jacoco/jacoco.xml` is forwarded to SonarCloud for coverage metrics. **Action required:** disable "Automatic Analysis" in SonarCloud project settings (Administration → Analysis Method) to prevent conflicts with this CI-based analysis.
