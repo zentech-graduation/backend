@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Elasticsearch service added to `docker-compose.yaml` using image `9.0.3` (upgraded from initial 8.17.3 to align with `elasticsearch-java:9.2.8` used by Spring Data Elasticsearch 6.x; single-node, security disabled, 512 MB JVM heap, named volume for index persistence).
+- `spring-boot-starter-data-elasticsearch` dependency added to `pom.xml`; version resolved by Spring Boot BOM.
+- `ElasticsearchProperties` configuration-properties bean binding `app.elasticsearch.*` (URIs, optional credentials, connect/socket timeouts).
+- `ElasticsearchConfig` wires the Spring Data Elasticsearch client from `ElasticsearchProperties`; basic auth applied only when both username and password are non-blank.
+- `app.elasticsearch` namespace added to `application.yaml` with environment-variable placeholders.
+- `management.health.elasticsearch.enabled` and `management.endpoint.health.show-details` added to `application.yaml`; Spring Boot's auto-configured `elasticsearchHealthIndicator` handles cluster health reporting.
+- `elasticsearchSearch` Resilience4j circuit breaker instance defined in both dev and prod profiles for use by future hashtag and post search services.
+- Elasticsearch environment variable placeholders added to `.env.example`.
+
+### Tests
+- Added unit tests for `ElasticsearchConfig` credential and timeout wiring.
+- Added integration test verifying Elasticsearch cluster connectivity and actuator health status via Testcontainers.
+
 ### Fixed
 - Registration now rejects an email or username that belongs to a soft-deleted account with a 409 domain error instead of propagating a database unique-constraint violation as a 500.
 - OAuth2 sign-in no longer attempts to create a new account when the provider email matches a soft-deleted user; a 409 domain error is returned instead.
