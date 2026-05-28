@@ -46,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Forgot-password handling now records durable outbox events inside a short transaction and applies a configurable response-time floor after the transaction to reduce account-enumeration timing signals.
 - Auth mail RabbitMQ consumer now processes `mail.queue` events with manual ack, idempotent inbox deduplication, bounded retry, and DLQ routing.
 - Synchronous Resend mail sender added for RabbitMQ consumers while keeping the existing async mail facade for non-consumer callers.
+- Social follow endpoint now creates accepted follows for public accounts, pending follow requests for private accounts, and records follow events through the transactional outbox.
 - Media upload-complete now persists validated media metadata, derives CDN URLs server-side, and records `media.uploaded.v1` outbox events after successful inserts.
 - Media upload URL endpoint now returns short-lived Cloudflare R2 pre-signed PUT URLs with backend-generated storage keys.
 
@@ -76,6 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added auth mail-event tests covering minimal outbox payloads and the absence of raw verification/reset token creation in auth mail request paths.
 - Added forgot-password event-routing and timing-equalizer tests, plus controller integration coverage that register writes auth mail outbox events without token-bearing payloads.
 - Added auth mail consumer unit and RabbitMQ Testcontainer coverage for successful delivery, duplicate skipping, transient retry, invalid payload DLQ routing, and DLQ publish failure requeue behavior.
+- Added social follow service, outbox event, repository, and trigger-counter coverage.
 - Added media upload-complete tests covering metadata validation, synchronous media persistence, outbox event payloads, and database-generated media IDs.
 - Added media upload URL validation, storage key generation, and R2 presigner configuration tests.
 - Added media upload-complete tests covering current-user storage-key ownership and non-unique database integrity failures.

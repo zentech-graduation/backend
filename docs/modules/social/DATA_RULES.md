@@ -1,6 +1,6 @@
 # Social Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Follow-create path implemented. Follow approval, decline, unfollow, block management, follower/following lists, and notification consumers are not implemented yet.
 
 ---
 
@@ -45,14 +45,14 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| When target account has `is_private = TRUE`, a new follow row is created with `status = 'pending'` | `[NOT YET IMPLEMENTED]` |
-| When target account has `is_private = FALSE`, a new follow row is created with `status = 'accepted'` | `[NOT YET IMPLEMENTED]` |
+| When target account has `is_private = TRUE`, a new follow row is created with `status = 'pending'` | `FollowServiceImpl` |
+| When target account has `is_private = FALSE`, a new follow row is created with `status = 'accepted'` | `FollowServiceImpl` |
 | Approving a follow request updates `follows.status` from `'pending'` to `'accepted'` | `[NOT YET IMPLEMENTED]` |
 | Declining a follow request deletes the `follows` row | `[NOT YET IMPLEMENTED]` |
 | Unfollowing deletes the `follows` row (triggers counter decrement) | `[NOT YET IMPLEMENTED]` |
 | Blocking a user must also delete any existing follow rows in both directions | `[NOT YET IMPLEMENTED]` |
 | A blocked user must be excluded from follower/following lists, search results, and all feed queries | `[NOT YET IMPLEMENTED]` |
-| A follow request generates a `follow_request` notification; an accepted follow generates a `follow` notification | `[NOT YET IMPLEMENTED]` |
+| A follow request records `user.follow-requested.v1`; an accepted follow records `user.followed.v1` in the transactional outbox | `SocialEventServiceImpl` |
 | When a private account is made public, all `'pending'` follow rows for that account must be transitioned to `'accepted'` | `[NOT YET IMPLEMENTED]` |
 
 **Block directionality**:
