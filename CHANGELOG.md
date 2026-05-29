@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added integration test verifying Elasticsearch cluster connectivity and actuator health status via Testcontainers.
 
 ### Fixed
+- Disabled Apache HC5 automatic-retry behavior on the `TestRestTemplate` used by `AuthControllerIT`; `httpclient5` (added transitively by `spring-boot-starter-data-elasticsearch`) was causing `Retry-After`-honoring retries on rate-limit 429 responses, making the integration test suite hang indefinitely.
 - Corrected the RabbitMQ auto-configuration exclusion class name in two integration test contexts from the stale Spring Boot 3.x path to the Spring Boot 4.x path, preventing infinite RabbitMQ reconnection loops when no broker is available during test runs.
 - Registration now rejects an email or username that belongs to a soft-deleted account with a 409 domain error instead of propagating a database unique-constraint violation as a 500.
 - OAuth2 sign-in no longer attempts to create a new account when the provider email matches a soft-deleted user; a 409 domain error is returned instead.
