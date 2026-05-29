@@ -34,7 +34,7 @@ import com.app.modules.users.repository.UserRepository;
             "spring.profiles.active=dev",
             "spring.docker.compose.enabled=false",
             "spring.autoconfigure.exclude="
-                    + "org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration"
+                    + "org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration"
         })
 @Testcontainers
 @AutoConfigureTestRestTemplate
