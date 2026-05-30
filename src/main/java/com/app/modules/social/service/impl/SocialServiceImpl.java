@@ -17,7 +17,6 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.auth.entity.User;
-import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 import com.app.modules.social.dto.response.SocialUserSummaryResponse;
@@ -28,6 +27,7 @@ import com.app.modules.social.entity.FollowId;
 import com.app.modules.social.enums.FollowStatus;
 import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.social.repository.FollowRepository;
+import com.app.modules.social.repository.SocialUserRepository;
 import com.app.modules.social.service.SocialService;
 
 @Service
@@ -35,15 +35,15 @@ public class SocialServiceImpl implements SocialService {
 
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
-    private final UserRepository userRepository;
+    private final SocialUserRepository socialUserRepository;
 
     public SocialServiceImpl(
             FollowRepository followRepository,
             BlockRepository blockRepository,
-            UserRepository userRepository) {
+            SocialUserRepository socialUserRepository) {
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
-        this.userRepository = userRepository;
+        this.socialUserRepository = socialUserRepository;
     }
 
     @Override
@@ -53,34 +53,34 @@ public class SocialServiceImpl implements SocialService {
             throw new AppException(ApiErrorCode.SOCIAL_SELF_FOLLOW);
         }
 
-        // Verify target user exists
         User targetUser =
-                userRepository
+                socialUserRepository
                         .findByIdAndDeletedAtIsNull(targetUserId)
                         .orElseThrow(
                                 () ->
                                         new AppException(
                                                 ApiErrorCode.NOT_FOUND, "Target user not found"));
 
-        // Check block relationship
         if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
                 || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
             throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
         }
 
         FollowId followId = new FollowId(currentUserId, targetUserId);
+
         if (followRepository.existsById(followId)) {
             Follow existingFollow = followRepository.findById(followId).orElseThrow();
+
             if (existingFollow.getStatus() == FollowStatus.ACCEPTED) {
                 throw new AppException(ApiErrorCode.SOCIAL_ALREADY_FOLLOWING);
-            } else {
-                throw new AppException(ApiErrorCode.SOCIAL_ALREADY_REQUESTED);
             }
+
+            throw new AppException(ApiErrorCode.SOCIAL_ALREADY_REQUESTED);
         }
 
         FollowStatus status = targetUser.isPrivate() ? FollowStatus.PENDING : FollowStatus.ACCEPTED;
-        Follow follow = Follow.builder().id(followId).status(status).build();
 
+        Follow follow = Follow.builder().id(followId).status(status).build();
         followRepository.save(follow);
 
         return new FollowResponse(currentUserId, targetUserId, status);
@@ -89,12 +89,12 @@ public class SocialServiceImpl implements SocialService {
     @Override
     @Transactional
     public void unfollowUser(UUID currentUserId, UUID targetUserId) {
-        // Verify target user exists
-        if (!userRepository.existsById(targetUserId)) {
+        if (!socialUserRepository.existsByIdAndDeletedAtIsNull(targetUserId)) {
             throw new AppException(ApiErrorCode.NOT_FOUND, "Target user not found");
         }
 
         FollowId followId = new FollowId(currentUserId, targetUserId);
+
         Follow follow =
                 followRepository
                         .findById(followId)
@@ -110,7 +110,16 @@ public class SocialServiceImpl implements SocialService {
     @Override
     @Transactional
     public void respondToFollowRequest(UUID currentUserId, UUID requesterId, String action) {
+        if (!socialUserRepository.existsByIdAndDeletedAtIsNull(requesterId)) {
+            throw new AppException(ApiErrorCode.NOT_FOUND, "Requester not found");
+        }
+
+        if (!socialUserRepository.existsByIdAndDeletedAtIsNull(currentUserId)) {
+            throw new AppException(ApiErrorCode.NOT_FOUND, "Current user not found");
+        }
+
         FollowId followId = new FollowId(requesterId, currentUserId);
+
         Follow follow =
                 followRepository
                         .findByIdAndStatus(followId, FollowStatus.PENDING)
@@ -119,12 +128,15 @@ public class SocialServiceImpl implements SocialService {
         if ("approve".equalsIgnoreCase(action)) {
             follow.setStatus(FollowStatus.ACCEPTED);
             followRepository.save(follow);
-        } else if ("reject".equalsIgnoreCase(action)) {
-            followRepository.delete(follow);
-        } else {
-            throw new AppException(
-                    ApiErrorCode.BAD_REQUEST, "Invalid follow request response action");
+            return;
         }
+
+        if ("reject".equalsIgnoreCase(action)) {
+            followRepository.delete(follow);
+            return;
+        }
+
+        throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid follow request response action");
     }
 
     @Override
@@ -134,12 +146,12 @@ public class SocialServiceImpl implements SocialService {
             throw new AppException(ApiErrorCode.SOCIAL_SELF_BLOCK);
         }
 
-        // Verify target user exists
-        if (!userRepository.existsById(targetUserId)) {
+        if (!socialUserRepository.existsByIdAndDeletedAtIsNull(targetUserId)) {
             throw new AppException(ApiErrorCode.NOT_FOUND, "Target user not found");
         }
 
         BlockId blockId = new BlockId(currentUserId, targetUserId);
+
         if (blockRepository.existsById(blockId)) {
             throw new AppException(ApiErrorCode.SOCIAL_ALREADY_BLOCKED);
         }
@@ -147,7 +159,6 @@ public class SocialServiceImpl implements SocialService {
         Block block = Block.builder().id(blockId).build();
         blockRepository.save(block);
 
-        // Clean up follow relationships both ways
         FollowId followIdDirect = new FollowId(currentUserId, targetUserId);
         followRepository.findById(followIdDirect).ifPresent(followRepository::delete);
 
@@ -159,6 +170,7 @@ public class SocialServiceImpl implements SocialService {
     @Transactional
     public void unblockUser(UUID currentUserId, UUID targetUserId) {
         BlockId blockId = new BlockId(currentUserId, targetUserId);
+
         Block block =
                 blockRepository
                         .findById(blockId)
@@ -176,24 +188,28 @@ public class SocialServiceImpl implements SocialService {
     public CursorPageResponse<SocialUserSummaryResponse> getFollowers(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
-        // Verify target user exists
-        userRepository
-                .findByIdAndDeletedAtIsNull(targetUserId)
-                .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND, "User not found"));
+        User targetUser =
+                socialUserRepository
+                        .findByIdAndDeletedAtIsNull(targetUserId)
+                        .orElseThrow(
+                                () -> new AppException(ApiErrorCode.NOT_FOUND, "User not found"));
 
-        // Check block relationship
-        if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
-                || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
-        }
+        checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
-        int size = limit > 100 ? 100 : (limit < 1 ? 20 : limit);
+        int size = normalizeLimit(limit);
         OffsetDateTime cursorTime = decodeCursor(cursor);
 
-        Pageable pageable = PageRequest.of(0, size);
+        Pageable pageable = PageRequest.of(0, size + 1);
+
         List<Follow> follows =
                 followRepository.findFollowersWithCursor(
                         targetUserId, currentUserId, FollowStatus.ACCEPTED, cursorTime, pageable);
+
+        boolean hasNextPage = follows.size() > size;
+
+        if (hasNextPage) {
+            follows = follows.subList(0, size);
+        }
 
         if (follows.isEmpty()) {
             return CursorPageResponse.of(Collections.emptyList(), size, null, null, cursor != null);
@@ -202,21 +218,14 @@ public class SocialServiceImpl implements SocialService {
         List<UUID> followerIds = follows.stream().map(f -> f.getId().getFollowerId()).toList();
 
         Map<UUID, User> userMap =
-                userRepository.findAllById(followerIds).stream()
-                        .collect(Collectors.toMap(User::getId, u -> u));
+                socialUserRepository.findAllByIdInAndDeletedAtIsNull(followerIds).stream()
+                        .collect(Collectors.toMap(User::getId, user -> user));
 
         List<SocialUserSummaryResponse> content =
                 follows.stream()
-                        .map(
-                                f -> {
-                                    User user = userMap.get(f.getId().getFollowerId());
-                                    return new SocialUserSummaryResponse(
-                                            user.getId(),
-                                            user.getUsername(),
-                                            user.getDisplayName(),
-                                            user.getAvatarUrl(),
-                                            user.isVerified());
-                                })
+                        .map(f -> userMap.get(f.getId().getFollowerId()))
+                        .filter(user -> user != null)
+                        .map(this::toSocialUserSummaryResponse)
                         .toList();
 
         String startCursor = encodeCursor(follows.get(0).getCreatedAt());
@@ -230,24 +239,28 @@ public class SocialServiceImpl implements SocialService {
     public CursorPageResponse<SocialUserSummaryResponse> getFollowing(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
-        // Verify target user exists
-        userRepository
-                .findByIdAndDeletedAtIsNull(targetUserId)
-                .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND, "User not found"));
+        User targetUser =
+                socialUserRepository
+                        .findByIdAndDeletedAtIsNull(targetUserId)
+                        .orElseThrow(
+                                () -> new AppException(ApiErrorCode.NOT_FOUND, "User not found"));
 
-        // Check block relationship
-        if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
-                || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
-        }
+        checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
-        int size = limit > 100 ? 100 : (limit < 1 ? 20 : limit);
+        int size = normalizeLimit(limit);
         OffsetDateTime cursorTime = decodeCursor(cursor);
 
-        Pageable pageable = PageRequest.of(0, size);
+        Pageable pageable = PageRequest.of(0, size + 1);
+
         List<Follow> follows =
                 followRepository.findFollowingWithCursor(
                         targetUserId, currentUserId, FollowStatus.ACCEPTED, cursorTime, pageable);
+
+        boolean hasNextPage = follows.size() > size;
+
+        if (hasNextPage) {
+            follows = follows.subList(0, size);
+        }
 
         if (follows.isEmpty()) {
             return CursorPageResponse.of(Collections.emptyList(), size, null, null, cursor != null);
@@ -256,21 +269,14 @@ public class SocialServiceImpl implements SocialService {
         List<UUID> followingIds = follows.stream().map(f -> f.getId().getFollowingId()).toList();
 
         Map<UUID, User> userMap =
-                userRepository.findAllById(followingIds).stream()
-                        .collect(Collectors.toMap(User::getId, u -> u));
+                socialUserRepository.findAllByIdInAndDeletedAtIsNull(followingIds).stream()
+                        .collect(Collectors.toMap(User::getId, user -> user));
 
         List<SocialUserSummaryResponse> content =
                 follows.stream()
-                        .map(
-                                f -> {
-                                    User user = userMap.get(f.getId().getFollowingId());
-                                    return new SocialUserSummaryResponse(
-                                            user.getId(),
-                                            user.getUsername(),
-                                            user.getDisplayName(),
-                                            user.getAvatarUrl(),
-                                            user.isVerified());
-                                })
+                        .map(f -> userMap.get(f.getId().getFollowingId()))
+                        .filter(user -> user != null)
+                        .map(this::toSocialUserSummaryResponse)
                         .toList();
 
         String startCursor = encodeCursor(follows.get(0).getCreatedAt());
@@ -294,30 +300,66 @@ public class SocialServiceImpl implements SocialService {
                 pendingFollows.stream().map(f -> f.getId().getFollowerId()).toList();
 
         Map<UUID, User> userMap =
-                userRepository.findAllById(requesterIds).stream()
-                        .collect(Collectors.toMap(User::getId, u -> u));
+                socialUserRepository.findAllByIdInAndDeletedAtIsNull(requesterIds).stream()
+                        .collect(Collectors.toMap(User::getId, user -> user));
 
         return pendingFollows.stream()
                 .map(
-                        f -> {
-                            User user = userMap.get(f.getId().getFollowerId());
+                        follow -> {
+                            User user = userMap.get(follow.getId().getFollowerId());
+
+                            if (user == null) {
+                                return null;
+                            }
+
                             SocialUserSummaryResponse followerSummary =
-                                    new SocialUserSummaryResponse(
-                                            user.getId(),
-                                            user.getUsername(),
-                                            user.getDisplayName(),
-                                            user.getAvatarUrl(),
-                                            user.isVerified());
+                                    toSocialUserSummaryResponse(user);
+
                             return new FollowRequestResponse(
-                                    user.getId(), followerSummary, f.getStatus(), f.getCreatedAt());
+                                    user.getId(),
+                                    followerSummary,
+                                    follow.getStatus(),
+                                    follow.getCreatedAt());
                         })
+                .filter(response -> response != null)
                 .toList();
+    }
+
+    private void checkCanViewSocialGraph(UUID currentUserId, UUID targetUserId, User targetUser) {
+        if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
+                || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
+            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+        }
+
+        boolean isOwner = currentUserId.equals(targetUserId);
+
+        boolean isAcceptedFollower =
+                followRepository.existsByIdAndStatus(
+                        new FollowId(currentUserId, targetUserId), FollowStatus.ACCEPTED);
+
+        if (targetUser.isPrivate() && !isOwner && !isAcceptedFollower) {
+            throw new AppException(ApiErrorCode.FORBIDDEN, "You cannot view this private account");
+        }
+    }
+
+    private SocialUserSummaryResponse toSocialUserSummaryResponse(User user) {
+        return new SocialUserSummaryResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getDisplayName(),
+                user.getAvatarUrl(),
+                user.isVerified());
+    }
+
+    private int normalizeLimit(int limit) {
+        return limit > 100 ? 100 : (limit < 1 ? 20 : limit);
     }
 
     private String encodeCursor(OffsetDateTime time) {
         if (time == null) {
             return null;
         }
+
         return Base64.getEncoder().encodeToString(time.toString().getBytes());
     }
 
@@ -325,6 +367,7 @@ public class SocialServiceImpl implements SocialService {
         if (cursor == null || cursor.isBlank()) {
             return null;
         }
+
         try {
             String decoded = new String(Base64.getDecoder().decode(cursor));
             return OffsetDateTime.parse(decoded);
