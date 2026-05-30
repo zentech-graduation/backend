@@ -15,13 +15,19 @@ import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.http.server.LocalTestWebServer;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
@@ -743,6 +749,25 @@ class AuthControllerIT {
         @Bean
         TestProtectedEndpoint testProtectedEndpoint() {
             return new TestProtectedEndpoint();
+        }
+
+        // httpclient5 honors Retry-After on 429; disable retries to prevent rate-limit-triggered
+        // hangs.
+        @Bean
+        TestRestTemplate testRestTemplate(
+                ObjectProvider<RestTemplateBuilder> builderProvider,
+                ApplicationContext applicationContext) {
+            RestTemplateBuilder builder =
+                    builderProvider
+                            .getIfAvailable(RestTemplateBuilder::new)
+                            .requestFactoryBuilder(
+                                    ClientHttpRequestFactoryBuilder.httpComponents()
+                                            .withHttpClientCustomizer(
+                                                    HttpClientBuilder::disableAutomaticRetries));
+            LocalTestWebServer localTestWebServer = LocalTestWebServer.obtain(applicationContext);
+            TestRestTemplate template = new TestRestTemplate(builder, null, null);
+            template.setUriTemplateHandler(localTestWebServer.uriBuilderFactory());
+            return template;
         }
     }
 
