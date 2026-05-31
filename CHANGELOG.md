@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `HashtagTrendingService` computing ranked hashtag trending snapshots from a windowed `post_hashtags` aggregation and serving the latest snapshot as an offset-paginated response, driven by a scheduled, transactional snapshot job.
 - `HashtagSearchService` providing fuzzy hashtag name search backed by an Elasticsearch ngram match with automatic degradation to a PostgreSQL `pg_trgm` query, guarded by the `elasticsearchSearch` circuit breaker and returning cursor-paginated results.
 - `HashtagService` with normalization, idempotent post-hashtag association upsert, and a synchronous post-commit Elasticsearch dual-write that never rolls back the source-of-truth write on indexing failure; `hashtags.post_count` remains trigger-owned.
 - Hashtag module scaffolding: `/search` API path constant, `HASHTAG_NOT_FOUND` error code, `app.hashtag` configuration namespace, and a `HashtagProperties` bean binding the trending-job and seed settings.
