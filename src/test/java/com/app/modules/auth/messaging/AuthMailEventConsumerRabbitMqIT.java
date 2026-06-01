@@ -70,6 +70,7 @@ class AuthMailEventConsumerRabbitMqIT {
     static void register(DynamicPropertyRegistry registry) {
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("spring.data.redis.password", () -> "");
         registry.add("spring.rabbitmq.host", rabbit::getHost);
         registry.add("spring.rabbitmq.port", () -> rabbit.getMappedPort(5672));
         registry.add("spring.rabbitmq.username", () -> "guest");
