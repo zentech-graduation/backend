@@ -16,8 +16,9 @@ public interface HashtagTrendingService {
      * Aggregates hashtag usage within {@code [windowStart, windowEnd)} and writes ranked rows to
      * {@code hashtag_trending}.
      *
-     * <p>Idempotent: re-running for the same period updates existing rows because the primary key
-     * is {@code (hashtag_id, period_start)}.
+     * <p>Idempotent for a given {@code period_start}: re-running deletes the existing snapshot for
+     * that period and re-inserts the current top ranks, so hashtags that dropped out of the top set
+     * are removed rather than left as stale rows.
      *
      * @param windowStart the window lower bound, inclusive
      * @param windowEnd the window upper bound, exclusive

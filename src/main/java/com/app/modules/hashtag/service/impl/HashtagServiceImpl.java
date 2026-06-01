@@ -43,6 +43,9 @@ public class HashtagServiceImpl implements HashtagService {
 
     @Override
     public String normalize(String raw) {
+        if (raw == null) {
+            return "";
+        }
         String trimmed = raw.strip();
         String withoutHash = trimmed.replaceFirst("^#+", "");
         // Locale.ROOT lowercasing keeps the unique-index key stable across server locales.
