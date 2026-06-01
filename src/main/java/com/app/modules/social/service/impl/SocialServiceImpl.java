@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
-import com.app.modules.auth.entity.User;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 import com.app.modules.social.dto.response.SocialUserSummaryResponse;
@@ -29,6 +28,7 @@ import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.social.repository.FollowRepository;
 import com.app.modules.social.repository.SocialUserRepository;
 import com.app.modules.social.service.SocialService;
+import com.app.modules.users.entity.User;
 
 @Service
 public class SocialServiceImpl implements SocialService {
