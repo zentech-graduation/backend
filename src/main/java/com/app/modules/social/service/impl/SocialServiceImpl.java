@@ -83,7 +83,7 @@ public class SocialServiceImpl implements SocialService {
         Follow follow = Follow.builder().id(followId).status(status).build();
         followRepository.save(follow);
 
-        return new FollowResponse(currentUserId, targetUserId, status);
+        return new FollowResponse(currentUserId, targetUserId, status, follow.getCreatedAt());
     }
 
     @Override

@@ -10,4 +10,5 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record FollowResponse(
         @Schema(description = "User who initiated the follow") UUID followerId,
         @Schema(description = "User who is being followed") UUID followingId,
-        @Schema(description = "Current status of the follow relationship") FollowStatus status) {}
+        @Schema(description = "Current status of the follow relationship") FollowStatus status,
+        java.time.OffsetDateTime createdAt) {}
