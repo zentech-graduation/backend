@@ -5,13 +5,13 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
-import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.UserCredentialRepository;
-import com.app.modules.auth.repository.UserRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
 
 @Service
 public class AuthForgotPasswordEventServiceImpl implements AuthForgotPasswordEventService {

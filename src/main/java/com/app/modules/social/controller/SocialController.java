@@ -38,6 +38,7 @@ public class SocialController extends BaseController implements SocialApi {
     @Override
     public ResponseEntity<ApiResponse<Void>> unfollow(UUID targetUserId) {
         socialService.unfollowUser(SecurityUtils.getCurrentUserId(), targetUserId);
+
         return ResponseEntity.status(HttpStatus.NO_CONTENT)
                 .body(ApiResponse.success(ApiSuccessCode.NO_CONTENT));
     }

@@ -21,9 +21,9 @@ import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.common.security.service.TokenBlacklistService;
 import com.app.common.security.user.SecurityMapper;
 import com.app.common.security.user.UserPrincipal;
-import com.app.modules.auth.entity.User;
-import com.app.modules.auth.enums.UserStatus;
-import com.app.modules.auth.repository.UserRepository;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
 
 /**
  * Authenticates requests by extracting a Bearer JWT, verifying its signature, and resolving the

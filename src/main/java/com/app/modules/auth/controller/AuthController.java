@@ -18,6 +18,7 @@ import com.app.common.response.ApiResponse;
 import com.app.modules.auth.api.AuthApi;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
+import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
 import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResendVerificationRequest;
@@ -114,5 +115,14 @@ public class AuthController extends BaseController implements AuthApi {
             @Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Redeems a short-lived OAuth2 exchange code for an access/refresh token pair. */
+    @Override
+    @PostMapping(ApiConstants.Auth.OAUTH2_EXCHANGE)
+    public ResponseEntity<ApiResponse<AuthResponse>> exchangeOAuth2Code(
+            @Valid @RequestBody OAuth2ExchangeRequest request, HttpServletRequest httpRequest) {
+        AuthResponse body = authService.exchangeOAuth2Code(request, httpRequest);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 }

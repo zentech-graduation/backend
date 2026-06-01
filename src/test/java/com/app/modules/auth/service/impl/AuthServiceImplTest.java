@@ -47,21 +47,22 @@ import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
 import com.app.modules.auth.dto.response.UserSummaryResponse;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
-import com.app.modules.auth.entity.UserSettings;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
 import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
-import com.app.modules.auth.repository.UserRepository;
-import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.entity.UserSettings;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.repository.UserSettingsRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
@@ -80,6 +81,7 @@ class AuthServiceImplTest {
     @Mock private TokenBlacklistService tokenBlacklistService;
     @Mock private IpExtractor ipExtractor;
     @Mock private UserStateValidator userStateValidator;
+    @Mock private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
     private AuthServiceImpl service;
 
@@ -118,7 +120,8 @@ class AuthServiceImplTest {
                         authMapper,
                         tokenBlacklistService,
                         ipExtractor,
-                        userStateValidator);
+                        userStateValidator,
+                        oauth2ExchangeCodeService);
     }
 
     private MockHttpServletRequest stubRequest() {
@@ -130,7 +133,7 @@ class AuthServiceImplTest {
 
     @Test
     void register_duplicateEmail_throwsConflict() {
-        when(userRepository.existsByEmailAndDeletedAtIsNull("a@b.c")).thenReturn(true);
+        when(userRepository.existsByEmail("a@b.c")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
         assertThatThrownBy(() -> service.register(req))
@@ -142,8 +145,8 @@ class AuthServiceImplTest {
 
     @Test
     void register_duplicateUsername_throwsConflict() {
-        when(userRepository.existsByEmailAndDeletedAtIsNull(anyString())).thenReturn(false);
-        when(userRepository.existsByUsernameAndDeletedAtIsNull("user1")).thenReturn(true);
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(userRepository.existsByUsername("user1")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
 
         assertThatThrownBy(() -> service.register(req))

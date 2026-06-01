@@ -101,6 +101,29 @@ app:
     reset-password-path: ${MAIL_RESET_PASSWORD_PATH:/reset-password}
     verify-email-path: ${MAIL_VERIFY_EMAIL_PATH:/verify-email}
     frontend-base-url: ${FRONTEND_BASE_URL}
+  media:
+    cdn-base-url: ${MEDIA_CDN_BASE_URL:}
+    r2:
+      endpoint: ${R2_ENDPOINT:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+      bucket: ${R2_BUCKET:}
+      region: ${R2_REGION:auto}
+      upload-url-ttl: ${R2_UPLOAD_URL_TTL:PT10M}
+    allowed-image-mime-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+    allowed-video-mime-types:
+      - video/mp4
+      - video/webm
+    storage-key-pattern: ${MEDIA_STORAGE_KEY_PATTERN:^[a-zA-Z0-9][a-zA-Z0-9/_.-]{1,511}$}
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
+    connection-timeout: ${ELASTICSEARCH_CONNECTION_TIMEOUT:PT5S}
+    socket-timeout: ${ELASTICSEARCH_SOCKET_TIMEOUT:PT30S}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
@@ -124,6 +147,14 @@ app:
       "[/api/v1/auth/verify-email/resend]":
         max-attempts: 3
         window-seconds: 3600
+
+management:
+  health:
+    elasticsearch:
+      enabled: true
+  endpoint:
+    health:
+      show-details: when-authorized
 
 server:
   forward-headers-strategy: framework

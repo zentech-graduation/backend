@@ -1,6 +1,6 @@
 # Media Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Pre-signed upload URL issuance and upload-complete persistence are implemented. Storage-object deletion and media reference checks from post/story/message modules are not implemented yet.
 
 ---
 
@@ -43,14 +43,15 @@ Media records are created after a client-side upload to Cloudflare R2 via pre-si
 
 | Rule | Service / Component |
 |------|---------------------|
-| File upload must generate a unique `storage_key` (e.g., UUID-based path) before writing to R2 | `[NOT YET IMPLEMENTED]` |
-| `cdn_url` is derived from `storage_key` using the configured CDN base URL; it must not be user-supplied | `[NOT YET IMPLEMENTED]` |
-| All media metadata (`width`, `height`, `duration`, `mime_type`, `file_size`, `blurhash`) is submitted by the client after direct upload to R2 via pre-signed URL; the server does not perform server-side media inspection at upload time | `[NOT YET IMPLEMENTED]` |
-| Maximum file size limits must be enforced at the API layer before issuing the pre-signed upload URL | `[NOT YET IMPLEMENTED]` |
-| Accepted `mime_type` values must be validated against an allowlist (e.g., `image/jpeg`, `image/png`, `video/mp4`) | `[NOT YET IMPLEMENTED]` |
+| File upload must generate a unique `storage_key` (e.g., UUID-based path) before writing to R2 | `MediaStorageKeyGenerator`, `MediaServiceImpl` |
+| `cdn_url` is derived from `storage_key` using the configured CDN base URL; it must not be user-supplied | `MediaServiceImpl` |
+| All media metadata (`width`, `height`, `duration`, `mime_type`, `file_size`, `blurhash`) is submitted by the client after direct upload to R2 via pre-signed URL; the server does not perform server-side media inspection at upload time | `MediaController`, `MediaServiceImpl` |
+| Maximum file size limits must be enforced at the API layer before issuing the pre-signed upload URL | `MediaMetadataValidator`, `MediaServiceImpl` |
+| Accepted `mime_type` values must be validated against an allowlist (e.g., `image/jpeg`, `image/png`, `video/mp4`) | `MediaMetadataValidator` |
 | Deleting a `media_assets` row must also delete the corresponding R2 object; do not leave orphaned objects in storage | `[NOT YET IMPLEMENTED]` |
 | A media asset owned by user A must not be referenceable by user B in their posts | `[NOT YET IMPLEMENTED]` |
-| **Server-side metadata validation before `media_assets` insert**: Although media files are uploaded directly to Cloudflare R2 by the client (pre-signed URL flow), the server MUST validate all client-submitted metadata before creating the `media_assets` record. Validation includes: `file_size` must be within the limit defined in `system_settings.max_media_size_mb`; `media_type` must match an accepted value (`image` or `video`); `mime_type` must be within the application's allowed MIME type list; `width` and `height` must be positive integers (for image and video); `duration` must be a non-negative integer (required for video, null for image); `storage_key` must follow the expected R2 key format and must not already exist in `media_assets`. The client is not trusted to submit correct metadata. Validation failure must reject the "upload complete" request and leave no orphaned `media_assets` record. The R2 object may remain; orphan cleanup is a separate operational concern. | `[NOT YET IMPLEMENTED]` |
+| **Server-side metadata validation before `media_assets` insert**: Although media files are uploaded directly to Cloudflare R2 by the client (pre-signed URL flow), the server MUST validate all client-submitted metadata before creating the `media_assets` record. Validation includes: `file_size` must be within the limit defined in `system_settings.max_media_size_mb`; `media_type` must match an accepted value (`image` or `video`); `mime_type` must be within the application's allowed MIME type list; `width` and `height` must be positive integers (for image and video); `duration` must be a non-negative integer (required for video, null for image); `storage_key` must follow the expected R2 key format and must not already exist in `media_assets`. The client is not trusted to submit correct metadata. Validation failure must reject the "upload complete" request and leave no orphaned `media_assets` record. The R2 object may remain; orphan cleanup is a separate operational concern. | `MediaMetadataValidator`, `MediaServiceImpl` |
+| Successful upload-complete writes the `media_assets` row synchronously and records a `media.uploaded.v1` outbox event in the same transaction. The event payload contains only `mediaAssetId`, `userId`, and `mediaType`. | `MediaServiceImpl`, `MediaEventServiceImpl` |
 
 ### C. Scope Simplifications
 

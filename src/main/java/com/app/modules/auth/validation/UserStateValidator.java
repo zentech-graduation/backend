@@ -4,8 +4,8 @@ import org.springframework.stereotype.Component;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
+import com.app.modules.users.entity.User;
 
 @Component
 public class UserStateValidator {

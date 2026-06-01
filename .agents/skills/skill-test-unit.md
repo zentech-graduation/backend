@@ -1,75 +1,101 @@
 ---
 trigger: model_decision
-description: Load when writing unit tests for any service implementation.
+description: Load when writing unit tests for any service implementation or infrastructure class. Covers annotation stack, mock wiring, naming, and assertion patterns derived from actual codebase tests.
 ---
 
-# Skill: Unit Test (Service)
+# Skill: Unit Test
 
 ## When to use
-Writing tests for any class in `modules/{module}/service/impl/`.
+
+Writing tests for any class in `modules/{module}/service/impl/` or `common/security/impl/`.
 
 ## Input required
-- Service impl class under test
+
+- Class under test
 - All constructor-injected dependencies (to be mocked)
 
 ## Steps
 
-1. Name the test class `{ServiceImpl}Test`, placed in the mirror package under `src/test/`.
-2. Annotate the class:
-   ```java
-   @ExtendWith(MockitoExtension.class)
-   class {ServiceImpl}Test { }
-   ```
-3. Declare a `@Mock` field for every constructor dependency:
+1. Name the class `{SubjectClass}Test` in the mirror package under `src/test/`.
+2. If the test needs `@Mock` fields, add `@ExtendWith(MockitoExtension.class)`.  
+   Pure unit tests (direct construction, no mocked dependencies) need no annotation.
+3. Declare one `@Mock` field per constructor dependency:
    ```java
    @Mock private UserRepository userRepository;
    @Mock private PasswordEncoder passwordEncoder;
-   // ...
    ```
-4. Instantiate the impl in `@BeforeEach` by calling the constructor directly with the mocked fields:
+4. Construct the subject in `@BeforeEach` by calling the constructor directly:
    ```java
    @BeforeEach
    void setUp() {
        service = new AuthServiceImpl(userRepository, credentialRepository, ...);
    }
    ```
-5. Write one `@Test` method per logical scenario (happy path and each failure branch separately).
-6. Test method names: `{methodName}_{condition}_{expectedOutcome}`, e.g., `login_invalidPassword_throwsAppException`.
-7. Use AssertJ for assertions:
+   Do **not** use `@InjectMocks`.
+5. Use `lenient()` only for stubs set up in `@BeforeEach` that are not consumed by every test:
    ```java
-   assertThat(result).isNotNull();
-   assertThat(result.accessToken()).isNotBlank();
+   lenient().when(authMapper.toUserSummaryResponse(any(), anyBoolean())).thenAnswer(...);
+   ```
+6. Write one `@Test` per logical scenario. Method name: `{method}_{condition}_{outcome}`:
+   ```
+   register_duplicateEmail_throwsConflict
+   login_bannedUser_throwsAccountLocked
+   logout_blacklistsAccessTokenAndRevokesRefreshToken
+   ```
+7. Stub with `when(...).thenReturn(...)`. Use `.thenAnswer(inv -> ...)` when the return value depends on input arguments (e.g., saving an entity and assigning an ID).
+8. AssertJ only — no JUnit `assertEquals`:
+   ```java
+   assertThat(result.accessToken()).isEqualTo("ACCESS");
    assertThatThrownBy(() -> service.login(req, httpReq))
        .isInstanceOf(AppException.class)
-       .extracting(e -> ((AppException) e).getErrorCode())
+       .extracting(ex -> ((AppException) ex).getErrorCode())
        .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+   assertThatCode(() -> service.logout(req)).doesNotThrowAnyException();
    ```
-8. Stub with `when(...).thenReturn(...)`. Use `lenient()` only when stubbing in `@BeforeEach` for stubs not used in every test.
-9. Verify side-effects: `verify(mock).method(args)` or `verify(mock, never()).method(any())`.
-10. Use `ArgumentCaptor` when the test needs to assert on arguments passed to a mock:
+9. Verify side effects:
+   ```java
+   verify(userRepository).save(any(User.class));
+   verify(mailService, never()).sendPasswordReset(anyString(), anyString(), anyString());
+   verify(refreshTokenService, times(1)).revoke("RAW");
+   ```
+10. Use `ArgumentCaptor` to assert on arguments passed to a mock:
     ```java
-    ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-    verify(userRepository).save(captor.capture());
-    assertThat(captor.getValue().getEmail()).isEqualTo(email);
+    ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(mailService).sendPasswordReset(eq(email), eq(displayName), urlCaptor.capture());
+    assertThat(urlCaptor.getValue()).startsWith("http://localhost:5173/reset-password?token=");
     ```
-11. Do **not** mock the system under test — only its dependencies.
-12. No `@Transactional` on test classes.
-13. No Javadoc on test methods.
+11. For SecurityContext-dependent logic, set the context in the test and clear it in a `finally`:
+    ```java
+    SecurityContextHolder.getContext().setAuthentication(
+        new UsernamePasswordAuthenticationToken("principal", rawAccessToken));
+    try {
+        service.logout(new RefreshRequest("REFRESH-RAW"));
+    } finally {
+        SecurityContextHolder.clearContext();
+    }
+    ```
+12. Extract common test entities into private `static` factory methods:
+    ```java
+    private static User activeUser() { ... }
+    private static UserCredential credential(UUID userId, String hash) { ... }
+    ```
 
 ## Output contract
-- Test class in `src/test/java/com/app/modules/{module}/service/impl/{ServiceImpl}Test.java`
-- `@ExtendWith(MockitoExtension.class)`
-- `@Mock` for each dependency
+
+- `@ExtendWith(MockitoExtension.class)` when `@Mock` fields are present
+- `@Mock` for each constructor dependency
 - Impl constructed manually in `@BeforeEach`
-- AssertJ assertions
-- One scenario per test method
-- No Spring context loaded
+- AssertJ assertions only
+- One scenario per `@Test` method
+- No Spring context loaded, no `@SpringBootTest`
 
 ## Checklist
-- [ ] `@ExtendWith(MockitoExtension.class)` present
+
+- [ ] `@ExtendWith(MockitoExtension.class)` present if using `@Mock` annotations
 - [ ] Every constructor dependency has a `@Mock` field
-- [ ] `@BeforeEach` constructs impl via constructor
-- [ ] Test method names follow `method_condition_outcome` pattern
+- [ ] `@BeforeEach` constructs impl via constructor — no `@InjectMocks`
+- [ ] Method names follow `method_condition_outcome` pattern
 - [ ] AssertJ used (not JUnit `assertEquals`)
 - [ ] `assertThatThrownBy` used for exception cases
+- [ ] `assertThatCode(...).doesNotThrowAnyException()` for no-throw cases
 - [ ] No `@SpringBootTest` or context loading

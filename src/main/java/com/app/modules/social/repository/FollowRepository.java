@@ -16,7 +16,7 @@ import com.app.modules.social.entity.FollowId;
 import com.app.modules.social.enums.FollowStatus;
 
 @Repository
-public interface FollowRepository extends JpaRepository<Follow, FollowId> {
+public interface FollowRepository extends JpaRepository<Follow, FollowId>, FollowRepositoryCustom {
 
     Optional<Follow> findByIdAndStatus(FollowId id, FollowStatus status);
 

@@ -20,7 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.outbox.service.OutboxService;
-import com.app.modules.auth.entity.User;
+import com.app.modules.users.entity.User;
 
 @ExtendWith(MockitoExtension.class)
 class AuthMailEventServiceImplTest {

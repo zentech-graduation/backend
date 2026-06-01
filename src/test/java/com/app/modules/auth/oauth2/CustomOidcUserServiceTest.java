@@ -22,9 +22,9 @@ import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import com.app.modules.auth.enums.OAuthProvider;
 import com.app.modules.auth.repository.OAuthAccountRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
-import com.app.modules.auth.repository.UserRepository;
-import com.app.modules.auth.repository.UserSettingsRepository;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.repository.UserSettingsRepository;
 
 @ExtendWith(MockitoExtension.class)
 class CustomOidcUserServiceTest {

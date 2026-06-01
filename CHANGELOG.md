@@ -7,6 +7,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Elasticsearch service added to `docker-compose.yaml` using image `9.0.3` (upgraded from initial 8.17.3 to align with `elasticsearch-java:9.2.8` used by Spring Data Elasticsearch 6.x; single-node, security disabled, 512 MB JVM heap, named volume for index persistence).
+- `spring-boot-starter-data-elasticsearch` dependency added to `pom.xml`; version resolved by Spring Boot BOM.
+- `ElasticsearchProperties` configuration-properties bean binding `app.elasticsearch.*` (URIs, optional credentials, connect/socket timeouts).
+- `ElasticsearchConfig` wires the Spring Data Elasticsearch client from `ElasticsearchProperties`; basic auth applied only when both username and password are non-blank.
+- `app.elasticsearch` namespace added to `application.yaml` with environment-variable placeholders.
+- `management.health.elasticsearch.enabled` and `management.endpoint.health.show-details` added to `application.yaml`; Spring Boot's auto-configured `elasticsearchHealthIndicator` handles cluster health reporting.
+- `elasticsearchSearch` Resilience4j circuit breaker instance defined in both dev and prod profiles for use by future hashtag and post search services.
+- Elasticsearch environment variable placeholders added to `.env.example`.
+
+### Tests
+- Added unit tests for `ElasticsearchConfig` credential and timeout wiring.
+- Added integration test verifying Elasticsearch cluster connectivity and actuator health status via Testcontainers.
+
+### Fixed
+- Disabled Apache HC5 automatic-retry behavior on the `TestRestTemplate` used by `AuthControllerIT`; `httpclient5` (added transitively by `spring-boot-starter-data-elasticsearch`) was causing `Retry-After`-honoring retries on rate-limit 429 responses, making the integration test suite hang indefinitely.
+- Corrected the RabbitMQ auto-configuration exclusion class name in two integration test contexts from the stale Spring Boot 3.x path to the Spring Boot 4.x path, preventing infinite RabbitMQ reconnection loops when no broker is available during test runs.
+- Registration now rejects an email or username that belongs to a soft-deleted account with a 409 domain error instead of propagating a database unique-constraint violation as a 500.
+- OAuth2 sign-in no longer attempts to create a new account when the provider email matches a soft-deleted user; a 409 domain error is returned instead.
+- Username generation for new OAuth2 users now checks the full `users` table (not just non-deleted rows), consistent with the table-wide `UNIQUE` constraint on `users.username`.
+
+### Added
+- `UserRepository` exposes table-wide `existsByEmail`, `existsByUsername`, and `findByEmail` methods aligned with the database `UNIQUE` constraints that have no soft-delete partial index.
+- `POST /api/v1/auth/oauth2/exchange` back-channel endpoint: redeems a one-time opaque exchange code for a standard access/refresh token pair; rate-limited via `lowTraffic` Resilience4j instance and Redis sliding-window filter.
+- `OAuth2ExchangeCodeService` with a Redis-backed implementation that stores 32-byte hex exchange codes under `auth:oauth2:exchange:{code}` (TTL 120 s) and consumes them atomically via a GET-then-DEL Lua script.
+- `OAuth2ExchangeRequest` DTO with `@Schema` annotations for the new exchange endpoint.
+- `AUTH_OAUTH2_EXCHANGE_CODE_INVALID` error code (HTTP 400) returned when an exchange code is absent or expired.
+
+### Changed
+- `OAuth2AuthenticationSuccessHandler` no longer writes tokens into the callback response body; instead generates an exchange code and redirects the browser to `{frontendBaseUrl}/oauth2/callback?code={code}`, eliminating token exposure in the browser redirect (resolves AUTH-012).
+- `AuthService` extended with `exchangeOAuth2Code` to support the new back-channel exchange flow.
+
+### Security
+- Resolved AUTH-012 (CWE-598, MEDIUM): OAuth2 tokens are no longer delivered through the browser redirect. The success handler now issues a short-lived opaque exchange code and completes the handshake via the authenticated back-channel `POST /api/v1/auth/oauth2/exchange` endpoint.
+
+### Added
+- Users module: `UserService`, `UserController`, and `UserApi` implementing profile view and update, public profile lookup with private-account enforcement, and settings view and update endpoints.
+
+### Documentation
+- `UserProfileResponse` and `PublicUserProfileResponse` Javadoc and `@Schema` descriptions now explicitly distinguish `isVerified` (administrator-granted platform badge, `users.is_verified`, always `false` for regular users) from email confirmation status (`user_credentials.email_verified`, exposed as `emailVerified` in the auth response). Investigation confirmed `isVerified` returning `false` after email verification is correct behavior — the two fields are unrelated.
+- Users module: `User` and `UserSettings` JPA entities, `UserRepository` and `UserSettingsRepository` moved from the auth module to `com.app.modules.users`.
+- Users module: `UserRole`, `UserStatus` enums and their JPA converters moved from the auth module to `com.app.modules.users`.
+- `GET /api/v1/users/me` — returns the authenticated user's full profile.
+- `PATCH /api/v1/users/me` — partial profile update with username uniqueness enforcement.
+- `GET /api/v1/users/{userId}` — public profile lookup; private accounts return 401; counter fields omitted for unauthenticated callers.
+- `GET /api/v1/users/me/settings` — returns the authenticated user's notification and privacy settings.
+- `PATCH /api/v1/users/me/settings` — partial settings update with patch semantics.
 - RabbitMQ topology now declares the `social.events` topic exchange, `social.events.dlx`, `mail.queue`, and `mail.dlq` for mail side-effect events only.
 - RabbitMQ environment variables are documented in the environment template with publisher confirms and returns enabled.
 - Transactional outbox storage now records versioned domain event envelopes in PostgreSQL before RabbitMQ publishing.
@@ -16,18 +62,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Forgot-password handling now records durable outbox events inside a short transaction and applies a configurable response-time floor after the transaction to reduce account-enumeration timing signals.
 - Auth mail RabbitMQ consumer now processes `mail.queue` events with manual ack, idempotent inbox deduplication, bounded retry, and DLQ routing.
 - Synchronous Resend mail sender added for RabbitMQ consumers while keeping the existing async mail facade for non-consumer callers.
+- Social follow endpoint now creates accepted follows for public accounts, pending follow requests for private accounts, and records follow events through the transactional outbox.
+- Media upload-complete now persists validated media metadata, derives CDN URLs server-side, and records `media.uploaded.v1` outbox events after successful inserts.
+- Media upload URL endpoint now returns short-lived Cloudflare R2 pre-signed PUT URLs with backend-generated storage keys.
 
 ### Fixed
+- `UserMapper.toProfileResponse` and `toPublicProfileResponse` now correctly map `isPrivate` and `isVerified` from the `User` entity; previously, MapStruct's JavaBeans convention stripped the `is` prefix from the boolean getter names (`isPrivate()` → property `private`, `isVerified()` → property `verified`), which did not match the record constructor parameter names (`isPrivate`, `isVerified`), causing both fields to silently default to `false` in every response.
+- `UserServiceImpl.getUserProfile` no longer rejects authenticated callers viewing a private account; the visibility guard now reads `if (user.isPrivate() && !isAuthenticated)` so only unauthenticated requests receive HTTP 401 for private profiles.
 - `UserStateValidator.enforceEmailVerified` now throws `AppException(AUTH_EMAIL_NOT_VERIFIED)` instead of `AUTH_ACCOUNT_INACTIVE`, giving callers a dedicated, distinguishable error code for the unverified-email case.
 - `AuthServiceImpl.resetPassword` catch clause extended to `TokenNotFoundException | TokenExpiredException` so an expired password-reset token is mapped to `AUTH_RESET_TOKEN_INVALID` (HTTP 400) rather than propagating as an unhandled exception, mirroring the `verifyEmail` flow.
 - Default async executor selection is explicit when scheduled outbox publishing is enabled.
 - RabbitMQ template mandatory publishing is enabled so unroutable outbox messages can be detected by publisher returns.
 - Outbox publisher now uses short transactional claim leases and per-event state commits instead of holding one batch transaction across RabbitMQ publisher confirms.
+- Media upload-complete now only maps PostgreSQL unique violations to duplicate storage-key conflicts instead of masking unrelated database integrity failures.
 
 ### Changed
+- `User` and `UserSettings` entities, enums, converters, and repositories relocated from `com.app.modules.auth` to `com.app.modules.users`; all auth module import references updated accordingly.
 - Auth mail side-effect documentation now points to outbox events and the mail consumer token-generation flow; raw verification/reset tokens are no longer created in the auth request path.
 - Auth mail events now use `actorId = null` for unauthenticated verification resend and forgot-password requests while keeping `aggregateId` as the target user id.
 - Auth mail RabbitMQ bindings now live with the auth module event contracts instead of the shared RabbitMQ infrastructure config.
+- Media API now exposes OpenAPI documentation for direct-upload URL issuance and upload confirmation.
 
 ### Tests
 - Added RabbitMQ topology tests covering active mail queues, mail event bindings, dead-letter binding, and inactive future queues.
@@ -39,6 +93,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added auth mail-event tests covering minimal outbox payloads and the absence of raw verification/reset token creation in auth mail request paths.
 - Added forgot-password event-routing and timing-equalizer tests, plus controller integration coverage that register writes auth mail outbox events without token-bearing payloads.
 - Added auth mail consumer unit and RabbitMQ Testcontainer coverage for successful delivery, duplicate skipping, transient retry, invalid payload DLQ routing, and DLQ publish failure requeue behavior.
+- Added social follow service, outbox event, repository, and trigger-counter coverage.
+- Added media upload-complete tests covering metadata validation, synchronous media persistence, outbox event payloads, and database-generated media IDs.
+- Added media upload URL validation, storage key generation, and R2 presigner configuration tests.
+- Added media upload-complete tests covering current-user storage-key ownership and non-unique database integrity failures.
 
 ### CI
 - Replaced split SonarCloud Maven steps with a single `verify sonar-maven-plugin:sonar` invocation; added SonarCloud package cache and `GITHUB_TOKEN` env declaration.
@@ -68,6 +126,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - JWT access tokens now include a `nbf` (not-before) claim equal to `iat`, validated by `JwtTimestampValidator` (AUTH-021).
 - Strict request body deserialization enabled globally (`spring.jackson.deserialization.fail-on-unknown-properties=true`) plus `@JsonIgnoreProperties(ignoreUnknown = false)` on `RegisterRequest` and `ResetPasswordRequest` (AUTH-022).
 - Production profile sets `logging.file.path: /var/log/app` so the `${user.home}` fallback applies only to dev/test (AUTH-023).
+- Media upload-complete now rejects client-submitted storage keys outside the authenticated user's generated upload prefix.
 
 ### Added
 - SonarCloud static analysis integrated into CI: `sonarcloud.yml` workflow runs on every push to `main` and on every pull request targeting `main`; JaCoCo coverage report at `target/site/jacoco/jacoco.xml` is forwarded to SonarCloud for coverage metrics. **Action required:** disable "Automatic Analysis" in SonarCloud project settings (Administration → Analysis Method) to prevent conflicts with this CI-based analysis.
