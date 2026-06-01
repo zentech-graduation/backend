@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Elasticsearch environment variable placeholders added to `.env.example`.
 
 ### Tests
+- Added `HashtagControllerIT` integration test covering search validation, empty trending snapshots, Elasticsearch ngram search, cursor pagination, and the Elasticsearch-down pg_trgm fallback against real Postgres, Redis, and Elasticsearch containers.
 - Added unit tests for `HashtagSearchService` covering the Elasticsearch ngram primary path, the PostgreSQL `pg_trgm` fallback, and empty-result pagination.
 - Added unit tests for `HashtagService` covering name normalization, case-insensitive deduplication, post-commit Elasticsearch dual-write failure isolation, and post-association removal.
 - Added unit tests for `ElasticsearchConfig` credential and timeout wiring.
