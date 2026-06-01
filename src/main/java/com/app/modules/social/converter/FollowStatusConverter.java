@@ -5,9 +5,7 @@ import jakarta.persistence.Converter;
 
 import com.app.modules.social.enums.FollowStatus;
 
-/**
- * Bridges the uppercase Java FollowStatus enum to the lowercase Postgres follow_status enum.
- */
+/** Bridges the uppercase Java FollowStatus enum to the lowercase Postgres follow_status enum. */
 @Converter(autoApply = false)
 public class FollowStatusConverter implements AttributeConverter<FollowStatus, String> {
 
