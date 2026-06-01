@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +52,12 @@ public class HashtagIndexSeedRunner implements ApplicationRunner {
             return;
         }
         try {
+            IndexOperations indexOps = elasticsearchOperations.indexOps(HashtagDocument.class);
+            // Repository auto-creation is disabled (createIndex = false), so create the index with
+            // its ngram mapping here once Elasticsearch is confirmed reachable.
+            if (!indexOps.exists()) {
+                indexOps.createWithMapping();
+            }
             long count = elasticsearchOperations.count(Query.findAll(), HashtagDocument.class);
             // Skip bootstrap if the index already has documents — partial population is also
             // skipped

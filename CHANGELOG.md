@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Hashtag Elasticsearch repository no longer connects to Elasticsearch during application-context startup (`@Document(createIndex = false)`); the index and its ngram mapping are created by the seed runner when Elasticsearch is reachable. This prevents every Spring context without an Elasticsearch instance from failing to start.
+
 ### Added
 - Public hashtag HTTP endpoints `GET /api/v1/hashtags/search` and `GET /api/v1/hashtags/trending`, documented via the `HashtagApi` OpenAPI interface and rate-limited per endpoint.
 - `HashtagIndexSeedRunner` seeding the Elasticsearch `hashtags` index from PostgreSQL on startup only when the index is empty and `app.hashtag.seed.enabled` is true, treating seeding failures as non-fatal so startup never blocks on the rebuildable search tier.

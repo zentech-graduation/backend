@@ -28,7 +28,10 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Document(indexName = "hashtags")
+// createIndex = false: the repository must not connect to Elasticsearch at startup (that would
+// fail every application context that has no Elasticsearch). The index is created with its ngram
+// mapping by HashtagIndexSeedRunner when Elasticsearch is reachable.
+@Document(indexName = "hashtags", createIndex = false)
 @Setting(settingPath = "/elasticsearch/settings/hashtags.json")
 public class HashtagDocument {
 
