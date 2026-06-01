@@ -12,7 +12,7 @@ import com.app.modules.social.entity.BlockId;
 
 @Repository
 public interface BlockRepository extends JpaRepository<Block, BlockId> {
-
+    ///
     Optional<Block> findById(BlockId id);
 
     boolean existsById(BlockId id);
