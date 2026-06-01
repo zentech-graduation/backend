@@ -33,8 +33,7 @@ import lombok.Setter;
 @Builder
 public class Follow {
 
-    @EmbeddedId
-    private FollowId id;
+    @EmbeddedId private FollowId id;
 
     @Convert(converter = FollowStatusConverter.class)
     @Column(name = "status", nullable = false, columnDefinition = "follow_status")
