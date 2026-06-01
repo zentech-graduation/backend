@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Elasticsearch environment variable placeholders added to `.env.example`.
 
 ### Tests
+- Added unit tests for `HashtagService` covering name normalization, case-insensitive deduplication, post-commit Elasticsearch dual-write failure isolation, and post-association removal.
 - Added unit tests for `ElasticsearchConfig` credential and timeout wiring.
 - Added integration test verifying Elasticsearch cluster connectivity and actuator health status via Testcontainers.
 
