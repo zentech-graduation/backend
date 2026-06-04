@@ -35,6 +35,7 @@ class ApplicationTests {
     static void register(DynamicPropertyRegistry r) {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        r.add("spring.data.redis.password", () -> "");
         r.add("JWT_SECRET", () -> "smoke-test-secret-32-chars-minimum-len!!!!");
         r.add("JWT_ISSUER", () -> "https://smoke.test.local");
         r.add("ACCESS_TOKEN_TTL", () -> 900L);
