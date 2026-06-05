@@ -25,7 +25,7 @@ class RabbitMqTopologyConfigTest {
                             RabbitMqTopologyConfig.class, AuthMailRabbitBindingConfig.class);
 
     @Test
-    void declaresActiveQueues() {
+    void topology_contextLoads_declaresAllDeclaredQueues() {
         contextRunner.run(
                 context -> {
                     Set<String> queueNames =
@@ -100,7 +100,7 @@ class RabbitMqTopologyConfigTest {
     }
 
     @Test
-    void doesNotBindFutureQueues() {
+    void topology_contextLoads_doesNotBindFutureQueues() {
         contextRunner.run(
                 context -> {
                     Set<String> futureQueues =
