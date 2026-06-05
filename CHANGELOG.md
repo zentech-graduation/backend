@@ -13,17 +13,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Unread notification count endpoint (`GET /api/v1/notifications/unread-count`).
 - `SocialNotificationConsumer` consuming `user.followed.v1` and `user.follow-requested.v1` events from the notification queue (gated by `app.notification.consumer.enabled`) and creating follow and follow-request notifications idempotently with bounded transient retry and dead-letter routing.
 - RabbitMQ topology: `notification.queue` and `notification.dlq` declared in `RabbitMqTopologyConfig`; `NotificationRabbitBindingConfig` binds `user.followed.v1` and `user.follow-requested.v1` social events to the notification queue.
-- Notification creation guards: self-notification suppression, user notification-preference check (`notifyFollows`), and blocked-actor check to prevent unwanted notifications.
+- Notification creation guards: self-notification suppression, per-type user notification-preference check (`notifyLikes`, `notifyComments`, `notifyFollows`, `notifyMentions`, `notifyMessages`), and blocked-actor check to prevent unwanted notifications.
 - Elasticsearch service added to `docker-compose.yaml` using image `9.0.3`; single-node, security disabled, 512 MB JVM heap, named volume for index persistence.
 - `spring-boot-starter-data-elasticsearch` dependency added; `ElasticsearchProperties` configuration bean and `ElasticsearchConfig` wiring the Spring Data Elasticsearch client from those properties.
 - `elasticsearchSearch` Resilience4j circuit breaker instance defined in both dev and prod profiles for use by future search services.
 
 ### Fixed
+- Notification creation now checks the governing user-settings toggle for every notification type (likes, comments, mentions, and messages in addition to follows); story views have no toggle and are never preference-suppressed.
 - Fixed `SocialNotificationConsumer` failing to start when `app.notification.consumer.enabled=true` due to missing `@Autowired` on the primary constructor.
 - Disabled Apache HC5 automatic-retry behavior on the `TestRestTemplate` used by `AuthControllerIT`; `httpclient5` (added transitively by `spring-boot-starter-data-elasticsearch`) was causing `Retry-After`-honoring retries on rate-limit 429 responses, making the integration test suite hang indefinitely.
 - Corrected the RabbitMQ auto-configuration exclusion class name in two integration test contexts from the stale Spring Boot 3.x path to the Spring Boot 4.x path, preventing infinite RabbitMQ reconnection loops when no broker is available during test runs.
 
+### Changed
+- Authenticated notification OpenAPI operations now inherit the global bearer-auth requirement instead of re-declaring it per operation.
+- Testing rules now exempt integration tests that exercise a real RabbitMQ broker via Testcontainers from the AMQP auto-configuration exclusion requirement.
+
 ### Tests
+- Renamed notification and RabbitMQ topology test methods to the `{method}_{condition}_{outcome}` naming convention.
 - `NotificationServiceImplTest`: 15 unit tests covering all creation guards, mark-as-read ownership and idempotency, mark-all-as-read, unread count, and cursor pagination.
 - `NotificationControllerIT`: 8 integration tests covering pagination, ownership enforcement, bulk read, unread count accuracy, and JWT authentication.
 - `SocialNotificationConsumerIT`: 6 integration tests covering happy path follow and follow-request creation, event-id deduplication, malformed-payload dead-lettering, self-follow suppression, and unknown-event-type skipping.
