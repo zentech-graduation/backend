@@ -36,6 +36,7 @@ public class NotificationController extends BaseController implements Notificati
         this.notificationService = notificationService;
     }
 
+    /** Returns a cursor-paginated page of the caller's notifications; requires a bearer JWT. */
     @Override
     @GetMapping
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
@@ -49,6 +50,7 @@ public class NotificationController extends BaseController implements Notificati
                         notificationService.listNotifications(userId, cursor, limit)));
     }
 
+    /** Marks one notification as read; 403 if not owned by the caller; requires a bearer JWT. */
     @Override
     @PatchMapping("/{notificationId}/read")
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
@@ -58,6 +60,7 @@ public class NotificationController extends BaseController implements Notificati
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
     }
 
+    /** Marks all of the caller's unread notifications as read; requires a bearer JWT. */
     @Override
     @PatchMapping("/read-all")
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
@@ -67,6 +70,7 @@ public class NotificationController extends BaseController implements Notificati
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
     }
 
+    /** Returns the count of the caller's unread notifications; requires a bearer JWT. */
     @Override
     @GetMapping("/unread-count")
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")

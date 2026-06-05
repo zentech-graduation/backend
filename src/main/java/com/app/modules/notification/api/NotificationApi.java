@@ -31,6 +31,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping(ApiConstants.Notifications.ROOT)
 public interface NotificationApi {
 
+    /** Returns a cursor-paginated page of the caller's notifications; requires a bearer JWT. */
     @Operation(summary = "List notifications")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -60,6 +61,7 @@ public interface NotificationApi {
             @RequestParam(required = false) UUID cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit);
 
+    /** Marks one notification as read; 403 if not owned by the caller; requires a bearer JWT. */
     @Operation(summary = "Mark a notification as read")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -95,6 +97,7 @@ public interface NotificationApi {
     ResponseEntity<ApiResponse<Void>> markAsRead(
             @PathVariable UUID notificationId, @AuthenticationPrincipal UserPrincipal principal);
 
+    /** Marks all of the caller's unread notifications as read; requires a bearer JWT. */
     @Operation(summary = "Mark all notifications as read")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -123,6 +126,7 @@ public interface NotificationApi {
     ResponseEntity<ApiResponse<Void>> markAllAsRead(
             @AuthenticationPrincipal UserPrincipal principal);
 
+    /** Returns the count of the caller's unread notifications; requires a bearer JWT. */
     @Operation(summary = "Get unread notification count")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
