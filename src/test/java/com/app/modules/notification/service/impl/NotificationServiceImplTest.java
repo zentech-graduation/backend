@@ -186,7 +186,7 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void markAllAsRead_delegatesToRepository() {
+    void markAllAsRead_called_delegatesToRepository() {
         UUID recipientId = UUID.randomUUID();
 
         service.markAllAsRead(recipientId);
@@ -195,7 +195,7 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void getUnreadCount_returnsRepositoryValue() {
+    void getUnreadCount_called_returnsRepositoryValue() {
         UUID recipientId = UUID.randomUUID();
         when(notificationRepository.countByRecipientIdAndIsReadFalse(recipientId)).thenReturn(7L);
 
@@ -203,7 +203,7 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void getUnreadCount_zeroCase() {
+    void getUnreadCount_noUnreadNotifications_returnsZero() {
         UUID recipientId = UUID.randomUUID();
         when(notificationRepository.countByRecipientIdAndIsReadFalse(recipientId)).thenReturn(0L);
 

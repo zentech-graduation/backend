@@ -188,7 +188,7 @@ class NotificationControllerIT {
     }
 
     @Test
-    void markAllAsRead_marksOnlyRecipientNotifications() {
+    void markAllAsRead_otherUserNotifications_notAffected() {
         for (int i = 0; i < 3; i++) {
             seedFollow(userA.getId(), userB.getId());
         }
@@ -206,7 +206,7 @@ class NotificationControllerIT {
     }
 
     @Test
-    void getUnreadCount_accurate() {
+    void getUnreadCount_mixedReadStates_returnsUnreadOnly() {
         notificationRepository.save(
                 Notification.builder()
                         .recipientId(userA.getId())
