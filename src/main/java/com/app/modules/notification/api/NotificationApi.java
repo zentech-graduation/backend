@@ -24,7 +24,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /** OpenAPI contract for the notification module. */
@@ -32,7 +31,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping(ApiConstants.Notifications.ROOT)
 public interface NotificationApi {
 
-    @Operation(summary = "List notifications", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "List notifications")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -61,9 +60,7 @@ public interface NotificationApi {
             @RequestParam(required = false) UUID cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit);
 
-    @Operation(
-            summary = "Mark a notification as read",
-            security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "Mark a notification as read")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -98,9 +95,7 @@ public interface NotificationApi {
     ResponseEntity<ApiResponse<Void>> markAsRead(
             @PathVariable UUID notificationId, @AuthenticationPrincipal UserPrincipal principal);
 
-    @Operation(
-            summary = "Mark all notifications as read",
-            security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "Mark all notifications as read")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -128,9 +123,7 @@ public interface NotificationApi {
     ResponseEntity<ApiResponse<Void>> markAllAsRead(
             @AuthenticationPrincipal UserPrincipal principal);
 
-    @Operation(
-            summary = "Get unread notification count",
-            security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "Get unread notification count")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
