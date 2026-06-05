@@ -55,7 +55,7 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         UserSettings settings = userSettingsRepository.findById(recipientId).orElse(null);
-        if (settings != null && isFollowType(type) && !settings.isNotifyFollows()) {
+        if (settings != null && !isTypeEnabled(type, settings)) {
             return;
         }
 
@@ -124,7 +124,15 @@ public class NotificationServiceImpl implements NotificationService {
         return CursorPageResponse.of(content, limit, startCursor, endCursor, cursor != null);
     }
 
-    private boolean isFollowType(NotificationType type) {
-        return type == NotificationType.FOLLOW || type == NotificationType.FOLLOW_REQUEST;
+    private boolean isTypeEnabled(NotificationType type, UserSettings settings) {
+        return switch (type) {
+            case FOLLOW, FOLLOW_REQUEST -> settings.isNotifyFollows();
+            case LIKE_POST, LIKE_COMMENT -> settings.isNotifyLikes();
+            case COMMENT_POST, REPLY_COMMENT -> settings.isNotifyComments();
+            case MENTION_POST, MENTION_COMMENT -> settings.isNotifyMentions();
+            case MESSAGE -> settings.isNotifyMessages();
+            // STORY_VIEW has no user_settings toggle; it is never preference-suppressed.
+            case STORY_VIEW -> true;
+        };
     }
 }
