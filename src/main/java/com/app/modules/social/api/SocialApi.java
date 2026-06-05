@@ -109,7 +109,7 @@ public interface SocialApi {
     })
     @DeleteMapping("/follow/{targetUserId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    ResponseEntity<ApiResponse<Void>> unfollow(@PathVariable UUID targetUserId);
+    ResponseEntity<Void> unfollow(@PathVariable UUID targetUserId);
 
     @Operation(summary = "Get pending follow requests for current user")
     @ApiResponses({
@@ -153,7 +153,7 @@ public interface SocialApi {
     })
     @PatchMapping("/follow-requests/{requesterId}/approve")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    ResponseEntity<ApiResponse<Void>> approveFollowRequest(@PathVariable UUID requesterId);
+    ResponseEntity<Void> approveFollowRequest(@PathVariable UUID requesterId);
 
     @Operation(summary = "Reject a pending follow request")
     @ApiResponses({
@@ -177,7 +177,7 @@ public interface SocialApi {
     })
     @PatchMapping("/follow-requests/{requesterId}/reject")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    ResponseEntity<ApiResponse<Void>> rejectFollowRequest(@PathVariable UUID requesterId);
+    ResponseEntity<Void> rejectFollowRequest(@PathVariable UUID requesterId);
 
     @Operation(summary = "Block user and clean up follow relationship both ways")
     @ApiResponses({
@@ -232,7 +232,7 @@ public interface SocialApi {
     })
     @DeleteMapping("/block/{targetUserId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    ResponseEntity<ApiResponse<Void>> unblock(@PathVariable UUID targetUserId);
+    ResponseEntity<Void> unblock(@PathVariable UUID targetUserId);
 
     @Operation(summary = "Get followers with cursor pagination")
     @ApiResponses({

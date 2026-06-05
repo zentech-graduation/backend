@@ -36,11 +36,10 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<Void>> unfollow(UUID targetUserId) {
+    public ResponseEntity<Void> unfollow(UUID targetUserId) {
         socialService.unfollowUser(SecurityUtils.getCurrentUserId(), targetUserId);
 
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(ApiResponse.success(ApiSuccessCode.NO_CONTENT));
+        return ResponseEntity.noContent().build();
     }
 
     @Override
@@ -52,21 +51,19 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<Void>> approveFollowRequest(UUID requesterId) {
+    public ResponseEntity<Void> approveFollowRequest(UUID requesterId) {
         socialService.respondToFollowRequest(
                 SecurityUtils.getCurrentUserId(), requesterId, "approve");
 
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(ApiResponse.success(ApiSuccessCode.NO_CONTENT));
+        return ResponseEntity.noContent().build();
     }
 
     @Override
-    public ResponseEntity<ApiResponse<Void>> rejectFollowRequest(UUID requesterId) {
+    public ResponseEntity<Void> rejectFollowRequest(UUID requesterId) {
         socialService.respondToFollowRequest(
                 SecurityUtils.getCurrentUserId(), requesterId, "reject");
 
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(ApiResponse.success(ApiSuccessCode.NO_CONTENT));
+        return ResponseEntity.noContent().build();
     }
 
     @Override
@@ -78,11 +75,10 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<Void>> unblock(UUID targetUserId) {
+    public ResponseEntity<Void> unblock(UUID targetUserId) {
         socialService.unblockUser(SecurityUtils.getCurrentUserId(), targetUserId);
 
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(ApiResponse.success(ApiSuccessCode.NO_CONTENT));
+        return ResponseEntity.noContent().build();
     }
 
     @Override

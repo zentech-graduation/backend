@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Redis connection now authenticates correctly when `REDIS_PASSWORD` is set, resolving NOAUTH errors on startup.
+
 ### Added
 - Elasticsearch service added to `docker-compose.yaml` using image `9.0.3` (upgraded from initial 8.17.3 to align with `elasticsearch-java:9.2.8` used by Spring Data Elasticsearch 6.x; single-node, security disabled, 512 MB JVM heap, named volume for index persistence).
 - `spring-boot-starter-data-elasticsearch` dependency added to `pom.xml`; version resolved by Spring Boot BOM.

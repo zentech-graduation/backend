@@ -52,6 +52,7 @@ class ElasticsearchHealthIT {
     static void register(DynamicPropertyRegistry r) {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        r.add("spring.data.redis.password", () -> "");
         r.add("app.elasticsearch.uris", () -> "http://" + elasticsearch.getHttpHostAddress());
         r.add("JWT_SECRET", () -> "es-health-it-secret-32-chars-minimum-len!!!!");
         r.add("JWT_ISSUER", () -> "https://es.health.it.local");
