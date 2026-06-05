@@ -75,6 +75,8 @@ Always include:
 "spring.autoconfigure.exclude=org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration"
 ```
 
+(Omit the `spring.autoconfigure.exclude` line in `@SpringBootTest` classes that wire and exercise a real RabbitMQ broker via Testcontainers — adding it would disable the consumer under test.)
+
 ## 6. Before Committing
 
 ```bash
