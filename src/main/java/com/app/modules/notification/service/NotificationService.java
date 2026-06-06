@@ -10,14 +10,14 @@ public interface NotificationService {
 
     /**
      * Creates a notification for the recipient if all creation guards pass: actor is not the
-     * recipient, the recipient has the governing user-settings toggle enabled for the type, and
-     * the actor is not blocked by the recipient.
+     * recipient, the recipient has the governing user-settings toggle enabled for the type, and the
+     * actor is not blocked by the recipient.
      *
-     * <p>Toggle mapping: {@code FOLLOW}/{@code FOLLOW_REQUEST} check {@code notify_follows},
-     * {@code LIKE_POST}/{@code LIKE_COMMENT} check {@code notify_likes}, {@code COMMENT_POST}/
-     * {@code REPLY_COMMENT} check {@code notify_comments}, {@code MENTION_POST}/{@code
-     * MENTION_COMMENT} check {@code notify_mentions}, and {@code MESSAGE} checks {@code
-     * notify_messages}. {@code STORY_VIEW} has no toggle and is never preference-suppressed.
+     * <p>Toggle mapping: {@code FOLLOW}/{@code FOLLOW_REQUEST} check {@code notify_follows}, {@code
+     * LIKE_POST}/{@code LIKE_COMMENT} check {@code notify_likes}, {@code COMMENT_POST}/ {@code
+     * REPLY_COMMENT} check {@code notify_comments}, {@code MENTION_POST}/{@code MENTION_COMMENT}
+     * check {@code notify_mentions}, and {@code MESSAGE} checks {@code notify_messages}. {@code
+     * STORY_VIEW} has no toggle and is never preference-suppressed.
      *
      * @param actorId user who triggered the action; may be null for system notifications
      * @param recipientId user who should receive the notification
