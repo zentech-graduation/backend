@@ -262,6 +262,15 @@ CREATE TABLE post_saves (
     PRIMARY KEY (user_id, post_id)
 );
 
+-- Post caption edit history (append-only audit; rows are never updated or soft-deleted)
+CREATE TABLE post_edit_history (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id             UUID            NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    editor_id           UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    previous_caption    TEXT,
+    edited_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
 -- ============================================================
 -- MODULE: COMMENTS (Nested, Adjacency List + root_id + depth)
 -- ============================================================
@@ -647,6 +656,10 @@ CREATE INDEX idx_post_likes_user        ON post_likes (user_id, created_at DESC)
 
 -- post_saves
 CREATE INDEX idx_post_saves_user        ON post_saves (user_id, created_at DESC);
+
+-- post_edit_history
+CREATE INDEX idx_post_edit_history_post_edited
+    ON post_edit_history (post_id, edited_at DESC);
 
 -- comments
 CREATE INDEX idx_comments_post_root     ON comments (post_id, created_at ASC)
