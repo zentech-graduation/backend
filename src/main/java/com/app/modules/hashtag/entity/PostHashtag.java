@@ -7,8 +7,6 @@ import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
-import org.hibernate.annotations.CreationTimestamp;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -33,7 +31,6 @@ public class PostHashtag {
 
     @EmbeddedId private PostHashtagId id;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 }
