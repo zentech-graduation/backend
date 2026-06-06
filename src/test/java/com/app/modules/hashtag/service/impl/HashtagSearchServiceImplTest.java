@@ -30,6 +30,9 @@ import com.app.modules.hashtag.mapper.HashtagMapper;
 import com.app.modules.hashtag.repository.HashtagRepository;
 import com.app.modules.hashtag.search.HashtagDocument;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+
 @ExtendWith(MockitoExtension.class)
 class HashtagSearchServiceImplTest {
 
@@ -79,8 +82,12 @@ class HashtagSearchServiceImplTest {
         HashtagResponse mapped = new HashtagResponse(id, "java", 5, null);
         when(hashtagMapper.toResponse(hashtag)).thenReturn(mapped);
 
+        CallNotPermittedException circuitOpen =
+                CallNotPermittedException.createCallNotPermittedException(
+                        CircuitBreaker.ofDefaults("elasticsearchSearch"));
+
         CursorPageResponse<HashtagResponse> result =
-                service.searchFallback("java", null, 20, new RuntimeException("ES down"));
+                service.searchFallback("java", null, 20, circuitOpen);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("java");

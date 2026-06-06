@@ -1,10 +1,12 @@
 package com.app.modules.hashtag.service.impl;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
@@ -20,6 +22,7 @@ import com.app.modules.hashtag.repository.HashtagRepository;
 import com.app.modules.hashtag.search.HashtagDocument;
 import com.app.modules.hashtag.service.HashtagSearchService;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 
@@ -68,9 +71,19 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
     // the PostgreSQL pg_trgm GIN index so search degrades gracefully when Elasticsearch is down.
     CursorPageResponse<HashtagResponse> searchFallback(
             String query, String cursor, int limit, Throwable t) {
+        // Only availability failures may degrade to pg_trgm; programming or data errors must
+        // surface to the caller instead of being masked as degradation.
+        if (!isAvailabilityFailure(t)) {
+            if (t instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Unexpected hashtag search failure", t);
+        }
         log.warn(
-                "Hashtag Elasticsearch search unavailable, using pg_trgm fallback: {}",
-                t.getMessage());
+                "Hashtag Elasticsearch search unavailable ({}: {}), using pg_trgm fallback",
+                t.getClass().getSimpleName(),
+                t.getMessage(),
+                t);
         String normalized = normalizeQuery(query);
         int offset = decodeCursor(cursor);
         List<HashtagResponse> content =
@@ -78,6 +91,22 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
                         .map(hashtagMapper::toResponse)
                         .toList();
         return toPage(content, offset, limit);
+    }
+
+    // Spring Data Elasticsearch translates transport/connection failures to
+    // DataAccessResourceFailureException; raw client failures surface as IOException in the cause
+    // chain. CallNotPermittedException means the circuit is already open.
+    private static boolean isAvailabilityFailure(Throwable t) {
+        if (t instanceof CallNotPermittedException) {
+            return true;
+        }
+        for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+            if (cause instanceof DataAccessResourceFailureException
+                    || cause instanceof IOException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String normalizeQuery(String raw) {
