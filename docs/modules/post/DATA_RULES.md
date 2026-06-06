@@ -1,6 +1,6 @@
 # Post Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Phase A implementation in progress — core CRUD, lifecycle, likes, saves, visibility, Elasticsearch search, and caption edit history. Outbox events and post-document dual-writes are deferred to Phase B.
 
 ---
 
@@ -13,6 +13,7 @@
 | `post_user_tags` | `post_id`, `tagged_user_id`, `media_asset_id`, `x_position`, `y_position` | Users tagged within a post image, with optional pixel-percentage coordinates. |
 | `post_likes` | `user_id`, `post_id`, `created_at` | One row per (user, post) pair; compound PK prevents duplicate likes. Canonical like signal. |
 | `post_saves` | `user_id`, `post_id`, `created_at` | One row per (user, post) pair; compound PK prevents duplicate saves. Canonical bookmark signal. |
+| `post_edit_history` | `id`, `post_id`, `editor_id`, `previous_caption`, `edited_at` | Append-only caption edit audit (V22). Rows are never updated or soft-deleted; retention is permanent until post hard-delete (FK cascade). |
 
 These tables cannot be rebuilt from any other source if lost.
 
@@ -63,6 +64,8 @@ These tables cannot be rebuilt from any other source if lost.
 | `posts.view_count` is updated by a background job, not a trigger. It may lag real-time activity. See `GLOBAL_RULES.md` — Counter Policy Exception. | Background job `[NOT YET IMPLEMENTED]` |
 | Hashtags in `caption` are parsed and written to `post_hashtags` at publish time | `[NOT YET IMPLEMENTED]` |
 | User mentions in `caption` generate `mention_post` notifications | `[NOT YET IMPLEMENTED]` |
+| Every caption update appends one `post_edit_history` row recording the pre-edit caption and the editor | `PostServiceImpl` |
+| Edit history is readable by the post owner only | `PostServiceImpl` |
 
 ### C. Scope Simplifications
 
