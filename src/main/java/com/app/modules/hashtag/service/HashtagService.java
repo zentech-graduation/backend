@@ -1,6 +1,8 @@
 package com.app.modules.hashtag.service;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Manages canonical hashtags and their associations to posts. */
@@ -39,4 +41,14 @@ public interface HashtagService {
      * @param postId the post whose hashtag associations are removed
      */
     void removeHashtagsForPost(UUID postId);
+
+    /**
+     * Returns the hashtag ids associated with each of the given posts.
+     *
+     * <p>Posts without hashtag associations are absent from the returned map.
+     *
+     * @param postIds the posts to look up
+     * @return hashtag ids grouped by post id; an empty map for empty input
+     */
+    Map<UUID, List<UUID>> getHashtagIdsForPosts(Collection<UUID> postIds);
 }

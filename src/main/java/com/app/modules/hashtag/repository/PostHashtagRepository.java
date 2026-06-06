@@ -1,5 +1,7 @@
 package com.app.modules.hashtag.repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -25,4 +27,6 @@ public interface PostHashtagRepository extends JpaRepository<PostHashtag, PostHa
     @Modifying
     @Query("DELETE FROM PostHashtag ph WHERE ph.id.postId = :postId")
     void deleteAllByPostId(@Param("postId") UUID postId);
+
+    List<PostHashtag> findAllByIdPostIdIn(Collection<UUID> postIds);
 }

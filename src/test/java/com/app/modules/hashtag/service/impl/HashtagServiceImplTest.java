@@ -6,9 +6,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,6 +25,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import com.app.modules.hashtag.entity.Hashtag;
 import com.app.modules.hashtag.entity.PostHashtag;
+import com.app.modules.hashtag.entity.PostHashtagId;
 import com.app.modules.hashtag.mapper.HashtagMapper;
 import com.app.modules.hashtag.repository.HashtagRepository;
 import com.app.modules.hashtag.repository.PostHashtagRepository;
@@ -103,5 +106,32 @@ class HashtagServiceImplTest {
         UUID postId = UUID.randomUUID();
         service.removeHashtagsForPost(postId);
         verify(postHashtagRepository).deleteAllByPostId(postId);
+    }
+
+    @Test
+    void getHashtagIdsForPosts_multiplePosts_groupsByPostId() {
+        UUID postA = UUID.randomUUID();
+        UUID postB = UUID.randomUUID();
+        UUID tag1 = UUID.randomUUID();
+        UUID tag2 = UUID.randomUUID();
+        UUID tag3 = UUID.randomUUID();
+        when(postHashtagRepository.findAllByIdPostIdIn(List.of(postA, postB)))
+                .thenReturn(
+                        List.of(
+                                PostHashtag.builder().id(new PostHashtagId(postA, tag1)).build(),
+                                PostHashtag.builder().id(new PostHashtagId(postA, tag2)).build(),
+                                PostHashtag.builder().id(new PostHashtagId(postB, tag3)).build()));
+
+        Map<UUID, List<UUID>> result = service.getHashtagIdsForPosts(List.of(postA, postB));
+
+        assertThat(result).containsOnlyKeys(postA, postB);
+        assertThat(result.get(postA)).containsExactlyInAnyOrder(tag1, tag2);
+        assertThat(result.get(postB)).containsExactly(tag3);
+    }
+
+    @Test
+    void getHashtagIdsForPosts_emptyInput_returnsEmptyMap() {
+        assertThat(service.getHashtagIdsForPosts(List.of())).isEmpty();
+        verifyNoInteractions(postHashtagRepository);
     }
 }

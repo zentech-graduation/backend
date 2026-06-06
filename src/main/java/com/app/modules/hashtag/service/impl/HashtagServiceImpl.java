@@ -1,9 +1,12 @@
 package com.app.modules.hashtag.service.impl;
 
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -94,5 +97,19 @@ public class HashtagServiceImpl implements HashtagService {
     @Transactional
     public void removeHashtagsForPost(UUID postId) {
         postHashtagRepository.deleteAllByPostId(postId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<UUID>> getHashtagIdsForPosts(Collection<UUID> postIds) {
+        if (postIds.isEmpty()) {
+            return Map.of();
+        }
+        return postHashtagRepository.findAllByIdPostIdIn(postIds).stream()
+                .collect(
+                        Collectors.groupingBy(
+                                ph -> ph.getId().getPostId(),
+                                Collectors.mapping(
+                                        ph -> ph.getId().getHashtagId(), Collectors.toList())));
     }
 }
