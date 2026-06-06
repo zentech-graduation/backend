@@ -91,6 +91,7 @@ class AuthControllerIT {
     static void register(DynamicPropertyRegistry r) {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        r.add("spring.data.redis.password", () -> "");
         r.add("JWT_SECRET", () -> TEST_JWT_SECRET);
         r.add("JWT_ISSUER", () -> TEST_JWT_ISSUER);
         r.add("JWT_AUDIENCE", () -> TEST_JWT_AUDIENCE);
