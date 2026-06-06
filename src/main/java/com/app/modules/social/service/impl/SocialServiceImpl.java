@@ -325,6 +325,19 @@ public class SocialServiceImpl implements SocialService {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasAcceptedFollow(UUID followerId, UUID followingId) {
+        return followRepository.existsByIdAndStatus(
+                new FollowId(followerId, followingId), FollowStatus.ACCEPTED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isBlockedBetween(UUID userIdA, UUID userIdB) {
+        return blockRepository.existsBetween(userIdA, userIdB);
+    }
+
     private void checkCanViewSocialGraph(UUID currentUserId, UUID targetUserId, User targetUser) {
         if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
                 || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
