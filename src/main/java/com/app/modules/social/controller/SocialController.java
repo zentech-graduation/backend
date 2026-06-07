@@ -1,41 +1,101 @@
 package com.app.modules.social.controller;
 
+import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.app.common.ApiConstants;
 import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
+import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.social.api.SocialApi;
+import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.service.FollowService;
+import com.app.modules.social.dto.response.SocialUserSummaryResponse;
+import com.app.modules.social.service.SocialService;
 
-import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import lombok.RequiredArgsConstructor;
 
-/** REST endpoints for social graph operations. */
 @RestController
+@RequiredArgsConstructor
 public class SocialController extends BaseController implements SocialApi {
 
-    private final FollowService followService;
+    private final SocialService socialService;
 
-    public SocialController(FollowService followService) {
-        this.followService = followService;
+    @Override
+    public ResponseEntity<ApiResponse<FollowResponse>> follow(UUID targetUserId) {
+        FollowResponse body =
+                socialService.followUser(SecurityUtils.getCurrentUserId(), targetUserId);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(ApiSuccessCode.CREATED, body));
     }
 
-    /** Creates a follow relationship for the authenticated user and returns its stored state. */
     @Override
-    @PostMapping(ApiConstants.Social.FOLLOW)
-    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<FollowResponse>> follow(@PathVariable UUID targetUserId) {
-        UUID followerId = SecurityUtils.getCurrentUserId();
-        FollowResponse response = followService.follow(followerId, targetUserId);
-        return ResponseEntity.status(ApiSuccessCode.CREATED.getHttpStatus())
-                .body(ApiResponse.success(ApiSuccessCode.CREATED, response));
+    public ResponseEntity<Void> unfollow(UUID targetUserId) {
+        socialService.unfollowUser(SecurityUtils.getCurrentUserId(), targetUserId);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    public ResponseEntity<ApiResponse<List<FollowRequestResponse>>> getPendingFollowRequests() {
+        List<FollowRequestResponse> body =
+                socialService.getPendingFollowRequests(SecurityUtils.getCurrentUserId());
+
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    @Override
+    public ResponseEntity<Void> approveFollowRequest(UUID requesterId) {
+        socialService.respondToFollowRequest(
+                SecurityUtils.getCurrentUserId(), requesterId, "approve");
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    public ResponseEntity<Void> rejectFollowRequest(UUID requesterId) {
+        socialService.respondToFollowRequest(
+                SecurityUtils.getCurrentUserId(), requesterId, "reject");
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    public ResponseEntity<ApiResponse<Void>> block(UUID targetUserId) {
+        socialService.blockUser(SecurityUtils.getCurrentUserId(), targetUserId);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(ApiSuccessCode.CREATED));
+    }
+
+    @Override
+    public ResponseEntity<Void> unblock(UUID targetUserId) {
+        socialService.unblockUser(SecurityUtils.getCurrentUserId(), targetUserId);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    public ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowers(
+            UUID userId, String cursor, int limit) {
+        CursorPageResponse<SocialUserSummaryResponse> body =
+                socialService.getFollowers(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
+
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    @Override
+    public ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowing(
+            UUID userId, String cursor, int limit) {
+        CursorPageResponse<SocialUserSummaryResponse> body =
+                socialService.getFollowing(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
+
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 }

@@ -1,34 +1,28 @@
 package com.app.modules.social.repository;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import com.app.modules.social.entity.Block;
+import com.app.modules.social.entity.BlockId;
+
 @Repository
-public class BlockRepository {
+public interface BlockRepository extends JpaRepository<Block, BlockId> {
 
-    private final JdbcClient jdbcClient;
+    Optional<Block> findById(BlockId id);
 
-    public BlockRepository(JdbcClient jdbcClient) {
-        this.jdbcClient = jdbcClient;
-    }
+    boolean existsById(BlockId id);
 
-    public boolean existsBetween(UUID firstUserId, UUID secondUserId) {
-        return Boolean.TRUE.equals(
-                jdbcClient
-                        .sql(
-                                """
-								SELECT EXISTS (
-									SELECT 1
-									FROM blocks
-									WHERE (blocker_id = :firstUserId AND blocked_id = :secondUserId)
-									OR (blocker_id = :secondUserId AND blocked_id = :firstUserId)
-								)
-								""")
-                        .param("firstUserId", firstUserId)
-                        .param("secondUserId", secondUserId)
-                        .query(Boolean.class)
-                        .single());
+    List<Block> findByIdBlockerId(UUID blockerId);
+
+    List<Block> findByIdBlockedId(UUID blockedId);
+
+    default boolean existsBetween(UUID firstUserId, UUID secondUserId) {
+        return existsById(new BlockId(firstUserId, secondUserId))
+                || existsById(new BlockId(secondUserId, firstUserId));
     }
 }

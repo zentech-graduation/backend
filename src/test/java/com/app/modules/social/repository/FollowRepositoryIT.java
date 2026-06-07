@@ -8,9 +8,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -50,15 +48,6 @@ class FollowRepositoryIT {
     @DynamicPropertySource
     static void register(DynamicPropertyRegistry registry) {
         registry.add("spring.flyway.enabled", () -> true);
-    }
-
-    @TestConfiguration
-    static class TestConfig {
-
-        @Bean
-        BlockRepository blockRepository(JdbcClient jdbcClient) {
-            return new BlockRepository(jdbcClient);
-        }
     }
 
     @Test
