@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Tests
+- Unit tests for the post service (creation media validation, carousel cardinality, owner-only authorization, lifecycle transitions, soft-delete invariants, hashtag extraction), post visibility service, and the like and save services (idempotency and visibility enforcement).
+- Integration test covering post CRUD, lifecycle, visibility gating across public, private, and blocked combinations, like and save idempotency, and search behaviour with Elasticsearch available and stopped.
+
+### Changed
+- `STRUCT.md` (`.claude/rules/` and `.agents/rules/`) updated to reflect current codebase state: 21 Flyway migrations (V01–V21), 7 implemented modules (auth, mail, users, social, media, hashtag, notification), new `common/` packages (inbox, outbox, messaging, settings, config/elasticsearch, config/rabbit, config/security), restructured `security/` sub-packages, Elasticsearch service and config, full RabbitMQ topology, updated Technology Stack versions, and accurate Redis key patterns.
+
 ### Fixed
 - `Follow` entity no longer maps a non-existent `deleted_at` column; `FollowRepository` JPQL queries and derived method names that referenced `deletedAt` are updated to match the actual schema.
 - `SocialNotificationConsumer` now activates in dev and prod profiles via `app.notification.consumer.enabled: true`; `application.yaml` wires the property from `NOTIFICATION_CONSUMER_ENABLED` with a `false` default.
@@ -19,6 +26,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Redis connection now authenticates correctly when `REDIS_PASSWORD` is set, resolving NOAUTH errors on startup.
 
 ### Added
+- Post creation, retrieval, caption update, lifecycle transition, and soft-delete endpoints, with per-post append-only caption edit history readable by the owner.
+- Post like and save endpoints with idempotent semantics and cursor-paginated liker and saved-post listings.
+- Post visibility enforcement gating retrieval, listing, liking, and saving by block relationships and private-account follow state.
+- Elasticsearch full-text post search guarded by the `elasticsearchSearch` circuit breaker, degrading to an empty result page when the search tier is unavailable.
+- Posts Elasticsearch index seed runner that batch-loads published posts from PostgreSQL on startup only when the index is empty and `app.post.seed.enabled` is true.
+- `post_edit_history` table (Flyway V22) recording the pre-edit caption and editor for every caption change, append-only and never soft-deleted.
+- Follow and block state read methods on the social service exposing accepted-follow and bidirectional-block checks to other modules.
+- Hashtag-id lookup on the hashtag service returning hashtag associations grouped by post for index seeding.
+- Post API error codes `POST_NOT_FOUND`, `POST_FORBIDDEN`, `POST_ALREADY_LIKED`, and `POST_ALREADY_SAVED`, and post API path constants for status, history, likes, saved, and search.
 - Public hashtag HTTP endpoints `GET /api/v1/hashtags/search` and `GET /api/v1/hashtags/trending`, documented via the `HashtagApi` OpenAPI interface and rate-limited per endpoint.
 - `HashtagIndexSeedRunner` seeding the Elasticsearch `hashtags` index from PostgreSQL on startup only when the index is empty and `app.hashtag.seed.enabled` is true, treating seeding failures as non-fatal so startup never blocks on the rebuildable search tier.
 - `HashtagTrendingService` computing ranked hashtag trending snapshots from a windowed `post_hashtags` aggregation and serving the latest snapshot as an offset-paginated response, driven by a scheduled, transactional snapshot job.
