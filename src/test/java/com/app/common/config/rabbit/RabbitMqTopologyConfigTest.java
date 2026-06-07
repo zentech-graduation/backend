@@ -25,7 +25,7 @@ class RabbitMqTopologyConfigTest {
                             RabbitMqTopologyConfig.class, AuthMailRabbitBindingConfig.class);
 
     @Test
-    void declaresOnlyMailQueuesAsActiveQueues() {
+    void topology_contextLoads_declaresAllDeclaredQueues() {
         contextRunner.run(
                 context -> {
                     Set<String> queueNames =
@@ -36,10 +36,11 @@ class RabbitMqTopologyConfigTest {
                     assertThat(queueNames)
                             .containsExactlyInAnyOrder(
                                     RabbitMqTopologyConfig.MAIL_QUEUE,
-                                    RabbitMqTopologyConfig.MAIL_DEAD_LETTER_QUEUE);
+                                    RabbitMqTopologyConfig.MAIL_DEAD_LETTER_QUEUE,
+                                    RabbitMqTopologyConfig.NOTIFICATION_QUEUE,
+                                    RabbitMqTopologyConfig.NOTIFICATION_DEAD_LETTER_QUEUE);
                     assertThat(queueNames)
                             .doesNotContain(
-                                    RabbitMqTopologyConfig.NOTIFICATION_QUEUE,
                                     RabbitMqTopologyConfig.AUDIT_LOG_QUEUE,
                                     RabbitMqTopologyConfig.MODERATION_QUEUE,
                                     RabbitMqTopologyConfig.SEARCH_INDEX_QUEUE);
@@ -99,19 +100,19 @@ class RabbitMqTopologyConfigTest {
     }
 
     @Test
-    void doesNotBindFutureQueues() {
+    void topology_contextLoads_doesNotBindFutureQueues() {
         contextRunner.run(
                 context -> {
                     Set<String> futureQueues =
                             Set.of(
-                                    RabbitMqTopologyConfig.NOTIFICATION_QUEUE,
                                     RabbitMqTopologyConfig.AUDIT_LOG_QUEUE,
                                     RabbitMqTopologyConfig.MODERATION_QUEUE,
                                     RabbitMqTopologyConfig.SEARCH_INDEX_QUEUE);
 
                     assertThat(context.getBeansOfType(Binding.class).values())
                             .noneMatch(binding -> futureQueues.contains(binding.getDestination()));
-                    assertThat(context.getBeansOfType(Binding.class)).hasSize(1);
+                    // mail.dlq and notification.dlq dead-letter bindings are active
+                    assertThat(context.getBeansOfType(Binding.class)).hasSize(2);
                 });
     }
 
