@@ -134,6 +134,9 @@ app:
       job-initial-delay: ${HASHTAG_TRENDING_JOB_INITIAL_DELAY:PT5M}
     seed:
       enabled: ${HASHTAG_SEED_ENABLED:true}
+  post:
+    seed:
+      enabled: ${POST_SEED_ENABLED:true}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
