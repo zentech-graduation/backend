@@ -26,6 +26,9 @@ public class RabbitMqTopologyConfig {
     public static final String MAIL_DEAD_LETTER_ROUTING_KEY = "mail.dead-letter";
 
     public static final String NOTIFICATION_QUEUE = "notification.queue";
+    public static final String NOTIFICATION_DEAD_LETTER_QUEUE = "notification.dlq";
+    public static final String NOTIFICATION_DEAD_LETTER_ROUTING_KEY = "notification.dead-letter";
+
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
     public static final String SEARCH_INDEX_QUEUE = "search-index.queue";
@@ -58,5 +61,23 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(mailDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(MAIL_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue notificationQueue() {
+        return QueueBuilder.durable(NOTIFICATION_QUEUE).build();
+    }
+
+    @Bean
+    Queue notificationDeadLetterQueue() {
+        return QueueBuilder.durable(NOTIFICATION_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding notificationDeadLetterBinding(
+            Queue notificationDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(notificationDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
     }
 }
