@@ -13,6 +13,7 @@ import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostEditHistory;
 import com.app.modules.post.entity.PostMedia;
+import com.app.modules.post.search.PostDocument;
 import com.app.modules.users.entity.User;
 
 /** Maps post entities to API response DTOs. */
@@ -58,4 +59,22 @@ public interface PostMapper {
     @Mapping(source = "id", target = "userId")
     @Mapping(source = "verified", target = "isVerified")
     LikerResponse toLikerResponse(User user);
+
+    /**
+     * Projects the entity to its Elasticsearch document, converting UUIDs to string form and the
+     * status to its lowercase index value.
+     *
+     * @param post the source post
+     * @param hashtagIds string-form hashtag ids resolved from {@code post_hashtags}
+     * @return the indexable document
+     */
+    @Mapping(target = "id", expression = "java(post.getId().toString())")
+    @Mapping(target = "userId", expression = "java(post.getUserId().toString())")
+    @Mapping(
+            target = "status",
+            expression = "java(post.getStatus().name().toLowerCase(java.util.Locale.ROOT))")
+    @Mapping(source = "hashtagIds", target = "hashtagIds")
+    @Mapping(source = "post.caption", target = "caption")
+    @Mapping(source = "post.createdAt", target = "createdAt")
+    PostDocument toDocument(Post post, List<String> hashtagIds);
 }
