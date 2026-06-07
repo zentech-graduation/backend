@@ -100,6 +100,7 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/notifications";
         public static final String MARK_READ = "/{notificationId}/read";
         public static final String MARK_ALL_READ = "/read-all";
+        public static final String UNREAD_COUNT = "/unread-count";
     }
 
     public static final class Hashtags {
@@ -109,6 +110,7 @@ public final class ApiConstants {
         public static final String BY_NAME = "/{name}";
         public static final String POSTS = "/{name}/posts";
         public static final String TRENDING = "/trending";
+        public static final String SEARCH = "/search";
     }
 
     public static final class Media {
