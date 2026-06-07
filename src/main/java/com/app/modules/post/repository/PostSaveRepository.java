@@ -17,18 +17,31 @@ import com.app.modules.post.entity.PostSaveId;
 public interface PostSaveRepository extends JpaRepository<PostSave, PostSaveId> {
 
     /**
-     * Keyset page of a user's saves, newest first.
+     * First keyset page of a user's saves, newest first.
+     *
+     * <p>Paired with {@link #findSavesBefore}; the no-cursor variant avoids binding an untyped null
+     * timestamp, which PostgreSQL cannot type-infer.
      *
      * @param userId saving user
-     * @param cursor exclusive upper bound on {@code created_at}; {@code null} for the first page
+     * @param pageable page size carrier
+     * @return saves ordered by {@code created_at} descending
+     */
+    @Query("SELECT ps FROM PostSave ps WHERE ps.id.userId = :userId ORDER BY ps.createdAt DESC")
+    List<PostSave> findFirstSaves(@Param("userId") UUID userId, Pageable pageable);
+
+    /**
+     * Keyset page of a user's saves older than the cursor, newest first.
+     *
+     * @param userId saving user
+     * @param cursor exclusive upper bound on {@code created_at}; never null
      * @param pageable page size carrier
      * @return saves ordered by {@code created_at} descending
      */
     @Query(
             "SELECT ps FROM PostSave ps WHERE ps.id.userId = :userId "
-                    + "AND (:cursor IS NULL OR ps.createdAt < :cursor) "
+                    + "AND ps.createdAt < :cursor "
                     + "ORDER BY ps.createdAt DESC")
-    List<PostSave> findSavesWithCursor(
+    List<PostSave> findSavesBefore(
             @Param("userId") UUID userId,
             @Param("cursor") OffsetDateTime cursor,
             Pageable pageable);

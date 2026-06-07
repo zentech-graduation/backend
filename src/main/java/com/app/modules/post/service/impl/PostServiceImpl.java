@@ -256,12 +256,13 @@ public class PostServiceImpl implements PostService {
         }
         int pageSize = normalizeLimit(size);
         OffsetDateTime cursorTime = decodeCursor(cursor);
+        PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Post> posts =
-                postRepository.findUserPostsWithCursor(
-                        targetUserId,
-                        PostStatus.PUBLISHED,
-                        cursorTime,
-                        PageRequest.of(0, pageSize + 1));
+                cursorTime == null
+                        ? postRepository.findFirstUserPosts(
+                                targetUserId, PostStatus.PUBLISHED, page)
+                        : postRepository.findUserPostsBefore(
+                                targetUserId, PostStatus.PUBLISHED, cursorTime, page);
         if (posts.size() > pageSize) {
             posts = posts.subList(0, pageSize);
         }
@@ -288,9 +289,11 @@ public class PostServiceImpl implements PostService {
         }
         int pageSize = normalizeLimit(size);
         OffsetDateTime cursorTime = decodeCursor(cursor);
+        PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostEditHistory> rows =
-                postEditHistoryRepository.findByPostWithCursor(
-                        postId, cursorTime, PageRequest.of(0, pageSize + 1));
+                cursorTime == null
+                        ? postEditHistoryRepository.findFirstByPost(postId, page)
+                        : postEditHistoryRepository.findByPostBefore(postId, cursorTime, page);
         if (rows.size() > pageSize) {
             rows = rows.subList(0, pageSize);
         }

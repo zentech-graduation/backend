@@ -94,9 +94,11 @@ public class PostLikeServiceImpl implements PostLikeService {
         fetchVisiblePublishedPost(viewerId, postId);
         int pageSize = normalizeLimit(size);
         OffsetDateTime cursorTime = decodeCursor(cursor);
+        PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostLike> likes =
-                postLikeRepository.findLikersWithCursor(
-                        postId, cursorTime, PageRequest.of(0, pageSize + 1));
+                cursorTime == null
+                        ? postLikeRepository.findFirstLikers(postId, page)
+                        : postLikeRepository.findLikersBefore(postId, cursorTime, page);
         if (likes.size() > pageSize) {
             likes = likes.subList(0, pageSize);
         }

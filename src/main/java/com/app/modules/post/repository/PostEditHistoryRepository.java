@@ -16,20 +16,34 @@ import com.app.modules.post.entity.PostEditHistory;
 public interface PostEditHistoryRepository extends JpaRepository<PostEditHistory, UUID> {
 
     /**
-     * Keyset page of a post's caption edit history, newest first.
+     * First keyset page of a post's caption edit history, newest first.
+     *
+     * <p>Served by {@code idx_post_edit_history_post_edited} (V22). Paired with {@link
+     * #findByPostBefore}; the no-cursor variant avoids binding an untyped null timestamp, which
+     * PostgreSQL cannot type-infer.
+     *
+     * @param postId edited post
+     * @param pageable page size carrier
+     * @return history rows ordered by {@code edited_at} descending
+     */
+    @Query("SELECT h FROM PostEditHistory h WHERE h.postId = :postId ORDER BY h.editedAt DESC")
+    List<PostEditHistory> findFirstByPost(@Param("postId") UUID postId, Pageable pageable);
+
+    /**
+     * Keyset page of a post's caption edit history older than the cursor, newest first.
      *
      * <p>Served by {@code idx_post_edit_history_post_edited} (V22).
      *
      * @param postId edited post
-     * @param cursor exclusive upper bound on {@code edited_at}; {@code null} for the first page
+     * @param cursor exclusive upper bound on {@code edited_at}; never null
      * @param pageable page size carrier
      * @return history rows ordered by {@code edited_at} descending
      */
     @Query(
             "SELECT h FROM PostEditHistory h WHERE h.postId = :postId "
-                    + "AND (:cursor IS NULL OR h.editedAt < :cursor) "
+                    + "AND h.editedAt < :cursor "
                     + "ORDER BY h.editedAt DESC")
-    List<PostEditHistory> findByPostWithCursor(
+    List<PostEditHistory> findByPostBefore(
             @Param("postId") UUID postId,
             @Param("cursor") OffsetDateTime cursor,
             Pageable pageable);

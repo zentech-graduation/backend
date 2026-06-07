@@ -93,9 +93,11 @@ public class PostSaveServiceImpl implements PostSaveService {
             UUID userId, String cursor, int size) {
         int pageSize = normalizeLimit(size);
         OffsetDateTime cursorTime = decodeCursor(cursor);
+        PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostSave> saves =
-                postSaveRepository.findSavesWithCursor(
-                        userId, cursorTime, PageRequest.of(0, pageSize + 1));
+                cursorTime == null
+                        ? postSaveRepository.findFirstSaves(userId, page)
+                        : postSaveRepository.findSavesBefore(userId, cursorTime, page);
         if (saves.size() > pageSize) {
             saves = saves.subList(0, pageSize);
         }

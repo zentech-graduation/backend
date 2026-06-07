@@ -83,9 +83,12 @@ public class PostIndexSeedRunner implements ApplicationRunner {
             long indexed = 0;
             OffsetDateTime cursor = null;
             while (true) {
+                PageRequest page = PageRequest.of(0, BATCH_SIZE);
                 List<Post> batch =
-                        postRepository.findPublishedWithCursor(
-                                PostStatus.PUBLISHED, cursor, PageRequest.of(0, BATCH_SIZE));
+                        cursor == null
+                                ? postRepository.findFirstPublished(PostStatus.PUBLISHED, page)
+                                : postRepository.findPublishedBefore(
+                                        PostStatus.PUBLISHED, cursor, page);
                 if (batch.isEmpty()) {
                     break;
                 }

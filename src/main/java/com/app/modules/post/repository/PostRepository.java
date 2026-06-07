@@ -20,40 +20,68 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     Optional<Post> findByIdAndDeletedAtIsNull(UUID id);
 
     /**
-     * Keyset page of a user's posts in the given status, newest first.
+     * First keyset page of a user's posts in the given status, newest first.
+     *
+     * <p>Paired with {@link #findUserPostsBefore}; the no-cursor variant avoids binding an untyped
+     * null timestamp, which PostgreSQL cannot type-infer.
      *
      * @param userId post author
      * @param status status filter; listing endpoints page published posts only
-     * @param cursor exclusive upper bound on {@code created_at}; {@code null} for the first page
      * @param pageable page size carrier (page number is always 0 for keyset paging)
      * @return posts ordered by {@code created_at} descending
      */
     @Query(
             "SELECT p FROM Post p WHERE p.userId = :userId "
                     + "AND p.status = :status "
-                    + "AND (:cursor IS NULL OR p.createdAt < :cursor) "
                     + "ORDER BY p.createdAt DESC")
-    List<Post> findUserPostsWithCursor(
+    List<Post> findFirstUserPosts(
+            @Param("userId") UUID userId, @Param("status") PostStatus status, Pageable pageable);
+
+    /**
+     * Keyset page of a user's posts older than the cursor, newest first.
+     *
+     * @param userId post author
+     * @param status status filter; listing endpoints page published posts only
+     * @param cursor exclusive upper bound on {@code created_at}; never null
+     * @param pageable page size carrier
+     * @return posts ordered by {@code created_at} descending
+     */
+    @Query(
+            "SELECT p FROM Post p WHERE p.userId = :userId "
+                    + "AND p.status = :status "
+                    + "AND p.createdAt < :cursor "
+                    + "ORDER BY p.createdAt DESC")
+    List<Post> findUserPostsBefore(
             @Param("userId") UUID userId,
             @Param("status") PostStatus status,
             @Param("cursor") OffsetDateTime cursor,
             Pageable pageable);
 
     /**
-     * Keyset batch of posts in the given status across all users, newest first.
+     * First keyset batch of posts in the given status across all users, newest first.
      *
-     * <p>Used by the Elasticsearch index seed runner to walk the table in fixed-size batches.
+     * <p>Used by the Elasticsearch index seed runner to start walking the table.
      *
      * @param status status filter; the seed runner indexes published posts only
-     * @param cursor exclusive upper bound on {@code created_at}; {@code null} for the first batch
+     * @param pageable batch size carrier
+     * @return posts ordered by {@code created_at} descending
+     */
+    @Query("SELECT p FROM Post p WHERE p.status = :status ORDER BY p.createdAt DESC")
+    List<Post> findFirstPublished(@Param("status") PostStatus status, Pageable pageable);
+
+    /**
+     * Keyset batch of posts in the given status older than the cursor, newest first.
+     *
+     * @param status status filter; the seed runner indexes published posts only
+     * @param cursor exclusive upper bound on {@code created_at}; never null
      * @param pageable batch size carrier
      * @return posts ordered by {@code created_at} descending
      */
     @Query(
             "SELECT p FROM Post p WHERE p.status = :status "
-                    + "AND (:cursor IS NULL OR p.createdAt < :cursor) "
+                    + "AND p.createdAt < :cursor "
                     + "ORDER BY p.createdAt DESC")
-    List<Post> findPublishedWithCursor(
+    List<Post> findPublishedBefore(
             @Param("status") PostStatus status,
             @Param("cursor") OffsetDateTime cursor,
             Pageable pageable);

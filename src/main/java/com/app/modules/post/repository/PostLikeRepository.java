@@ -17,18 +17,31 @@ import com.app.modules.post.entity.PostLikeId;
 public interface PostLikeRepository extends JpaRepository<PostLike, PostLikeId> {
 
     /**
-     * Keyset page of likes for a post, newest first.
+     * First keyset page of likes for a post, newest first.
+     *
+     * <p>Paired with {@link #findLikersBefore}; the no-cursor variant avoids binding an untyped
+     * null timestamp, which PostgreSQL cannot type-infer.
      *
      * @param postId liked post
-     * @param cursor exclusive upper bound on {@code created_at}; {@code null} for the first page
+     * @param pageable page size carrier
+     * @return likes ordered by {@code created_at} descending
+     */
+    @Query("SELECT pl FROM PostLike pl WHERE pl.id.postId = :postId ORDER BY pl.createdAt DESC")
+    List<PostLike> findFirstLikers(@Param("postId") UUID postId, Pageable pageable);
+
+    /**
+     * Keyset page of likes for a post older than the cursor, newest first.
+     *
+     * @param postId liked post
+     * @param cursor exclusive upper bound on {@code created_at}; never null
      * @param pageable page size carrier
      * @return likes ordered by {@code created_at} descending
      */
     @Query(
             "SELECT pl FROM PostLike pl WHERE pl.id.postId = :postId "
-                    + "AND (:cursor IS NULL OR pl.createdAt < :cursor) "
+                    + "AND pl.createdAt < :cursor "
                     + "ORDER BY pl.createdAt DESC")
-    List<PostLike> findLikersWithCursor(
+    List<PostLike> findLikersBefore(
             @Param("postId") UUID postId,
             @Param("cursor") OffsetDateTime cursor,
             Pageable pageable);

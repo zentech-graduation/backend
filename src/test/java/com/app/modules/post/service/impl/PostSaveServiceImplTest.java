@@ -119,7 +119,7 @@ class PostSaveServiceImplTest {
                         .userId(UUID.randomUUID())
                         .status(PostStatus.PUBLISHED)
                         .build();
-        when(postSaveRepository.findSavesWithCursor(eq(userId), any(), any(Pageable.class)))
+        when(postSaveRepository.findFirstSaves(eq(userId), any(Pageable.class)))
                 .thenReturn(List.of(save(postId), save(hiddenPostId)));
         when(postRepository.findAllById(List.of(postId, hiddenPostId)))
                 .thenReturn(List.of(publishedPost, hiddenPost));
@@ -133,7 +133,7 @@ class PostSaveServiceImplTest {
     @Test
     void listSavedPosts_softDeletedPost_excluded() {
         UUID deletedPostId = UUID.randomUUID();
-        when(postSaveRepository.findSavesWithCursor(eq(userId), any(), any(Pageable.class)))
+        when(postSaveRepository.findFirstSaves(eq(userId), any(Pageable.class)))
                 .thenReturn(List.of(save(postId), save(deletedPostId)));
         // The @SQLRestriction filter drops the soft-deleted row from findAllById.
         when(postRepository.findAllById(List.of(postId, deletedPostId)))
