@@ -2,11 +2,9 @@ package com.app.modules.notification.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import javax.crypto.spec.SecretKeySpec;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,11 +19,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -34,6 +27,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.repository.NotificationRepository;
@@ -41,7 +35,6 @@ import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -71,6 +64,7 @@ class NotificationControllerIT {
     static void register(DynamicPropertyRegistry r) {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        r.add("spring.data.redis.password", () -> "");
         r.add("JWT_SECRET", () -> TEST_JWT_SECRET);
         r.add("JWT_ISSUER", () -> TEST_JWT_ISSUER);
         r.add("JWT_AUDIENCE", () -> TEST_JWT_AUDIENCE);
@@ -89,6 +83,7 @@ class NotificationControllerIT {
     }
 
     @Autowired private TestRestTemplate rest;
+    @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationRepository notificationRepository;
 
@@ -259,26 +254,8 @@ class NotificationControllerIT {
     }
 
     private String jwtFor(User user) {
-        NimbusJwtEncoder encoder =
-                new NimbusJwtEncoder(
-                        new ImmutableSecret<>(
-                                new SecretKeySpec(TEST_JWT_SECRET.getBytes(), "HmacSHA256")));
-        JwtClaimsSet claims =
-                JwtClaimsSet.builder()
-                        .issuer(TEST_JWT_ISSUER)
-                        .audience(List.of(TEST_JWT_AUDIENCE))
-                        .subject(user.getId().toString())
-                        .claim("email", user.getEmail())
-                        .claim("role", user.getRole().name())
-                        .claim("status", user.getStatus().name())
-                        .claim("jti", UUID.randomUUID().toString())
-                        .issuedAt(Instant.now())
-                        .expiresAt(Instant.now().plusSeconds(900))
-                        .build();
-        return encoder.encode(
-                        JwtEncoderParameters.from(
-                                JwsHeader.with(MacAlgorithm.HS256).build(), claims))
-                .getTokenValue();
+        return jwtTokenProvider.generateAccessToken(
+                user.getId(), user.getEmail(), user.getRole().name());
     }
 
     private static User activeUser(String username) {

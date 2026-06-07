@@ -24,6 +24,9 @@ springdoc:
     disable-swagger-default-url: true
 
 app:
+  notification:
+    consumer:
+      enabled: true
   mail:
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}

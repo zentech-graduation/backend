@@ -26,11 +26,9 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
 
     boolean existsByIdAndStatus(FollowId id, FollowStatus status);
 
-    List<Follow> findByIdFollowerIdAndStatusAndDeletedAtIsNull(
-            UUID followerId, FollowStatus status);
+    List<Follow> findByIdFollowerIdAndStatus(UUID followerId, FollowStatus status);
 
-    List<Follow> findByIdFollowingIdAndStatusAndDeletedAtIsNull(
-            UUID followingId, FollowStatus status);
+    List<Follow> findByIdFollowingIdAndStatus(UUID followingId, FollowStatus status);
 
     List<Follow> findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
             UUID followingId, FollowStatus status);
@@ -38,7 +36,6 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
     @Query(
             "SELECT f FROM Follow f WHERE f.id.followingId = :userId "
                     + "AND f.status = :status "
-                    + "AND f.deletedAt IS NULL "
                     + "AND (:cursor IS NULL OR f.createdAt < :cursor) "
                     + "AND f.id.followerId NOT IN (SELECT b.id.blockedId FROM Block b WHERE b.id.blockerId = :currentUserId) "
                     + "AND f.id.followerId NOT IN (SELECT b.id.blockerId FROM Block b WHERE b.id.blockedId = :currentUserId) "
@@ -53,7 +50,6 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
     @Query(
             "SELECT f FROM Follow f WHERE f.id.followerId = :userId "
                     + "AND f.status = :status "
-                    + "AND f.deletedAt IS NULL "
                     + "AND (:cursor IS NULL OR f.createdAt < :cursor) "
                     + "AND f.id.followingId NOT IN (SELECT b.id.blockedId FROM Block b WHERE b.id.blockerId = :currentUserId) "
                     + "AND f.id.followingId NOT IN (SELECT b.id.blockerId FROM Block b WHERE b.id.blockedId = :currentUserId) "
