@@ -138,6 +138,7 @@ public class SecurityConfig {
                             configureInfrastructureEndpoints(auth);
                             configureRoleBasedEndpoints(auth);
                             configurePublicUsersEndpoints(auth);
+                            configurePublicHashtagEndpoints(auth);
                             auth.anyRequest().authenticated();
                         })
                 .addFilterBefore(
@@ -212,6 +213,17 @@ public class SecurityConfig {
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
         auth.requestMatchers(HttpMethod.GET, ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID)
+                .permitAll();
+    }
+
+    /** Permits unauthenticated access to hashtag fuzzy search and trending discovery endpoints. */
+    private void configurePublicHashtagEndpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Hashtags.ROOT + ApiConstants.Hashtags.SEARCH,
+                        ApiConstants.Hashtags.ROOT + ApiConstants.Hashtags.TRENDING)
                 .permitAll();
     }
 
