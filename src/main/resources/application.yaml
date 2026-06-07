@@ -101,6 +101,9 @@ app:
     reset-password-path: ${MAIL_RESET_PASSWORD_PATH:/reset-password}
     verify-email-path: ${MAIL_VERIFY_EMAIL_PATH:/verify-email}
     frontend-base-url: ${FRONTEND_BASE_URL}
+  notification:
+    consumer:
+      enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
   media:
     cdn-base-url: ${MEDIA_CDN_BASE_URL:}
     r2:

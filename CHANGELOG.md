@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- `Follow` entity no longer maps a non-existent `deleted_at` column; `FollowRepository` JPQL queries and derived method names that referenced `deletedAt` are updated to match the actual schema.
+- `SocialNotificationConsumer` now activates in dev and prod profiles via `app.notification.consumer.enabled: true`; `application.yaml` wires the property from `NOTIFICATION_CONSUMER_ENABLED` with a `false` default.
+- `NotificationControllerIT` JWT construction replaced with `JwtTokenProvider.generateAccessToken()` and the `@DynamicPropertySource` block now overrides `spring.data.redis.password` to prevent the `.env`-sourced password from being sent to the password-less test Redis container.
 - Hashtag entities now delegate `created_at` to the PostgreSQL `DEFAULT NOW()` column default instead of generating the timestamp on the JVM, aligning with the documented timestamp policy.
 - Hashtag search circuit-breaker fallback now rethrows non-availability errors instead of masking programming and data errors as Elasticsearch degradation, and logs the full exception with its stack trace.
 - Hashtag search now pages the Elasticsearch query by the exact cursor offset rather than integer-dividing the offset into a page index, eliminating silently skipped or repeated results when the requested page size varies between requests.
