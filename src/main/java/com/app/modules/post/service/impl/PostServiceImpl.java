@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.common.settings.service.SystemSettingService;
@@ -36,6 +38,7 @@ import com.app.modules.post.entity.PostMedia;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.enums.PostType;
 import com.app.modules.post.mapper.PostMapper;
+import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostEditHistoryRepository;
 import com.app.modules.post.repository.PostMediaAssetRepository;
 import com.app.modules.post.repository.PostRepository;
@@ -64,6 +67,7 @@ public class PostServiceImpl implements PostService {
     private final PostResponseAssembler postResponseAssembler;
     private final PostMapper postMapper;
     private final SocialService socialService;
+    private final OutboxService outboxService;
 
     public PostServiceImpl(
             PostRepository postRepository,
@@ -75,7 +79,8 @@ public class PostServiceImpl implements PostService {
             PostVisibilityService postVisibilityService,
             PostResponseAssembler postResponseAssembler,
             PostMapper postMapper,
-            SocialService socialService) {
+            SocialService socialService,
+            OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postEditHistoryRepository = postEditHistoryRepository;
         this.postUserRepository = postUserRepository;
@@ -86,6 +91,7 @@ public class PostServiceImpl implements PostService {
         this.postResponseAssembler = postResponseAssembler;
         this.postMapper = postMapper;
         this.socialService = socialService;
+        this.outboxService = outboxService;
     }
 
     @Override
@@ -136,6 +142,7 @@ public class PostServiceImpl implements PostService {
         postRepository.save(post);
         if (initialStatus == PostStatus.PUBLISHED) {
             upsertCaptionHashtags(post.getId(), post.getCaption());
+            enqueuePostIndexUpsert(post);
         }
         return postResponseAssembler.assemble(post);
     }
@@ -181,6 +188,7 @@ public class PostServiceImpl implements PostService {
             // Keep post_hashtags consistent with the published caption.
             hashtagService.removeHashtagsForPost(post.getId());
             upsertCaptionHashtags(post.getId(), post.getCaption());
+            enqueuePostIndexUpsert(post);
         }
         return postResponseAssembler.assemble(post);
     }
@@ -216,9 +224,11 @@ public class PostServiceImpl implements PostService {
         post.setStatus(target);
         if (target == PostStatus.PUBLISHED) {
             upsertCaptionHashtags(post.getId(), post.getCaption());
+            enqueuePostIndexUpsert(post);
         } else if (target == PostStatus.ARCHIVED) {
             // Unpublishing removes hashtag associations (hashtag module data rules).
             hashtagService.removeHashtagsForPost(post.getId());
+            enqueuePostIndexDelete(post);
         }
         return postResponseAssembler.assemble(post);
     }
@@ -314,6 +324,7 @@ public class PostServiceImpl implements PostService {
         post.setStatus(PostStatus.REMOVED);
         post.setDeletedAt(OffsetDateTime.now());
         hashtagService.removeHashtagsForPost(post.getId());
+        enqueuePostIndexDelete(post);
     }
 
     private void validateMediaCardinality(
@@ -348,6 +359,42 @@ public class PostServiceImpl implements PostService {
         if (!tags.isEmpty()) {
             hashtagService.upsertHashtagsForPost(postId, tags);
         }
+    }
+
+    // Must run after upsertCaptionHashtags so the post_hashtags associations are queryable here.
+    private void enqueuePostIndexUpsert(Post post) {
+        List<String> hashtagIds =
+                hashtagService
+                        .getHashtagIdsForPosts(List.of(post.getId()))
+                        .getOrDefault(post.getId(), List.of())
+                        .stream()
+                        .map(UUID::toString)
+                        .toList();
+        // Nullable caption forbids Map.of; HashMap tolerates null values.
+        Map<String, Object> data = new HashMap<>();
+        data.put("postId", post.getId().toString());
+        data.put("userId", post.getUserId().toString());
+        data.put("caption", post.getCaption());
+        data.put("status", "published");
+        data.put("hashtagIds", hashtagIds);
+        data.put("createdAt", post.getCreatedAt().toString());
+        outboxService.enqueue(
+                PostEventTypes.POST_INDEX_UPSERT_V1,
+                PostEventTypes.POST_INDEX_UPSERT_V1,
+                "post",
+                post.getId(),
+                post.getUserId(),
+                data);
+    }
+
+    private void enqueuePostIndexDelete(Post post) {
+        outboxService.enqueue(
+                PostEventTypes.POST_INDEX_DELETE_V1,
+                PostEventTypes.POST_INDEX_DELETE_V1,
+                "post",
+                post.getId(),
+                post.getUserId(),
+                Map.of("postId", post.getId().toString()));
     }
 
     // Tokens are #-prefixed runs of Unicode letters, digits, and underscores; normalization and
