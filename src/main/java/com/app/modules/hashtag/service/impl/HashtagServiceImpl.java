@@ -1,25 +1,29 @@
 package com.app.modules.hashtag.service.impl;
 
+import static com.app.modules.hashtag.messaging.HashtagEventTypes.HASHTAG_INDEX_DELETE_V1;
+import static com.app.modules.hashtag.messaging.HashtagEventTypes.HASHTAG_INDEX_UPSERT_V1;
+
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import jakarta.persistence.EntityManager;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.app.common.outbox.service.OutboxService;
 import com.app.modules.hashtag.entity.Hashtag;
 import com.app.modules.hashtag.entity.PostHashtag;
 import com.app.modules.hashtag.entity.PostHashtagId;
-import com.app.modules.hashtag.mapper.HashtagMapper;
+import com.app.modules.hashtag.repository.HashtagIndexProjection;
 import com.app.modules.hashtag.repository.HashtagRepository;
 import com.app.modules.hashtag.repository.PostHashtagRepository;
-import com.app.modules.hashtag.search.HashtagSearchRepository;
 import com.app.modules.hashtag.service.HashtagService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -28,20 +32,22 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class HashtagServiceImpl implements HashtagService {
 
+    private static final String AGGREGATE_TYPE_HASHTAG = "hashtag";
+
     private final HashtagRepository hashtagRepository;
     private final PostHashtagRepository postHashtagRepository;
-    private final HashtagSearchRepository hashtagSearchRepository;
-    private final HashtagMapper hashtagMapper;
+    private final EntityManager entityManager;
+    private final OutboxService outboxService;
 
     public HashtagServiceImpl(
             HashtagRepository hashtagRepository,
             PostHashtagRepository postHashtagRepository,
-            HashtagSearchRepository hashtagSearchRepository,
-            HashtagMapper hashtagMapper) {
+            EntityManager entityManager,
+            OutboxService outboxService) {
         this.hashtagRepository = hashtagRepository;
         this.postHashtagRepository = postHashtagRepository;
-        this.hashtagSearchRepository = hashtagSearchRepository;
-        this.hashtagMapper = hashtagMapper;
+        this.entityManager = entityManager;
+        this.outboxService = outboxService;
     }
 
     @Override
@@ -66,37 +72,51 @@ public class HashtagServiceImpl implements HashtagService {
             }
         }
 
+        LinkedHashSet<UUID> affectedIds = new LinkedHashSet<>();
         for (String name : names) {
             hashtagRepository.upsertByName(name);
             Hashtag hashtag = hashtagRepository.findByNameIgnoreCase(name).orElseThrow();
             postHashtagRepository.save(
                     PostHashtag.builder().id(new PostHashtagId(postId, hashtag.getId())).build());
+            affectedIds.add(hashtag.getId());
+        }
 
-            final Hashtag committed = hashtag;
-            // Post-commit dual-write: index in Elasticsearch only after the DB transaction commits.
-            // ES failure must never roll back the source-of-truth write, so it is caught and
-            // logged.
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            try {
-                                hashtagSearchRepository.save(hashtagMapper.toDocument(committed));
-                            } catch (Exception e) {
-                                log.warn(
-                                        "Elasticsearch dual-write failed for hashtag '{}': {}",
-                                        committed.getName(),
-                                        e.getMessage());
-                            }
-                        }
-                    });
+        // Flush so the trigger-updated post_count is readable by the projection query below.
+        entityManager.flush();
+        for (HashtagIndexProjection projection :
+                hashtagRepository.findIndexProjectionsByIdIn(affectedIds)) {
+            enqueueUpsert(projection);
         }
     }
 
     @Override
     @Transactional
     public void removeHashtagsForPost(UUID postId) {
+        List<UUID> affected = postHashtagRepository.findHashtagIdsByPostId(postId);
         postHashtagRepository.deleteAllByPostId(postId);
+
+        // Flush so the decremented post_count is readable by the projection query below.
+        entityManager.flush();
+        Map<UUID, HashtagIndexProjection> projections =
+                hashtagRepository.findIndexProjectionsByIdIn(affected).stream()
+                        .collect(
+                                Collectors.toMap(
+                                        HashtagIndexProjection::getId, Function.identity()));
+
+        for (UUID id : affected) {
+            HashtagIndexProjection projection = projections.get(id);
+            if (projection != null && projection.getPostCount() > 0) {
+                enqueueUpsert(projection);
+            } else {
+                outboxService.enqueue(
+                        HASHTAG_INDEX_DELETE_V1,
+                        HASHTAG_INDEX_DELETE_V1,
+                        AGGREGATE_TYPE_HASHTAG,
+                        id,
+                        null,
+                        Map.of("hashtagId", id.toString()));
+            }
+        }
     }
 
     @Override
@@ -111,5 +131,23 @@ public class HashtagServiceImpl implements HashtagService {
                                 ph -> ph.getId().getPostId(),
                                 Collectors.mapping(
                                         ph -> ph.getId().getHashtagId(), Collectors.toList())));
+    }
+
+    private void enqueueUpsert(HashtagIndexProjection projection) {
+        outboxService.enqueue(
+                HASHTAG_INDEX_UPSERT_V1,
+                HASHTAG_INDEX_UPSERT_V1,
+                AGGREGATE_TYPE_HASHTAG,
+                projection.getId(),
+                null,
+                Map.of(
+                        "hashtagId",
+                        projection.getId().toString(),
+                        "name",
+                        projection.getName(),
+                        "postCount",
+                        projection.getPostCount(),
+                        "createdAt",
+                        projection.getCreatedAt().toString()));
     }
 }
