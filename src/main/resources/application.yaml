@@ -104,6 +104,12 @@ app:
   notification:
     consumer:
       enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
+  hashtag:
+    consumer:
+      enabled: ${HASHTAG_CONSUMER_ENABLED:false}
+  post:
+    consumer:
+      enabled: ${POST_CONSUMER_ENABLED:false}
   media:
     cdn-base-url: ${MEDIA_CDN_BASE_URL:}
     r2:
