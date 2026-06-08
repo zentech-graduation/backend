@@ -28,5 +28,14 @@ public interface PostHashtagRepository extends JpaRepository<PostHashtag, PostHa
     @Query("DELETE FROM PostHashtag ph WHERE ph.id.postId = :postId")
     void deleteAllByPostId(@Param("postId") UUID postId);
 
+    /**
+     * Returns the hashtag ids associated with the given post.
+     *
+     * @param postId the post whose hashtag ids are returned
+     * @return the associated hashtag ids; empty when the post has no hashtags
+     */
+    @Query("SELECT ph.id.hashtagId FROM PostHashtag ph WHERE ph.id.postId = :postId")
+    List<UUID> findHashtagIdsByPostId(@Param("postId") UUID postId);
+
     List<PostHashtag> findAllByIdPostIdIn(Collection<UUID> postIds);
 }

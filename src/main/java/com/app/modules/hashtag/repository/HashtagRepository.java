@@ -1,5 +1,6 @@
 package com.app.modules.hashtag.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,4 +46,19 @@ public interface HashtagRepository extends JpaRepository<Hashtag, UUID> {
             nativeQuery = true)
     List<Hashtag> searchByNameTrgm(
             @Param("query") String query, @Param("limit") int limit, @Param("offset") int offset);
+
+    /**
+     * Returns scalar index projections for the given hashtag ids.
+     *
+     * <p>Selects columns directly rather than loading managed entities so the trigger-updated
+     * {@code post_count} is read from the current database state within the transaction and is not
+     * served from the Hibernate L1 cache.
+     *
+     * @param ids the hashtag ids to project
+     * @return index projections for the matching hashtags
+     */
+    @Query(
+            "SELECT h.id AS id, h.name AS name, h.postCount AS postCount, h.createdAt AS createdAt"
+                    + " FROM Hashtag h WHERE h.id IN :ids")
+    List<HashtagIndexProjection> findIndexProjectionsByIdIn(@Param("ids") Collection<UUID> ids);
 }
