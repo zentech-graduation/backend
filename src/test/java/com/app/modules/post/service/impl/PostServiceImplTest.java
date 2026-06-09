@@ -3,12 +3,16 @@ package com.app.modules.post.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,6 +30,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.settings.service.SystemSettingService;
 import com.app.modules.hashtag.service.HashtagService;
@@ -59,6 +64,7 @@ class PostServiceImplTest {
     @Mock private PostResponseAssembler postResponseAssembler;
     @Mock private PostMapper postMapper;
     @Mock private SocialService socialService;
+    @Mock private OutboxService outboxService;
 
     private PostServiceImpl service;
 
@@ -79,14 +85,16 @@ class PostServiceImplTest {
                         postVisibilityService,
                         postResponseAssembler,
                         postMapper,
-                        socialService);
+                        socialService,
+                        outboxService);
         lenient()
                 .when(systemSettingService.getRequiredLong("max_post_media_items"))
                 .thenReturn(10L);
         lenient()
                 .when(systemSettingService.getRequiredLong("max_hashtags_per_post"))
                 .thenReturn(30L);
-        // Mimic Hibernate id assignment so publish-time hashtag calls carry a real post id.
+        lenient().when(hashtagService.getHashtagIdsForPosts(any())).thenReturn(Map.of());
+        // Mimic Hibernate id and created_at assignment so publish-time index events carry both.
         lenient()
                 .when(postRepository.save(any(Post.class)))
                 .thenAnswer(
@@ -94,6 +102,9 @@ class PostServiceImplTest {
                             Post p = invocation.getArgument(0);
                             if (p.getId() == null) {
                                 p.setId(postId);
+                            }
+                            if (p.getCreatedAt() == null) {
+                                p.setCreatedAt(OffsetDateTime.now());
                             }
                             return p;
                         });
@@ -124,6 +135,7 @@ class PostServiceImplTest {
                 .status(status)
                 .postType(PostType.IMAGE)
                 .caption("old caption")
+                .createdAt(OffsetDateTime.now())
                 .build();
     }
 
@@ -214,6 +226,14 @@ class PostServiceImplTest {
                         PostStatus.PUBLISHED));
 
         verify(hashtagService).upsertHashtagsForPost(postId, List.of("Beach", "sunset_2024"));
+        verify(outboxService)
+                .enqueue(
+                        eq("post.index.upsert.v1"),
+                        eq("post.index.upsert.v1"),
+                        eq("post"),
+                        any(UUID.class),
+                        any(),
+                        anyMap());
     }
 
     @Test
@@ -282,6 +302,14 @@ class PostServiceImplTest {
 
         assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
         verify(hashtagService).upsertHashtagsForPost(postId, List.of("now"));
+        verify(outboxService)
+                .enqueue(
+                        eq("post.index.upsert.v1"),
+                        eq("post.index.upsert.v1"),
+                        eq("post"),
+                        any(UUID.class),
+                        any(),
+                        anyMap());
     }
 
     @Test
@@ -294,6 +322,14 @@ class PostServiceImplTest {
 
         assertThat(post.getStatus()).isEqualTo(PostStatus.ARCHIVED);
         verify(hashtagService).removeHashtagsForPost(postId);
+        verify(outboxService)
+                .enqueue(
+                        eq("post.index.delete.v1"),
+                        eq("post.index.delete.v1"),
+                        eq("post"),
+                        any(UUID.class),
+                        any(),
+                        anyMap());
     }
 
     @Test
@@ -363,6 +399,14 @@ class PostServiceImplTest {
         assertThat(post.getStatus()).isEqualTo(PostStatus.REMOVED);
         assertThat(post.getDeletedAt()).isNotNull();
         verify(hashtagService).removeHashtagsForPost(postId);
+        verify(outboxService)
+                .enqueue(
+                        eq("post.index.delete.v1"),
+                        eq("post.index.delete.v1"),
+                        eq("post"),
+                        any(UUID.class),
+                        any(),
+                        anyMap());
     }
 
     @Test
