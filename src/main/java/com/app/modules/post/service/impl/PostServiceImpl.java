@@ -139,7 +139,9 @@ public class PostServiceImpl implements PostService {
                                     .position((short) i)
                                     .build());
         }
-        postRepository.save(post);
+        // Flush so the DB-assigned id and @CreationTimestamp createdAt are populated before the
+        // index-upsert event payload reads them.
+        postRepository.saveAndFlush(post);
         if (initialStatus == PostStatus.PUBLISHED) {
             upsertCaptionHashtags(post.getId(), post.getCaption());
             enqueuePostIndexUpsert(post);
