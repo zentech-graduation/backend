@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 public record HashtagIndexUpsertEvent(
         UUID eventId,
-        int version,
+        Integer version,
         OffsetDateTime occurredAt,
         UUID hashtagId,
         String name,

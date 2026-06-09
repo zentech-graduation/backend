@@ -14,4 +14,4 @@ import java.util.UUID;
  * @param hashtagId identifier of the hashtag to remove from the index
  */
 public record HashtagIndexDeleteEvent(
-        UUID eventId, int version, OffsetDateTime occurredAt, UUID hashtagId) {}
+        UUID eventId, Integer version, OffsetDateTime occurredAt, UUID hashtagId) {}
