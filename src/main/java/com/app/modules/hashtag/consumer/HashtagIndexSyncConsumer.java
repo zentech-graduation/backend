@@ -28,8 +28,9 @@ import com.app.modules.hashtag.event.HashtagIndexUpsertEvent;
 import com.app.modules.hashtag.messaging.HashtagEventTypes;
 import com.app.modules.hashtag.search.HashtagDocument;
 import com.app.modules.hashtag.search.HashtagSearchRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
+
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * RabbitMQ consumer that applies hashtag index events to Elasticsearch.

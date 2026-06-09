@@ -32,8 +32,9 @@ import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.search.PostDocument;
 import com.app.modules.post.search.PostSearchRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
+
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * RabbitMQ consumer that applies post index events to Elasticsearch.

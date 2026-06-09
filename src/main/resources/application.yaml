@@ -104,12 +104,6 @@ app:
   notification:
     consumer:
       enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
-  hashtag:
-    consumer:
-      enabled: ${HASHTAG_CONSUMER_ENABLED:false}
-  post:
-    consumer:
-      enabled: ${POST_CONSUMER_ENABLED:false}
   media:
     cdn-base-url: ${MEDIA_CDN_BASE_URL:}
     r2:
@@ -134,6 +128,8 @@ app:
     connection-timeout: ${ELASTICSEARCH_CONNECTION_TIMEOUT:PT5S}
     socket-timeout: ${ELASTICSEARCH_SOCKET_TIMEOUT:PT30S}
   hashtag:
+    consumer:
+      enabled: ${HASHTAG_CONSUMER_ENABLED:false}
     trending:
       window: ${HASHTAG_TRENDING_WINDOW:PT24H}
       job-delay: ${HASHTAG_TRENDING_JOB_DELAY:PT1H}
@@ -141,6 +137,8 @@ app:
     seed:
       enabled: ${HASHTAG_SEED_ENABLED:true}
   post:
+    consumer:
+      enabled: ${POST_CONSUMER_ENABLED:false}
     seed:
       enabled: ${POST_SEED_ENABLED:true}
   rate-limit:
