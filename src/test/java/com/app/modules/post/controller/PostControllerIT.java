@@ -2,7 +2,6 @@ package com.app.modules.post.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -14,6 +13,9 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.mockito.Mockito;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
@@ -38,17 +40,24 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.common.config.rabbit.RabbitMqTopologyConfig;
+import com.app.common.outbox.service.OutboxPublisherService;
 import com.app.modules.mail.service.MailService;
+import com.app.modules.post.consumer.PostIndexSyncConsumer;
 import com.app.modules.post.search.PostDocument;
-import com.app.modules.post.search.PostSearchRepository;
+import com.rabbitmq.client.Channel;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "spring.profiles.active=dev",
             "spring.docker.compose.enabled=false",
-            "spring.autoconfigure.exclude="
-                    + "org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration"
+            "app.post.consumer.enabled=true",
+            "app.messaging.consumer.max-attempts=1",
+            "spring.rabbitmq.listener.simple.auto-startup=false",
+            "spring.rabbitmq.publisher-confirm-type=correlated",
+            "spring.rabbitmq.publisher-returns=true",
+            "spring.rabbitmq.template.mandatory=true"
         })
 @Testcontainers
 @AutoConfigureTestRestTemplate
@@ -63,6 +72,11 @@ class PostControllerIT {
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
     @Container
+    static GenericContainer<?> rabbit =
+            new GenericContainer<>(DockerImageName.parse("rabbitmq:3.13-alpine"))
+                    .withExposedPorts(5672);
+
+    @Container
     static ElasticsearchContainer elasticsearch =
             new ElasticsearchContainer(
                             DockerImageName.parse(
@@ -75,6 +89,10 @@ class PostControllerIT {
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         // Override any developer .env REDIS_PASSWORD — the test container runs without auth.
         r.add("spring.data.redis.password", () -> "");
+        r.add("spring.rabbitmq.host", rabbit::getHost);
+        r.add("spring.rabbitmq.port", () -> rabbit.getMappedPort(5672));
+        r.add("spring.rabbitmq.username", () -> "guest");
+        r.add("spring.rabbitmq.password", () -> "guest");
         r.add("app.elasticsearch.uris", () -> "http://" + elasticsearch.getHttpHostAddress());
         r.add("JWT_SECRET", () -> "post-controller-it-secret-32-chars-min!!!!!!");
         r.add("JWT_ISSUER", () -> "https://post.it.local");
@@ -91,7 +109,12 @@ class PostControllerIT {
         r.add("GOOGLE_CLIENT_ID", () -> "test-client-id");
         r.add("GOOGLE_CLIENT_SECRET", () -> "test-client-secret");
         r.add("spring.datasource.hikari.data-source-properties.stringtype", () -> "unspecified");
-        r.add("app.outbox.publisher.enabled", () -> false);
+        // Keep the publisher bean present so the test can drive publishDueEvents() manually, and
+        // push the scheduled poll past the suite runtime so only the manual publish drains the
+        // outbox — eliminating a race between the scheduler and the in-test publish.
+        r.add("app.outbox.publisher.enabled", () -> true);
+        r.add("app.outbox.publisher.initial-delay", () -> "PT1H");
+        r.add("app.outbox.publisher.fixed-delay", () -> "PT1H");
         // Disable the startup seed runners so each test owns its index documents.
         r.add("app.hashtag.seed.enabled", () -> false);
         r.add("app.post.seed.enabled", () -> false);
@@ -101,8 +124,10 @@ class PostControllerIT {
 
     @Autowired private TestRestTemplate rest;
     @Autowired private JdbcTemplate jdbcTemplate;
-    @Autowired private PostSearchRepository postSearchRepository;
     @Autowired private ElasticsearchOperations elasticsearchOperations;
+    @Autowired private OutboxPublisherService outboxPublisherService;
+    @Autowired private RabbitTemplate rabbitTemplate;
+    @Autowired private PostIndexSyncConsumer postIndexSyncConsumer;
 
     private record TestUser(UUID id, String token) {}
 
@@ -399,23 +424,27 @@ class PostControllerIT {
 
     @Test
     @Order(10)
-    void searchPosts_indexed_returnsMatches() {
+    void searchPosts_indexed_returnsMatches() throws java.io.IOException {
         TestUser author = registerUser("search_author");
         TestUser hidden = registerUser("search_hidden");
         TestUser viewer = registerUser("search_viewer");
         UUID visiblePostId =
                 createImagePost(
                         author, "sunset over hills", insertMediaAsset(author.id(), "image"));
-        UUID hiddenPostId =
-                createImagePost(hidden, "sunset secret", insertMediaAsset(hidden.id(), "image"));
+        // The hidden author's published post is also indexed but must be filtered out at search
+        // time because the account is private and the viewer does not follow it.
+        createImagePost(hidden, "sunset secret", insertMediaAsset(hidden.id(), "image"));
         jdbcTemplate.update("UPDATE users SET is_private = TRUE WHERE id = ?", hidden.id());
 
-        // Phase A has no post-document dual-write; index documents manually for the test.
-        ensureIndexExists();
-        postSearchRepository.saveAll(
-                List.of(
-                        document(visiblePostId, author.id(), "sunset over hills"),
-                        document(hiddenPostId, hidden.id(), "sunset secret")));
+        // Both published posts enqueue a PostIndexUpsertEvent. Drive the real
+        // outbox -> RabbitMQ -> consumer -> Elasticsearch path so the search is reached through the
+        // production indexing flow rather than a direct document write.
+        // The scheduled poll is pushed past the suite runtime, so this manual publish is the only
+        // producer; draining first discards any stray delivery before observing the two upserts.
+        drainIndexSyncQueue();
+        outboxPublisherService.publishDueEvents();
+        consumeIndexSyncMessage();
+        consumeIndexSyncMessage();
         elasticsearchOperations.indexOps(PostDocument.class).refresh();
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/posts/search?q=sunset", viewer);
@@ -424,6 +453,19 @@ class PostControllerIT {
         List<Map<?, ?>> content = contentOf(response);
         assertThat(content).hasSize(1);
         assertThat(content.get(0).get("id")).isEqualTo(visiblePostId.toString());
+    }
+
+    private void consumeIndexSyncMessage() throws java.io.IOException {
+        Message message =
+                rabbitTemplate.receive(RabbitMqTopologyConfig.POST_INDEX_SYNC_QUEUE, 5000L);
+        assertThat(message).isNotNull();
+        postIndexSyncConsumer.consume(message, Mockito.mock(Channel.class));
+    }
+
+    private void drainIndexSyncQueue() {
+        while (rabbitTemplate.receive(RabbitMqTopologyConfig.POST_INDEX_SYNC_QUEUE) != null) {
+            // Discard residual deliveries so the test observes only its own upsert messages.
+        }
     }
 
     @Test
@@ -554,24 +596,6 @@ class PostControllerIT {
     private int postHashtagCount(UUID postId) {
         return jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM post_hashtags WHERE post_id = ?", Integer.class, postId);
-    }
-
-    private void ensureIndexExists() {
-        IndexOperations ops = elasticsearchOperations.indexOps(PostDocument.class);
-        if (!ops.exists()) {
-            ops.createWithMapping();
-        }
-    }
-
-    private static PostDocument document(UUID postId, UUID userId, String caption) {
-        return PostDocument.builder()
-                .id(postId.toString())
-                .userId(userId.toString())
-                .caption(caption)
-                .status("published")
-                .hashtagIds(List.of())
-                .createdAt(OffsetDateTime.now())
-                .build();
     }
 
     @SuppressWarnings("unchecked")
