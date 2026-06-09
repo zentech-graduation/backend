@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 public record PostIndexUpsertEvent(
         UUID eventId,
-        int version,
+        Integer version,
         OffsetDateTime occurredAt,
         UUID postId,
         UUID userId,

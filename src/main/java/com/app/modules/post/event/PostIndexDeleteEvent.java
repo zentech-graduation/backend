@@ -14,4 +14,4 @@ import java.util.UUID;
  * @param postId identifier of the post to remove from the index
  */
 public record PostIndexDeleteEvent(
-        UUID eventId, int version, OffsetDateTime occurredAt, UUID postId) {}
+        UUID eventId, Integer version, OffsetDateTime occurredAt, UUID postId) {}
