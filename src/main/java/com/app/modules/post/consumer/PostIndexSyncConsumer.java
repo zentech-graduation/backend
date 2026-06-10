@@ -160,11 +160,13 @@ public class PostIndexSyncConsumer {
                 if (post.isEmpty() || post.get().getStatus() != PostStatus.PUBLISHED) {
                     return;
                 }
+                // Caption is read from the source-of-truth row, not the event payload, so user
+                // free-text never travels through the outbox.
                 PostDocument document =
                         PostDocument.builder()
                                 .id(payload.postId().toString())
                                 .userId(payload.userId().toString())
-                                .caption(payload.caption())
+                                .caption(post.get().getCaption())
                                 .status("published")
                                 .hashtagIds(payload.hashtagIds())
                                 .createdAt(payload.createdAt())

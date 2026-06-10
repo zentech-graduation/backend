@@ -372,11 +372,11 @@ public class PostServiceImpl implements PostService {
                         .stream()
                         .map(UUID::toString)
                         .toList();
-        // Nullable caption forbids Map.of; HashMap tolerates null values.
+        // User free-text (caption) is excluded from the payload; the consumer reads it from the
+        // source-of-truth post row it already loads for the Q4 gate.
         Map<String, Object> data = new HashMap<>();
         data.put("postId", post.getId().toString());
         data.put("userId", post.getUserId().toString());
-        data.put("caption", post.getCaption());
         data.put("status", "published");
         data.put("hashtagIds", hashtagIds);
         data.put("createdAt", post.getCreatedAt().toString());

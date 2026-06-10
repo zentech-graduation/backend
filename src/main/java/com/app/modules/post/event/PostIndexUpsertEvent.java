@@ -15,7 +15,6 @@ import java.util.UUID;
  * @param occurredAt instant the source state change occurred
  * @param postId identifier of the post to index
  * @param userId identifier of the post author
- * @param caption post caption; may be {@code null} when the post has no caption
  * @param status post status as the lowercase string value (e.g. {@code "published"})
  * @param hashtagIds identifiers of hashtags associated with the post
  * @param createdAt instant the post row was created
@@ -26,7 +25,6 @@ public record PostIndexUpsertEvent(
         OffsetDateTime occurredAt,
         UUID postId,
         UUID userId,
-        String caption,
         String status,
         List<String> hashtagIds,
         OffsetDateTime createdAt) {}
