@@ -96,7 +96,7 @@ class PostServiceImplTest {
         lenient().when(hashtagService.getHashtagIdsForPosts(any())).thenReturn(Map.of());
         // Mimic Hibernate id and created_at assignment so publish-time index events carry both.
         lenient()
-                .when(postRepository.save(any(Post.class)))
+                .when(postRepository.saveAndFlush(any(Post.class)))
                 .thenAnswer(
                         invocation -> {
                             Post p = invocation.getArgument(0);
