@@ -128,10 +128,9 @@ class PostIndexSyncConsumerIT {
         UUID userId = UUID.randomUUID();
         UUID postId = UUID.randomUUID();
         insertUser(userId);
-        insertPost(postId, userId, "published", false);
+        insertPost(postId, userId, "published", false, "sunset over the bay");
 
-        DomainEventEnvelope env =
-                upsertEnvelope(UUID.randomUUID(), postId, userId, "sunset over the bay");
+        DomainEventEnvelope env = upsertEnvelope(UUID.randomUUID(), postId, userId);
         Channel channel = mock(Channel.class);
 
         consumer.consume(buildMessage(env), channel);
@@ -177,10 +176,10 @@ class PostIndexSyncConsumerIT {
         UUID userId = UUID.randomUUID();
         UUID postId = UUID.randomUUID();
         insertUser(userId);
-        insertPost(postId, userId, "published", false);
+        insertPost(postId, userId, "published", false, "first");
 
-        DomainEventEnvelope first = upsertEnvelope(eventId, postId, userId, "first");
-        DomainEventEnvelope second = upsertEnvelope(eventId, postId, userId, "second");
+        DomainEventEnvelope first = upsertEnvelope(eventId, postId, userId);
+        DomainEventEnvelope second = upsertEnvelope(eventId, postId, userId);
         Channel channel = mock(Channel.class);
 
         consumer.consume(buildMessage(first), channel);
@@ -207,7 +206,7 @@ class PostIndexSyncConsumerIT {
         UUID userId = UUID.randomUUID();
         UUID postId = UUID.randomUUID();
         insertUser(userId);
-        insertPost(postId, userId, "removed", true);
+        insertPost(postId, userId, "removed", true, "resurrected");
 
         postSearchRepository.save(
                 PostDocument.builder()
@@ -222,9 +221,7 @@ class PostIndexSyncConsumerIT {
 
         Channel channel = mock(Channel.class);
         consumer.consume(buildMessage(deleteEnvelope(UUID.randomUUID(), postId)), channel);
-        consumer.consume(
-                buildMessage(upsertEnvelope(UUID.randomUUID(), postId, userId, "resurrected")),
-                channel);
+        consumer.consume(buildMessage(upsertEnvelope(UUID.randomUUID(), postId, userId)), channel);
 
         elasticsearchOperations.indexOps(PostDocument.class).refresh();
         // Q4 gate: the source row is soft-deleted/non-published, so the stale upsert is skipped and
@@ -256,13 +253,15 @@ class PostIndexSyncConsumerIT {
                 userId + "@test.local");
     }
 
-    private void insertPost(UUID postId, UUID userId, String status, boolean softDeleted) {
+    private void insertPost(
+            UUID postId, UUID userId, String status, boolean softDeleted, String caption) {
         jdbcTemplate.update(
-                "INSERT INTO posts (id, user_id, post_type, status, deleted_at)"
-                        + " VALUES (?, ?, 'image', ?, ?)",
+                "INSERT INTO posts (id, user_id, post_type, status, caption, deleted_at)"
+                        + " VALUES (?, ?, 'image', ?, ?, ?)",
                 postId,
                 userId,
                 status,
+                caption,
                 softDeleted ? OffsetDateTime.now(ZoneOffset.UTC) : null);
     }
 
@@ -286,16 +285,13 @@ class PostIndexSyncConsumerIT {
                 .build();
     }
 
-    private static DomainEventEnvelope upsertEnvelope(
-            UUID eventId, UUID postId, UUID userId, String caption) {
+    private static DomainEventEnvelope upsertEnvelope(UUID eventId, UUID postId, UUID userId) {
         Map<String, Object> data =
                 Map.of(
                         "postId",
                         postId.toString(),
                         "userId",
                         userId.toString(),
-                        "caption",
-                        caption,
                         "status",
                         "published",
                         "hashtagIds",
