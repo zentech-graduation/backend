@@ -26,9 +26,6 @@ import com.app.modules.hashtag.repository.HashtagRepository;
 import com.app.modules.hashtag.repository.PostHashtagRepository;
 import com.app.modules.hashtag.service.HashtagService;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
 @Service
 public class HashtagServiceImpl implements HashtagService {
 
@@ -81,11 +78,8 @@ public class HashtagServiceImpl implements HashtagService {
             affectedIds.add(hashtag.getId());
         }
 
-        // Flush so the trigger-updated post_count is readable by the projection query below.
-        entityManager.flush();
-        for (HashtagIndexProjection projection :
-                hashtagRepository.findIndexProjectionsByIdIn(affectedIds)) {
-            enqueueUpsert(projection);
+        for (UUID id : affectedIds) {
+            enqueueUpsert(id);
         }
     }
 
@@ -106,7 +100,7 @@ public class HashtagServiceImpl implements HashtagService {
         for (UUID id : affected) {
             HashtagIndexProjection projection = projections.get(id);
             if (projection != null && projection.getPostCount() > 0) {
-                enqueueUpsert(projection);
+                enqueueUpsert(id);
             } else {
                 outboxService.enqueue(
                         HASHTAG_INDEX_DELETE_V1,
@@ -133,21 +127,16 @@ public class HashtagServiceImpl implements HashtagService {
                                         ph -> ph.getId().getHashtagId(), Collectors.toList())));
     }
 
-    private void enqueueUpsert(HashtagIndexProjection projection) {
+    // Carry only the hashtag id; the consumer reads name/post_count/created_at from the
+    // source-of-truth database. This keeps user free-text out of the event payload (the outbox
+    // rejects sensitive-looking values) and lets the post_count gate run against current state.
+    private void enqueueUpsert(UUID id) {
         outboxService.enqueue(
                 HASHTAG_INDEX_UPSERT_V1,
                 HASHTAG_INDEX_UPSERT_V1,
                 AGGREGATE_TYPE_HASHTAG,
-                projection.getId(),
+                id,
                 null,
-                Map.of(
-                        "hashtagId",
-                        projection.getId().toString(),
-                        "name",
-                        projection.getName(),
-                        "postCount",
-                        projection.getPostCount(),
-                        "createdAt",
-                        projection.getCreatedAt().toString()));
+                Map.of("hashtagId", id.toString()));
     }
 }

@@ -2,6 +2,9 @@ package com.app.modules.hashtag.consumer;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +29,8 @@ import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.modules.hashtag.event.HashtagIndexDeleteEvent;
 import com.app.modules.hashtag.event.HashtagIndexUpsertEvent;
 import com.app.modules.hashtag.messaging.HashtagEventTypes;
+import com.app.modules.hashtag.repository.HashtagIndexProjection;
+import com.app.modules.hashtag.repository.HashtagRepository;
 import com.app.modules.hashtag.search.HashtagDocument;
 import com.app.modules.hashtag.search.HashtagSearchRepository;
 import com.rabbitmq.client.Channel;
@@ -55,6 +60,7 @@ public class HashtagIndexSyncConsumer {
     private final DeadLetterPublisher deadLetterPublisher;
     private final ConsumerRetryProperties retryProperties;
     private final HashtagSearchRepository hashtagSearchRepository;
+    private final HashtagRepository hashtagRepository;
     private final ObjectMapper objectMapper;
     private final Sleeper sleeper;
 
@@ -65,6 +71,7 @@ public class HashtagIndexSyncConsumer {
             DeadLetterPublisher deadLetterPublisher,
             ConsumerRetryProperties retryProperties,
             HashtagSearchRepository hashtagSearchRepository,
+            HashtagRepository hashtagRepository,
             ObjectMapper objectMapper) {
         this(
                 parser,
@@ -72,6 +79,7 @@ public class HashtagIndexSyncConsumer {
                 deadLetterPublisher,
                 retryProperties,
                 hashtagSearchRepository,
+                hashtagRepository,
                 objectMapper,
                 Thread::sleep);
     }
@@ -82,6 +90,7 @@ public class HashtagIndexSyncConsumer {
             DeadLetterPublisher deadLetterPublisher,
             ConsumerRetryProperties retryProperties,
             HashtagSearchRepository hashtagSearchRepository,
+            HashtagRepository hashtagRepository,
             ObjectMapper objectMapper,
             Sleeper sleeper) {
         this.parser = parser;
@@ -89,6 +98,7 @@ public class HashtagIndexSyncConsumer {
         this.deadLetterPublisher = deadLetterPublisher;
         this.retryProperties = retryProperties;
         this.hashtagSearchRepository = hashtagSearchRepository;
+        this.hashtagRepository = hashtagRepository;
         this.objectMapper = objectMapper;
         this.sleeper = sleeper;
     }
@@ -145,14 +155,26 @@ public class HashtagIndexSyncConsumer {
             case HashtagEventTypes.HASHTAG_INDEX_UPSERT_V1 -> {
                 HashtagIndexUpsertEvent payload =
                         objectMapper.convertValue(event.data(), HashtagIndexUpsertEvent.class);
-                HashtagDocument document =
-                        HashtagDocument.builder()
-                                .id(payload.hashtagId().toString())
-                                .name(payload.name())
-                                .postCount(payload.postCount())
-                                .createdAt(payload.createdAt())
-                                .build();
-                hashtagSearchRepository.save(document);
+                UUID hashtagId = payload.hashtagId();
+                Optional<HashtagIndexProjection> projection =
+                        hashtagRepository.findIndexProjectionsByIdIn(List.of(hashtagId)).stream()
+                                .findFirst();
+                // post_count gate: only index a hashtag with live posts. A missing row or zero
+                // count means a concurrent delete won the race; drop any stale doc rather than
+                // resurrecting it from an out-of-order upsert.
+                if (projection.isPresent() && projection.get().getPostCount() > 0) {
+                    HashtagIndexProjection source = projection.get();
+                    HashtagDocument document =
+                            HashtagDocument.builder()
+                                    .id(hashtagId.toString())
+                                    .name(source.getName())
+                                    .postCount(source.getPostCount())
+                                    .createdAt(source.getCreatedAt())
+                                    .build();
+                    hashtagSearchRepository.save(document);
+                } else {
+                    hashtagSearchRepository.deleteById(hashtagId.toString());
+                }
             }
             case HashtagEventTypes.HASHTAG_INDEX_DELETE_V1 -> {
                 HashtagIndexDeleteEvent payload =
