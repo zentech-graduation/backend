@@ -113,6 +113,7 @@ class HashtagIndexSyncConsumerIT {
     @AfterEach
     void cleanup() {
         jdbcTemplate.execute("TRUNCATE processed_messages");
+        jdbcTemplate.execute("TRUNCATE hashtags CASCADE");
         IndexOperations ops = elasticsearchOperations.indexOps(HashtagDocument.class);
         if (ops.exists()) {
             ops.delete();
@@ -123,7 +124,8 @@ class HashtagIndexSyncConsumerIT {
     void upsert_validEvent_indexesDocument() throws Exception {
         ensureIndexExists();
         UUID hashtagId = UUID.randomUUID();
-        DomainEventEnvelope env = upsertEnvelope(UUID.randomUUID(), hashtagId, "java", 5);
+        insertHashtag(hashtagId, "java", 5);
+        DomainEventEnvelope env = upsertEnvelope(UUID.randomUUID(), hashtagId);
         Channel channel = mock(Channel.class);
 
         consumer.consume(buildMessage(env), channel);
@@ -164,9 +166,10 @@ class HashtagIndexSyncConsumerIT {
         ensureIndexExists();
         UUID eventId = UUID.randomUUID();
         UUID hashtagId = UUID.randomUUID();
+        insertHashtag(hashtagId, "java", 5);
 
-        DomainEventEnvelope first = upsertEnvelope(eventId, hashtagId, "java", 5);
-        DomainEventEnvelope second = upsertEnvelope(eventId, hashtagId, "java", 99);
+        DomainEventEnvelope first = upsertEnvelope(eventId, hashtagId);
+        DomainEventEnvelope second = upsertEnvelope(eventId, hashtagId);
         Channel channel = mock(Channel.class);
 
         consumer.consume(buildMessage(first), channel);
@@ -185,6 +188,31 @@ class HashtagIndexSyncConsumerIT {
         Optional<HashtagDocument> stored = hashtagSearchRepository.findById(hashtagId.toString());
         assertThat(stored).isPresent();
         assertThat(stored.get().getPostCount()).isEqualTo(5);
+    }
+
+    @Test
+    void outOfOrder_upsertForZeroPostHashtag_documentAbsent() throws Exception {
+        ensureIndexExists();
+        UUID hashtagId = UUID.randomUUID();
+        hashtagSearchRepository.save(
+                HashtagDocument.builder()
+                        .id(hashtagId.toString())
+                        .name("java")
+                        .postCount(3)
+                        .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
+                        .build());
+        elasticsearchOperations.indexOps(HashtagDocument.class).refresh();
+
+        // No hashtags row exists: a concurrent delete already removed the last association, so the
+        // post_count gate must drop the stale doc rather than resurrect it from this late upsert.
+        DomainEventEnvelope env = upsertEnvelope(UUID.randomUUID(), hashtagId);
+        Channel channel = mock(Channel.class);
+
+        consumer.consume(buildMessage(env), channel);
+
+        verify(channel).basicAck(0L, false);
+        elasticsearchOperations.indexOps(HashtagDocument.class).refresh();
+        assertThat(hashtagSearchRepository.findById(hashtagId.toString())).isEmpty();
     }
 
     @Test
@@ -223,20 +251,17 @@ class HashtagIndexSyncConsumerIT {
                 .build();
     }
 
-    private static DomainEventEnvelope upsertEnvelope(
-            UUID eventId, UUID hashtagId, String name, int postCount) {
-        Map<String, Object> data =
-                Map.of(
-                        "hashtagId",
-                        hashtagId.toString(),
-                        "name",
-                        name,
-                        "postCount",
-                        postCount,
-                        "version",
-                        1,
-                        "createdAt",
-                        OffsetDateTime.now(ZoneOffset.UTC).toString());
+    private void insertHashtag(UUID hashtagId, String name, int postCount) {
+        jdbcTemplate.update(
+                "INSERT INTO hashtags (id, name, post_count, created_at)"
+                        + " VALUES (?, ?, ?, now())",
+                hashtagId,
+                name,
+                postCount);
+    }
+
+    private static DomainEventEnvelope upsertEnvelope(UUID eventId, UUID hashtagId) {
+        Map<String, Object> data = Map.of("hashtagId", hashtagId.toString(), "version", 1);
         return new DomainEventEnvelope(
                 eventId,
                 HashtagEventTypes.HASHTAG_INDEX_UPSERT_V1,

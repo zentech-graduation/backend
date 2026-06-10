@@ -10,7 +10,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,8 +74,6 @@ class HashtagServiceImplTest {
         UUID hashtagId = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(hashtagId).name("spring").build();
         when(hashtagRepository.findByNameIgnoreCase("spring")).thenReturn(Optional.of(hashtag));
-        HashtagIndexProjection projection = projection(hashtagId, "spring", 3);
-        when(hashtagRepository.findIndexProjectionsByIdIn(any())).thenReturn(List.of(projection));
 
         service.upsertHashtagsForPost(postId, List.of("#Spring"));
 
@@ -116,7 +113,7 @@ class HashtagServiceImplTest {
         UUID postId = UUID.randomUUID();
         UUID hashtagId = UUID.randomUUID();
         when(postHashtagRepository.findHashtagIdsByPostId(postId)).thenReturn(List.of(hashtagId));
-        HashtagIndexProjection projection = projection(hashtagId, "spring", 2);
+        HashtagIndexProjection projection = projection(hashtagId, 2);
         when(hashtagRepository.findIndexProjectionsByIdIn(List.of(hashtagId)))
                 .thenReturn(List.of(projection));
 
@@ -160,12 +157,10 @@ class HashtagServiceImplTest {
         verifyNoInteractions(postHashtagRepository);
     }
 
-    private static HashtagIndexProjection projection(UUID id, String name, int postCount) {
+    private static HashtagIndexProjection projection(UUID id, int postCount) {
         HashtagIndexProjection projection = org.mockito.Mockito.mock(HashtagIndexProjection.class);
         when(projection.getId()).thenReturn(id);
-        when(projection.getName()).thenReturn(name);
         when(projection.getPostCount()).thenReturn(postCount);
-        when(projection.getCreatedAt()).thenReturn(OffsetDateTime.now());
         return projection;
     }
 }
