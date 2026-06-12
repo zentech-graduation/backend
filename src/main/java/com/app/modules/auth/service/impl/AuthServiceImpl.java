@@ -180,12 +180,15 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
-        userStateValidator.enforceActive(user);
-
+        // Verify the password before any account-state enforcement so that account status
+        // (banned, suspended, deactivated) is never revealed to a caller who has not proven
+        // knowledge of the credentials. Otherwise a wrong-password attempt against a banned
+        // account would surface a 403, leaking status as an enumeration oracle.
         if (!passwordMatches) {
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
+        userStateValidator.enforceActive(user);
         userStateValidator.enforceEmailVerified(credential);
 
         return issueSession(user, credential.isEmailVerified(), httpRequest);
