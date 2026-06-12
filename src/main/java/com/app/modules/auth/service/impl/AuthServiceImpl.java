@@ -122,11 +122,11 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
-        }
-        if (userRepository.existsByUsername(request.username())) {
-            throw new AppException(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
+        // Return a single generic conflict code for both email and username collisions so the
+        // response cannot be used to enumerate which emails or usernames are already registered.
+        if (userRepository.existsByEmail(request.email())
+                || userRepository.existsByUsername(request.username())) {
+            throw new AppException(ApiErrorCode.USER_ALREADY_EXISTS);
         }
 
         String displayName =

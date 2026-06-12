@@ -139,7 +139,7 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
+                .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
         verify(userRepository, never()).save(any());
     }
 
@@ -152,7 +152,7 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
+                .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
         verify(userRepository, never()).save(any());
     }
 
