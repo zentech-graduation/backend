@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Logout now propagates token-blacklist failures instead of swallowing them, and revokes the refresh token before blacklisting so a blacklist failure cannot leave both invalidations un-applied.
 - `Follow` entity no longer maps a non-existent `deleted_at` column; `FollowRepository` JPQL queries and derived method names that referenced `deletedAt` are updated to match the actual schema.
 - `SocialNotificationConsumer` now activates in dev and prod profiles via `app.notification.consumer.enabled: true`; `application.yaml` wires the property from `NOTIFICATION_CONSUMER_ENABLED` with a `false` default.
 - `NotificationControllerIT` JWT construction replaced with `JwtTokenProvider.generateAccessToken()` and the `@DynamicPropertySource` block now overrides `spring.data.redis.password` to prevent the `.env`-sourced password from being sent to the password-less test Redis container.

@@ -237,25 +237,30 @@ public class AuthServiceImpl implements AuthService {
         // JwtAuthenticationFilter; absence (e.g. logout without an Authorization header)
         // is tolerated and only the refresh token is revoked.
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        // Revoke the refresh token first so that if the subsequent blacklist call fails the
+        // refresh token is already invalidated; failing before revoke would leave neither
+        // invalidation applied.
+        refreshTokenService.revoke(request.refreshToken());
+
         // Retained for defensive completeness — public path now requires authentication
         // (SecurityConfig enforces authenticated() on /logout).
         if (auth != null && auth.getCredentials() instanceof String rawToken) {
+            JwtClaims claims;
+            long remaining;
             try {
-                JwtClaims claims = jwtTokenProvider.validateAndParse(rawToken);
-                long remaining =
+                claims = jwtTokenProvider.validateAndParse(rawToken);
+                remaining =
                         claims.expiresAt() == null
                                 ? 0L
                                 : claims.expiresAt().getEpochSecond()
                                         - Instant.now().getEpochSecond();
-                // If this throws, the refresh token has already been revoked (REQUIRES_NEW
-                // committed). The client receives 500; they should retry logout. The access
-                // token remains valid until its natural expiry.
-                tokenBlacklistService.blacklist(claims.jti(), remaining);
             } catch (AppException ignored) {
-                // Token already invalid — refresh-token revoke below still proceeds.
+                // Token already invalid — nothing to blacklist; refresh token is revoked above.
+                return;
             }
+            // Blacklist failures must propagate; the refresh token is already revoked above.
+            tokenBlacklistService.blacklist(claims.jti(), remaining);
         }
-        refreshTokenService.revoke(request.refreshToken());
     }
 
     @Override
