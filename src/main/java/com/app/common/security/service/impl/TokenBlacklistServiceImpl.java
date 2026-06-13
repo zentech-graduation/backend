@@ -53,6 +53,14 @@ public class TokenBlacklistServiceImpl implements TokenBlacklistService {
         if (jti == null || jti.isBlank()) {
             return false;
         }
-        return Boolean.TRUE.equals(redisTemplate.hasKey(KEY_PREFIX + jti));
+        try {
+            return Boolean.TRUE.equals(redisTemplate.hasKey(KEY_PREFIX + jti));
+        } catch (DataAccessException e) {
+            // Fail closed: a Redis outage must not let a possibly-revoked token authenticate.
+            // Mirrors
+            // the fail-closed policy in RateLimiterServiceImpl.
+            log.error("Blacklist Redis failure for jti={}; failing closed", jti, e);
+            return true;
+        }
     }
 }

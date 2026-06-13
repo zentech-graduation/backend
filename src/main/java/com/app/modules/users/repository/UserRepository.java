@@ -17,6 +17,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
 
+    /**
+     * Loads only the security-relevant fields for an active (non soft-deleted) user, used by the
+     * JWT filter to authenticate requests without hydrating the full {@code User} aggregate.
+     */
+    Optional<UserSecurityProjection> findProjectedByIdAndDeletedAtIsNull(UUID id);
+
     boolean existsByEmailAndDeletedAtIsNull(String email);
 
     boolean existsByUsernameAndDeletedAtIsNull(String username);
