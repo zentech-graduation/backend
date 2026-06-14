@@ -30,6 +30,10 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class HashtagSearchServiceImpl implements HashtagSearchService {
 
+    // Out-of-range offsets reset to the first page rather than reaching ES/pg_trgm, where a deep
+    // `from`/OFFSET triggers expensive scans and counts as a circuit-breaker failure.
+    private static final int MAX_SEARCH_OFFSET = 10_000;
+
     private final ElasticsearchOperations elasticsearchOperations;
     private final HashtagRepository hashtagRepository;
     private final HashtagMapper hashtagMapper;
@@ -132,8 +136,16 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
             return 0;
         }
         try {
-            return Integer.parseInt(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
+            int offset =
+                    Integer.parseInt(
+                            new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
+            // Clamp valid-but-out-of-range offsets to the first page so a forged cursor cannot
+            // drive
+            // a deep ES `from` / pg_trgm OFFSET that errors and trips the circuit breaker.
+            if (offset < 0 || offset > MAX_SEARCH_OFFSET) {
+                return 0;
+            }
+            return offset;
         } catch (IllegalArgumentException e) {
             // Malformed cursor → start from the first page rather than failing the request.
             return 0;
