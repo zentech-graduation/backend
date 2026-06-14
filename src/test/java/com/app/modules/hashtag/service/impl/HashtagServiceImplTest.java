@@ -68,7 +68,7 @@ class HashtagServiceImplTest {
     void upsertHashtagsForPost_caseDifferingDuplicates_insertsOnce() {
         UUID postId = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(UUID.randomUUID()).name("spring").build();
-        when(hashtagRepository.findByNameIgnoreCase("spring")).thenReturn(Optional.of(hashtag));
+        when(hashtagRepository.findByName("spring")).thenReturn(Optional.of(hashtag));
 
         TransactionSynchronizationManager.initSynchronization();
         service.upsertHashtagsForPost(postId, List.of("#Spring", "spring", "SPRING"));
@@ -81,7 +81,7 @@ class HashtagServiceImplTest {
     void upsertHashtagsForPost_elasticsearchWriteFails_transactionNotAborted() {
         UUID postId = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(UUID.randomUUID()).name("fail").build();
-        when(hashtagRepository.findByNameIgnoreCase("fail")).thenReturn(Optional.of(hashtag));
+        when(hashtagRepository.findByName("fail")).thenReturn(Optional.of(hashtag));
         when(hashtagMapper.toDocument(hashtag)).thenReturn(new HashtagDocument());
         doThrow(new RuntimeException("ES down")).when(hashtagSearchRepository).save(any());
 

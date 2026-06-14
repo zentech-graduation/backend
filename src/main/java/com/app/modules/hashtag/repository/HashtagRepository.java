@@ -17,6 +17,8 @@ public interface HashtagRepository extends JpaRepository<Hashtag, UUID> {
 
     Optional<Hashtag> findByNameIgnoreCase(String name);
 
+    Optional<Hashtag> findByName(String name);
+
     /**
      * Inserts a hashtag if absent; relies on the unique constraint on name. No-op when the name
      * already exists.

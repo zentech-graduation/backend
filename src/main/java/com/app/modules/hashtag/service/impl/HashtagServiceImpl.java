@@ -65,7 +65,7 @@ public class HashtagServiceImpl implements HashtagService {
 
         for (String name : names) {
             hashtagRepository.upsertByName(name);
-            Hashtag hashtag = hashtagRepository.findByNameIgnoreCase(name).orElseThrow();
+            Hashtag hashtag = hashtagRepository.findByName(name).orElseThrow();
             postHashtagRepository.save(
                     PostHashtag.builder().id(new PostHashtagId(postId, hashtag.getId())).build());
 
