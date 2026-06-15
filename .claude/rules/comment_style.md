@@ -132,7 +132,7 @@ Dead code must be deleted, not commented out. `hooks/pre-commit-lint.sh` flags 3
 // Combines job description and candidate profile to generate a relevance score (0–100)
 String prompt = promptBuilder.build(job, candidate);
 
-// Key format: ai:emb:{sha256(text)} — TTL 24hr, avoids redundant OpenAI embedding calls
+// Key format: ai:emb:{sha256(text)} — TTL 24hr, avoids redundant external embedding API calls
 String cacheKey = "ai:emb:" + DigestUtils.sha256Hex(text);
 
 // Key format: ai:mem:{userId}:{sessionId} — TTL 1hr, capped at 10 messages via Lua script
