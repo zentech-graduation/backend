@@ -56,11 +56,11 @@ These tables cannot be rebuilt from any other source if lost.
 |------|---------------------|
 | A `carousel` post must have more than one `post_media` row | `[NOT YET IMPLEMENTED]` |
 | Self-like is permitted. There is no constraint preventing a user from liking their own post. | No constraint in schema |
-| Only the post owner may update or soft-delete their post | `[NOT YET IMPLEMENTED]` |
-| A soft-deleted post must set `deleted_at = NOW()` and `status = 'removed'`; do not hard-delete | `[NOT YET IMPLEMENTED]` |
+| Only the post owner may update or soft-delete their post | Enforced by `PostServiceImpl` — `updateCaption`, `transitionStatus`, `deletePost`. |
+| A soft-deleted post must set `deleted_at = NOW()` and `status = 'removed'`; do not hard-delete | Implemented in `PostServiceImpl.softDelete`. |
 | `status = 'removed'` by admin sets `deleted_at = NOW()` via admin action | `[NOT YET IMPLEMENTED]` |
-| Posts from blocked users must be excluded from feeds | `[NOT YET IMPLEMENTED]` |
-| Posts from private accounts are only visible to accepted followers | `[NOT YET IMPLEMENTED]` |
+| Posts from blocked users must be excluded from feeds | Enforced by `PostVisibilityServiceImpl.isVisibleTo`. |
+| Posts from private accounts are only visible to accepted followers | Enforced by `PostVisibilityServiceImpl.isVisibleTo`. |
 | `posts.view_count` is updated by a background job, not a trigger. It may lag real-time activity. See `GLOBAL_RULES.md` — Counter Policy Exception. | Background job `[NOT YET IMPLEMENTED]` |
 | Hashtags in `caption` are parsed and written to `post_hashtags` at publish time | `[NOT YET IMPLEMENTED]` |
 | User mentions in `caption` generate `mention_post` notifications | `[NOT YET IMPLEMENTED]` |

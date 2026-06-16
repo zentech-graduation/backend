@@ -17,6 +17,7 @@ import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
@@ -60,6 +61,7 @@ public class PostSearchServiceImpl implements PostSearchService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     @CircuitBreaker(name = "elasticsearchSearch", fallbackMethod = "searchFallback")
     public CursorPageResponse<PostResponse> searchPosts(
             UUID viewerId, String query, String cursor, int size) {
