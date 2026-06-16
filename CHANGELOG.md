@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `STRUCT.md` (`.claude/rules/` and `.agents/rules/`) updated to reflect current codebase state: 21 Flyway migrations (V01–V21), 7 implemented modules (auth, mail, users, social, media, hashtag, notification), new `common/` packages (inbox, outbox, messaging, settings, config/elasticsearch, config/rabbit, config/security), restructured `security/` sub-packages, Elasticsearch service and config, full RabbitMQ topology, updated Technology Stack versions, and accurate Redis key patterns.
 
 ### Fixed
+- Added forward migration V23 to drop the legacy plaintext `access_token`, `refresh_token`, and `token_expires_at` columns from `oauth_accounts` (idempotent `DROP COLUMN IF EXISTS`), reconciling databases that ran the original migration with the rewritten one; the prior changelog and schema attribution of this drop to V19 was incorrect.
 - Index-sync consumers now inject the Spring Boot 4 (Jackson 3) `ObjectMapper`; the prior Jackson 2 type had no registered bean and failed Spring context startup.
 - Duplicate `app.hashtag` and `app.post` keys in `application.yaml`, which broke YAML parsing and prevented every dev-profile Spring context from loading, are merged into single blocks.
 - New posts are flushed before the index-upsert event reads the database-generated creation timestamp, preventing a null-timestamp failure on the publish path.

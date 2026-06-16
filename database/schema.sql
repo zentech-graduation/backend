@@ -92,7 +92,7 @@ CREATE TABLE user_credentials (
 );
 
 -- OAuth provider accounts (Google, etc.)
--- Note: access_token, refresh_token, token_expires_at were dropped in V19 (AUTH-005).
+-- Note: access_token, refresh_token, token_expires_at were dropped in V23 (drop_legacy_plaintext_credential_columns).
 -- These columns will be re-added with encrypted storage when that feature is implemented.
 CREATE TABLE oauth_accounts (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
