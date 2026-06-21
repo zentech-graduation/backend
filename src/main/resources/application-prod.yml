@@ -4,15 +4,15 @@ spring:
       - classpath:resilience/circuitbreaker/resilience4j-prod.yml
       - classpath:resilience/ratelimiter/resilience4j-prod.yml
       - classpath:resilience/retry/resilience4j-prod.yml
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
 
 logging:
   file:
     path: /var/log/luvax
-
-jpa:
-  hibernate:
-    ddl-auto: validate
-  show-sql: false
 
 springdoc:
   api-docs:
@@ -24,7 +24,15 @@ app:
   notification:
     consumer:
       enabled: true
+  hashtag:
+    consumer:
+      enabled: true
+  post:
+    consumer:
+      enabled: true
   mail:
+    consumer:
+      enabled: true
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:
@@ -56,3 +64,7 @@ app:
       "[/api/v1/auth/oauth2/exchange]":
         max-attempts: 10
         window-seconds: 60
+      "[/api/v1/posts]":
+        max-attempts: 30
+        window-seconds: 60
+      # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
