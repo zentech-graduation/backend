@@ -54,6 +54,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
+| Registration returns a single generic conflict code (`USER_ALREADY_EXISTS`) for both email and username collisions to prevent account enumeration | `AuthServiceImpl` |
 | Passwords are bcrypt-hashed before storage; plaintext is never stored | `AuthServiceImpl` |
 | JWT access tokens are stateless (not stored in DB); only refresh token hash is stored | `TokenServiceImpl` |
 | Revoked refresh tokens have `revoked_at` set to `NOW()` — they are not deleted | `TokenServiceImpl.revokeRefreshToken()` |

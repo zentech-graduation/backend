@@ -139,7 +139,7 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
+                .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
         verify(userRepository, never()).save(any());
     }
 
@@ -152,7 +152,7 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
+                .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
         verify(userRepository, never()).save(any());
     }
 
@@ -229,6 +229,7 @@ class AuthServiceImplTest {
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId()))
                 .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        when(passwordEncoder.matches(eq("any"), eq("STORED-HASH"))).thenReturn(true);
         doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED))
                 .when(userStateValidator)
                 .enforceActive(u);
@@ -246,6 +247,7 @@ class AuthServiceImplTest {
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId()))
                 .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        when(passwordEncoder.matches(eq("any"), eq("STORED-HASH"))).thenReturn(true);
         doThrow(new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE))
                 .when(userStateValidator)
                 .enforceActive(u);
