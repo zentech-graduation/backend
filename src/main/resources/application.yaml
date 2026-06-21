@@ -68,6 +68,12 @@ app:
       min-response-time: ${AUTH_FORGOT_PASSWORD_MIN_RESPONSE_TIME:200ms}
       max-jitter: ${AUTH_FORGOT_PASSWORD_MAX_JITTER:50ms}
 
+    # Purge job deletes expired + revoked refresh_tokens rows.
+    refresh-token-purge:
+      expired-grace: ${RT_PURGE_EXPIRED_GRACE:PT1H}
+      revoked-retention: ${RT_PURGE_REVOKED_RETENTION:P7D}
+      initial-delay: ${RT_PURGE_INITIAL_DELAY:PT5M}
+      fixed-delay: ${RT_PURGE_FIXED_DELAY:PT6H}
   outbox:
     publisher:
       enabled: ${OUTBOX_PUBLISHER_ENABLED:true}

@@ -716,6 +716,7 @@ CREATE INDEX idx_admin_actions_target   ON admin_actions (target_user_id)
 -- refresh_tokens
 CREATE INDEX idx_refresh_tokens_user    ON refresh_tokens (user_id)
     WHERE revoked_at IS NULL;
+CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens (expires_at);
 
 -- user_events (applied per partition automatically)
 CREATE INDEX idx_user_events_user       ON user_events (user_id, created_at DESC);

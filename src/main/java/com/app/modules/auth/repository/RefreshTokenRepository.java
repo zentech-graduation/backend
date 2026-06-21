@@ -46,4 +46,21 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
             "UPDATE RefreshToken r SET r.revokedAt = :now "
                     + "WHERE r.tokenHash = :tokenHash AND r.revokedAt IS NULL")
     int revokeByTokenHash(@Param("tokenHash") String tokenHash, @Param("now") OffsetDateTime now);
+
+    /**
+     * Deletes all refresh tokens that are either expired past the grace period or revoked past the
+     * retention window.
+     *
+     * @param expiredBefore delete rows where {@code expires_at < expiredBefore}
+     * @param revokedBefore delete rows where {@code revoked_at < revokedBefore}
+     * @return number of rows deleted
+     */
+    @Modifying
+    @Query(
+            "DELETE FROM RefreshToken r "
+                    + "WHERE r.expiresAt < :expiredBefore "
+                    + "OR (r.revokedAt IS NOT NULL AND r.revokedAt < :revokedBefore)")
+    int deleteExpiredAndRevoked(
+            @Param("expiredBefore") OffsetDateTime expiredBefore,
+            @Param("revokedBefore") OffsetDateTime revokedBefore);
 }
