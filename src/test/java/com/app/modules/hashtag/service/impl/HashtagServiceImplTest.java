@@ -60,7 +60,7 @@ class HashtagServiceImplTest {
     void upsertHashtagsForPost_caseDifferingDuplicates_insertsOnce() {
         UUID postId = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(UUID.randomUUID()).name("spring").build();
-        when(hashtagRepository.findByNameIgnoreCase("spring")).thenReturn(Optional.of(hashtag));
+        when(hashtagRepository.findByName("spring")).thenReturn(Optional.of(hashtag));
 
         service.upsertHashtagsForPost(postId, List.of("#Spring", "spring", "SPRING"));
 
@@ -73,7 +73,7 @@ class HashtagServiceImplTest {
         UUID postId = UUID.randomUUID();
         UUID hashtagId = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(hashtagId).name("spring").build();
-        when(hashtagRepository.findByNameIgnoreCase("spring")).thenReturn(Optional.of(hashtag));
+        when(hashtagRepository.findByName("spring")).thenReturn(Optional.of(hashtag));
 
         service.upsertHashtagsForPost(postId, List.of("#Spring"));
 
