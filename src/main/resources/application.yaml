@@ -128,12 +128,19 @@ app:
     connection-timeout: ${ELASTICSEARCH_CONNECTION_TIMEOUT:PT5S}
     socket-timeout: ${ELASTICSEARCH_SOCKET_TIMEOUT:PT30S}
   hashtag:
+    consumer:
+      enabled: ${HASHTAG_CONSUMER_ENABLED:false}
     trending:
       window: ${HASHTAG_TRENDING_WINDOW:PT24H}
       job-delay: ${HASHTAG_TRENDING_JOB_DELAY:PT1H}
       job-initial-delay: ${HASHTAG_TRENDING_JOB_INITIAL_DELAY:PT5M}
     seed:
       enabled: ${HASHTAG_SEED_ENABLED:true}
+  post:
+    consumer:
+      enabled: ${POST_CONSUMER_ENABLED:false}
+    seed:
+      enabled: ${POST_SEED_ENABLED:true}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
@@ -157,6 +164,10 @@ app:
       "[/api/v1/auth/verify-email/resend]":
         max-attempts: 3
         window-seconds: 3600
+      "[/api/v1/posts]":
+        max-attempts: 30
+        window-seconds: 60
+      # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
 
 management:
   health:

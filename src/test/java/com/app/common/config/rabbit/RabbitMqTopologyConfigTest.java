@@ -38,7 +38,11 @@ class RabbitMqTopologyConfigTest {
                                     RabbitMqTopologyConfig.MAIL_QUEUE,
                                     RabbitMqTopologyConfig.MAIL_DEAD_LETTER_QUEUE,
                                     RabbitMqTopologyConfig.NOTIFICATION_QUEUE,
-                                    RabbitMqTopologyConfig.NOTIFICATION_DEAD_LETTER_QUEUE);
+                                    RabbitMqTopologyConfig.NOTIFICATION_DEAD_LETTER_QUEUE,
+                                    RabbitMqTopologyConfig.HASHTAG_INDEX_SYNC_QUEUE,
+                                    RabbitMqTopologyConfig.HASHTAG_INDEX_SYNC_DEAD_LETTER_QUEUE,
+                                    RabbitMqTopologyConfig.POST_INDEX_SYNC_QUEUE,
+                                    RabbitMqTopologyConfig.POST_INDEX_SYNC_DEAD_LETTER_QUEUE);
                     assertThat(queueNames)
                             .doesNotContain(
                                     RabbitMqTopologyConfig.AUDIT_LOG_QUEUE,
@@ -111,8 +115,8 @@ class RabbitMqTopologyConfigTest {
 
                     assertThat(context.getBeansOfType(Binding.class).values())
                             .noneMatch(binding -> futureQueues.contains(binding.getDestination()));
-                    // mail.dlq and notification.dlq dead-letter bindings are active
-                    assertThat(context.getBeansOfType(Binding.class)).hasSize(2);
+                    // Active dead-letter bindings: mail, notification, hashtag.index, post.index
+                    assertThat(context.getBeansOfType(Binding.class)).hasSize(4);
                 });
     }
 

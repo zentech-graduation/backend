@@ -6,7 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Tests
+- Integration tests for the hashtag and post index-sync consumers covering at-least-once delivery, idempotent reprocessing, dead-letter routing of malformed messages, and the post out-of-order delete-before-upsert gate, against real PostgreSQL, Redis, RabbitMQ, and Elasticsearch containers.
+- `PostControllerIT` search scenario now drives the real outbox to RabbitMQ to consumer to Elasticsearch path instead of seeding the index directly.
+- Unit tests for the post service (creation media validation, carousel cardinality, owner-only authorization, lifecycle transitions, soft-delete invariants, hashtag extraction), post visibility service, and the like and save services (idempotency and visibility enforcement).
+- Integration test covering post CRUD, lifecycle, visibility gating across public, private, and blocked combinations, like and save idempotency, and search behaviour with Elasticsearch available and stopped.
+
+### Changed
+- Hashtag Elasticsearch propagation moved from a synchronous post-commit dual-write to outbox-based asynchronous publishing, emitting an index upsert or delete event per affected hashtag after the post-association change is flushed.
+- Post Elasticsearch index is now maintained through the outbox on publish, caption update, archive, and soft-delete; publish and unarchive upsert the document while archive and soft-delete remove it.
+- `STRUCT.md` (`.claude/rules/` and `.agents/rules/`) updated to reflect current codebase state: 21 Flyway migrations (V01–V21), 7 implemented modules (auth, mail, users, social, media, hashtag, notification), new `common/` packages (inbox, outbox, messaging, settings, config/elasticsearch, config/rabbit, config/security), restructured `security/` sub-packages, Elasticsearch service and config, full RabbitMQ topology, updated Technology Stack versions, and accurate Redis key patterns.
+
 ### Fixed
+- Added forward migration V23 to drop the legacy plaintext `access_token`, `refresh_token`, and `token_expires_at` columns from `oauth_accounts` (idempotent `DROP COLUMN IF EXISTS`), reconciling databases that ran the original migration with the rewritten one; the prior changelog and schema attribution of this drop to V19 was incorrect.
+- Index-sync consumers now inject the Spring Boot 4 (Jackson 3) `ObjectMapper`; the prior Jackson 2 type had no registered bean and failed Spring context startup.
+- Duplicate `app.hashtag` and `app.post` keys in `application.yaml`, which broke YAML parsing and prevented every dev-profile Spring context from loading, are merged into single blocks.
+- New posts are flushed before the index-upsert event reads the database-generated creation timestamp, preventing a null-timestamp failure on the publish path.
+- Index event payloads deserialize correctly when the optional schema `version` field is absent from the message.
 - `Follow` entity no longer maps a non-existent `deleted_at` column; `FollowRepository` JPQL queries and derived method names that referenced `deletedAt` are updated to match the actual schema.
 - `SocialNotificationConsumer` now activates in dev and prod profiles via `app.notification.consumer.enabled: true`; `application.yaml` wires the property from `NOTIFICATION_CONSUMER_ENABLED` with a `false` default.
 - `NotificationControllerIT` JWT construction replaced with `JwtTokenProvider.generateAccessToken()` and the `@DynamicPropertySource` block now overrides `spring.data.redis.password` to prevent the `.env`-sourced password from being sent to the password-less test Redis container.
@@ -19,6 +35,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Redis connection now authenticates correctly when `REDIS_PASSWORD` is set, resolving NOAUTH errors on startup.
 
 ### Added
+- RabbitMQ topology for Elasticsearch index synchronization: durable `hashtag.index.sync` and `post.index.sync` work queues with dead-letter queues, bound to the shared `social.events` topic exchange with dead-lettering to `social.events.dlx`.
+- Idempotent `hashtag` and `post` index-sync consumers that apply Elasticsearch upsert and delete events with bounded in-process retry and dead-letter routing on permanent or exhausted failures; the post consumer re-checks PostgreSQL and indexes only existing published posts, dropping stale out-of-order events.
+- Post creation, retrieval, caption update, lifecycle transition, and soft-delete endpoints, with per-post append-only caption edit history readable by the owner.
+- Post like and save endpoints with idempotent semantics and cursor-paginated liker and saved-post listings.
+- Post visibility enforcement gating retrieval, listing, liking, and saving by block relationships and private-account follow state.
+- Elasticsearch full-text post search guarded by the `elasticsearchSearch` circuit breaker, degrading to an empty result page when the search tier is unavailable.
+- Posts Elasticsearch index seed runner that batch-loads published posts from PostgreSQL on startup only when the index is empty and `app.post.seed.enabled` is true.
+- `post_edit_history` table (Flyway V22) recording the pre-edit caption and editor for every caption change, append-only and never soft-deleted.
+- Follow and block state read methods on the social service exposing accepted-follow and bidirectional-block checks to other modules.
+- Hashtag-id lookup on the hashtag service returning hashtag associations grouped by post for index seeding.
+- Post API error codes `POST_NOT_FOUND`, `POST_FORBIDDEN`, `POST_ALREADY_LIKED`, and `POST_ALREADY_SAVED`, and post API path constants for status, history, likes, saved, and search.
 - Public hashtag HTTP endpoints `GET /api/v1/hashtags/search` and `GET /api/v1/hashtags/trending`, documented via the `HashtagApi` OpenAPI interface and rate-limited per endpoint.
 - `HashtagIndexSeedRunner` seeding the Elasticsearch `hashtags` index from PostgreSQL on startup only when the index is empty and `app.hashtag.seed.enabled` is true, treating seeding failures as non-fatal so startup never blocks on the rebuildable search tier.
 - `HashtagTrendingService` computing ranked hashtag trending snapshots from a windowed `post_hashtags` aggregation and serving the latest snapshot as an offset-paginated response, driven by a scheduled, transactional snapshot job.

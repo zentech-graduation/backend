@@ -27,6 +27,7 @@ import com.app.modules.social.enums.FollowStatus;
 import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.social.repository.FollowRepository;
 import com.app.modules.social.repository.SocialUserRepository;
+import com.app.modules.social.service.SocialEventService;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.entity.User;
 
@@ -36,14 +37,17 @@ public class SocialServiceImpl implements SocialService {
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
     private final SocialUserRepository socialUserRepository;
+    private final SocialEventService socialEventService;
 
     public SocialServiceImpl(
             FollowRepository followRepository,
             BlockRepository blockRepository,
-            SocialUserRepository socialUserRepository) {
+            SocialUserRepository socialUserRepository,
+            SocialEventService socialEventService) {
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.socialUserRepository = socialUserRepository;
+        this.socialEventService = socialEventService;
     }
 
     @Override
@@ -82,6 +86,8 @@ public class SocialServiceImpl implements SocialService {
 
         Follow follow = Follow.builder().id(followId).status(status).build();
         followRepository.save(follow);
+
+        socialEventService.publishFollowCreated(follow);
 
         return new FollowResponse(currentUserId, targetUserId, status, follow.getCreatedAt());
     }
@@ -323,6 +329,19 @@ public class SocialServiceImpl implements SocialService {
                         })
                 .filter(response -> response != null)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasAcceptedFollow(UUID followerId, UUID followingId) {
+        return followRepository.existsByIdAndStatus(
+                new FollowId(followerId, followingId), FollowStatus.ACCEPTED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isBlockedBetween(UUID userIdA, UUID userIdB) {
+        return blockRepository.existsBetween(userIdA, userIdB);
     }
 
     private void checkCanViewSocialGraph(UUID currentUserId, UUID targetUserId, User targetUser) {

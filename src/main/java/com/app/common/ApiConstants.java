@@ -42,8 +42,13 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/posts";
         public static final String BY_ID = "/{postId}";
+        public static final String STATUS = "/{postId}/status";
+        public static final String HISTORY = "/{postId}/history";
         public static final String LIKE = "/{postId}/like";
+        public static final String LIKES = "/{postId}/likes";
         public static final String SAVE = "/{postId}/save";
+        public static final String SAVED = "/saved";
+        public static final String SEARCH = "/search";
         public static final String COMMENTS = "/{postId}/comments";
         public static final String MEDIA = "/{postId}/media";
         public static final String FEED = "/feed";
