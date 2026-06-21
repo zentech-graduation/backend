@@ -2,6 +2,7 @@ package com.app.common.security.filter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -27,10 +28,9 @@ import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.common.security.service.TokenBlacklistService;
 import com.app.common.security.user.SecurityMapper;
 import com.app.common.security.user.UserPrincipal;
-import com.app.modules.users.entity.User;
-import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.repository.UserSecurityProjection;
 
 @ExtendWith(MockitoExtension.class)
 class JwtAuthenticationFilterTest {
@@ -71,9 +71,10 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void activeUser_populatesSecurityContext() throws Exception {
-        User user = buildUser(UserStatus.ACTIVE);
+        UserSecurityProjection user = buildProjection(UserStatus.ACTIVE);
         UserPrincipal principal = new UserPrincipal(USER_ID, "user@example.com", "USER", "ACTIVE");
-        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).thenReturn(Optional.of(user));
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(user));
         when(securityMapper.toUserPrincipal(user)).thenReturn(principal);
 
         filter.doFilter(request, response, chain);
@@ -86,47 +87,46 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void bannedUser_leavesSecurityContextEmpty() throws Exception {
-        User user = buildUser(UserStatus.BANNED);
-        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).thenReturn(Optional.of(user));
+        UserSecurityProjection user = buildProjection(UserStatus.BANNED);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(user));
 
         filter.doFilter(request, response, chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(securityMapper, never()).toUserPrincipal(any());
+        verify(securityMapper, never()).toUserPrincipal(any(UserSecurityProjection.class));
         verify(chain).doFilter(request, response);
     }
 
     @Test
     void suspendedUser_leavesSecurityContextEmpty() throws Exception {
-        User user = buildUser(UserStatus.SUSPENDED);
-        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).thenReturn(Optional.of(user));
+        UserSecurityProjection user = buildProjection(UserStatus.SUSPENDED);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(user));
 
         filter.doFilter(request, response, chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(securityMapper, never()).toUserPrincipal(any());
+        verify(securityMapper, never()).toUserPrincipal(any(UserSecurityProjection.class));
         verify(chain).doFilter(request, response);
     }
 
     @Test
     void deactivatedUser_leavesSecurityContextEmpty() throws Exception {
-        User user = buildUser(UserStatus.DEACTIVATED);
-        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).thenReturn(Optional.of(user));
+        UserSecurityProjection user = buildProjection(UserStatus.DEACTIVATED);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(user));
 
         filter.doFilter(request, response, chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(securityMapper, never()).toUserPrincipal(any());
+        verify(securityMapper, never()).toUserPrincipal(any(UserSecurityProjection.class));
         verify(chain).doFilter(request, response);
     }
 
-    private static User buildUser(UserStatus status) {
-        return User.builder()
-                .id(USER_ID)
-                .username("testuser")
-                .email("user@example.com")
-                .role(UserRole.USER)
-                .status(status)
-                .build();
+    private static UserSecurityProjection buildProjection(UserStatus status) {
+        UserSecurityProjection projection = mock(UserSecurityProjection.class);
+        when(projection.getStatus()).thenReturn(status);
+        return projection;
     }
 }

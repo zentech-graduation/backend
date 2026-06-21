@@ -21,16 +21,16 @@ import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.common.security.service.TokenBlacklistService;
 import com.app.common.security.user.SecurityMapper;
 import com.app.common.security.user.UserPrincipal;
-import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.repository.UserSecurityProjection;
 
 /**
  * Authenticates requests by extracting a Bearer JWT, verifying its signature, and resolving the
- * persisted {@link User} so that account-level state (status, soft-delete) is enforced on every
- * call. The raw token is stored as the {@link UsernamePasswordAuthenticationToken} credentials so
- * that downstream handlers (logout) can recover the {@code jti} and remaining lifetime without
- * re-reading the {@code Authorization} header.
+ * persisted user (via a slim security projection) so that account-level state (status, soft-delete)
+ * is enforced on every call. The raw token is stored as the {@link
+ * UsernamePasswordAuthenticationToken} credentials so that downstream handlers (logout) can recover
+ * the {@code jti} and remaining lifetime without re-reading the {@code Authorization} header.
  *
  * <p>The filter never writes the response on failure: it clears the context and lets downstream
  * handlers (Spring Security's {@code AuthenticationEntryPoint}) decide how to respond.
@@ -77,9 +77,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            User user =
+            UserSecurityProjection user =
                     userRepository
-                            .findByIdAndDeletedAtIsNull(claims.userId())
+                            .findProjectedByIdAndDeletedAtIsNull(claims.userId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
 
             // We bypass DaoAuthenticationProvider here (token-based path), so
