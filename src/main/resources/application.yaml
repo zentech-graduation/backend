@@ -18,6 +18,11 @@ spring:
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     hikari:
+      # Explicit pool bounds. Tune DB_POOL_MAX against PostgreSQL max_connections.
+      # Default: 20 connections (safe for a max_connections=100 PostgreSQL with headroom).
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:3000}
       data-source-properties:
         stringtype: unspecified
   flyway:
@@ -62,6 +67,7 @@ app:
     forgot-password:
       min-response-time: ${AUTH_FORGOT_PASSWORD_MIN_RESPONSE_TIME:200ms}
       max-jitter: ${AUTH_FORGOT_PASSWORD_MAX_JITTER:50ms}
+
   outbox:
     publisher:
       enabled: ${OUTBOX_PUBLISHER_ENABLED:true}

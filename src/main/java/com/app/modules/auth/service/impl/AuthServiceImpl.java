@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiErrorCode;
@@ -71,6 +72,7 @@ public class AuthServiceImpl implements AuthService {
     private final IpExtractor ipExtractor;
     private final UserStateValidator userStateValidator;
     private final OAuth2ExchangeCodeService oauth2ExchangeCodeService;
+    private final TransactionTemplate transactionTemplate;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -92,7 +94,8 @@ public class AuthServiceImpl implements AuthService {
             TokenBlacklistService tokenBlacklistService,
             IpExtractor ipExtractor,
             UserStateValidator userStateValidator,
-            OAuth2ExchangeCodeService oauth2ExchangeCodeService) {
+            OAuth2ExchangeCodeService oauth2ExchangeCodeService,
+            TransactionTemplate transactionTemplate) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -109,6 +112,7 @@ public class AuthServiceImpl implements AuthService {
         this.ipExtractor = ipExtractor;
         this.userStateValidator = userStateValidator;
         this.oauth2ExchangeCodeService = oauth2ExchangeCodeService;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @PostConstruct
@@ -120,7 +124,6 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
     public void register(RegisterRequest request) {
         // Return a single generic conflict code for both email and username collisions so the
         // response cannot be used to enumerate which emails or usernames are already registered.
@@ -129,39 +132,53 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ApiErrorCode.USER_ALREADY_EXISTS);
         }
 
-        String displayName =
-                StringUtils.hasText(request.displayName())
-                        ? request.displayName()
-                        : request.username();
+        // Hash the password before opening a transaction so the connection is not held during
+        // the BCrypt computation (~200-300ms at cost 12).
+        String passwordHash = passwordEncoder.encode(request.password());
 
-        User user =
-                User.builder()
-                        .username(request.username())
-                        .email(request.email())
-                        .displayName(displayName)
-                        .role(UserRole.USER)
-                        .status(UserStatus.ACTIVE)
-                        .isPrivate(false)
-                        .isVerified(false)
-                        .build();
-        user = userRepository.save(user);
+        transactionTemplate.executeWithoutResult(
+                status -> {
+                    // Re-check uniqueness inside the transaction to close the TOCTOU window.
+                    if (userRepository.existsByEmail(request.email())
+                            || userRepository.existsByUsername(request.username())) {
+                        throw new AppException(ApiErrorCode.USER_ALREADY_EXISTS);
+                    }
 
-        UserCredential credential =
-                UserCredential.builder()
-                        .userId(user.getId())
-                        .passwordHash(passwordEncoder.encode(request.password()))
-                        .emailVerified(false)
-                        .build();
-        credentialRepository.save(credential);
+                    String displayName =
+                            StringUtils.hasText(request.displayName())
+                                    ? request.displayName()
+                                    : request.username();
 
-        settingsRepository.save(UserSettings.builder().userId(user.getId()).build());
+                    User user =
+                            User.builder()
+                                    .username(request.username())
+                                    .email(request.email())
+                                    .displayName(displayName)
+                                    .role(UserRole.USER)
+                                    .status(UserStatus.ACTIVE)
+                                    .isPrivate(false)
+                                    .isVerified(false)
+                                    .build();
+                    User savedUser = userRepository.save(user);
 
-        authMailEventService.publishUserRegistered(user);
-        authMailEventService.publishEmailVerificationRequested(user, user.getId());
+                    UserCredential credential =
+                            UserCredential.builder()
+                                    .userId(savedUser.getId())
+                                    .passwordHash(passwordHash)
+                                    .emailVerified(false)
+                                    .build();
+                    credentialRepository.save(credential);
+
+                    settingsRepository.save(
+                            UserSettings.builder().userId(savedUser.getId()).build());
+
+                    authMailEventService.publishUserRegistered(savedUser);
+                    authMailEventService.publishEmailVerificationRequested(
+                            savedUser, savedUser.getId());
+                });
     }
 
     @Override
-    @Transactional
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         User user = userRepository.findByEmailAndDeletedAtIsNull(request.email()).orElse(null);
         UserCredential credential =
@@ -170,6 +187,7 @@ public class AuthServiceImpl implements AuthService {
         // Run BCrypt unconditionally so unknown-email, missing-credential, and wrong-password
         // paths are indistinguishable via response timing. The dummy hash is a real BCrypt
         // hash that no user password can satisfy.
+        // BCrypt runs outside any transaction — no connection held during hashing.
         String hashForCompare =
                 credential != null && credential.getPasswordHash() != null
                         ? credential.getPasswordHash()
@@ -191,7 +209,12 @@ public class AuthServiceImpl implements AuthService {
         userStateValidator.enforceActive(user);
         userStateValidator.enforceEmailVerified(credential);
 
-        return issueSession(user, credential.isEmailVerified(), httpRequest);
+        // issueSession writes a refresh_token row; run inside a short write-only transaction.
+        // TransactionTemplate ensures the proxy is used correctly (no self-call bypass).
+        User finalUser = user;
+        UserCredential finalCredential = credential;
+        return transactionTemplate.execute(
+                status -> issueSession(finalUser, finalCredential.isEmailVerified(), httpRequest));
     }
 
     @Override
@@ -318,35 +341,47 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        UUID userId;
-        try {
-            userId = tokenService.consumePasswordResetToken(request.token());
-        } catch (TokenNotFoundException | TokenExpiredException e) {
-            throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
-        }
+        // Hash the new password before opening the transaction so the connection is not
+        // held during BCrypt computation.
+        String newPasswordHash = passwordEncoder.encode(request.newPassword());
 
-        User user =
-                userRepository
-                        .findByIdAndDeletedAtIsNull(userId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+        transactionTemplate.executeWithoutResult(
+                status -> {
+                    UUID userId;
+                    try {
+                        userId = tokenService.consumePasswordResetToken(request.token());
+                    } catch (TokenNotFoundException | TokenExpiredException e) {
+                        throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+                    }
 
-        userStateValidator.enforceActive(user);
+                    User user =
+                            userRepository
+                                    .findByIdAndDeletedAtIsNull(userId)
+                                    .orElseThrow(
+                                            () ->
+                                                    new AppException(
+                                                            ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
 
-        UserCredential credential =
-                credentialRepository
-                        .findByUserId(userId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
-        if (credential.getPasswordHash() == null) {
-            throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
-        }
-        credential.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        credentialRepository.save(credential);
+                    userStateValidator.enforceActive(user);
 
-        refreshTokenService.revokeAllForUser(userId);
+                    UserCredential credential =
+                            credentialRepository
+                                    .findByUserId(userId)
+                                    .orElseThrow(
+                                            () ->
+                                                    new AppException(
+                                                            ApiErrorCode.AUTH_RESET_TOKEN_INVALID));
+                    if (credential.getPasswordHash() == null) {
+                        throw new AppException(ApiErrorCode.AUTH_RESET_TOKEN_INVALID);
+                    }
+                    credential.setPasswordHash(newPasswordHash);
+                    credentialRepository.save(credential);
 
-        authMailEventService.publishPasswordChanged(user);
+                    refreshTokenService.revokeAllForUser(userId);
+
+                    authMailEventService.publishPasswordChanged(user);
+                });
     }
 
     @Override
