@@ -179,4 +179,31 @@ class AuthRateLimitFilterTest {
         verify(chain).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(200);
     }
+
+    @Test
+    void resolveRule_antPatternMatch_returnsRule() {
+        // Configure a wildcard rule for post sub-paths.
+        Rule postRule = new Rule(50, 60);
+        RateLimitProperties patternProps =
+                new RateLimitProperties(
+                        Map.of("/api/v1/posts/**", postRule, LOGIN_PATH, LOGIN_RULE));
+        SecurityProperties securityProperties =
+                new SecurityProperties(
+                        java.util.List.of(), 2048, "test-cookie-signing-secret-placeholder-32ch");
+        AuthRateLimitFilter patternFilter =
+                new AuthRateLimitFilter(
+                        rateLimiterService,
+                        patternProps,
+                        objectMapper,
+                        ipExtractor,
+                        securityProperties);
+
+        // Exact auth path still resolves.
+        assertThat(patternFilter.resolveRule(LOGIN_PATH, "POST")).isEqualTo(LOGIN_RULE);
+        // Concrete path under the wildcard pattern resolves.
+        assertThat(patternFilter.resolveRule("/api/v1/posts/abc123/likes", "POST"))
+                .isEqualTo(postRule);
+        // Unmatched path returns null.
+        assertThat(patternFilter.resolveRule("/api/v1/users/me", "GET")).isNull();
+    }
 }

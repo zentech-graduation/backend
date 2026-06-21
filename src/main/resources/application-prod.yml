@@ -36,6 +36,9 @@ app:
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:
+    # Populate with your ingress proxy CIDR(s) before deploying behind a reverse proxy.
+    # IpExtractor only trusts XFF when the direct peer matches a configured CIDR.
+    # Example: ["10.0.0.0/8", "172.16.0.0/12"]
     trusted-proxy-cidrs: []
     max-login-body-bytes: 2048
   rate-limit:
