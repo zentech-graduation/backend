@@ -5,6 +5,8 @@ import java.util.Map;
 
 import jakarta.validation.ConstraintViolationException;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -82,6 +84,18 @@ public class GlobalExceptionHandler {
         String message = "HTTP method not supported: " + ex.getMethod();
         return ResponseEntity.status(ApiErrorCode.BAD_REQUEST.getHttpStatus())
                 .body(ApiResponse.failure(ApiErrorCode.BAD_REQUEST, message, null));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<?>> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex) {
+        log.warn("Database constraint violation: {}", ex.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(
+                        ApiResponse.failure(
+                                ApiErrorCode.BAD_REQUEST,
+                                "The request conflicts with an existing resource",
+                                null));
     }
 
     @ExceptionHandler(Exception.class)

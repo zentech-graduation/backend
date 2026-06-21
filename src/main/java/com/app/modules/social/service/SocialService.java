@@ -27,4 +27,28 @@ public interface SocialService {
             UUID targetUserId, UUID currentUserId, String cursor, int limit);
 
     List<FollowRequestResponse> getPendingFollowRequests(UUID currentUserId);
+
+    /**
+     * Checks whether an accepted follow relationship exists from the follower to the target user.
+     *
+     * <p>Pending follow requests do not count as accepted follows; counters and content visibility
+     * are gated on accepted status only.
+     *
+     * @param followerId user performing the follow
+     * @param followingId user being followed
+     * @return true when a follow row with accepted status exists
+     */
+    boolean hasAcceptedFollow(UUID followerId, UUID followingId);
+
+    /**
+     * Checks whether a block relationship exists between two users in either direction.
+     *
+     * <p>Blocks are bidirectional in effect: a single row in either direction suppresses all
+     * interaction and content visibility between the pair.
+     *
+     * @param userIdA first user of the pair
+     * @param userIdB second user of the pair
+     * @return true when either user has blocked the other
+     */
+    boolean isBlockedBetween(UUID userIdA, UUID userIdB);
 }

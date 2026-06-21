@@ -4,6 +4,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.app.modules.users.entity.User;
+import com.app.modules.users.repository.UserSecurityProjection;
 
 /** Maps {@link User} entities to security-layer principals. */
 @Mapper(componentModel = "spring")
@@ -13,4 +14,9 @@ public interface SecurityMapper {
     @Mapping(source = "role", target = "role")
     @Mapping(source = "status", target = "status")
     UserPrincipal toUserPrincipal(User user);
+
+    @Mapping(source = "id", target = "userId")
+    @Mapping(source = "role", target = "role")
+    @Mapping(source = "status", target = "status")
+    UserPrincipal toUserPrincipal(UserSecurityProjection user);
 }

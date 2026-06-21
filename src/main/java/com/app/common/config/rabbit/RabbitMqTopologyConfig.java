@@ -29,6 +29,14 @@ public class RabbitMqTopologyConfig {
     public static final String NOTIFICATION_DEAD_LETTER_QUEUE = "notification.dlq";
     public static final String NOTIFICATION_DEAD_LETTER_ROUTING_KEY = "notification.dead-letter";
 
+    public static final String HASHTAG_INDEX_SYNC_QUEUE = "hashtag.index.sync";
+    public static final String HASHTAG_INDEX_SYNC_DEAD_LETTER_QUEUE = "hashtag.index.sync.dlq";
+    public static final String HASHTAG_INDEX_DEAD_LETTER_ROUTING_KEY = "hashtag.index.dead-letter";
+
+    public static final String POST_INDEX_SYNC_QUEUE = "post.index.sync";
+    public static final String POST_INDEX_SYNC_DEAD_LETTER_QUEUE = "post.index.sync.dlq";
+    public static final String POST_INDEX_DEAD_LETTER_ROUTING_KEY = "post.index.dead-letter";
+
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
     public static final String SEARCH_INDEX_QUEUE = "search-index.queue";
@@ -79,5 +87,41 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(notificationDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue hashtagIndexSyncQueue() {
+        return QueueBuilder.durable(HASHTAG_INDEX_SYNC_QUEUE).build();
+    }
+
+    @Bean
+    Queue hashtagIndexSyncDeadLetterQueue() {
+        return QueueBuilder.durable(HASHTAG_INDEX_SYNC_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding hashtagIndexSyncDeadLetterBinding(
+            Queue hashtagIndexSyncDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(hashtagIndexSyncDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(HASHTAG_INDEX_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue postIndexSyncQueue() {
+        return QueueBuilder.durable(POST_INDEX_SYNC_QUEUE).build();
+    }
+
+    @Bean
+    Queue postIndexSyncDeadLetterQueue() {
+        return QueueBuilder.durable(POST_INDEX_SYNC_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding postIndexSyncDeadLetterBinding(
+            Queue postIndexSyncDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(postIndexSyncDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(POST_INDEX_DEAD_LETTER_ROUTING_KEY);
     }
 }
