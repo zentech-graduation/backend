@@ -11,7 +11,6 @@ spring:
       enabled: true
   jackson:
     deserialization:
-      # AUTH-022: reject request bodies that contain unknown fields to prevent mass-assignment
       fail-on-unknown-properties: true
   datasource:
     url: ${POSTGRES_URL}
@@ -31,8 +30,8 @@ spring:
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:guest}
-    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
     virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:/}
     publisher-confirm-type: ${SPRING_RABBITMQ_PUBLISHER_CONFIRM_TYPE:correlated}
     publisher-returns: ${SPRING_RABBITMQ_PUBLISHER_RETURNS:true}
