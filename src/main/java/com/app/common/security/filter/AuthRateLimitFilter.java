@@ -13,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -28,9 +29,14 @@ import com.app.common.security.util.IpExtractor;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Rejects abusive traffic on sensitive auth endpoints before it reaches downstream filters or
- * controllers. The bucket key is namespaced by request IP; for login the JSON body's {@code email}
- * field is appended so a single-account brute force cannot be hidden behind a rotating IP counter.
+ * Rejects abusive traffic on configured endpoints before it reaches downstream filters or
+ * controllers. The bucket key is namespaced per-client: per-IP for the login path (with email
+ * appended so a single-account brute force cannot hide behind a rotating IP counter); per {@code
+ * method:path:ip} for all other endpoints.
+ *
+ * <p>Rule resolution uses an exact-match fast path first, then falls back to {@link AntPathMatcher}
+ * so path-variable routes (e.g. {@code /posts/{id}/likes}) can be configured without requiring
+ * exact-match entries for every concrete path.
  *
  * <p>All 429 responses include a {@code Retry-After} header set to the matched rule's window.
  */
@@ -44,6 +50,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper;
     private final IpExtractor ipExtractor;
     private final SecurityProperties securityProperties;
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     public AuthRateLimitFilter(
             RateLimiterService rateLimiterService,
@@ -108,10 +115,29 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     /**
      * Returns the matching {@link RateLimitProperties.Rule} or {@code null} if not rate-limited.
+     *
+     * <p>Resolution order:
+     *
+     * <ol>
+     *   <li>Exact match (O(1)) — covers all literal auth paths and any other exactly-specified
+     *       rules.
+     *   <li>Ant-pattern match — covers path-variable templates such as {@code /posts/{id}/likes}.
+     * </ol>
      */
     RateLimitProperties.Rule resolveRule(String path, String method) {
-        // Single lookup — all rules live in endpointRules; method is encoded in the bucket key.
-        return properties.endpointRules().get(path);
+        // Fast path: exact key lookup used for all literal paths (e.g. auth endpoints).
+        RateLimitProperties.Rule exact = properties.endpointRules().get(path);
+        if (exact != null) {
+            return exact;
+        }
+        // Pattern fallback: supports path-variable templates in endpointRules keys.
+        for (Map.Entry<String, RateLimitProperties.Rule> entry :
+                properties.endpointRules().entrySet()) {
+            if (pathMatcher.match(entry.getKey(), path)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     /** Returns whether the given path + method combination is subject to rate limiting. */

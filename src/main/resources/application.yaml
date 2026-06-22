@@ -177,7 +177,8 @@ management:
       show-details: when-authorized
 
 server:
-  forward-headers-strategy: framework
+  # Forward-headers-strategy removed; IpExtractor + trusted-proxy-cidrs is the only model.
+  # Configure app.security.trusted-proxy-cidrs to your ingress CIDR(s) before deploying behind a proxy.
   tomcat:
     max-http-form-post-size: 1MB
 
