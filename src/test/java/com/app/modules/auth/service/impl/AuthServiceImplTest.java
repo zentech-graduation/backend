@@ -31,6 +31,8 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -82,6 +84,7 @@ class AuthServiceImplTest {
     @Mock private IpExtractor ipExtractor;
     @Mock private UserStateValidator userStateValidator;
     @Mock private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
+    @Mock private TransactionTemplate transactionTemplate;
 
     private AuthServiceImpl service;
 
@@ -104,6 +107,25 @@ class AuthServiceImplTest {
                                     u.getRole() == null ? null : u.getRole().name(),
                                     ev);
                         });
+        // Execute TransactionTemplate callbacks directly (no real PlatformTransactionManager).
+        lenient()
+                .doAnswer(
+                        inv -> {
+                            java.util.function.Consumer<
+                                            org.springframework.transaction.TransactionStatus>
+                                    cb = inv.getArgument(0);
+                            cb.accept(null);
+                            return null;
+                        })
+                .when(transactionTemplate)
+                .executeWithoutResult(any());
+        lenient()
+                .when(transactionTemplate.execute(any(TransactionCallback.class)))
+                .thenAnswer(
+                        inv -> {
+                            TransactionCallback<?> cb = inv.getArgument(0);
+                            return cb.doInTransaction(null);
+                        });
         this.service =
                 new AuthServiceImpl(
                         userRepository,
@@ -121,7 +143,8 @@ class AuthServiceImplTest {
                         tokenBlacklistService,
                         ipExtractor,
                         userStateValidator,
-                        oauth2ExchangeCodeService);
+                        oauth2ExchangeCodeService,
+                        transactionTemplate);
     }
 
     private MockHttpServletRequest stubRequest() {
