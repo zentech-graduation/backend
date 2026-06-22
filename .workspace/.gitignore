@@ -1,0 +1,5 @@
+# Ignore all content; track structure files only
+*
+!.gitignore
+!.gitkeep
+!README.md
