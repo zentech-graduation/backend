@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Tests
+- Added unit test coverage for previously untested service classes, targeting failure and exception branches: the social service (self-follow, not-found, block, already-following/requested, follow-request approve/reject, block cascade purge, private-account visibility, cursor decoding), the OAuth2 exchange-code service (absent-code rejection), the system-setting accessor (missing and non-numeric values), the post search fallback (availability degradation vs. programming-error rethrow), the post response assembler (batched media hydration), and the hashtag trending empty-snapshot guard.
 - Integration tests for the hashtag and post index-sync consumers covering at-least-once delivery, idempotent reprocessing, dead-letter routing of malformed messages, and the post out-of-order delete-before-upsert gate, against real PostgreSQL, Redis, RabbitMQ, and Elasticsearch containers.
 - `PostControllerIT` search scenario now drives the real outbox to RabbitMQ to consumer to Elasticsearch path instead of seeding the index directly.
 - Unit tests for the post service (creation media validation, carousel cardinality, owner-only authorization, lifecycle transitions, soft-delete invariants, hashtag extraction), post visibility service, and the like and save services (idempotency and visibility enforcement).
