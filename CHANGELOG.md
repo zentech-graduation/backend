@@ -6,7 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Comment module: create, edit, soft-delete (subtree), likes, and nested replies up to depth 10, with cursor-paginated listing of top-level comments and replies.
+- Synchronous comment moderation (content normalization plus rule-based rejection for empty, over-length, blocked-word, and spam content).
+- HTTP write idempotency for comment creation via an `Idempotency-Key` header, replaying the original response on a matching retry and rejecting key reuse with a different payload.
+- Optional per-post comment slow-mode rate limiting backed by Redis.
+- Event-driven comment, reply, mention, and like notifications via a dedicated RabbitMQ consumer.
+- Redis recent-comments cache with cache-aside writes, rebuild-on-miss, and fail-open degradation.
+- Real-time comment delivery over WebSocket (STOMP/SockJS) with JWT-authenticated handshake, per-subscription post-visibility authorization, and per-instance RabbitMQ fanout queues.
+- Comment subsystem metrics and a Redis/RabbitMQ health indicator.
+
+### Changed
+- `ApiErrorCode` gains comment-scoped error codes.
+- RabbitMQ topology gains the `comment.live.events` fanout exchange (bound to the event bus for `comment.#`) and a dedicated `comment.notification.queue` with its dead-letter queue.
+- Comment write and live-delivery paths emit MDC correlation fields (commentId, postId, userId, eventId, serverId).
+
+### Fixed
+- Comment list endpoints now enforce post visibility; private posts return 403 to non-followers, consistent with the create and WebSocket paths.
+- Idempotency key races are resolved with an `INSERT ... ON CONFLICT DO NOTHING` reservation in the request transaction, so a concurrent duplicate cannot poison the transaction and a rolled-back create frees the key.
+- WebSocket handshake now rejects blacklisted (revoked but unexpired) access tokens.
+- Cursor pagination `hasNextPage` is computed from the pre-trim probe row, fixing a false positive on an exactly-full final page.
+
 ### Tests
+- Added WebSocket JWT handshake interceptor unit tests covering valid non-blacklisted token, revoked (blacklisted) token, missing token parameter, and invalid token paths.
+- Added pagination boundary unit tests verifying `hasNextPage=false` on an exactly-full final page and `hasNextPage=true` with one probe row beyond the limit.
+- Added comment-module coverage for the idempotency replay and conflict paths (unit + controller IT), admin-delete authorization, read-side visibility on private posts, and the reply/like/mention notification consumer branches.
 - Added unit test coverage for previously untested service classes, targeting failure and exception branches: the social service (self-follow, not-found, block, already-following/requested, follow-request approve/reject, block cascade purge, private-account visibility, cursor decoding), the OAuth2 exchange-code service (absent-code rejection), the system-setting accessor (missing and non-numeric values), the post search fallback (availability degradation vs. programming-error rethrow), the post response assembler (batched media hydration), and the hashtag trending empty-snapshot guard.
 - Integration tests for the hashtag and post index-sync consumers covering at-least-once delivery, idempotent reprocessing, dead-letter routing of malformed messages, and the post out-of-order delete-before-upsert gate, against real PostgreSQL, Redis, RabbitMQ, and Elasticsearch containers.
 - `PostControllerIT` search scenario now drives the real outbox to RabbitMQ to consumer to Elasticsearch path instead of seeding the index directly.
