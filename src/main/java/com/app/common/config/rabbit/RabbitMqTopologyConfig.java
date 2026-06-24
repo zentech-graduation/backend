@@ -3,6 +3,7 @@ package com.app.common.config.rabbit;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.ExchangeBuilder;
+import org.springframework.amqp.core.FanoutExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
@@ -36,6 +37,12 @@ public class RabbitMqTopologyConfig {
     public static final String POST_INDEX_SYNC_QUEUE = "post.index.sync";
     public static final String POST_INDEX_SYNC_DEAD_LETTER_QUEUE = "post.index.sync.dlq";
     public static final String POST_INDEX_DEAD_LETTER_ROUTING_KEY = "post.index.dead-letter";
+
+    public static final String COMMENT_LIVE_EVENTS_EXCHANGE = "comment.live.events";
+    public static final String COMMENT_NOTIFICATION_QUEUE = "comment.notification.queue";
+    public static final String COMMENT_NOTIFICATION_DEAD_LETTER_QUEUE = "comment.notification.dlq";
+    public static final String COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
+            "comment.notification.dead-letter";
 
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
@@ -123,5 +130,44 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(postIndexSyncDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(POST_INDEX_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    FanoutExchange commentLiveEventsExchange() {
+        return ExchangeBuilder.fanoutExchange(COMMENT_LIVE_EVENTS_EXCHANGE).durable(true).build();
+    }
+
+    // Exchange-to-exchange: the topic bus routes every comment.* event into the live fanout so the
+    // outbox publishes once and the broker fans out to both the notification queue and the live
+    // tier.
+    @Bean
+    Binding commentLiveExchangeBinding(
+            FanoutExchange commentLiveEventsExchange, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(commentLiveEventsExchange)
+                .to(socialEventsExchange)
+                .with("comment.#");
+    }
+
+    @Bean
+    Queue commentNotificationQueue() {
+        return QueueBuilder.durable(COMMENT_NOTIFICATION_QUEUE)
+                .withArgument("x-dead-letter-exchange", SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE)
+                .withArgument(
+                        "x-dead-letter-routing-key", COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    Queue commentNotificationDeadLetterQueue() {
+        return QueueBuilder.durable(COMMENT_NOTIFICATION_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding commentNotificationDeadLetterBinding(
+            Queue commentNotificationDeadLetterQueue,
+            TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(commentNotificationDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
     }
 }
