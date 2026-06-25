@@ -1,5 +1,6 @@
 package com.app.modules.auth.messaging;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -20,8 +21,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.redis.RedisSystemException;
 
 import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.enums.ApiErrorCode;
@@ -195,6 +199,26 @@ class AuthMailEventConsumerTest {
 
         verify(channel).basicNack(1L, false, true);
         verify(channel, never()).basicAck(1L, false);
+    }
+
+    @Test
+    void isTransient_dataAccessException_returnsTrue() {
+        assertThat(consumer.isTransient(new QueryTimeoutException("db timeout"))).isTrue();
+    }
+
+    @Test
+    void isTransient_redisSystemException_returnsTrue() {
+        assertThat(consumer.isTransient(new RedisSystemException("redis down", null))).isTrue();
+    }
+
+    @Test
+    void isTransient_amqpException_returnsTrue() {
+        assertThat(consumer.isTransient(new AmqpException("broker unreachable"))).isTrue();
+    }
+
+    @Test
+    void isTransient_appExceptionNonServiceUnavailable_returnsFalse() {
+        assertThat(consumer.isTransient(new AppException(ApiErrorCode.POST_NOT_FOUND))).isFalse();
     }
 
     private Message message(DomainEventEnvelope event) {
