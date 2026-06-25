@@ -128,6 +128,239 @@ class AuthMailEventHandlerTest {
                 .isInstanceOf(PermanentMessageException.class);
     }
 
+    @Test
+    void handle_nullEventId_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        null,
+                        AuthEventTypes.USER_REGISTERED_V1,
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "user",
+                        USER_ID,
+                        Map.of("userId", USER_ID.toString()));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("missing");
+    }
+
+    @Test
+    void handle_unsupportedEventType_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        "unknown.event.type",
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "user",
+                        USER_ID,
+                        Map.of("userId", USER_ID.toString()));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("Unsupported");
+    }
+
+    @Test
+    void handle_wrongAggregateType_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        AuthEventTypes.USER_REGISTERED_V1,
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "post",
+                        USER_ID,
+                        Map.of("userId", USER_ID.toString()));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("aggregate type");
+    }
+
+    @Test
+    void handle_nullAggregateId_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        AuthEventTypes.USER_REGISTERED_V1,
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "user",
+                        null,
+                        Map.of("userId", USER_ID.toString()));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("aggregate id");
+    }
+
+    @Test
+    void handle_nullData_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        AuthEventTypes.USER_REGISTERED_V1,
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "user",
+                        USER_ID,
+                        null);
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("data.userId");
+    }
+
+    @Test
+    void handle_missingUserIdKey_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        AuthEventTypes.USER_REGISTERED_V1,
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "user",
+                        USER_ID,
+                        Map.of("otherId", "something"));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("data.userId");
+    }
+
+    @Test
+    void handle_nonStringUserId_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        AuthEventTypes.USER_REGISTERED_V1,
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "user",
+                        USER_ID,
+                        Map.<String, Object>of("userId", 42));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("invalid");
+    }
+
+    @Test
+    void handle_nonUuidStringUserId_throwsPermanentFailure() {
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        AuthEventTypes.USER_REGISTERED_V1,
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        USER_ID,
+                        "user",
+                        USER_ID,
+                        Map.of("userId", "not-a-uuid"));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        envelope,
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("UUID");
+    }
+
+    @Test
+    void handle_inactiveUser_throwsPermanentFailure() {
+        User suspended =
+                User.builder()
+                        .id(USER_ID)
+                        .username("duc")
+                        .email("duc@example.com")
+                        .displayName("Ngoc Duc")
+                        .role(UserRole.USER)
+                        .status(UserStatus.SUSPENDED)
+                        .build();
+        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).thenReturn(Optional.of(suspended));
+
+        assertThatThrownBy(
+                        () ->
+                                handler.handle(
+                                        event(AuthEventTypes.USER_REGISTERED_V1),
+                                        new AuthMailEventHandler.AuthMailEventProcessingContext()))
+                .isInstanceOf(PermanentMessageException.class)
+                .hasMessageContaining("not active");
+    }
+
+    @Test
+    void handle_displayNameNullFallsBackToUsername() {
+        User noDisplayName =
+                User.builder()
+                        .id(USER_ID)
+                        .username("duc")
+                        .email("duc@example.com")
+                        .displayName(null)
+                        .role(UserRole.USER)
+                        .status(UserStatus.ACTIVE)
+                        .build();
+        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(noDisplayName));
+
+        handler.handle(
+                event(AuthEventTypes.USER_REGISTERED_V1),
+                new AuthMailEventHandler.AuthMailEventProcessingContext());
+
+        verify(mailSender).sendWelcome("duc@example.com", "duc");
+    }
+
+    @Test
+    void handle_passwordChanged_sendsPasswordChangedMail() {
+        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).thenReturn(Optional.of(user()));
+
+        handler.handle(
+                event(AuthEventTypes.AUTH_PASSWORD_CHANGED_V1),
+                new AuthMailEventHandler.AuthMailEventProcessingContext());
+
+        verify(mailSender).sendPasswordChanged("duc@example.com", "Ngoc Duc");
+    }
+
+    @Test
+    void handle_oauthAccountNoPassword_sendsOAuthMail() {
+        when(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).thenReturn(Optional.of(user()));
+
+        handler.handle(
+                event(AuthEventTypes.AUTH_OAUTH_ACCOUNT_NO_PASSWORD_V1),
+                new AuthMailEventHandler.AuthMailEventProcessingContext());
+
+        verify(mailSender).sendOAuthAccountNoPassword("duc@example.com", "Ngoc Duc");
+    }
+
     private DomainEventEnvelope event(String eventType) {
         return new DomainEventEnvelope(
                 UUID.randomUUID(),

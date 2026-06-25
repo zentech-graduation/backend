@@ -36,7 +36,7 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
     @Query(
             "SELECT f FROM Follow f WHERE f.id.followingId = :userId "
                     + "AND f.status = :status "
-                    + "AND (:cursor IS NULL OR f.createdAt < :cursor) "
+                    + "AND f.createdAt < :cursor "
                     + "AND f.id.followerId NOT IN (SELECT b.id.blockedId FROM Block b WHERE b.id.blockerId = :currentUserId) "
                     + "AND f.id.followerId NOT IN (SELECT b.id.blockerId FROM Block b WHERE b.id.blockedId = :currentUserId) "
                     + "ORDER BY f.createdAt DESC")
@@ -50,7 +50,7 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
     @Query(
             "SELECT f FROM Follow f WHERE f.id.followerId = :userId "
                     + "AND f.status = :status "
-                    + "AND (:cursor IS NULL OR f.createdAt < :cursor) "
+                    + "AND f.createdAt < :cursor "
                     + "AND f.id.followingId NOT IN (SELECT b.id.blockedId FROM Block b WHERE b.id.blockerId = :currentUserId) "
                     + "AND f.id.followingId NOT IN (SELECT b.id.blockerId FROM Block b WHERE b.id.blockedId = :currentUserId) "
                     + "ORDER BY f.createdAt DESC")

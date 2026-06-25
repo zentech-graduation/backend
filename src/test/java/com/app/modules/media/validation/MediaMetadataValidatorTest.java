@@ -152,4 +152,134 @@ class MediaMetadataValidatorTest {
                 .isInstanceOf(AppException.class)
                 .hasMessage("File size exceeds the configured limit");
     }
+
+    @Test
+    void validate_blankStorageKey_throwsMediaInvalidMetadata() {
+        MediaUploadCompleteRequest request =
+                new MediaUploadCompleteRequest(
+                        "   ", MediaType.IMAGE, "image/jpeg", 1024L, 800, 600, null, null);
+
+        assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Storage key is required");
+    }
+
+    @Test
+    void validate_storageKeyStartsWithSlash_throwsMediaInvalidMetadata() {
+        MediaUploadCompleteRequest request =
+                new MediaUploadCompleteRequest(
+                        "/users/123/image.jpg",
+                        MediaType.IMAGE,
+                        "image/jpeg",
+                        1024L,
+                        800,
+                        600,
+                        null,
+                        null);
+
+        assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Storage key format is invalid");
+    }
+
+    @Test
+    void validate_storageKeyEndsWithSlash_throwsMediaInvalidMetadata() {
+        MediaUploadCompleteRequest request =
+                new MediaUploadCompleteRequest(
+                        "users/123/", MediaType.IMAGE, "image/jpeg", 1024L, 800, 600, null, null);
+
+        assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Storage key format is invalid");
+    }
+
+    @Test
+    void validate_maxMediaSizeMegabytesZero_throwsServiceUnavailable() {
+        MediaUploadCompleteRequest request =
+                new MediaUploadCompleteRequest(
+                        "users/123/media/image.jpg",
+                        MediaType.IMAGE,
+                        "image/jpeg",
+                        1024L,
+                        800,
+                        600,
+                        null,
+                        null);
+
+        assertThatThrownBy(() -> validator.validate(request, 0))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Media size system setting must be positive");
+    }
+
+    @Test
+    void validate_zeroWidth_throwsMediaInvalidMetadata() {
+        MediaUploadCompleteRequest request =
+                new MediaUploadCompleteRequest(
+                        "users/123/media/image.jpg",
+                        MediaType.IMAGE,
+                        "image/jpeg",
+                        1024L,
+                        0,
+                        600,
+                        null,
+                        null);
+
+        assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Media width and height must be positive");
+    }
+
+    @Test
+    void validate_negativeDurationForVideo_throwsMediaInvalidMetadata() {
+        MediaUploadCompleteRequest request =
+                new MediaUploadCompleteRequest(
+                        "users/123/media/video.mp4",
+                        MediaType.VIDEO,
+                        "video/mp4",
+                        1024L,
+                        800,
+                        600,
+                        -1,
+                        null);
+
+        assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Duration must be non-negative");
+    }
+
+    @Test
+    void validate_blurhashBlank_normalizedToNull() {
+        ValidatedMediaMetadata metadata =
+                validator.validate(
+                        new MediaUploadCompleteRequest(
+                                "users/123/media/image.jpg",
+                                MediaType.IMAGE,
+                                "image/jpeg",
+                                1024L,
+                                800,
+                                600,
+                                null,
+                                "   "),
+                        100);
+
+        assertThat(metadata.blurhash()).isNull();
+    }
+
+    @Test
+    void validate_fileSizeZero_throwsMediaInvalidMetadata() {
+        MediaUploadCompleteRequest request =
+                new MediaUploadCompleteRequest(
+                        "users/123/media/image.jpg",
+                        MediaType.IMAGE,
+                        "image/jpeg",
+                        0L,
+                        800,
+                        600,
+                        null,
+                        null);
+
+        assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("File size must be positive");
+    }
 }

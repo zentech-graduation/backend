@@ -1,6 +1,7 @@
 package com.app.modules.social.service.impl;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -384,7 +385,9 @@ public class SocialServiceImpl implements SocialService {
 
     private OffsetDateTime decodeCursor(String cursor) {
         if (cursor == null || cursor.isBlank()) {
-            return null;
+            // Return a sentinel far in the future so the query condition `createdAt < :cursor`
+            // matches all rows on the first page without passing an untyped null to JDBC.
+            return OffsetDateTime.now(ZoneOffset.UTC).plusYears(100);
         }
 
         try {

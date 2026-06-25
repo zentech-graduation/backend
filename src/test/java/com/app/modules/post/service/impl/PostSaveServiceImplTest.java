@@ -143,4 +143,58 @@ class PostSaveServiceImplTest {
 
         assertThat(page.getContent()).hasSize(1);
     }
+
+    @Test
+    void savePost_postNotFound_throwsPostNotFound() {
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.savePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+    }
+
+    @Test
+    void savePost_unpublishedPostNonOwner_throwsPostNotFound() {
+        Post draftPost =
+                Post.builder()
+                        .id(postId)
+                        .userId(UUID.randomUUID())
+                        .status(PostStatus.DRAFT)
+                        .build();
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
+
+        assertThatThrownBy(() -> service.savePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+    }
+
+    @Test
+    void savePost_postNotVisible_throwsPostForbidden() {
+        when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.savePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+    }
+
+    @Test
+    void listSavedPosts_invalidCursor_throwsBadRequest() {
+        assertThatThrownBy(() -> service.listSavedPosts(userId, "!!!invalid-cursor!!!", 20))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void unsavePost_postNotFound_throwsPostNotFound() {
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.unsavePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+    }
 }

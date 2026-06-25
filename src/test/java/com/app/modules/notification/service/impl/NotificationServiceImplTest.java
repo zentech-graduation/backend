@@ -259,6 +259,74 @@ class NotificationServiceImplTest {
         assertThat(result.getPageInfo().isHasNextPage()).isFalse();
     }
 
+    @Test
+    void create_notifyLikesDisabled_skips() {
+        UUID actorId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UserSettings settings =
+                UserSettings.builder().userId(recipientId).notifyLikes(false).build();
+        when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
+
+        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", UUID.randomUUID());
+
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void create_notifyCommentsDisabled_skips() {
+        UUID actorId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UserSettings settings =
+                UserSettings.builder().userId(recipientId).notifyComments(false).build();
+        when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
+
+        service.create(
+                actorId, recipientId, NotificationType.COMMENT_POST, "post", UUID.randomUUID());
+
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void create_storyViewType_isNeverPreferenceSuppressed() {
+        UUID actorId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UserSettings settings =
+                UserSettings.builder()
+                        .userId(recipientId)
+                        .notifyFollows(false)
+                        .notifyLikes(false)
+                        .notifyComments(false)
+                        .notifyMentions(false)
+                        .notifyMessages(false)
+                        .build();
+        when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
+
+        service.create(
+                actorId, recipientId, NotificationType.STORY_VIEW, "story", UUID.randomUUID());
+
+        verify(notificationRepository, times(1)).save(any());
+    }
+
+    @Test
+    void listNotifications_cursorPivotAbsent_fallsBackToFirstPage() {
+        UUID recipientId = UUID.randomUUID();
+        UUID cursorId = UUID.randomUUID();
+        Notification row = mockNotification();
+        when(notificationRepository.findById(cursorId)).thenReturn(Optional.empty());
+        when(notificationRepository.findByRecipientIdWithCursor(
+                        eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
+                .thenReturn(List.of(row));
+        when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
+
+        CursorPageResponse<NotificationResponse> result =
+                service.listNotifications(recipientId, cursorId, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        // Cursor was provided but pivot was absent — result is still flagged as "past-cursor" page
+        verify(notificationRepository)
+                .findByRecipientIdWithCursor(recipientId, null, null, PageRequest.of(0, 20));
+    }
+
     private static Notification mockNotification() {
         return Notification.builder()
                 .id(UUID.randomUUID())
