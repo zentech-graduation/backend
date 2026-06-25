@@ -143,4 +143,41 @@ class ResendMailSenderTest {
         assertThat(opts.getSubject()).isEqualTo("Sign in with Google to access your account");
         assertThat(opts.getHtml()).isEqualTo(RENDERED_HTML);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void sendPasswordChanged_assemblesCorrectVariableMapAndDispatchesEmail() throws Exception {
+        when(emails.send(any(CreateEmailOptions.class)))
+                .thenReturn(mock(CreateEmailResponse.class));
+
+        service.sendPasswordChanged(TO_EMAIL, TO_NAME);
+
+        ArgumentCaptor<Map<String, Object>> varCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(mailTemplateRenderer).render(eq(MailTemplate.PASSWORD_CHANGED), varCaptor.capture());
+        Map<String, Object> vars = varCaptor.getValue();
+        assertThat(vars).containsEntry("toName", TO_NAME).containsEntry("appName", APP_NAME);
+
+        ArgumentCaptor<CreateEmailOptions> optionsCaptor =
+                ArgumentCaptor.forClass(CreateEmailOptions.class);
+        verify(emails).send(optionsCaptor.capture());
+        assertThat(optionsCaptor.getValue().getTo()).containsExactly(TO_EMAIL);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void sendPasswordReset_assemblesCorrectVariableMapAndDispatchesEmail() throws Exception {
+        when(emails.send(any(CreateEmailOptions.class)))
+                .thenReturn(mock(CreateEmailResponse.class));
+
+        service.sendPasswordReset(TO_EMAIL, TO_NAME, "https://app.local/reset?t=abc");
+
+        ArgumentCaptor<Map<String, Object>> varCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(mailTemplateRenderer).render(eq(MailTemplate.PASSWORD_RESET), varCaptor.capture());
+        Map<String, Object> vars = varCaptor.getValue();
+        assertThat(vars)
+                .containsEntry("toName", TO_NAME)
+                .containsEntry("appName", APP_NAME)
+                .containsEntry("resetUrl", "https://app.local/reset?t=abc")
+                .containsKey("expiryMinutes");
+    }
 }

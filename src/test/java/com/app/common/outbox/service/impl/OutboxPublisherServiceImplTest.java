@@ -19,6 +19,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -179,6 +182,115 @@ class OutboxPublisherServiceImplTest {
 
         verify(outboxPublisherStateService).markFailed(eq(event), eq(1), any(), any());
         verify(outboxPublisherStateService, never()).markPublished(any(), any());
+    }
+
+    @Test
+    void publishDueEvents_executionExceptionOnConfirm_marksEventFailed() {
+        OutboxEvent event = outboxEvent(0);
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
+                .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markFailed(
+                        eq(event), eq(1), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
+        doAnswer(
+                        invocation -> {
+                            CorrelationData cd = invocation.getArgument(3);
+                            cd.getFuture()
+                                    .completeExceptionally(
+                                            new ExecutionException(
+                                                    "broker error", new RuntimeException("root")));
+                            return null;
+                        })
+                .when(rabbitTemplate)
+                .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+
+        service.publishDueEvents();
+
+        verify(outboxPublisherStateService).markFailed(eq(event), eq(1), any(), any());
+        verify(outboxPublisherStateService, never()).markPublished(any(), any());
+    }
+
+    @Test
+    void publishDueEvents_interruptedOnConfirm_marksEventFailedAndRestoresInterrupt() {
+        OutboxEvent event = outboxEvent(0);
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
+                .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markFailed(
+                        eq(event), eq(1), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
+        Thread.currentThread().interrupt();
+
+        try {
+            service.publishDueEvents();
+        } finally {
+            Thread.interrupted();
+        }
+
+        verify(outboxPublisherStateService).markFailed(eq(event), eq(1), any(), any());
+        verify(outboxPublisherStateService, never()).markPublished(any(), any());
+    }
+
+    @Test
+    void publishDueEvents_messageReturned_marksEventFailed() {
+        OutboxEvent event = outboxEvent(0);
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
+                .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markFailed(
+                        eq(event), eq(1), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
+        doAnswer(
+                        invocation -> {
+                            CorrelationData cd = invocation.getArgument(3);
+                            cd.getFuture().complete(new CorrelationData.Confirm(true, null));
+                            cd.setReturned(
+                                    new ReturnedMessage(
+                                            MessageBuilder.withBody(new byte[0]).build(),
+                                            312,
+                                            "NO_ROUTE",
+                                            "social.events",
+                                            event.getRoutingKey()));
+                            return null;
+                        })
+                .when(rabbitTemplate)
+                .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+
+        service.publishDueEvents();
+
+        verify(outboxPublisherStateService).markFailed(eq(event), eq(1), any(), any());
+        verify(outboxPublisherStateService, never()).markPublished(any(), any());
+    }
+
+    @Test
+    void publishDueEvents_nullExceptionMessage_usesDefaultTruncatedMessage() {
+        OutboxEvent event = outboxEvent(0);
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
+                .thenReturn(List.of(event));
+        doThrow(new AmqpException((String) null))
+                .when(rabbitTemplate)
+                .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+
+        service.publishDueEvents();
+
+        ArgumentCaptor<String> errorCaptor = ArgumentCaptor.forClass(String.class);
+        verify(outboxPublisherStateService)
+                .markFailed(eq(event), eq(1), any(OffsetDateTime.class), errorCaptor.capture());
+        assertThat(errorCaptor.getValue()).isEqualTo("Unknown outbox publish failure");
+    }
+
+    @Test
+    void publishDueEvents_markPublishedReturnsFalse_doesNotThrow() {
+        OutboxEvent event = outboxEvent(0);
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
+                .thenReturn(List.of(event));
+        // Default Mockito stub returns false
+        when(outboxPublisherStateService.markPublished(eq(event), any(OffsetDateTime.class)))
+                .thenReturn(false);
+        completeConfirm(true, null);
+
+        int attempted = service.publishDueEvents();
+
+        assertThat(attempted).isOne();
+        verify(outboxPublisherStateService).markPublished(eq(event), any(OffsetDateTime.class));
     }
 
     @Test

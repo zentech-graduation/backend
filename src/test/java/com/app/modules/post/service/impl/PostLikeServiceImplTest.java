@@ -130,4 +130,38 @@ class PostLikeServiceImplTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
     }
+
+    @Test
+    void likePost_postNotFound_throwsPostNotFound() {
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.likePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+    }
+
+    @Test
+    void likePost_unpublishedPostNonOwner_throwsPostNotFound() {
+        Post draftPost =
+                Post.builder()
+                        .id(postId)
+                        .userId(UUID.randomUUID())
+                        .status(PostStatus.DRAFT)
+                        .build();
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
+
+        assertThatThrownBy(() -> service.likePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+    }
+
+    @Test
+    void listLikers_invalidCursor_throwsBadRequest() {
+        assertThatThrownBy(() -> service.listLikers(userId, postId, "!!!not-valid-base64!!!", 20))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+    }
 }

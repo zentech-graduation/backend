@@ -37,6 +37,45 @@ class R2ObjectStoragePresignServiceTest {
                 .isEqualTo(ApiErrorCode.MEDIA_STORAGE_NOT_CONFIGURED);
     }
 
+    @Test
+    void presignPutObject_nullTtl_throwsStorageNotConfigured() {
+        MediaProperties properties = configuredProperties();
+        properties.getR2().setUploadUrlTtl(null);
+        R2ObjectStoragePresignService service = new R2ObjectStoragePresignService(properties);
+
+        assertThatThrownBy(
+                        () -> service.presignPutObject("users/u/media/file.jpg", "image/jpeg", 1))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_STORAGE_NOT_CONFIGURED);
+    }
+
+    @Test
+    void presignPutObject_ttlTooShort_throwsStorageNotConfigured() {
+        MediaProperties properties = configuredProperties();
+        properties.getR2().setUploadUrlTtl(Duration.ofSeconds(30));
+        R2ObjectStoragePresignService service = new R2ObjectStoragePresignService(properties);
+
+        assertThatThrownBy(
+                        () -> service.presignPutObject("users/u/media/file.jpg", "image/jpeg", 1))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_STORAGE_NOT_CONFIGURED);
+    }
+
+    @Test
+    void presignPutObject_blankEndpoint_throwsStorageNotConfigured() {
+        MediaProperties properties = configuredProperties();
+        properties.getR2().setEndpoint("   ");
+        R2ObjectStoragePresignService service = new R2ObjectStoragePresignService(properties);
+
+        assertThatThrownBy(
+                        () -> service.presignPutObject("users/u/media/file.jpg", "image/jpeg", 1))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_STORAGE_NOT_CONFIGURED);
+    }
+
     private static MediaProperties configuredProperties() {
         MediaProperties properties = new MediaProperties();
         properties.getR2().setEndpoint("https://example.r2.cloudflarestorage.com");
