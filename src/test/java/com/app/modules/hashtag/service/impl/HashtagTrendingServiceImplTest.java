@@ -20,7 +20,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.ResultSetExtractor;
 
 import com.app.common.response.PageResponse;
 import com.app.modules.hashtag.config.HashtagProperties;
@@ -55,10 +54,9 @@ class HashtagTrendingServiceImplTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getTrending_noSnapshot_returnsEmptyPageWithoutQueryingRows() {
-        // No latest period exists: the MAX(period_start) extractor yields null.
-        when(jdbcTemplate.query(anyString(), any(ResultSetExtractor.class))).thenReturn(null);
+        // No latest period exists: queryForObject returns null for a NULL aggregate result.
+        when(jdbcTemplate.queryForObject(anyString(), eq(OffsetDateTime.class))).thenReturn(null);
 
         PageResponse<HashtagTrendingResponse> page = service.getTrending(PageRequest.of(0, 20));
 
@@ -67,7 +65,6 @@ class HashtagTrendingServiceImplTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getTrending_withSnapshot_returnsHashtagContent() {
         OffsetDateTime latestPeriod = OffsetDateTime.now(ZoneOffset.UTC);
         UUID hashtagId = UUID.randomUUID();
@@ -78,7 +75,7 @@ class HashtagTrendingServiceImplTest {
         HashtagTrendingResponse response =
                 new HashtagTrendingResponse(hashtagId, "java", 42, 1, latestPeriod, latestPeriod);
 
-        when(jdbcTemplate.query(anyString(), any(ResultSetExtractor.class)))
+        when(jdbcTemplate.queryForObject(anyString(), eq(OffsetDateTime.class)))
                 .thenReturn(latestPeriod);
         when(hashtagTrendingRepository.findByIdPeriodStartOrderByRankAsc(eq(latestPeriod), any()))
                 .thenReturn(List.of(row));
@@ -95,11 +92,10 @@ class HashtagTrendingServiceImplTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getTrending_withSnapshotButNoRows_returnsEmptyPage() {
         OffsetDateTime latestPeriod = OffsetDateTime.now(ZoneOffset.UTC);
 
-        when(jdbcTemplate.query(anyString(), any(ResultSetExtractor.class)))
+        when(jdbcTemplate.queryForObject(anyString(), eq(OffsetDateTime.class)))
                 .thenReturn(latestPeriod);
         when(hashtagTrendingRepository.findByIdPeriodStartOrderByRankAsc(eq(latestPeriod), any()))
                 .thenReturn(List.of());

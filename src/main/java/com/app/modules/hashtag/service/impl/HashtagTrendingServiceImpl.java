@@ -110,10 +110,10 @@ public class HashtagTrendingServiceImpl implements HashtagTrendingService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<HashtagTrendingResponse> getTrending(Pageable pageable) {
+        // Queries aggregate MAX; returns null when hashtag_trending is empty
         OffsetDateTime latest =
-                jdbcTemplate.query(
-                        "SELECT MAX(period_start) FROM hashtag_trending",
-                        rs -> rs.next() ? rs.getObject(1, OffsetDateTime.class) : null);
+                jdbcTemplate.queryForObject(
+                        "SELECT MAX(period_start) FROM hashtag_trending", OffsetDateTime.class);
         if (latest == null) {
             return PageResponse.from(Page.empty(pageable));
         }

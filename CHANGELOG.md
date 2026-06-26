@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Replaced `ResultSetExtractor` lambda with `queryForObject` in `HashtagTrendingServiceImpl` to resolve always-false null check on latest trending period (SonarQube `java:S2583`).
+- Added emptiness guards before `doesNotContainAnyElementsOf` assertion in `HashtagControllerIT` to prevent trivially passing pagination test (SonarQube `java:S5841`).
+
 ### Tests
 - Added `SocialControllerIT` covering all 7 REST endpoints of the social module (follow, unfollow, block, unblock, get followers, get following, follow-request list, approve, reject) against real PostgreSQL and Redis containers.
 - Extended `AuthMailEventHandlerTest` with 11 new methods covering null eventId, unsupported event type, wrong aggregate type, missing/null/non-String/non-UUID data.userId, inactive user, displayName fallback, and all remaining dispatch branches.
