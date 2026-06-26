@@ -185,6 +185,10 @@ class HashtagControllerIT {
                 page1Content.stream().map(m -> (String) m.get("name")).collect(Collectors.toSet());
         java.util.Set<String> page2Names =
                 page2Content.stream().map(m -> (String) m.get("name")).collect(Collectors.toSet());
+        // An empty reference collection causes doesNotContainAnyElementsOf to trivially pass,
+        // masking pagination regressions — guard both sets before asserting disjointness.
+        assertThat(page1Names).isNotEmpty();
+        assertThat(page2Names).isNotEmpty();
         assertThat(page2Names).doesNotContainAnyElementsOf(page1Names);
     }
 

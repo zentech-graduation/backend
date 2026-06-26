@@ -26,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Idempotency key races are resolved with an `INSERT ... ON CONFLICT DO NOTHING` reservation in the request transaction, so a concurrent duplicate cannot poison the transaction and a rolled-back create frees the key.
 - WebSocket handshake now rejects blacklisted (revoked but unexpired) access tokens.
 - Cursor pagination `hasNextPage` is computed from the pre-trim probe row, fixing a false positive on an exactly-full final page.
+### Fixed
+- Replaced `ResultSetExtractor` lambda with `queryForObject` in `HashtagTrendingServiceImpl` to resolve always-false null check on latest trending period (SonarQube `java:S2583`).
+- Added emptiness guards before `doesNotContainAnyElementsOf` assertion in `HashtagControllerIT` to prevent trivially passing pagination test (SonarQube `java:S5841`).
 
 ### Tests
 - Added WebSocket JWT handshake interceptor unit tests covering valid non-blacklisted token, revoked (blacklisted) token, missing token parameter, and invalid token paths.
