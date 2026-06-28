@@ -21,6 +21,9 @@ import com.app.common.security.service.RefreshTokenService;
 import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.repository.RefreshTokenRepository;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class RefreshTokenServiceImpl implements RefreshTokenService {
 
@@ -77,6 +80,9 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         }
 
         if (existing.getRevokedAt() != null) {
+            // Replay of an already-revoked refresh token is the OAuth 2.0 Security BCP signal for
+            // token theft -- without this log, revoking every session for the user is invisible.
+            log.warn("Refresh token replay detected for userId={}", existing.getUserId());
             repository.revokeAllActiveByUserId(existing.getUserId(), OffsetDateTime.now());
             throw new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
         }
@@ -92,6 +98,11 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         // for the user (token theft detection per OAuth 2.0 Security BCP).
         int revoked = repository.revokeByTokenHash(hash, now);
         if (revoked == 0) {
+            // Lost the conditional-UPDATE race: same replay-detection signal as an already-revoked
+            // token above -- log before revoking every session for the user.
+            log.warn(
+                    "Refresh token replay detected (concurrent rotation race) for userId={}",
+                    existing.getUserId());
             repository.revokeAllActiveByUserId(existing.getUserId(), now);
             throw new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
         }
