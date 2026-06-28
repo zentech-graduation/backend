@@ -107,16 +107,15 @@ public class PostIndexSyncConsumer {
      *
      * @param message delivered RabbitMQ message carrying the domain event envelope
      * @param channel channel used for manual acknowledgement and DLQ routing
-     * @throws IOException if acknowledgement or negative acknowledgement fails
      */
     @RabbitListener(queues = RabbitMqTopologyConfig.POST_INDEX_SYNC_QUEUE)
-    public void consume(Message message, Channel channel) throws IOException {
+    public void consume(Message message, Channel channel) {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
             DomainEventEnvelope event = parser.parse(message);
             validateEnvelope(event);
             processWithRetry(event);
-            channel.basicAck(deliveryTag, false);
+            ack(channel, deliveryTag);
         } catch (PermanentMessageException ex) {
             routeToDlqOrRequeue(message, channel, deliveryTag, ex);
         } catch (RuntimeException ex) {
@@ -206,19 +205,37 @@ public class PostIndexSyncConsumer {
     }
 
     private void routeToDlqOrRequeue(
-            Message message, Channel channel, long deliveryTag, RuntimeException failure)
-            throws IOException {
+            Message message, Channel channel, long deliveryTag, RuntimeException failure) {
         try {
             deadLetterPublisher.publish(
                     message,
                     RabbitMqTopologyConfig.POST_INDEX_DEAD_LETTER_ROUTING_KEY,
                     failure.getMessage());
-            channel.basicAck(deliveryTag, false);
+            ack(channel, deliveryTag);
         } catch (RuntimeException dlqFailure) {
             log.warn(
                     "Failed to publish post index sync event to DLQ; requeueing: {}",
                     dlqFailure.getMessage());
+            nack(channel, deliveryTag);
+        }
+    }
+
+    // channel.basicAck/basicNack declare IOException on a broken/closed AMQP channel; the
+    // listener container's own recovery handles that case, so we log and return rather than
+    // letting a checked IOException escape this @RabbitListener method uncaught.
+    private void ack(Channel channel, long deliveryTag) {
+        try {
+            channel.basicAck(deliveryTag, false);
+        } catch (IOException ex) {
+            log.error("Failed to ack post index sync message: {}", ex.getMessage());
+        }
+    }
+
+    private void nack(Channel channel, long deliveryTag) {
+        try {
             channel.basicNack(deliveryTag, false, true);
+        } catch (IOException ex) {
+            log.error("Failed to nack post index sync message: {}", ex.getMessage());
         }
     }
 
