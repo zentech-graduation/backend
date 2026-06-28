@@ -25,6 +25,8 @@ import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
 import com.app.modules.users.repository.UserSecurityProjection;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Authenticates requests by extracting a Bearer JWT, verifying its signature, and resolving the
  * persisted user (via a slim security projection) so that account-level state (status, soft-delete)
@@ -35,6 +37,7 @@ import com.app.modules.users.repository.UserSecurityProjection;
  * <p>The filter never writes the response on failure: it clears the context and lets downstream
  * handlers (Spring Security's {@code AuthenticationEntryPoint}) decide how to respond.
  */
+@Slf4j
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -100,6 +103,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(auth);
 
         } catch (AppException ex) {
+            // Every JWT failure (expired, invalid signature, blacklisted lookup) was previously
+            // indistinguishable in logs -- this is the only visibility into why auth failed.
+            log.debug("JWT authentication rejected: {}", ex.getErrorCode());
             SecurityContextHolder.clearContext();
         }
 

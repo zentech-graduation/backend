@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.app.common.security.jwt.JwtClaims;
@@ -31,6 +32,11 @@ import com.app.common.security.user.UserPrincipal;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
 import com.app.modules.users.repository.UserSecurityProjection;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 @ExtendWith(MockitoExtension.class)
 class JwtAuthenticationFilterTest {
@@ -122,6 +128,29 @@ class JwtAuthenticationFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(securityMapper, never()).toUserPrincipal(any(UserSecurityProjection.class));
         verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    void invalidToken_logsErrorCodeBeforeClearingContext() throws Exception {
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.empty());
+
+        Logger logger = (Logger) LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+        Level originalLevel = logger.getLevel();
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.DEBUG);
+        try {
+            filter.doFilter(request, response, chain);
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(originalLevel);
+        }
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        assertThat(appender.list)
+                .anyMatch(event -> event.getFormattedMessage().contains("AUTH_TOKEN_INVALID"));
     }
 
     private static UserSecurityProjection buildProjection(UserStatus status) {
