@@ -83,13 +83,13 @@ public class AuthMailEventConsumer {
     }
 
     @RabbitListener(queues = RabbitMqTopologyConfig.MAIL_QUEUE)
-    public void consume(Message message, Channel channel) throws IOException {
+    public void consume(Message message, Channel channel) {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
             DomainEventEnvelope event = parser.parse(message);
             validateEnvelopeIdentity(event);
             ProcessedMessageResult result = processWithRetry(event);
-            channel.basicAck(deliveryTag, false);
+            ack(channel, deliveryTag);
             if (result == ProcessedMessageResult.DUPLICATE) {
                 log.info("Skipped duplicate auth mail event {}", event.eventId());
             }
@@ -166,19 +166,37 @@ public class AuthMailEventConsumer {
     }
 
     private void routeToDlqOrRequeue(
-            Message message, Channel channel, long deliveryTag, RuntimeException failure)
-            throws IOException {
+            Message message, Channel channel, long deliveryTag, RuntimeException failure) {
         try {
             deadLetterPublisher.publish(
                     message,
                     RabbitMqTopologyConfig.MAIL_DEAD_LETTER_ROUTING_KEY,
                     failure.getMessage());
-            channel.basicAck(deliveryTag, false);
+            ack(channel, deliveryTag);
         } catch (RuntimeException dlqFailure) {
             log.warn(
                     "Failed to publish auth mail event to DLQ; requeueing original message: {}",
                     dlqFailure.getMessage());
+            nack(channel, deliveryTag);
+        }
+    }
+
+    // channel.basicAck/basicNack declare IOException on a broken/closed AMQP channel; the
+    // listener container's own recovery handles that case, so we log and return rather than
+    // letting a checked IOException escape this @RabbitListener method uncaught.
+    private void ack(Channel channel, long deliveryTag) {
+        try {
+            channel.basicAck(deliveryTag, false);
+        } catch (IOException ex) {
+            log.error("Failed to ack auth mail message: {}", ex.getMessage());
+        }
+    }
+
+    private void nack(Channel channel, long deliveryTag) {
+        try {
             channel.basicNack(deliveryTag, false, true);
+        } catch (IOException ex) {
+            log.error("Failed to nack auth mail message: {}", ex.getMessage());
         }
     }
 
