@@ -175,6 +175,7 @@ public class AuthServiceImpl implements AuthService {
                     authMailEventService.publishUserRegistered(savedUser);
                     authMailEventService.publishEmailVerificationRequested(
                             savedUser, savedUser.getId());
+                    log.info("User registered: userId={}", savedUser.getId());
                 });
     }
 
@@ -195,6 +196,9 @@ public class AuthServiceImpl implements AuthService {
         boolean passwordMatches = passwordEncoder.matches(request.password(), hashForCompare);
 
         if (user == null || credential == null || credential.getPasswordHash() == null) {
+            // Deliberately no email/reason detail in this log -- distinguishing "unknown email"
+            // from "wrong password" via logs would defeat the timing-equalization above.
+            log.warn("Login failed: reason=invalid_credentials");
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
@@ -203,6 +207,7 @@ public class AuthServiceImpl implements AuthService {
         // knowledge of the credentials. Otherwise a wrong-password attempt against a banned
         // account would surface a 403, leaking status as an enumeration oracle.
         if (!passwordMatches) {
+            log.warn("Login failed: reason=invalid_credentials");
             throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
@@ -213,8 +218,13 @@ public class AuthServiceImpl implements AuthService {
         // TransactionTemplate ensures the proxy is used correctly (no self-call bypass).
         User finalUser = user;
         UserCredential finalCredential = credential;
-        return transactionTemplate.execute(
-                status -> issueSession(finalUser, finalCredential.isEmailVerified(), httpRequest));
+        AuthResponse response =
+                transactionTemplate.execute(
+                        status ->
+                                issueSession(
+                                        finalUser, finalCredential.isEmailVerified(), httpRequest));
+        log.info("User login: userId={}", user.getId());
+        return response;
     }
 
     @Override
