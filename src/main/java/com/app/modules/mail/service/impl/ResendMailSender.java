@@ -105,13 +105,9 @@ public class ResendMailSender implements MailSender {
                         .build();
         try {
             resend.emails().send(options);
-            log.info("Email sent to {} | subject: {}", toEmail, subject);
+            log.info("Email sent | subject: {}", subject);
         } catch (Exception e) {
-            log.error(
-                    "Failed to send email to {} | subject: {} | error: {}",
-                    toEmail,
-                    subject,
-                    e.getMessage());
+            log.error("Failed to send email | subject: {} | error: {}", subject, e.getMessage());
             throw new AppException(ApiErrorCode.SERVICE_UNAVAILABLE);
         }
     }
