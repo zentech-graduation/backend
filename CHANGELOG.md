@@ -6,7 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Chronological following feed endpoint (`GET /api/v1/posts/feed`): cursor-paginated published posts from accepted-follow accounts, newest first, with bidirectional block exclusion and empty-following short circuit.
+- `V99__seed_feed_test_data.sql` Flyway migration seeding 7 users, 5 follows, 2 blocks, and 12 posts covering all feed business rules for manual endpoint testing.
+
+### Changed
+- Synced `database/schema.sql` with all 24 Flyway migrations (V01–V24): added missing V18 metadata config tables (`system_settings`, `notification_type_configs`, `moderation_action_configs`, `feature_flags`, `report_reason_configs`) with seed data and triggers; V23/V24 were already reflected. Updated struct.md migration count from 22 to 24.
+
 ### Fixed
+- Added author `username`, `displayName`, and `avatarUrl` to post and feed API responses, batched via a single author lookup alongside the existing media batching, fixing a frontend crash on the main feed caused by missing author display fields.
 - Replaced `ResultSetExtractor` lambda with `queryForObject` in `HashtagTrendingServiceImpl` to resolve always-false null check on latest trending period (SonarQube `java:S2583`).
 - Added emptiness guards before `doesNotContainAnyElementsOf` assertion in `HashtagControllerIT` to prevent trivially passing pagination test (SonarQube `java:S5841`).
 
