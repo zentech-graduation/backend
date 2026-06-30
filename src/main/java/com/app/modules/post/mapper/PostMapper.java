@@ -6,6 +6,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.app.modules.media.entity.MediaAsset;
+import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.LikerResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostMediaResponse;
@@ -21,14 +22,47 @@ import com.app.modules.users.entity.User;
 public interface PostMapper {
 
     /**
-     * Builds the post response from the entity and the separately hydrated media items.
+     * Builds the post response from the entity, the separately hydrated media items, and the post's
+     * author.
      *
      * @param post the source post; media ordering comes from the entity collection {@code @OrderBy}
      * @param media media responses already joined with their {@code media_assets} rows
-     * @return the post response with media populated
+     * @param author the post's author, separately hydrated; author fields are null if the author
+     *     lookup missed
+     * @return the post response with media and author display fields populated
      */
-    @Mapping(source = "media", target = "media")
-    PostResponse toResponse(Post post, List<PostMediaResponse> media);
+    @Mapping(source = "post.id", target = "id")
+    @Mapping(source = "post.status", target = "status")
+    @Mapping(source = "post.createdAt", target = "createdAt")
+    @Mapping(source = "post.updatedAt", target = "updatedAt")
+    @Mapping(source = "post.media", target = "media")
+    @Mapping(source = "author.username", target = "username")
+    @Mapping(source = "author.displayName", target = "userDisplayName")
+    @Mapping(source = "author.avatarUrl", target = "userAvatarUrl")
+    PostResponse toResponse(Post post, List<PostMediaResponse> media, User author);
+
+    /**
+     * Builds the feed-specific post response from the entity, the separately hydrated media items,
+     * and the post's author, with {@code rankingScore} always null for the current chronological
+     * implementation.
+     *
+     * @param post the source post; media ordering comes from the entity collection {@code @OrderBy}
+     * @param media media responses already joined with their {@code media_assets} rows
+     * @param author the post's author, separately hydrated; author fields are null if the author
+     *     lookup missed
+     * @return the feed post response with media and author display fields populated and ranking
+     *     score reserved as null
+     */
+    @Mapping(source = "post.id", target = "id")
+    @Mapping(source = "post.status", target = "status")
+    @Mapping(source = "post.createdAt", target = "createdAt")
+    @Mapping(source = "post.updatedAt", target = "updatedAt")
+    @Mapping(source = "post.media", target = "media")
+    @Mapping(source = "author.username", target = "username")
+    @Mapping(source = "author.displayName", target = "userDisplayName")
+    @Mapping(source = "author.avatarUrl", target = "userAvatarUrl")
+    @Mapping(target = "rankingScore", ignore = true)
+    FeedPostResponse toFeedResponse(Post post, List<PostMediaResponse> media, User author);
 
     /**
      * Combines a post media row with its referenced media asset for rendering.
