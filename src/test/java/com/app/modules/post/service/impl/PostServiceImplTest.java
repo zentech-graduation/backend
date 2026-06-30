@@ -10,7 +10,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,6 +34,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.response.CursorPageResponse;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.settings.service.SystemSettingService;
 import com.app.modules.hashtag.service.HashtagService;
@@ -39,6 +43,7 @@ import com.app.modules.media.enums.MediaType;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
 import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
+import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostEditHistory;
 import com.app.modules.post.enums.PostStatus;
@@ -488,5 +493,172 @@ class PostServiceImplTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.BAD_REQUEST);
         verifyNoInteractions(postMediaAssetRepository);
+    }
+
+    @Test
+    void getFeed_noFollowingAccounts_returnsEmptyPage() {
+        UUID viewer = UUID.randomUUID();
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer))
+                .thenReturn(Collections.emptyList());
+
+        CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
+
+        assertThat(page.getContent()).isEmpty();
+        verifyNoInteractions(postRepository);
+    }
+
+    @Test
+    void getFeed_firstPage_returnsMostRecentPosts() {
+        UUID viewer = UUID.randomUUID();
+        UUID author = UUID.randomUUID();
+        Post post = ownedPost(PostStatus.PUBLISHED);
+        FeedPostResponse feedResponse = feedResponse();
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
+        when(postRepository.findFirstFeedPosts(any(), eq(PostStatus.PUBLISHED), any()))
+                .thenReturn(List.of(post));
+        when(postResponseAssembler.assembleFeed(any())).thenReturn(List.of(feedResponse));
+
+        CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
+
+        assertThat(page.getContent()).hasSize(1).containsExactly(feedResponse);
+    }
+
+    @Test
+    void getFeed_withCursor_returnsPostsBefore() {
+        UUID viewer = UUID.randomUUID();
+        UUID author = UUID.randomUUID();
+        Post post = ownedPost(PostStatus.PUBLISHED);
+        String cursor =
+                Base64.getEncoder()
+                        .encodeToString(
+                                OffsetDateTime.now().toString().getBytes(StandardCharsets.UTF_8));
+        FeedPostResponse feedResponse = feedResponse();
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
+        when(postRepository.findFeedPostsBefore(any(), eq(PostStatus.PUBLISHED), any(), any()))
+                .thenReturn(List.of(post));
+        when(postResponseAssembler.assembleFeed(any())).thenReturn(List.of(feedResponse));
+
+        CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, cursor, 20);
+
+        assertThat(page.getContent()).containsExactly(feedResponse);
+        verify(postRepository).findFeedPostsBefore(any(), eq(PostStatus.PUBLISHED), any(), any());
+    }
+
+    @Test
+    void getFeed_invalidCursor_throwsBadRequest() {
+        UUID viewer = UUID.randomUUID();
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer))
+                .thenReturn(List.of(UUID.randomUUID()));
+
+        assertThatThrownBy(() -> service.getFeed(viewer, "!!!not-valid-base64!!!", 20))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getFeed_pageSizeExceedsMax_normalizesToHundred() {
+        UUID viewer = UUID.randomUUID();
+        UUID author = UUID.randomUUID();
+        ArgumentCaptor<org.springframework.data.domain.Pageable> pageCaptor =
+                ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
+        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(List.of());
+
+        service.getFeed(viewer, null, 9999);
+
+        verify(postRepository).findFirstFeedPosts(any(), any(), pageCaptor.capture());
+        // normalizeLimit caps at 100, then fetches pageSize+1 to detect next page
+        assertThat(pageCaptor.getValue().getPageSize()).isEqualTo(101);
+    }
+
+    @Test
+    void getFeed_pageSizeZero_normalizesToDefault() {
+        UUID viewer = UUID.randomUUID();
+        UUID author = UUID.randomUUID();
+        ArgumentCaptor<org.springframework.data.domain.Pageable> pageCaptor =
+                ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
+        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(List.of());
+
+        service.getFeed(viewer, null, 0);
+
+        verify(postRepository).findFirstFeedPosts(any(), any(), pageCaptor.capture());
+        // normalizeLimit defaults to 20, then fetches pageSize+1 to detect next page
+        assertThat(pageCaptor.getValue().getPageSize()).isEqualTo(21);
+    }
+
+    @Test
+    void getFeed_exactlyPageSizeResults_hasNextPageTrue() {
+        UUID viewer = UUID.randomUUID();
+        UUID author = UUID.randomUUID();
+        // Return pageSize+1 posts to trigger hasNextPage = true.
+        List<Post> posts = buildPosts(author, 21);
+        FeedPostResponse feedResponse = feedResponse();
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
+        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(posts);
+        when(postResponseAssembler.assembleFeed(any()))
+                .thenReturn(Collections.nCopies(20, feedResponse));
+
+        CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
+
+        assertThat(page.getPageInfo().isHasNextPage()).isTrue();
+        assertThat(page.getContent()).hasSize(20);
+    }
+
+    @Test
+    void getFeed_fewerThanPageSizeResults_hasNextPageFalse() {
+        UUID viewer = UUID.randomUUID();
+        UUID author = UUID.randomUUID();
+        List<Post> posts = buildPosts(author, 5);
+        FeedPostResponse feedResponse = feedResponse();
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
+        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(posts);
+        when(postResponseAssembler.assembleFeed(posts))
+                .thenReturn(Collections.nCopies(5, feedResponse));
+
+        CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
+
+        assertThat(page.getPageInfo().isHasNextPage()).isFalse();
+        assertThat(page.getContent()).hasSize(5);
+    }
+
+    private List<Post> buildPosts(UUID userId, int count) {
+        List<Post> result = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            Post p =
+                    Post.builder()
+                            .id(UUID.randomUUID())
+                            .userId(userId)
+                            .status(PostStatus.PUBLISHED)
+                            .postType(PostType.IMAGE)
+                            .createdAt(OffsetDateTime.now().minusMinutes(i))
+                            .build();
+            result.add(p);
+        }
+        return result;
+    }
+
+    private FeedPostResponse feedResponse() {
+        return new FeedPostResponse(
+                UUID.randomUUID(),
+                authorId,
+                null,
+                null,
+                null,
+                null,
+                PostType.IMAGE,
+                PostStatus.PUBLISHED,
+                0,
+                0,
+                0,
+                0,
+                null,
+                null,
+                null,
+                List.of(),
+                OffsetDateTime.now(),
+                OffsetDateTime.now(),
+                null);
     }
 }

@@ -481,6 +481,149 @@ class PostControllerIT {
         assertThat(contentOf(response)).isEmpty();
     }
 
+    @Test
+    @Order(12)
+    void getFeed_noFollows_returnsEmptyPage() {
+        TestUser viewer = registerUser("feed_nofollows_viewer");
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(response)).isEmpty();
+    }
+
+    @Test
+    @Order(13)
+    void getFeed_acceptedFollow_returnsFollowedPosts() {
+        TestUser author = registerUser("feed_author");
+        TestUser viewer = registerUser("feed_viewer");
+        createImagePost(author, "hello feed", insertMediaAsset(author.id(), "image"));
+        insertFollow(viewer.id(), author.id(), "accepted");
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(response)).hasSize(1);
+    }
+
+    @Test
+    @Order(14)
+    void getFeed_pendingFollowOnly_returnsEmptyPage() {
+        TestUser author = registerUser("feed_pending_author");
+        TestUser viewer = registerUser("feed_pending_viewer");
+        createImagePost(author, "pending content", insertMediaAsset(author.id(), "image"));
+        insertFollow(viewer.id(), author.id(), "pending");
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(response)).isEmpty();
+    }
+
+    @Test
+    @Order(15)
+    void getFeed_viewerBlockedAuthor_excludesAuthorPosts() {
+        TestUser author = registerUser("feed_blocked_author");
+        TestUser viewer = registerUser("feed_blocker_viewer");
+        createImagePost(author, "blocked out", insertMediaAsset(author.id(), "image"));
+        insertFollow(viewer.id(), author.id(), "accepted");
+        insertBlock(viewer.id(), author.id());
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(response)).isEmpty();
+    }
+
+    @Test
+    @Order(16)
+    void getFeed_authorBlockedViewer_excludesAuthorPosts() {
+        TestUser author = registerUser("feed_blocking_author");
+        TestUser viewer = registerUser("feed_blocked_viewer");
+        createImagePost(author, "reverse blocked", insertMediaAsset(author.id(), "image"));
+        insertFollow(viewer.id(), author.id(), "accepted");
+        insertBlock(author.id(), viewer.id());
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(response)).isEmpty();
+    }
+
+    @Test
+    @Order(17)
+    void getFeed_softDeletedPost_notIncluded() {
+        TestUser author = registerUser("feed_softdel_author");
+        TestUser viewer = registerUser("feed_softdel_viewer");
+        UUID postId =
+                createImagePost(author, "soon deleted", insertMediaAsset(author.id(), "image"));
+        insertFollow(viewer.id(), author.id(), "accepted");
+        jdbcTemplate.update(
+                "UPDATE posts SET deleted_at = NOW(), status = 'removed' WHERE id = ?", postId);
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(response)).isEmpty();
+    }
+
+    @Test
+    @Order(18)
+    void getFeed_draftPost_notIncluded() {
+        TestUser author = registerUser("feed_draft_author");
+        TestUser viewer = registerUser("feed_draft_viewer");
+        createImagePost(author, "draft hidden", insertMediaAsset(author.id(), "image"));
+        // Revert to draft after creation.
+        jdbcTemplate.update("UPDATE posts SET status = 'draft' WHERE user_id = ?", author.id());
+        createImagePost(author, "published visible", insertMediaAsset(author.id(), "image"));
+        insertFollow(viewer.id(), author.id(), "accepted");
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // Only the published post appears.
+        assertThat(contentOf(response)).hasSize(1);
+    }
+
+    @Test
+    @Order(19)
+    void getFeed_pagination_nextPageCursorWorks() {
+        TestUser author = registerUser("feed_page_author");
+        TestUser viewer = registerUser("feed_page_viewer");
+        insertFollow(viewer.id(), author.id(), "accepted");
+        createImagePost(author, "post one", insertMediaAsset(author.id(), "image"));
+        createImagePost(author, "post two", insertMediaAsset(author.id(), "image"));
+        createImagePost(author, "post three", insertMediaAsset(author.id(), "image"));
+
+        ResponseEntity<Map> firstPage = getFeed(viewer, null, 2);
+        assertThat(firstPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(firstPage)).hasSize(2);
+
+        Map<?, ?> pageInfo =
+                (Map<?, ?>) ((Map<?, ?>) firstPage.getBody().get("data")).get("pageInfo");
+        assertThat((Boolean) pageInfo.get("hasNextPage")).isTrue();
+        String endCursor = (String) pageInfo.get("endCursor");
+        assertThat(endCursor).isNotNull();
+
+        ResponseEntity<Map> secondPage = getFeed(viewer, endCursor, 2);
+        assertThat(secondPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(secondPage)).hasSize(1);
+    }
+
+    @Test
+    @Order(20)
+    void getFeed_invalidCursor_returnsBadRequest() {
+        TestUser author = registerUser("feed_badcursor_author");
+        TestUser viewer = registerUser("feed_badcursor_viewer");
+        // Cursor decoding only runs when the viewer has at least one eligible follow; without a
+        // follow the service short-circuits before decoding and returns an empty 200 page.
+        insertFollow(viewer.id(), author.id(), "accepted");
+
+        ResponseEntity<Map> response = getFeed(viewer, "!!!not-valid!!!", 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     private TestUser registerUser(String username) {
         String email = username + "@test.local";
         String password = "S3cur3P@ssword!";
@@ -574,6 +717,26 @@ class PostControllerIT {
 
     private ResponseEntity<Map> getWithAuth(String url, TestUser user) {
         return rest.exchange(url, HttpMethod.GET, new HttpEntity<>(authHeaders(user)), Map.class);
+    }
+
+    private ResponseEntity<Map> getFeed(TestUser viewer, String cursor, int limit) {
+        String url =
+                "/api/v1/posts/feed?limit=" + limit + (cursor != null ? "&cursor=" + cursor : "");
+        return getWithAuth(url, viewer);
+    }
+
+    private void insertFollow(UUID followerId, UUID followingId, String status) {
+        jdbcTemplate.update(
+                "INSERT INTO follows (follower_id, following_id, status)"
+                        + " VALUES (?, ?, CAST(? AS follow_status))",
+                followerId,
+                followingId,
+                status);
+    }
+
+    private void insertBlock(UUID blockerId, UUID blockedId) {
+        jdbcTemplate.update(
+                "INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)", blockerId, blockedId);
     }
 
     private ResponseEntity<Map> transition(TestUser user, UUID postId, String targetStatus) {
