@@ -6,6 +6,7 @@ import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
 import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
+import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
 
@@ -95,6 +96,22 @@ public interface PostService {
      */
     CursorPageResponse<PostResponse> listUserPosts(
             UUID viewerId, UUID targetUserId, String cursor, int size);
+
+    /**
+     * Cursor-paginated chronological feed of published posts from accounts the viewer follows.
+     *
+     * <p>Only accepted follow relationships contribute to the feed; pending follow requests are
+     * excluded. Posts from any account involved in a block relationship with the viewer, in either
+     * direction, are excluded. Returns an empty page without querying posts when the viewer follows
+     * nobody or when all followed accounts are blocked. Posts are ordered by creation time, newest
+     * first.
+     *
+     * @param viewerId authenticated viewer
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param size requested page size, normalized to 1–100 with a default of 20
+     * @return cursor page of feed posts ordered by creation time, newest first
+     */
+    CursorPageResponse<FeedPostResponse> getFeed(UUID viewerId, String cursor, int size);
 
     /**
      * Cursor-paginated caption edit history of an owned post, newest first.
