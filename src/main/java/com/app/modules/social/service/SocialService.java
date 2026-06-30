@@ -29,6 +29,21 @@ public interface SocialService {
     List<FollowRequestResponse> getPendingFollowRequests(UUID currentUserId);
 
     /**
+     * Returns the IDs of users the viewer currently follows with accepted status, excluding any
+     * user involved in a block relationship with the viewer in either direction.
+     *
+     * <p>Pending follow requests do not count as accepted follows and are excluded. A user is
+     * suppressed from the result when either the viewer has blocked them or they have blocked the
+     * viewer; the block table stores a single directional row but the practical effect is
+     * bidirectional. An empty result means the viewer has no valid feed authors; callers should
+     * short-circuit and return an empty page without querying posts.
+     *
+     * @param viewerId authenticated viewer requesting their feed
+     * @return list of user IDs eligible to appear as post authors in the viewer's feed
+     */
+    List<UUID> getAcceptedFollowingExcludingBlocks(UUID viewerId);
+
+    /**
      * Checks whether an accepted follow relationship exists from the follower to the target user.
      *
      * <p>Pending follow requests do not count as accepted follows; counters and content visibility

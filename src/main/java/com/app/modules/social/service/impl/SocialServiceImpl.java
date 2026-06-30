@@ -4,8 +4,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -329,6 +331,27 @@ public class SocialServiceImpl implements SocialService {
                                     follow.getCreatedAt());
                         })
                 .filter(response -> response != null)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> getAcceptedFollowingExcludingBlocks(UUID viewerId) {
+        List<Follow> accepted =
+                followRepository.findByIdFollowerIdAndStatus(viewerId, FollowStatus.ACCEPTED);
+        if (accepted.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<UUID> blockedOrBlocking = new HashSet<>();
+        blockRepository
+                .findByIdBlockerId(viewerId)
+                .forEach(b -> blockedOrBlocking.add(b.getId().getBlockedId()));
+        blockRepository
+                .findByIdBlockedId(viewerId)
+                .forEach(b -> blockedOrBlocking.add(b.getId().getBlockerId()));
+        return accepted.stream()
+                .map(f -> f.getId().getFollowingId())
+                .filter(id -> !blockedOrBlocking.contains(id))
                 .toList();
     }
 
