@@ -1,12 +1,14 @@
 package com.app.modules.auth.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -199,6 +201,37 @@ class AuthMailEventConsumerTest {
 
         verify(channel).basicNack(1L, false, true);
         verify(channel, never()).basicAck(1L, false);
+    }
+
+    @Test
+    void consume_ackThrowsIOException_doesNotPropagate() throws Exception {
+        Message message = message(event(AuthEventTypes.USER_REGISTERED_V1));
+        when(processedMessageService.processOnce(
+                        org.mockito.ArgumentMatchers.eq(AuthMailEventConsumer.CONSUMER_NAME),
+                        org.mockito.ArgumentMatchers.eq(EVENT_ID),
+                        org.mockito.ArgumentMatchers.eq(AuthEventTypes.USER_REGISTERED_V1),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(ProcessedMessageResult.PROCESSED);
+        doThrow(new IOException("channel closed")).when(channel).basicAck(1L, false);
+
+        assertThatCode(() -> consumer.consume(message, channel)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void consume_nackThrowsIOException_doesNotPropagate() throws Exception {
+        Message message = message(event(AuthEventTypes.USER_REGISTERED_V1));
+        when(processedMessageService.processOnce(
+                        org.mockito.ArgumentMatchers.eq(AuthMailEventConsumer.CONSUMER_NAME),
+                        org.mockito.ArgumentMatchers.eq(EVENT_ID),
+                        org.mockito.ArgumentMatchers.eq(AuthEventTypes.USER_REGISTERED_V1),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new PermanentMessageException("bad event"));
+        doThrow(new IllegalStateException("dlq down"))
+                .when(deadLetterPublisher)
+                .publish(message, RabbitMqTopologyConfig.MAIL_DEAD_LETTER_ROUTING_KEY, "bad event");
+        doThrow(new IOException("channel closed")).when(channel).basicNack(1L, false, true);
+
+        assertThatCode(() -> consumer.consume(message, channel)).doesNotThrowAnyException();
     }
 
     @Test

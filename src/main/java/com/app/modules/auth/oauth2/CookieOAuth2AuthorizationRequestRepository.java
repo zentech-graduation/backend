@@ -26,6 +26,7 @@ import org.springframework.stereotype.Component;
 
 import com.app.common.config.security.SecurityProperties;
 
+import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -47,6 +48,7 @@ import tools.jackson.databind.ObjectMapper;
  * HMAC, and performs a constant-time comparison; cookies whose signature is absent or invalid are
  * silently rejected, preventing state-parameter forgery.
  */
+@Slf4j
 @Component
 public class CookieOAuth2AuthorizationRequestRepository
         implements org.springframework.security.oauth2.client.web.AuthorizationRequestRepository<
@@ -174,6 +176,11 @@ public class CookieOAuth2AuthorizationRequestRepository
                 return Optional.empty();
             }
         } catch (Exception e) {
+            // A tampered or corrupted state cookie is a security-relevant event; without this
+            // log, it was silently indistinguishable from "no authorization request in progress".
+            log.warn(
+                    "OAuth2 state cookie failed signature verification: {}",
+                    e.getClass().getSimpleName());
             return Optional.empty();
         }
         return Optional.of(payload);
@@ -219,6 +226,10 @@ public class CookieOAuth2AuthorizationRequestRepository
                     .authorizationRequestUri((String) data.get("authorizationRequestUri"))
                     .build();
         } catch (Exception e) {
+            // Same rationale as extractVerifiedPayload: a verified-but-undeserializable payload
+            // indicates cookie corruption or a tampered state, which must not be silent.
+            log.warn(
+                    "OAuth2 state cookie failed deserialization: {}", e.getClass().getSimpleName());
             return null;
         }
     }

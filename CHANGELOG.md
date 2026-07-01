@@ -16,12 +16,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Synced `database/schema.sql` with all 24 Flyway migrations (V01–V24): added missing V18 metadata config tables (`system_settings`, `notification_type_configs`, `moderation_action_configs`, `feature_flags`, `report_reason_configs`) with seed data and triggers; V23/V24 were already reflected. Updated struct.md migration count from 22 to 24.
 
 ### Fixed
+- Prevented an unexpected login-request body read failure from escaping the security filter chain uncaught, which previously bypassed the standard API response envelope entirely.
+- Prevented a broken message-broker channel from letting an acknowledgment failure escape the auth mail, post index, hashtag index, and social notification event consumers uncaught.
+- Logged outbox publish failures with the original exception instead of only persisting a truncated error message to the database, restoring log-based visibility into async event delivery outages.
+- Logged pre-signed media upload URL failures instead of silently discarding the underlying storage-provider exception.
 - Added author `username`, `displayName`, and `avatarUrl` to post and feed API responses, batched via a single author lookup alongside the existing media batching, fixing a frontend crash on the main feed caused by missing author display fields.
 - Replaced `ResultSetExtractor` lambda with `queryForObject` in `HashtagTrendingServiceImpl` to resolve always-false null check on latest trending period (SonarQube `java:S2583`).
 - Added emptiness guards before `doesNotContainAnyElementsOf` assertion in `HashtagControllerIT` to prevent trivially passing pagination test (SonarQube `java:S5841`).
 
 ### Security
 - Removed the recipient email address from transactional email send success/failure log lines to eliminate a PII exposure.
+- Logged every JWT authentication rejection reason so failed-auth attempts are no longer indistinguishable from one another in application logs.
+- Logged refresh-token replay/theft-detection events before revoking all active sessions for the affected user, so a real token-theft incident is no longer silent.
+- Logged OAuth2 state-cookie signature and deserialization failures instead of silently treating a tampered or corrupted cookie as an absent authorization request.
 
 ### Tests
 - Added `SocialControllerIT` covering all 7 REST endpoints of the social module (follow, unfollow, block, unblock, get followers, get following, follow-request list, approve, reject) against real PostgreSQL and Redis containers.
