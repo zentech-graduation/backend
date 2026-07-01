@@ -10,9 +10,14 @@ import com.app.modules.post.enums.PostType;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** API response for a post, including ordered media and trigger-maintained counters. */
-@Schema(description = "Post with ordered media and engagement counters")
-public record PostResponse(
+/**
+ * API response for a post in the following feed, including ordered media, trigger-maintained
+ * counters, and a reserved ranking field for forward compatibility.
+ */
+@Schema(
+        description =
+                "Post entry in the following feed, with engagement counters and a reserved ranking field")
+public record FeedPostResponse(
         @Schema(description = "Post identifier.") UUID id,
         @Schema(description = "Author user identifier.") UUID userId,
         @Schema(description = "Author username.") String username,
@@ -31,4 +36,10 @@ public record PostResponse(
         @Schema(description = "Longitude in decimal degrees.") BigDecimal longitude,
         @Schema(description = "Ordered media items.") List<PostMediaResponse> media,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
-        @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt) {}
+        @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt,
+        @Schema(
+                        description =
+                                "Reserved for a future ranking score; always null in the current"
+                                        + " chronological implementation. Present to keep the"
+                                        + " contract forward-compatible with ranked ordering.")
+                Double rankingScore) {}

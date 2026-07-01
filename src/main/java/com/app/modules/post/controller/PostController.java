@@ -25,6 +25,7 @@ import com.app.modules.post.api.PostApi;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
 import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
+import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.service.PostSearchService;
@@ -96,6 +97,18 @@ public class PostController extends BaseController implements PostApi {
     public ResponseEntity<Void> deletePost(@PathVariable("postId") UUID postId) {
         postService.deletePost(SecurityUtils.getCurrentUserId(), postId);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Returns the chronological following feed for the authenticated viewer. */
+    @Override
+    @GetMapping(ApiConstants.Posts.FEED)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<FeedPostResponse>>> getFeed(
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "20") int limit) {
+        CursorPageResponse<FeedPostResponse> body =
+                postService.getFeed(SecurityUtils.getCurrentUserId(), cursor, limit);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
     /** Lists a user's published posts visible to the authenticated viewer. */

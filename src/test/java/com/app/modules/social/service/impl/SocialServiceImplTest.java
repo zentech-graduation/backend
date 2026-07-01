@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
@@ -430,6 +431,89 @@ class SocialServiceImplTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).id()).isEqualTo(requester);
+    }
+
+    @Test
+    void getAcceptedFollowingExcludingBlocks_noFollows_returnsEmpty() {
+        UUID viewer = UUID.randomUUID();
+        when(followRepository.findByIdFollowerIdAndStatus(viewer, FollowStatus.ACCEPTED))
+                .thenReturn(List.of());
+
+        List<UUID> result = service.getAcceptedFollowingExcludingBlocks(viewer);
+
+        assertThat(result).isEmpty();
+        verifyNoInteractions(blockRepository);
+    }
+
+    @Test
+    void getAcceptedFollowingExcludingBlocks_noBlocks_returnsAllFollowingIds() {
+        UUID viewer = UUID.randomUUID();
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        when(followRepository.findByIdFollowerIdAndStatus(viewer, FollowStatus.ACCEPTED))
+                .thenReturn(
+                        List.of(
+                                follow(viewer, a, FollowStatus.ACCEPTED),
+                                follow(viewer, b, FollowStatus.ACCEPTED)));
+        when(blockRepository.findByIdBlockerId(viewer)).thenReturn(List.of());
+        when(blockRepository.findByIdBlockedId(viewer)).thenReturn(List.of());
+
+        List<UUID> result = service.getAcceptedFollowingExcludingBlocks(viewer);
+
+        assertThat(result).containsExactlyInAnyOrder(a, b);
+    }
+
+    @Test
+    void getAcceptedFollowingExcludingBlocks_viewerBlockedSomeone_excludesBlockedId() {
+        UUID viewer = UUID.randomUUID();
+        UUID kept = UUID.randomUUID();
+        UUID blocked = UUID.randomUUID();
+        Block blockRow = Block.builder().id(new BlockId(viewer, blocked)).build();
+        when(followRepository.findByIdFollowerIdAndStatus(viewer, FollowStatus.ACCEPTED))
+                .thenReturn(
+                        List.of(
+                                follow(viewer, kept, FollowStatus.ACCEPTED),
+                                follow(viewer, blocked, FollowStatus.ACCEPTED)));
+        when(blockRepository.findByIdBlockerId(viewer)).thenReturn(List.of(blockRow));
+        when(blockRepository.findByIdBlockedId(viewer)).thenReturn(List.of());
+
+        List<UUID> result = service.getAcceptedFollowingExcludingBlocks(viewer);
+
+        assertThat(result).containsExactly(kept);
+    }
+
+    @Test
+    void getAcceptedFollowingExcludingBlocks_viewerIsBlockedBySomeone_excludesBlockerId() {
+        UUID viewer = UUID.randomUUID();
+        UUID kept = UUID.randomUUID();
+        UUID blocker = UUID.randomUUID();
+        Block blockRow = Block.builder().id(new BlockId(blocker, viewer)).build();
+        when(followRepository.findByIdFollowerIdAndStatus(viewer, FollowStatus.ACCEPTED))
+                .thenReturn(
+                        List.of(
+                                follow(viewer, kept, FollowStatus.ACCEPTED),
+                                follow(viewer, blocker, FollowStatus.ACCEPTED)));
+        when(blockRepository.findByIdBlockerId(viewer)).thenReturn(List.of());
+        when(blockRepository.findByIdBlockedId(viewer)).thenReturn(List.of(blockRow));
+
+        List<UUID> result = service.getAcceptedFollowingExcludingBlocks(viewer);
+
+        assertThat(result).containsExactly(kept);
+    }
+
+    @Test
+    void getAcceptedFollowingExcludingBlocks_allFollowedUsersBlocked_returnsEmpty() {
+        UUID viewer = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        Block blockRow = Block.builder().id(new BlockId(viewer, target)).build();
+        when(followRepository.findByIdFollowerIdAndStatus(viewer, FollowStatus.ACCEPTED))
+                .thenReturn(List.of(follow(viewer, target, FollowStatus.ACCEPTED)));
+        when(blockRepository.findByIdBlockerId(viewer)).thenReturn(List.of(blockRow));
+        when(blockRepository.findByIdBlockedId(viewer)).thenReturn(List.of());
+
+        List<UUID> result = service.getAcceptedFollowingExcludingBlocks(viewer);
+
+        assertThat(result).isEmpty();
     }
 
     @Test

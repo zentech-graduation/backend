@@ -30,6 +30,7 @@ import com.app.modules.media.enums.MediaType;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
 import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
+import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.entity.Post;
@@ -283,6 +284,35 @@ public class PostServiceImpl implements PostService {
                     Collections.emptyList(), pageSize, null, null, cursor != null);
         }
         List<PostResponse> content = postResponseAssembler.assemble(posts);
+        String startCursor = encodeCursor(posts.get(0).getCreatedAt());
+        String endCursor = encodeCursor(posts.get(posts.size() - 1).getCreatedAt());
+        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<FeedPostResponse> getFeed(UUID viewerId, String cursor, int size) {
+        List<UUID> authorIds = socialService.getAcceptedFollowingExcludingBlocks(viewerId);
+        int pageSize = normalizeLimit(size);
+        if (authorIds.isEmpty()) {
+            return CursorPageResponse.of(
+                    Collections.emptyList(), pageSize, null, null, cursor != null);
+        }
+        OffsetDateTime cursorTime = decodeCursor(cursor);
+        PageRequest page = PageRequest.of(0, pageSize + 1);
+        List<Post> posts =
+                cursorTime == null
+                        ? postRepository.findFirstFeedPosts(authorIds, PostStatus.PUBLISHED, page)
+                        : postRepository.findFeedPostsBefore(
+                                authorIds, PostStatus.PUBLISHED, cursorTime, page);
+        if (posts.size() > pageSize) {
+            posts = posts.subList(0, pageSize);
+        }
+        if (posts.isEmpty()) {
+            return CursorPageResponse.of(
+                    Collections.emptyList(), pageSize, null, null, cursor != null);
+        }
+        List<FeedPostResponse> content = postResponseAssembler.assembleFeed(posts);
         String startCursor = encodeCursor(posts.get(0).getCreatedAt());
         String endCursor = encodeCursor(posts.get(posts.size() - 1).getCreatedAt());
         return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);

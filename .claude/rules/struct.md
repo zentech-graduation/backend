@@ -250,7 +250,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 22 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: true`); 24 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -276,6 +276,8 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V20 | create_processed_messages |
 | V21 | add_outbox_claim_lease_columns |
 | V22 | create_post_edit_history |
+| V23 | drop_legacy_plaintext_credential_columns |
+| V24 | add_refresh_tokens_expires_index |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
