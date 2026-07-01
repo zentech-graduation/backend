@@ -49,6 +49,9 @@ import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.entity.User;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class PostServiceImpl implements PostService {
 
@@ -147,6 +150,7 @@ public class PostServiceImpl implements PostService {
             upsertCaptionHashtags(post.getId(), post.getCaption());
             enqueuePostIndexUpsert(post);
         }
+        log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
         return postResponseAssembler.assemble(post);
     }
 
@@ -233,6 +237,11 @@ public class PostServiceImpl implements PostService {
             hashtagService.removeHashtagsForPost(post.getId());
             enqueuePostIndexDelete(post);
         }
+        log.info(
+                "Post status transitioned: postId={}, from={}, to={}",
+                post.getId(),
+                current,
+                target);
         return postResponseAssembler.assemble(post);
     }
 

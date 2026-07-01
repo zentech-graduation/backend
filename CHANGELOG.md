@@ -7,10 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Structured logging for outbox publish failures, pre-signed media upload URL failures, user registration and login outcomes, and post creation/status-transition events.
 - Chronological following feed endpoint (`GET /api/v1/posts/feed`): cursor-paginated published posts from accepted-follow accounts, newest first, with bidirectional block exclusion and empty-following short circuit.
 - `V99__seed_feed_test_data.sql` Flyway migration seeding 7 users, 5 follows, 2 blocks, and 12 posts covering all feed business rules for manual endpoint testing.
 
 ### Changed
+- Disabled raw per-statement SQL logging (`show-sql`, `format_sql`, `use_sql_comments`) in the dev profile in favor of the new structured application logs; the prod profile already had these disabled and needed no change.
 - Synced `database/schema.sql` with all 24 Flyway migrations (V01–V24): added missing V18 metadata config tables (`system_settings`, `notification_type_configs`, `moderation_action_configs`, `feature_flags`, `report_reason_configs`) with seed data and triggers; V23/V24 were already reflected. Updated struct.md migration count from 22 to 24.
 
 ### Fixed
@@ -23,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added emptiness guards before `doesNotContainAnyElementsOf` assertion in `HashtagControllerIT` to prevent trivially passing pagination test (SonarQube `java:S5841`).
 
 ### Security
+- Removed the recipient email address from transactional email send success/failure log lines to eliminate a PII exposure.
 - Logged every JWT authentication rejection reason so failed-auth attempts are no longer indistinguishable from one another in application logs.
 - Logged refresh-token replay/theft-detection events before revoking all active sessions for the affected user, so a real token-theft incident is no longer silent.
 - Logged OAuth2 state-cookie signature and deserialization failures instead of silently treating a tampered or corrupted cookie as an absent authorization request.
