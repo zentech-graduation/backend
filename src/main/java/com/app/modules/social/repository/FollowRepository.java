@@ -28,6 +28,23 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
 
     List<Follow> findByIdFollowerIdAndStatus(UUID followerId, FollowStatus status);
 
+    /**
+     * Returns the IDs of all users that the given viewer follows with the specified status.
+     *
+     * <p>Used by the feed to resolve the accepted-follow author list before applying block
+     * exclusions. Projects only the {@code following_id} column to avoid loading full entity graphs
+     * when only identifiers are needed.
+     *
+     * @param viewerId the follower whose outgoing follows are queried
+     * @param status follow status filter; pass {@link FollowStatus#ACCEPTED} for feed resolution
+     * @return list of user IDs being followed with the given status
+     */
+    @Query(
+            "SELECT f.id.followingId FROM Follow f"
+                    + " WHERE f.id.followerId = :viewerId AND f.status = :status")
+    List<UUID> findAcceptedFollowingIds(
+            @Param("viewerId") UUID viewerId, @Param("status") FollowStatus status);
+
     List<Follow> findByIdFollowingIdAndStatus(UUID followingId, FollowStatus status);
 
     List<Follow> findByIdFollowingIdAndStatusOrderByCreatedAtDesc(

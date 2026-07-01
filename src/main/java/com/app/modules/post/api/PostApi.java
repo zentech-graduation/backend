@@ -20,6 +20,7 @@ import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
 import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
+import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
 
@@ -250,6 +251,47 @@ public interface PostApi {
     })
     @DeleteMapping(ApiConstants.Posts.BY_ID)
     ResponseEntity<Void> deletePost(@PathVariable("postId") UUID postId);
+
+    @Operation(
+            summary = "Get the following feed",
+            description =
+                    "Cursor-paginated chronological feed of published posts from accounts the"
+                            + " authenticated viewer follows with accepted status, newest first."
+                            + " Posts from accounts involved in a block relationship with the viewer"
+                            + " in either direction are excluded. Returns an empty page when the"
+                            + " viewer has no accepted follows or when all followed accounts are"
+                            + " blocked.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Cursor page of feed posts",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Malformed cursor",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Posts.FEED)
+    ResponseEntity<ApiResponse<CursorPageResponse<FeedPostResponse>>> getFeed(
+            @Parameter(description = "Opaque cursor from the previous page")
+                    @RequestParam(value = "cursor", required = false)
+                    String cursor,
+            @Parameter(description = "Page size (1–100, default 20)")
+                    @RequestParam(value = "limit", defaultValue = "20")
+                    int limit);
 
     @Operation(
             summary = "List a user's published posts",

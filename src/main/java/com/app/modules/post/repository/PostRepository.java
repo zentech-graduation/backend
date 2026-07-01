@@ -87,6 +87,47 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
             Pageable pageable);
 
     /**
+     * First keyset page of published posts authored by any user in {@code authorIds}, newest first.
+     *
+     * <p>Paired with {@link #findFeedPostsBefore}; the no-cursor variant avoids binding an untyped
+     * null timestamp, which PostgreSQL cannot type-infer.
+     *
+     * @param authorIds post authors eligible to appear in the feed; must not be empty
+     * @param status status filter; feed endpoints page published posts only
+     * @param pageable page size carrier (page number is always 0 for keyset paging)
+     * @return posts ordered by {@code created_at} descending
+     */
+    @Query(
+            "SELECT p FROM Post p WHERE p.userId IN :authorIds"
+                    + " AND p.status = :status"
+                    + " ORDER BY p.createdAt DESC")
+    List<Post> findFirstFeedPosts(
+            @Param("authorIds") List<UUID> authorIds,
+            @Param("status") PostStatus status,
+            Pageable pageable);
+
+    /**
+     * Keyset page of published posts authored by any user in {@code authorIds}, older than the
+     * cursor, newest first.
+     *
+     * @param authorIds post authors eligible to appear in the feed; must not be empty
+     * @param status status filter; feed endpoints page published posts only
+     * @param cursor exclusive upper bound on {@code created_at}; never null
+     * @param pageable page size carrier
+     * @return posts ordered by {@code created_at} descending
+     */
+    @Query(
+            "SELECT p FROM Post p WHERE p.userId IN :authorIds"
+                    + " AND p.status = :status"
+                    + " AND p.createdAt < :cursor"
+                    + " ORDER BY p.createdAt DESC")
+    List<Post> findFeedPostsBefore(
+            @Param("authorIds") List<UUID> authorIds,
+            @Param("status") PostStatus status,
+            @Param("cursor") OffsetDateTime cursor,
+            Pageable pageable);
+
+    /**
      * Reads the trigger-maintained like counter directly from the database.
      *
      * <p>Bypasses the first-level-cached entity state, which goes stale once {@code
