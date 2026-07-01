@@ -63,6 +63,29 @@ refactor(common): extract token blacklist TTL calculation
 
 Note: Only use short description
 
+## Branch workflow (mandatory)
+
+`develop` must never receive direct commits from implementation work.
+
+- [ ] Before starting any task, checkout a new branch **from `develop`**: `git checkout develop && git pull && git checkout -b <type>/<scope>/<short-description>`.
+- [ ] All implementation work happens on that branch. Never commit directly to `develop`.
+- [ ] Push the branch and open a PR targeting `develop`. `main` is never a PR target for implementation work — it is owner-only, terminal.
+- [ ] One branch per logical unit of work. Do not reuse a stale branch for an unrelated task — cut a new one from an up-to-date `develop`.
+
+## Commit granularity policy (mandatory)
+
+A commit is one logical, self-contained, working change — not a file-count target.
+
+**Forbidden — mega-commit**: bundling multiple unrelated changes (e.g., a bug fix + a refactor + a new endpoint) into a single commit. Each concern gets its own commit.
+
+**Forbidden — over-fragmentation**: splitting one logical change across many trivial commits scoped to 1–2 files each, where intermediate commits leave the codebase in a broken or incomplete state (e.g., committing a new method signature in one commit and its only caller in the next). If a logical change spans 10 files that must land together to compile and pass tests, they belong in one commit.
+
+**Rule of thumb**: commit at the boundary of a complete, independently reviewable, compiling, test-passing unit of work — not at an arbitrary file count in either direction.
+
+- [ ] Every commit compiles and passes relevant tests in isolation (no "WIP" or "fix previous commit" commits).
+- [ ] Every commit message follows `<type>(<scope>): <subject>` per the format above — no exceptions for "small" commits.
+- [ ] Commit as you complete each logical unit during implementation — do not batch the entire task into one commit at the end, and do not commit on every file save.
+
 ## Pull request rules
 
 ### Title format
@@ -83,8 +106,10 @@ Same as commit message format — enforced by `pr-lint` workflow on PR open, edi
 Split large PRs proactively: keep feature PRs under `size/M` (≤ 1000 lines) as a target.
 
 ### Process checklist
+- [ ] Branch was checked out from an up-to-date `develop` — no direct commits to `develop`
 - [ ] Branch follows `<type>/<scope>/<description>` naming
 - [ ] All commits follow `<type>(<scope>): <subject>` with an allowlisted scope
+- [ ] Each commit is one logical, compiling, test-passing unit — no mega-commits, no broken intermediate commits
 - [ ] `./mvnw spotless:apply` and `./mvnw test` both pass
 - [ ] PR template author checklist completed
 - [ ] PR title matches commit format (pr-lint will block merge otherwise)
