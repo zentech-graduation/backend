@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -65,6 +66,11 @@ import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
 import com.app.modules.users.repository.UserSettingsRepository;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
@@ -218,6 +224,36 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void register_success_logsInfoWithoutEmail() {
+        UUID newId = UUID.randomUUID();
+        when(userRepository.save(any(User.class)))
+                .thenAnswer(
+                        inv -> {
+                            User u = inv.getArgument(0);
+                            u.setId(newId);
+                            return u;
+                        });
+        when(passwordEncoder.encode(anyString())).thenReturn("HASH");
+
+        Logger logger = (Logger) LoggerFactory.getLogger(AuthServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(
+                        event ->
+                                event.getLevel() == Level.INFO
+                                        && event.getFormattedMessage().contains(newId.toString()))
+                .noneMatch(event -> event.getFormattedMessage().contains("a@b.c"));
+    }
+
+    @Test
     void login_unknownEmail_throwsInvalidCredentials() {
         when(userRepository.findByEmailAndDeletedAtIsNull("nobody@x.y"))
                 .thenReturn(Optional.empty());
@@ -229,6 +265,33 @@ class AuthServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_wrongPassword_logsWarningWithoutEmailOrReason() {
+        User u = activeUser();
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        when(passwordEncoder.matches(eq("wrong"), eq("STORED-HASH"))).thenReturn(false);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(AuthServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            assertThatThrownBy(
+                            () ->
+                                    service.login(
+                                            new LoginRequest(u.getEmail(), "wrong"), stubRequest()))
+                    .isInstanceOf(AppException.class);
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(event -> event.getLevel() == Level.WARN)
+                .noneMatch(event -> event.getFormattedMessage().contains(u.getEmail()));
     }
 
     @Test
@@ -333,6 +396,36 @@ class AuthServiceImplTest {
         assertThat(resp.accessToken()).isEqualTo("ACCESS");
         assertThat(resp.refreshToken()).isEqualTo("REFRESH");
         assertThat(resp.user().id()).isEqualTo(u.getId());
+    }
+
+    @Test
+    void login_success_logsInfoWithoutEmail() {
+        User u = activeUser();
+        UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq(u.getEmail()), eq("USER")))
+                .thenReturn("ACCESS");
+        when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
+
+        Logger logger = (Logger) LoggerFactory.getLogger(AuthServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            service.login(new LoginRequest(u.getEmail(), "password1"), stubRequest());
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(
+                        event ->
+                                event.getLevel() == Level.INFO
+                                        && event.getFormattedMessage()
+                                                .contains(u.getId().toString()))
+                .noneMatch(event -> event.getFormattedMessage().contains(u.getEmail()));
     }
 
     @Test

@@ -69,6 +69,9 @@ public class OutboxPublisherServiceImpl implements OutboxPublisherService {
         try {
             publishToRabbit(event);
         } catch (RuntimeException ex) {
+            // Every async domain event in the system flows through this publisher; without this
+            // log, a publish failure is only ever visible as a truncated string in the DB.
+            log.error("Outbox publish failed for event {}", event.getEventId(), ex);
             recordFailure(event, ex);
             return;
         }

@@ -12,6 +12,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.modules.media.config.MediaProperties;
 
+import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -21,6 +22,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
+@Slf4j
 @Service
 public class R2ObjectStoragePresignService implements ObjectStoragePresignService {
 
@@ -56,6 +58,9 @@ public class R2ObjectStoragePresignService implements ObjectStoragePresignServic
                     flattenHeaders(presignedRequest.signedHeaders()),
                     presignedRequest.expiration());
         } catch (RuntimeException ex) {
+            // This is the only call into the R2/S3 SDK in the module; without this log, an R2
+            // outage is indistinguishable from a client-input error in the logs.
+            log.error("R2 presign request failed", ex);
             throw new AppException(ApiErrorCode.MEDIA_UPLOAD_URL_FAILED);
         }
     }

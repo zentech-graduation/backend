@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 
@@ -14,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -21,6 +25,10 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 
 import com.app.common.config.security.SecurityProperties;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
@@ -111,6 +119,61 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
                 new Cookie(CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME, tamperedValue));
 
         assertThat(repository.loadAuthorizationRequest(loadRequest)).isNull();
+    }
+
+    @Test
+    void loadAuthorizationRequest_invalidSignatureBase64_logsWarningAndReturnsNull()
+            throws Exception {
+        String cookieValue = "cGF5bG9hZA.not-valid-base64!!!";
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(
+                new Cookie(CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME, cookieValue));
+
+        Logger logger =
+                (Logger) LoggerFactory.getLogger(CookieOAuth2AuthorizationRequestRepository.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            assertThat(repository.loadAuthorizationRequest(request)).isNull();
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list).anyMatch(event -> event.getLevel() == Level.WARN);
+    }
+
+    @Test
+    void
+            loadAuthorizationRequest_validSignatureButUndeserializablePayload_logsWarningAndReturnsNull()
+                    throws Exception {
+        Method signMethod =
+                CookieOAuth2AuthorizationRequestRepository.class.getDeclaredMethod(
+                        "sign", String.class);
+        signMethod.setAccessible(true);
+        String payload =
+                Base64.getUrlEncoder()
+                        .withoutPadding()
+                        .encodeToString("not json at all".getBytes(StandardCharsets.UTF_8));
+        String signature = (String) signMethod.invoke(repository, payload);
+        String cookieValue = payload + "." + signature;
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(
+                new Cookie(CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME, cookieValue));
+
+        Logger logger =
+                (Logger) LoggerFactory.getLogger(CookieOAuth2AuthorizationRequestRepository.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            assertThat(repository.loadAuthorizationRequest(request)).isNull();
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list).anyMatch(event -> event.getLevel() == Level.WARN);
     }
 
     @Test

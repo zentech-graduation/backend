@@ -26,6 +26,7 @@ import com.app.common.security.service.RateLimiterService;
 import com.app.common.security.util.CachedBodyHttpServletRequest;
 import com.app.common.security.util.IpExtractor;
 
+import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -40,6 +41,7 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <p>All 429 responses include a {@code Retry-After} header set to the matched rule's window.
  */
+@Slf4j
 @Component
 public class AuthRateLimitFilter extends OncePerRequestFilter {
 
@@ -96,7 +98,11 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                     writeBadRequestResponse(response);
                     return;
                 }
-                throw e;
+                // Filters run before DispatcherServlet, so GlobalExceptionHandler never sees
+                // this — an uncaught throw here would bypass the ApiResponse envelope entirely.
+                log.warn("Unexpected IOException reading login request body", e);
+                writeInternalErrorResponse(response);
+                return;
             }
             delivered = cached;
             String email = extractEmail(cached.getCachedBody());
@@ -178,5 +184,13 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         objectMapper.writeValue(
                 response.getWriter(), ApiResponse.failure(ApiErrorCode.BAD_REQUEST));
+    }
+
+    private void writeInternalErrorResponse(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        objectMapper.writeValue(
+                response.getWriter(), ApiResponse.failure(ApiErrorCode.INTERNAL_ERROR));
     }
 }

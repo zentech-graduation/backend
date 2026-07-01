@@ -28,6 +28,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -55,6 +56,11 @@ import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.social.service.SocialService;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 @ExtendWith(MockitoExtension.class)
 class PostServiceImplTest {
@@ -252,6 +258,56 @@ class PostServiceImplTest {
                 createRequest("#draft tag", PostType.IMAGE, List.of(mediaId), PostStatus.DRAFT));
 
         verifyNoInteractions(hashtagService);
+    }
+
+    @Test
+    void createPost_success_logsInfoWithPostId() {
+        UUID mediaId = UUID.randomUUID();
+        when(postMediaAssetRepository.findAllById(List.of(mediaId)))
+                .thenReturn(List.of(asset(mediaId, authorId, MediaType.IMAGE)));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(PostServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            service.createPost(
+                    authorId,
+                    createRequest("caption", PostType.IMAGE, List.of(mediaId), PostStatus.DRAFT));
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(
+                        event ->
+                                event.getLevel() == Level.INFO
+                                        && event.getFormattedMessage().contains(postId.toString()));
+    }
+
+    @Test
+    void transitionStatus_success_logsInfoWithFromAndToStatus() {
+        when(postRepository.findByIdAndDeletedAtIsNull(postId))
+                .thenReturn(Optional.of(ownedPost(PostStatus.DRAFT)));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(PostServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            service.transitionStatus(
+                    authorId, postId, new PostStatusTransitionRequest(PostStatus.PUBLISHED));
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(
+                        event ->
+                                event.getLevel() == Level.INFO
+                                        && event.getFormattedMessage().contains(postId.toString())
+                                        && event.getFormattedMessage().contains("DRAFT")
+                                        && event.getFormattedMessage().contains("PUBLISHED"));
     }
 
     @Test

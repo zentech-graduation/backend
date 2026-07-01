@@ -27,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
@@ -41,6 +42,11 @@ import com.app.common.outbox.entity.OutboxEvent;
 import com.app.common.outbox.enums.OutboxEventStatus;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.service.OutboxPublisherStateService;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 @ExtendWith(MockitoExtension.class)
 class OutboxPublisherServiceImplTest {
@@ -106,6 +112,36 @@ class OutboxPublisherServiceImplTest {
         assertThat(nextRetryCaptor.getValue()).isAfter(OffsetDateTime.now(ZoneOffset.UTC));
         verify(outboxPublisherStateService, never()).markPublished(any(), any());
         verify(outboxPublisherStateService, never()).markDead(any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void publishDueEvents_publishFailure_logsErrorWithEventId() {
+        OutboxEvent event = outboxEvent(0);
+        when(outboxPublisherStateService.claimPublishableBatch(any(OffsetDateTime.class), eq(100)))
+                .thenReturn(List.of(event));
+        when(outboxPublisherStateService.markFailed(
+                        eq(event), eq(1), any(OffsetDateTime.class), any()))
+                .thenReturn(true);
+        doThrow(new AmqpException("broker unavailable"))
+                .when(rabbitTemplate)
+                .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(OutboxPublisherServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            service.publishDueEvents();
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(
+                        e ->
+                                e.getLevel() == Level.ERROR
+                                        && e.getFormattedMessage()
+                                                .contains(event.getEventId().toString()));
     }
 
     @Test

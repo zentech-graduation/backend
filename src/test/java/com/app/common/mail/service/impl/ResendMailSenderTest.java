@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -29,6 +30,10 @@ import com.resend.core.exception.ResendException;
 import com.resend.services.emails.Emails;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.resend.services.emails.model.CreateEmailResponse;
+
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 @ExtendWith(MockitoExtension.class)
 class ResendMailSenderTest {
@@ -100,6 +105,48 @@ class ResendMailSenderTest {
         verify(mailTemplateRenderer).render(eq(MailTemplate.WELCOME), varCaptor.capture());
         Map<String, Object> vars = varCaptor.getValue();
         assertThat(vars).containsOnlyKeys("toName", "appName");
+    }
+
+    @Test
+    void sendWelcome_success_logDoesNotContainRawEmailAddress() throws Exception {
+        when(emails.send(any(CreateEmailOptions.class)))
+                .thenReturn(mock(CreateEmailResponse.class));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(ResendMailSender.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            service.sendWelcome(TO_EMAIL, TO_NAME);
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .isNotEmpty()
+                .noneMatch(event -> event.getFormattedMessage().contains(TO_EMAIL));
+    }
+
+    @Test
+    void sendWelcome_failure_logDoesNotContainRawEmailAddress() throws Exception {
+        doThrow(new ResendException("upstream failure"))
+                .when(emails)
+                .send(any(CreateEmailOptions.class));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(ResendMailSender.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            assertThatThrownBy(() -> service.sendWelcome(TO_EMAIL, TO_NAME))
+                    .isInstanceOf(AppException.class);
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list)
+                .isNotEmpty()
+                .noneMatch(event -> event.getFormattedMessage().contains(TO_EMAIL));
     }
 
     @Test
