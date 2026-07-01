@@ -8,9 +8,11 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.util.Map;
 
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -178,6 +180,42 @@ class AuthRateLimitFilterTest {
 
         verify(chain).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void
+            doFilterInternal_loginPath_unexpectedBodyReadFailure_writesInternalErrorResponseInsteadOfPropagating()
+                    throws Exception {
+        when(request.getRequestURI()).thenReturn(LOGIN_PATH);
+        when(request.getMethod()).thenReturn("POST");
+        ServletInputStream brokenStream =
+                new ServletInputStream() {
+                    @Override
+                    public boolean isFinished() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isReady() {
+                        return true;
+                    }
+
+                    @Override
+                    public void setReadListener(jakarta.servlet.ReadListener readListener) {}
+
+                    @Override
+                    public int read() throws IOException {
+                        throw new IOException("Connection reset by peer");
+                    }
+                };
+        when(request.getInputStream()).thenReturn(brokenStream);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getContentAsString()).contains("INTERNAL_ERROR");
     }
 
     @Test

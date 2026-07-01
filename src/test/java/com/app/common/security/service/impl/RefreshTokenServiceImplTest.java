@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -30,6 +31,11 @@ import com.app.common.security.jwt.JwtProperties;
 import com.app.common.security.service.RefreshTokenService;
 import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.repository.RefreshTokenRepository;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 @ExtendWith(MockitoExtension.class)
 class RefreshTokenServiceImplTest {
@@ -153,6 +159,42 @@ class RefreshTokenServiceImplTest {
     }
 
     @Test
+    void rotate_knownRevokedToken_logsReplayWarning() {
+        String raw = UUID.randomUUID().toString();
+        String hash = sha256(raw);
+        UUID userId = UUID.randomUUID();
+        RefreshToken revoked =
+                RefreshToken.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .tokenHash(hash)
+                        .expiresAt(OffsetDateTime.now().plusMinutes(30))
+                        .revokedAt(OffsetDateTime.now().minusSeconds(10))
+                        .build();
+        when(repository.findByTokenHash(hash)).thenReturn(Optional.of(revoked));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(RefreshTokenServiceImpl.class);
+        Level originalLevel = logger.getLevel();
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.DEBUG);
+        try {
+            assertThatThrownBy(() -> service.rotate(raw, "1.1.1.1"))
+                    .isInstanceOf(AppException.class);
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(originalLevel);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(
+                        event ->
+                                event.getLevel() == Level.WARN
+                                        && event.getFormattedMessage().contains(userId.toString()));
+    }
+
+    @Test
     void rotate_expiredToken_throwsAuthRefreshTokenExpired() {
         String raw = UUID.randomUUID().toString();
         String hash = sha256(raw);
@@ -195,6 +237,42 @@ class RefreshTokenServiceImplTest {
                 .isEqualTo(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
         verify(repository).revokeAllActiveByUserId(eq(userId), any());
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void rotate_concurrentRevoke_logsReplayWarning() {
+        String raw = UUID.randomUUID().toString();
+        String hash = sha256(raw);
+        UUID userId = UUID.randomUUID();
+        RefreshToken existing =
+                RefreshToken.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .tokenHash(hash)
+                        .expiresAt(OffsetDateTime.now().plusMinutes(30))
+                        .build();
+        when(repository.findByTokenHash(hash)).thenReturn(Optional.of(existing));
+        when(repository.revokeByTokenHash(eq(hash), any())).thenReturn(0);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(RefreshTokenServiceImpl.class);
+        Level originalLevel = logger.getLevel();
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.DEBUG);
+        try {
+            assertThatThrownBy(() -> service.rotate(raw, "1.1.1.1"))
+                    .isInstanceOf(AppException.class);
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(originalLevel);
+        }
+
+        assertThat(appender.list)
+                .anyMatch(
+                        event ->
+                                event.getLevel() == Level.WARN
+                                        && event.getFormattedMessage().contains(userId.toString()));
     }
 
     @Test

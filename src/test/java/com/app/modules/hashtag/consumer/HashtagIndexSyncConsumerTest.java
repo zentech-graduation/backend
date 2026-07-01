@@ -1,6 +1,7 @@
 package com.app.modules.hashtag.consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -219,6 +221,35 @@ class HashtagIndexSyncConsumerTest {
 
         verify(channel).basicNack(1L, false, true);
         verify(channel, never()).basicAck(1L, false);
+    }
+
+    @Test
+    void consume_ackThrowsIOException_doesNotPropagate() throws Exception {
+        Message message = message(envelope(HashtagEventTypes.HASHTAG_INDEX_UPSERT_V1));
+        when(processedMessageService.processOnce(any(), any(), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            inv.getArgument(3, Runnable.class).run();
+                            return ProcessedMessageResult.PROCESSED;
+                        });
+        when(objectMapper.convertValue(any(), eq(HashtagIndexUpsertEvent.class)))
+                .thenReturn(upsertEvent());
+        when(hashtagRepository.findIndexProjectionsByIdIn(List.of(HASHTAG_ID)))
+                .thenReturn(List.of());
+        doThrow(new IOException("channel closed")).when(channel).basicAck(1L, false);
+
+        assertThatCode(() -> consumer.consume(message, channel)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void consume_nackThrowsIOException_doesNotPropagate() throws Exception {
+        Message message = message(nullEventIdEnvelope());
+        doThrow(new IllegalStateException("dlq down"))
+                .when(deadLetterPublisher)
+                .publish(any(), any(), any());
+        doThrow(new IOException("channel closed")).when(channel).basicNack(1L, false, true);
+
+        assertThatCode(() -> consumer.consume(message, channel)).doesNotThrowAnyException();
     }
 
     private Message message(DomainEventEnvelope envelope) {
