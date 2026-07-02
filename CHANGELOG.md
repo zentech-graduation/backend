@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Text-only post type: posts with `postType: text` require a non-blank caption and no media attachments.
 - Structured logging for outbox publish failures, pre-signed media upload URL failures, user registration and login outcomes, and post creation/status-transition events.
 - Chronological following feed endpoint (`GET /api/v1/posts/feed`): cursor-paginated published posts from accepted-follow accounts, newest first, with bidirectional block exclusion and empty-following short circuit.
 - `V99__seed_feed_test_data.sql` Flyway migration seeding 7 users, 5 follows, 2 blocks, and 12 posts covering all feed business rules for manual endpoint testing.
