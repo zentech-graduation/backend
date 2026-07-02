@@ -12,7 +12,10 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-RUN useradd -r -u 10001 luvax \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -r -u 10001 luvax \
     && mkdir -p /var/log/luvax \
     && chown -R luvax:luvax /var/log/luvax /app
 
