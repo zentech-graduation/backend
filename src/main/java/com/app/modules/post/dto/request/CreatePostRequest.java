@@ -6,7 +6,6 @@ import java.util.UUID;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -29,9 +28,11 @@ public record CreatePostRequest(
                 @NotNull
                 PostType postType,
         @Schema(
-                        description = "Media asset ids owned by the author, in carousel order",
-                        requiredMode = Schema.RequiredMode.REQUIRED)
-                @NotEmpty
+                        description =
+                                "Media asset ids owned by the author, in carousel order."
+                                        + " Required for image, video, and carousel posts;"
+                                        + " must be null or empty for text posts.",
+                        requiredMode = Schema.RequiredMode.NOT_REQUIRED)
                 List<UUID> mediaIds,
         @Schema(
                         description =

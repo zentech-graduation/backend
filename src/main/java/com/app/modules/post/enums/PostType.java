@@ -8,7 +8,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 public enum PostType {
     IMAGE,
     VIDEO,
-    CAROUSEL;
+    CAROUSEL,
+    TEXT;
 
     @JsonCreator
     public static PostType fromJson(String value) {

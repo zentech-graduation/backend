@@ -39,10 +39,10 @@ public interface PostApi {
     @Operation(
             summary = "Create a post",
             description =
-                    "Creates a post with ordered media owned by the author. Carousel posts require"
-                            + " 2–10 media items; image and video posts require exactly one asset"
-                            + " of the matching type. Publishing extracts caption hashtags"
-                            + " synchronously.")
+                    "Creates a post. Text posts require a non-blank caption and no media."
+                            + " Image and video posts require exactly one media asset of the"
+                            + " matching type. Carousel posts require 2–10 media items."
+                            + " Publishing extracts caption hashtags synchronously.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
