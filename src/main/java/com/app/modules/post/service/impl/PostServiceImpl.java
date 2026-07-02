@@ -106,7 +106,40 @@ public class PostServiceImpl implements PostService {
         if (initialStatus != PostStatus.DRAFT && initialStatus != PostStatus.PUBLISHED) {
             throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid initial post status");
         }
+        if (request.postType() == PostType.TEXT) {
+            if (request.caption() == null || request.caption().isBlank()) {
+                throw new AppException(
+                        ApiErrorCode.BAD_REQUEST, "Text posts require a non-blank caption");
+            }
+            if (request.mediaIds() != null && !request.mediaIds().isEmpty()) {
+                throw new AppException(
+                        ApiErrorCode.BAD_REQUEST, "Text posts must not include media");
+            }
+            Post post =
+                    Post.builder()
+                            .userId(authorId)
+                            .caption(request.caption())
+                            .postType(PostType.TEXT)
+                            .status(initialStatus)
+                            .locationName(request.locationName())
+                            .latitude(request.latitude())
+                            .longitude(request.longitude())
+                            .build();
+            // Flush so the DB-assigned id and @CreationTimestamp createdAt are populated before
+            // the index-upsert event payload reads them.
+            postRepository.saveAndFlush(post);
+            if (initialStatus == PostStatus.PUBLISHED) {
+                upsertCaptionHashtags(post.getId(), post.getCaption());
+                enqueuePostIndexUpsert(post);
+            }
+            log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
+            return postResponseAssembler.assemble(post);
+        }
         List<UUID> mediaIds = request.mediaIds();
+        if (mediaIds == null || mediaIds.isEmpty()) {
+            throw new AppException(
+                    ApiErrorCode.BAD_REQUEST, "Media posts require at least one media item");
+        }
         if (new HashSet<>(mediaIds).size() != mediaIds.size()) {
             throw new AppException(ApiErrorCode.BAD_REQUEST, "Duplicate media ids");
         }

@@ -611,6 +611,68 @@ class PostControllerIT {
     }
 
     @Test
+    @Order(21)
+    void createPost_textType_success() {
+        TestUser author = registerUser("text_post_author");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "text");
+        payload.put("caption", "Hello text world");
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(countOf("posts")).isEqualTo(1);
+        assertThat(countOf("post_media")).isEqualTo(0);
+    }
+
+    @Test
+    @Order(22)
+    void createPost_textType_blankCaption_returnsBadRequest() {
+        TestUser author = registerUser("text_blank_author");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "text");
+        payload.put("caption", "");
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @Order(23)
+    void createPost_textType_withMedia_returnsBadRequest() {
+        TestUser author = registerUser("text_media_author");
+        UUID mediaId = insertMediaAsset(author.id(), "image");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "text");
+        payload.put("caption", "has media");
+        payload.put("mediaIds", List.of(mediaId.toString()));
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(countOf("posts")).isEqualTo(0);
+    }
+
+    @Test
     @Order(20)
     void getFeed_invalidCursor_returnsBadRequest() {
         TestUser author = registerUser("feed_badcursor_author");
