@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Prevented an unexpected login-request body read failure from escaping the security filter chain uncaught, which previously bypassed the standard API response envelope entirely.
+- Corrected `PostMapper.toResponse` and `PostMapper.toFeedResponse` to map the pre-assembled `media` parameter instead of `post.media`; the wrong source caused MapStruct to generate code that discarded the CDN URL, media type, dimensions, and blurhash from all post API responses.
 - Prevented a broken message-broker channel from letting an acknowledgment failure escape the auth mail, post index, hashtag index, and social notification event consumers uncaught.
 - Logged outbox publish failures with the original exception instead of only persisting a truncated error message to the database, restoring log-based visibility into async event delivery outages.
 - Logged pre-signed media upload URL failures instead of silently discarding the underlying storage-provider exception.
