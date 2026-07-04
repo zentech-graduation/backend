@@ -17,7 +17,7 @@ CREATE EXTENSION IF NOT EXISTS "btree_gin";   -- composite GIN indexes
 CREATE TYPE user_role       AS ENUM ('user', 'moderator', 'admin');
 CREATE TYPE user_status     AS ENUM ('active', 'suspended', 'deactivated', 'banned');
 CREATE TYPE post_status     AS ENUM ('draft', 'published', 'archived', 'removed');
-CREATE TYPE post_type       AS ENUM ('image', 'video', 'carousel');
+CREATE TYPE post_type       AS ENUM ('image', 'video', 'carousel', 'text');
 CREATE TYPE media_type      AS ENUM ('image', 'video');
 CREATE TYPE follow_status   AS ENUM ('pending', 'accepted');
 CREATE TYPE story_type      AS ENUM ('image', 'video');

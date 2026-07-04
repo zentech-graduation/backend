@@ -552,6 +552,69 @@ class PostServiceImplTest {
     }
 
     @Test
+    void createPost_textType_noMedia_success() {
+        service.createPost(
+                authorId,
+                createRequest("Hello #textworld", PostType.TEXT, null, PostStatus.PUBLISHED));
+
+        verify(postRepository).saveAndFlush(any(Post.class));
+        verifyNoInteractions(postMediaAssetRepository);
+        verify(hashtagService).upsertHashtagsForPost(eq(postId), eq(List.of("textworld")));
+        verify(outboxService)
+                .enqueue(
+                        eq("post.index.upsert.v1"),
+                        eq("post.index.upsert.v1"),
+                        eq("post"),
+                        any(UUID.class),
+                        any(),
+                        anyMap());
+    }
+
+    @Test
+    void createPost_textType_blankCaption_throwsBadRequest() {
+        assertThatThrownBy(
+                        () ->
+                                service.createPost(
+                                        authorId, createRequest("   ", PostType.TEXT, null, null)))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+        verifyNoInteractions(postMediaAssetRepository);
+        verifyNoInteractions(postRepository);
+    }
+
+    @Test
+    void createPost_textType_nullCaption_throwsBadRequest() {
+        assertThatThrownBy(
+                        () ->
+                                service.createPost(
+                                        authorId, createRequest(null, PostType.TEXT, null, null)))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+        verifyNoInteractions(postMediaAssetRepository);
+        verifyNoInteractions(postRepository);
+    }
+
+    @Test
+    void createPost_textType_withMedia_throwsBadRequest() {
+        assertThatThrownBy(
+                        () ->
+                                service.createPost(
+                                        authorId,
+                                        createRequest(
+                                                "Hello",
+                                                PostType.TEXT,
+                                                List.of(UUID.randomUUID()),
+                                                null)))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+        verifyNoInteractions(postMediaAssetRepository);
+        verifyNoInteractions(postRepository);
+    }
+
+    @Test
     void getFeed_noFollowingAccounts_returnsEmptyPage() {
         UUID viewer = UUID.randomUUID();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer))

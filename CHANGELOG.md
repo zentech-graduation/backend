@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Idempotency key races are resolved with an `INSERT ... ON CONFLICT DO NOTHING` reservation in the request transaction, so a concurrent duplicate cannot poison the transaction and a rolled-back create frees the key.
 - WebSocket handshake now rejects blacklisted (revoked but unexpired) access tokens.
 - Cursor pagination `hasNextPage` is computed from the pre-trim probe row, fixing a false positive on an exactly-full final page.
+- Text-only post type: posts with `postType: text` require a non-blank caption and no media attachments.
 - Structured logging for outbox publish failures, pre-signed media upload URL failures, user registration and login outcomes, and post creation/status-transition events.
 - Chronological following feed endpoint (`GET /api/v1/posts/feed`): cursor-paginated published posts from accepted-follow accounts, newest first, with bidirectional block exclusion and empty-following short circuit.
 - `V99__seed_feed_test_data.sql` Flyway migration seeding 7 users, 5 follows, 2 blocks, and 12 posts covering all feed business rules for manual endpoint testing.
@@ -36,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Prevented an unexpected login-request body read failure from escaping the security filter chain uncaught, which previously bypassed the standard API response envelope entirely.
+- Corrected `PostMapper.toResponse` and `PostMapper.toFeedResponse` to map the pre-assembled `media` parameter instead of `post.media`; the wrong source caused MapStruct to generate code that discarded the CDN URL, media type, dimensions, and blurhash from all post API responses.
 - Prevented a broken message-broker channel from letting an acknowledgment failure escape the auth mail, post index, hashtag index, and social notification event consumers uncaught.
 - Logged outbox publish failures with the original exception instead of only persisting a truncated error message to the database, restoring log-based visibility into async event delivery outages.
 - Logged pre-signed media upload URL failures instead of silently discarding the underlying storage-provider exception.
