@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V22 SQL migrations
+│   │       ├── db/migration/       # Flyway V01–V26 + V99 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -163,7 +163,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, mapper, messaging, repository, runner, search, service/impl |
 | `hashtag` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, event, mapper, messaging, repository, runner, search, service/impl |
 | `notification` | **Implemented** | api, controller, dto/response, entity, entity/converter, entity/enums, mapper, messaging, repository, service/impl |
-| `comment` | Empty (`.gitkeep`) | — |
+| `comment` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, live, mapper, messaging, observability, repository, service/impl, util |
 | `story` | Empty (`.gitkeep`) | — |
 | `message` | Empty (`.gitkeep`) | — |
 | `report` | Empty (`.gitkeep`) | — |
@@ -171,14 +171,15 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `recommendation` | Empty (`.gitkeep`) | — |
 
 **Module responsibilities:**
-- **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
+- **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange. `RefreshTokenPurgeJob` schedules cleanup of expired tokens. `OAuthProviderConverter` and `CustomOidcUser` support the OIDC flow.
 - **`mail`**: Transactional email via Resend SDK; Thymeleaf templates; `MailTemplate` enum drives template selection; `MailSender` interface abstracts transport.
 - **`users`**: Public and private user profiles, user settings, role/status management.
-- **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
+- **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox. `SocialService` / `SocialServiceImpl` expose combined social graph queries.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
-- **`post`**: Post CRUD (image/video/carousel), likes, saves, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
+- **`post`**: Post CRUD (image/video/carousel/text), likes, saves, post edit history, visibility enforcement, Elasticsearch index sync via outbox. `PostResponseAssembler` centralises response construction. `PostSearchService` / `PostSearchServiceImpl` handle ES-backed search.
 - **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback.
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
+- **`comment`**: Nested comments (depth 0–10) with likes, CRUD, content normalisation, moderation (soft-delete/hide via `CommentModerationService`), write idempotency (`CommentWriteIdempotency`), and real-time push via STOMP WebSocket (`live/` sub-package). `CommentNotificationConsumer` drives in-app notifications for `comment.created.v1` and `comment.liked.v1`. `CommentMetrics` + `CommentSubsystemHealthIndicator` expose Micrometer observability.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -217,28 +218,39 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | `common/security/filter` | `AuthRateLimitFilterTest`, `JwtAuthenticationFilterTest` |
 | `common/security/jwt` | `JwtTokenProviderTest` |
 | `common/security/service/impl` | `RateLimiterServiceImplTest`, `RefreshTokenServiceImplTest`, `TokenBlacklistServiceImplTest` |
-| `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest` |
+| `common/security/user` | `UserPrincipalTest` |
+| `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest`, `SecurityUtilsTest` |
+| `common/settings/service/impl` | `SystemSettingServiceImplTest` |
 | `modules/auth/controller` | `AuthControllerIT` |
+| `modules/auth/converter` | `OAuthProviderConverterTest` |
 | `modules/auth/dto/request` | `RegisterRequestDeserializationTest`, `ResetPasswordRequestDeserializationTest` |
 | `modules/auth/messaging` | `AuthMailEventConsumerRabbitMqIT`, `AuthMailEventConsumerTest`, `AuthMailEventHandlerTest` |
-| `modules/auth/oauth2` | `CookieOAuth2AuthorizationRequestRepositoryTest`, `CustomOidcUserServiceTest`, `OAuth2AuthenticationFailureHandlerTest` |
-| `modules/auth/service/impl` | `AuthForgotPasswordEventServiceImplTest`, `AuthMailEventServiceImplTest`, `AuthServiceImplTest`, `ForgotPasswordTimingEqualizerTest`, `TokenServiceImplTest` |
+| `modules/auth/oauth2` | `CookieOAuth2AuthorizationRequestRepositoryTest`, `CustomOidcUserServiceTest`, `CustomOidcUserTest`, `OAuth2AuthenticationFailureHandlerTest` |
+| `modules/auth/service/impl` | `AuthForgotPasswordEventServiceImplTest`, `AuthMailEventServiceImplTest`, `AuthServiceImplTest`, `ForgotPasswordTimingEqualizerTest`, `OAuth2ExchangeCodeServiceImplTest`, `RefreshTokenPurgeJobTest`, `TokenServiceImplTest` |
 | `modules/auth/validation` | `UserStateValidatorTest` |
-| `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT` |
+| `modules/comment/consumer` | `CommentNotificationConsumerIT` |
+| `modules/comment/controller` | `CommentControllerIT` |
+| `modules/comment/live` | `CommentWebSocketJwtHandshakeInterceptorTest` |
+| `modules/comment/service/impl` | `CommentModerationServiceImplTest`, `CommentServiceImplTest` |
+| `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT`, `HashtagIndexSyncConsumerTest` |
 | `modules/hashtag/controller` | `HashtagControllerIT` |
-| `modules/hashtag/service/impl` | `HashtagSearchServiceImplTest`, `HashtagServiceImplTest` |
+| `modules/hashtag/service/impl` | `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest` |
 | `modules/media/repository` | `MediaAssetRepositoryIT` |
 | `modules/media/service/impl` | `MediaEventServiceImplTest`, `MediaServiceImplTest` |
 | `modules/media/storage` | `MediaStorageKeyGeneratorTest`, `R2ObjectStoragePresignServiceTest` |
 | `modules/media/validation` | `MediaMetadataValidatorTest` |
 | `modules/notification/controller` | `NotificationControllerIT` |
-| `modules/notification/messaging` | `SocialNotificationConsumerIT` |
+| `modules/notification/entity/converter` | `NotificationTypeConverterTest` |
+| `modules/notification/messaging` | `SocialNotificationConsumerIT`, `SocialNotificationConsumerTest` |
 | `modules/notification/service/impl` | `NotificationServiceImplTest` |
-| `modules/post/consumer` | `PostIndexSyncConsumerIT` |
+| `modules/post/consumer` | `PostIndexSyncConsumerIT`, `PostIndexSyncConsumerTest` |
 | `modules/post/controller` | `PostControllerIT` |
-| `modules/post/service/impl` | `PostLikeServiceImplTest`, `PostSaveServiceImplTest`, `PostServiceImplTest`, `PostVisibilityServiceImplTest` |
+| `modules/post/service/impl` | `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostVisibilityServiceImplTest` |
+| `modules/social/controller` | `SocialControllerIT` |
+| `modules/social/converter` | `FollowStatusConverterTest` |
+| `modules/social/mapper` | `FollowMapperTest` |
 | `modules/social/repository` | `FollowRepositoryIT` |
-| `modules/social/service/impl` | `FollowServiceImplTest`, `SocialEventServiceImplTest` |
+| `modules/social/service/impl` | `FollowServiceImplTest`, `SocialEventServiceImplTest`, `SocialServiceImplTest` |
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
 | `modules/users/service/impl` | `UserServiceImplTest` |
@@ -250,7 +262,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 22 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: true`); 26 versioned migrations + 1 seed script at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -276,6 +288,11 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V20 | create_processed_messages |
 | V21 | add_outbox_claim_lease_columns |
 | V22 | create_post_edit_history |
+| V23 | drop_legacy_plaintext_credential_columns |
+| V24 | add_refresh_tokens_expires_index |
+| V25 | add_comment_moderation_status / add_text_post_type |
+| V26 | create_comment_write_idempotency |
+| V99 | seed_feed_test_data (dev-only seed) |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -328,6 +345,14 @@ PostgreSQL enum types:
 | `social.events` | Topic | yes | Primary event bus for all domain events |
 | `social.events.dlx` | Topic | yes | Dead-letter exchange for failed messages |
 
+**Exchanges:**
+
+| Exchange | Type | Durable | Role |
+|----------|------|---------|------|
+| `social.events` | Topic | yes | Primary event bus for all domain events |
+| `social.events.dlx` | Topic | yes | Dead-letter exchange for failed messages |
+| `comment.live.events` | Fanout | yes | Fans out all `comment.#` events to per-server live queues for WebSocket push |
+
 **Queues and DLQs (all durable):**
 
 | Queue | Dead-letter queue | DLQ routing key to `social.events.dlx` |
@@ -336,11 +361,12 @@ PostgreSQL enum types:
 | `notification.queue` | `notification.dlq` | `notification.dead-letter` |
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
+| `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
 
 **Bindings (queue → `social.events`):**
 
-| Queue | Routing key / pattern | Source config |
-|-------|-----------------------|---------------|
+| Queue / Exchange | Routing key / pattern | Source config |
+|-----------------|-----------------------|---------------|
 | `mail.queue` | `user.registered.v1` | `AuthMailRabbitBindingConfig` |
 | `mail.queue` | `auth.email-verification.requested.v1` | `AuthMailRabbitBindingConfig` |
 | `mail.queue` | `auth.password-reset.requested.v1` | `AuthMailRabbitBindingConfig` |
@@ -350,6 +376,12 @@ PostgreSQL enum types:
 | `notification.queue` | `user.follow-requested.v1` | `NotificationRabbitBindingConfig` |
 | `hashtag.index.sync` | `hashtag.index.#` (wildcard) | `HashtagRabbitBindingConfig` |
 | `post.index.sync` | `post.index.#` (wildcard) | `PostRabbitBindingConfig` |
+| `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
+| `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
+| `comment.live.events` (exchange) | `comment.#` (wildcard, E2E binding) | `RabbitMqTopologyConfig` |
+
+**Comment event types** (`CommentEventTypes`):
+`comment.created.v1`, `comment.edited.v1`, `comment.deleted.v1`, `comment.liked.v1`, `comment.unliked.v1`
 
 **RabbitMQ configuration (application.yaml):**
 - `publisher-confirm-type: correlated` — broker confirms wired to outbox acknowledge logic
