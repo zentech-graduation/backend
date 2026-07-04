@@ -292,6 +292,7 @@ CREATE TABLE comments (
     root_id             UUID            REFERENCES comments(id) ON DELETE CASCADE,
     depth               SMALLINT        NOT NULL DEFAULT 0 CHECK (depth BETWEEN 0 AND 10),
     content             TEXT            NOT NULL,
+    moderation_status   VARCHAR(20)     NOT NULL DEFAULT 'approved',
     -- Denormalized counters
     like_count          INT             NOT NULL DEFAULT 0 CHECK (like_count >= 0),
     reply_count         INT             NOT NULL DEFAULT 0 CHECK (reply_count >= 0),
@@ -307,6 +308,17 @@ CREATE TABLE comment_likes (
     comment_id          UUID            NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, comment_id)
+);
+
+-- Comment write idempotency: caches the first response per (user_id, idempotency_key).
+CREATE TABLE comment_write_idempotency (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    idempotency_key     VARCHAR(64)     NOT NULL,
+    request_hash        VARCHAR(64)     NOT NULL,
+    response_body       JSONB,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, idempotency_key)
 );
 
 -- ============================================================
@@ -785,6 +797,11 @@ CREATE INDEX idx_comments_parent        ON comments (parent_id, created_at ASC)
 CREATE INDEX idx_comments_root          ON comments (root_id)
     WHERE root_id IS NOT NULL;
 CREATE INDEX idx_comments_user          ON comments (user_id);
+CREATE INDEX idx_comments_post_moderation ON comments (post_id, moderation_status, created_at DESC)
+    WHERE deleted_at IS NULL;
+
+-- comment_write_idempotency
+CREATE INDEX idx_comment_idempotency_created ON comment_write_idempotency (created_at);
 
 -- comment_likes
 CREATE INDEX idx_comment_likes_comment  ON comment_likes (comment_id);

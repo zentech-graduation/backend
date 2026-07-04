@@ -66,7 +66,18 @@ public enum ApiErrorCode {
     POST_NOT_FOUND("POST_NOT_FOUND", "Post not found", HttpStatus.NOT_FOUND),
     POST_FORBIDDEN("POST_FORBIDDEN", "You do not have access to this post", HttpStatus.FORBIDDEN),
     POST_ALREADY_LIKED("POST_ALREADY_LIKED", "Post already liked", HttpStatus.CONFLICT),
-    POST_ALREADY_SAVED("POST_ALREADY_SAVED", "Post already saved", HttpStatus.CONFLICT);
+    POST_ALREADY_SAVED("POST_ALREADY_SAVED", "Post already saved", HttpStatus.CONFLICT),
+
+    // Comment
+    COMMENT_NOT_FOUND("COMMENT_NOT_FOUND", "Comment not found", HttpStatus.NOT_FOUND),
+    COMMENT_FORBIDDEN("COMMENT_FORBIDDEN", "You do not have permission to perform this action on the comment", HttpStatus.FORBIDDEN),
+    COMMENT_MODERATION_REJECTED("COMMENT_MODERATION_REJECTED", "Comment content was rejected by moderation", HttpStatus.UNPROCESSABLE_ENTITY),
+    COMMENT_DEPTH_EXCEEDED("COMMENT_DEPTH_EXCEEDED", "Maximum comment nesting depth exceeded", HttpStatus.BAD_REQUEST),
+    COMMENT_ALREADY_LIKED("COMMENT_ALREADY_LIKED", "Comment already liked", HttpStatus.CONFLICT),
+    COMMENT_NOT_LIKED("COMMENT_NOT_LIKED", "Comment has not been liked", HttpStatus.CONFLICT),
+    COMMENT_SLOW_MODE_ACTIVE("COMMENT_SLOW_MODE_ACTIVE", "Slow mode is active. Please wait before commenting again.", HttpStatus.TOO_MANY_REQUESTS),
+    COMMENT_IDEMPOTENCY_CONFLICT("COMMENT_IDEMPOTENCY_CONFLICT", "Idempotency key reused with different request payload", HttpStatus.CONFLICT),
+    POST_COMMENTING_RESTRICTED("POST_COMMENTING_RESTRICTED", "You do not have access to comment on this post", HttpStatus.FORBIDDEN);
 
     // spotless:on
 
