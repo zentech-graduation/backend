@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Resolved Flyway duplicate-version conflict on V25: renamed `V25__add_comment_moderation_status.sql` to V26 and `V26__create_comment_write_idempotency.sql` to V27, restoring application startup and unblocking all 144 integration-test errors.
+
 ### Added
 - Comment module: create, edit, soft-delete (subtree), likes, and nested replies up to depth 10, with cursor-paginated listing of top-level comments and replies.
 - Synchronous comment moderation (content normalization plus rule-based rejection for empty, over-length, blocked-word, and spam content).

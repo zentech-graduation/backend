@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V22 SQL migrations
+│   │       ├── db/migration/       # Flyway V01–V27 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -278,6 +278,9 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V22 | create_post_edit_history |
 | V23 | drop_legacy_plaintext_credential_columns |
 | V24 | add_refresh_tokens_expires_index |
+| V25 | add_text_post_type |
+| V26 | add_comment_moderation_status |
+| V27 | create_comment_write_idempotency |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
