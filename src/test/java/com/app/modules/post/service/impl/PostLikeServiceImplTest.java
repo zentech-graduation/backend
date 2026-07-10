@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.modules.post.dto.response.LikeActionResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
@@ -39,6 +40,7 @@ class PostLikeServiceImplTest {
     @Mock private PostUserRepository postUserRepository;
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private PostMapper postMapper;
+    @Mock private OutboxService outboxService;
 
     private PostLikeServiceImpl service;
 
@@ -57,7 +59,8 @@ class PostLikeServiceImplTest {
                         postLikeRepository,
                         postUserRepository,
                         postVisibilityService,
-                        postMapper);
+                        postMapper,
+                        outboxService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
         lenient()

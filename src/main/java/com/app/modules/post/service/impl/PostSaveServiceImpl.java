@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.messaging.RecommendationInteractionContract;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.dto.response.SavedPostResponse;
@@ -39,16 +42,19 @@ public class PostSaveServiceImpl implements PostSaveService {
     private final PostSaveRepository postSaveRepository;
     private final PostVisibilityService postVisibilityService;
     private final PostResponseAssembler postResponseAssembler;
+    private final OutboxService outboxService;
 
     public PostSaveServiceImpl(
             PostRepository postRepository,
             PostSaveRepository postSaveRepository,
             PostVisibilityService postVisibilityService,
-            PostResponseAssembler postResponseAssembler) {
+            PostResponseAssembler postResponseAssembler,
+            OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postSaveRepository = postSaveRepository;
         this.postVisibilityService = postVisibilityService;
         this.postResponseAssembler = postResponseAssembler;
+        this.outboxService = outboxService;
     }
 
     @Override
@@ -70,14 +76,16 @@ public class PostSaveServiceImpl implements PostSaveService {
             throw new AppException(ApiErrorCode.POST_ALREADY_SAVED);
         }
         postSaveRepository.save(PostSave.builder().id(saveId).build());
+        enqueueInteraction("post_save", post, userId);
     }
 
     @Override
     @Transactional
     public void unsavePost(UUID userId, UUID postId) {
-        postRepository
-                .findByIdAndDeletedAtIsNull(postId)
-                .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        Post post =
+                postRepository
+                        .findByIdAndDeletedAtIsNull(postId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         PostSaveId saveId = new PostSaveId(userId, postId);
         PostSave save =
                 postSaveRepository
@@ -85,6 +93,22 @@ public class PostSaveServiceImpl implements PostSaveService {
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.NOT_FOUND, "Save not found"));
         postSaveRepository.delete(save);
+        enqueueInteraction("post_unsave", post, userId);
+    }
+
+    private void enqueueInteraction(String eventType, Post post, UUID userId) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("eventType", eventType);
+        data.put("entityType", "post");
+        data.put("entityId", post.getId().toString());
+        data.put("targetUserId", post.getUserId().toString());
+        outboxService.enqueue(
+                RecommendationInteractionContract.REC_INTERACTION_RECORDED_V1,
+                RecommendationInteractionContract.REC_INTERACTION_RECORDED_V1,
+                "post",
+                post.getId(),
+                userId,
+                data);
     }
 
     @Override

@@ -7,7 +7,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- Comment module: create, edit, soft-delete (subtree), likes, and nested replies up to depth 10, with cursor-paginated listing of top-level comments and replies.
+- Recommendation event-tracking foundation: server-side engagements (like, save, comment, follow, and their undo counterparts) flow into the behavioral `user_events` table through the transactional outbox, idempotently via the shared inbox pattern.
+- Client impression ingestion endpoint `POST /api/v1/events` accepting batched viewport impressions with deterministic per-item row ids so partial-failure replays never duplicate rows.
+- Recommendation event-weight config table driving collaborative-filter, trending, and affinity weighting from metadata, with an in-memory cached read refreshed every five minutes.
+- Monthly partition automation for `user_events` and `impressions`, pre-creating the next partitions and dropping expired impressions partitions past the retention window.
+- Metrics for recommendation event consumption (processed, duplicate, dead-letter outcomes).
+
+### Fixed
+- Resolved the duplicate Flyway version conflict between the text-post-type and comment-moderation-status migrations by renumbering the comment moderation migration to V27, allowing fresh databases (including Testcontainers) to apply all migrations.
+
+### Changed
+- Extended `user_events` partitions through 2027-06 and relocated rows that had leaked into the default partition since July 2026.
+
+### Tests
+- Recommendation consumer unit tests covering processed, duplicate, permanent dead-letter, transient retry, unknown event type, and ack/nack IOException paths.
+- Event-weight cache service unit tests covering weight and flag reads, cross-call caching, and snapshot retention on refresh failure.
+- Integration tests for the client event ingestion endpoint (202 with outbox row, 401 without JWT, 400 on invalid batches) and the event-persist consumer flow against real PostgreSQL and Redis (single-row persistence, inbox idempotency, and impression-batch replay safety).
+
 - Synchronous comment moderation (content normalization plus rule-based rejection for empty, over-length, blocked-word, and spam content).
 - HTTP write idempotency for comment creation via an `Idempotency-Key` header, replaying the original response on a matching retry and rejecting key reuse with a different payload.
 - Optional per-post comment slow-mode rate limiting backed by Redis.

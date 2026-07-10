@@ -24,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.dto.response.SavedPostResponse;
@@ -42,6 +43,7 @@ class PostSaveServiceImplTest {
     @Mock private PostSaveRepository postSaveRepository;
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private PostResponseAssembler postResponseAssembler;
+    @Mock private OutboxService outboxService;
 
     private PostSaveServiceImpl service;
 
@@ -59,7 +61,8 @@ class PostSaveServiceImplTest {
                         postRepository,
                         postSaveRepository,
                         postVisibilityService,
-                        postResponseAssembler);
+                        postResponseAssembler,
+                        outboxService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
         lenient()

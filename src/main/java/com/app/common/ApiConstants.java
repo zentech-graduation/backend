@@ -127,6 +127,12 @@ public final class ApiConstants {
         public static final String BY_ID = "/{mediaId}";
     }
 
+    public static final class Events {
+        private Events() {}
+
+        public static final String ROOT = API_V1 + "/events";
+    }
+
     public static final class Reports {
         private Reports() {}
 

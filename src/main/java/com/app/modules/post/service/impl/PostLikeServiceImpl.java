@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -16,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.messaging.RecommendationInteractionContract;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
 import com.app.modules.post.dto.response.LikerResponse;
@@ -42,24 +45,27 @@ public class PostLikeServiceImpl implements PostLikeService {
     private final PostUserRepository postUserRepository;
     private final PostVisibilityService postVisibilityService;
     private final PostMapper postMapper;
+    private final OutboxService outboxService;
 
     public PostLikeServiceImpl(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
             PostUserRepository postUserRepository,
             PostVisibilityService postVisibilityService,
-            PostMapper postMapper) {
+            PostMapper postMapper,
+            OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
         this.postUserRepository = postUserRepository;
         this.postVisibilityService = postVisibilityService;
         this.postMapper = postMapper;
+        this.outboxService = outboxService;
     }
 
     @Override
     @Transactional
     public LikeActionResponse likePost(UUID userId, UUID postId) {
-        fetchVisiblePublishedPost(userId, postId);
+        Post post = fetchVisiblePublishedPost(userId, postId);
         PostLikeId likeId = new PostLikeId(userId, postId);
         if (postLikeRepository.existsById(likeId)) {
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
@@ -67,15 +73,17 @@ public class PostLikeServiceImpl implements PostLikeService {
         // Flush forces the INSERT (and its AFTER INSERT counter trigger) before the scalar
         // re-read; the entity in the persistence context still carries the stale counter.
         postLikeRepository.saveAndFlush(PostLike.builder().id(likeId).build());
+        enqueueInteraction("post_like", post, userId);
         return new LikeActionResponse(postId, true, postRepository.findLikeCount(postId));
     }
 
     @Override
     @Transactional
     public LikeActionResponse unlikePost(UUID userId, UUID postId) {
-        postRepository
-                .findByIdAndDeletedAtIsNull(postId)
-                .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        Post post =
+                postRepository
+                        .findByIdAndDeletedAtIsNull(postId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         PostLikeId likeId = new PostLikeId(userId, postId);
         PostLike like =
                 postLikeRepository
@@ -84,7 +92,23 @@ public class PostLikeServiceImpl implements PostLikeService {
                                 () -> new AppException(ApiErrorCode.NOT_FOUND, "Like not found"));
         postLikeRepository.delete(like);
         postLikeRepository.flush();
+        enqueueInteraction("post_unlike", post, userId);
         return new LikeActionResponse(postId, false, postRepository.findLikeCount(postId));
+    }
+
+    private void enqueueInteraction(String eventType, Post post, UUID userId) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("eventType", eventType);
+        data.put("entityType", "post");
+        data.put("entityId", post.getId().toString());
+        data.put("targetUserId", post.getUserId().toString());
+        outboxService.enqueue(
+                RecommendationInteractionContract.REC_INTERACTION_RECORDED_V1,
+                RecommendationInteractionContract.REC_INTERACTION_RECORDED_V1,
+                "post",
+                post.getId(),
+                userId,
+                data);
     }
 
     @Override

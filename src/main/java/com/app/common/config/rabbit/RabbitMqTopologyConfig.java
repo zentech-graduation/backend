@@ -44,6 +44,14 @@ public class RabbitMqTopologyConfig {
     public static final String COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
             "comment.notification.dead-letter";
 
+    public static final String REC_EVENTS_QUEUE = "rec.events.queue";
+    public static final String REC_EVENTS_DEAD_LETTER_QUEUE = "rec.events.dlq";
+    public static final String REC_EVENTS_DEAD_LETTER_ROUTING_KEY = "rec.events.dead-letter";
+
+    public static final String REC_TRENDING_QUEUE = "rec.trending.queue";
+    public static final String REC_TRENDING_DEAD_LETTER_QUEUE = "rec.trending.dlq";
+    public static final String REC_TRENDING_DEAD_LETTER_ROUTING_KEY = "rec.trending.dead-letter";
+
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
     public static final String SEARCH_INDEX_QUEUE = "search-index.queue";
@@ -169,5 +177,41 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(commentNotificationDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue recEventsQueue() {
+        return QueueBuilder.durable(REC_EVENTS_QUEUE).build();
+    }
+
+    @Bean
+    Queue recEventsDeadLetterQueue() {
+        return QueueBuilder.durable(REC_EVENTS_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding recEventsDeadLetterBinding(
+            Queue recEventsDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(recEventsDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(REC_EVENTS_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue recTrendingQueue() {
+        return QueueBuilder.durable(REC_TRENDING_QUEUE).build();
+    }
+
+    @Bean
+    Queue recTrendingDeadLetterQueue() {
+        return QueueBuilder.durable(REC_TRENDING_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding recTrendingDeadLetterBinding(
+            Queue recTrendingDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(recTrendingDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(REC_TRENDING_DEAD_LETTER_ROUTING_KEY);
     }
 }

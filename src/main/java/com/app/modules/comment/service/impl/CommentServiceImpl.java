@@ -487,6 +487,27 @@ public class CommentServiceImpl implements CommentService {
                 saved.getId(),
                 actorId,
                 data);
+
+        // Recommendation interaction hook: independent enqueue in the same transaction so the
+        // comment payload shape stays decoupled from the recommendation consumer.
+        enqueueRecommendationInteraction(post, actorId);
+    }
+
+    private void enqueueRecommendationInteraction(Post post, UUID actorId) {
+        Map<String, Object> recData = new HashMap<>();
+        recData.put("eventType", "post_comment");
+        recData.put("entityType", "post");
+        recData.put("entityId", post.getId().toString());
+        recData.put("targetUserId", post.getUserId().toString());
+        outboxService.enqueue(
+                com.app.common.messaging.RecommendationInteractionContract
+                        .REC_INTERACTION_RECORDED_V1,
+                com.app.common.messaging.RecommendationInteractionContract
+                        .REC_INTERACTION_RECORDED_V1,
+                AGGREGATE_TYPE,
+                post.getId(),
+                actorId,
+                recData);
     }
 
     private List<String> resolveMentions(String content, UUID actorId) {

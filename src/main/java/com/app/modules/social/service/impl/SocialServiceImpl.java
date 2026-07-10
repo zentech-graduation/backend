@@ -114,6 +114,9 @@ public class SocialServiceImpl implements SocialService {
                                                 "Follow relationship not found"));
 
         followRepository.delete(follow);
+        if (follow.getStatus() == FollowStatus.ACCEPTED) {
+            socialEventService.publishProfileUnfollowInteraction(currentUserId, targetUserId);
+        }
     }
 
     @Override
@@ -137,6 +140,7 @@ public class SocialServiceImpl implements SocialService {
         if ("approve".equalsIgnoreCase(action)) {
             follow.setStatus(FollowStatus.ACCEPTED);
             followRepository.save(follow);
+            socialEventService.publishProfileFollowInteraction(requesterId, currentUserId);
             return;
         }
 
