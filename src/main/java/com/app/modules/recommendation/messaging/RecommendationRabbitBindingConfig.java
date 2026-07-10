@@ -12,22 +12,21 @@ import org.springframework.context.annotation.Configuration;
  * exchange.
  *
  * <p>The persist queue receives both interaction-recorded and impression-batch events. The trending
- * queue receives only interaction-recorded events, since impressions do not feed the trending score.
+ * queue receives only interaction-recorded events, since impressions do not feed the trending
+ * score.
  */
 @Configuration
 public class RecommendationRabbitBindingConfig {
 
     @Bean
-    Binding recEventsInteractionBinding(
-            Queue recEventsQueue, TopicExchange socialEventsExchange) {
+    Binding recEventsInteractionBinding(Queue recEventsQueue, TopicExchange socialEventsExchange) {
         return BindingBuilder.bind(recEventsQueue)
                 .to(socialEventsExchange)
                 .with(RecommendationEventTypes.REC_INTERACTION_RECORDED_V1);
     }
 
     @Bean
-    Binding recEventsImpressionBinding(
-            Queue recEventsQueue, TopicExchange socialEventsExchange) {
+    Binding recEventsImpressionBinding(Queue recEventsQueue, TopicExchange socialEventsExchange) {
         return BindingBuilder.bind(recEventsQueue)
                 .to(socialEventsExchange)
                 .with(RecommendationEventTypes.REC_IMPRESSION_BATCH_V1);

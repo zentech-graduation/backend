@@ -129,7 +129,10 @@ public class RecEventPersistConsumer {
             try {
                 ProcessedMessageResult result =
                         processedMessageService.processOnce(
-                                CONSUMER_NAME, event.eventId(), event.eventType(), () -> apply(event));
+                                CONSUMER_NAME,
+                                event.eventId(),
+                                event.eventType(),
+                                () -> apply(event));
                 metrics.consumed(
                         CONSUMER_NAME,
                         result == ProcessedMessageResult.DUPLICATE ? "duplicate" : "processed");
@@ -168,7 +171,8 @@ public class RecEventPersistConsumer {
                         now);
             }
             case RecommendationEventTypes.REC_IMPRESSION_BATCH_V1 -> {
-                eventRepository.insertImpressions(event.actorId(), parseImpressionBatch(event.data()));
+                eventRepository.insertImpressions(
+                        event.actorId(), parseImpressionBatch(event.data()));
             }
             default ->
                     throw new PermanentMessageException("unknown event type: " + event.eventType());
@@ -239,7 +243,8 @@ public class RecEventPersistConsumer {
         try {
             return OffsetDateTime.parse(value.toString());
         } catch (RuntimeException ex) {
-            throw new PermanentMessageException("Invalid timestamp for field " + key + ": " + value);
+            throw new PermanentMessageException(
+                    "Invalid timestamp for field " + key + ": " + value);
         }
     }
 

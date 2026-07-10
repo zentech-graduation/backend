@@ -1,5 +1,7 @@
 package com.app.modules.recommendation.api;
 
+import jakarta.validation.Valid;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,7 +16,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 
 /** OpenAPI contract for client-side behavioral event ingestion. */
 @Tag(name = "Events", description = "Client behavioral event ingestion for recommendation")
@@ -51,5 +52,6 @@ public interface EventsApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping
-    ResponseEntity<ApiResponse<Void>> ingestEvents(@Valid @RequestBody ClientEventBatchRequest request);
+    ResponseEntity<ApiResponse<Void>> ingestEvents(
+            @Valid @RequestBody ClientEventBatchRequest request);
 }

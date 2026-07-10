@@ -5,7 +5,6 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -18,9 +17,9 @@ import com.app.modules.recommendation.dto.ImpressionBatchEvent;
  * Batch-inserts behavioral events into the append-only, range-partitioned {@code user_events} and
  * {@code impressions} tables.
  *
- * <p>Uses {@link NamedParameterJdbcTemplate} rather than JPA because both tables are partitioned and
- * append-only: no entity lifecycle, no dirty checking, and {@code user_events} has no JPA-friendly
- * unique constraint to reconcile. Idempotency is enforced one level up by the inbox
+ * <p>Uses {@link NamedParameterJdbcTemplate} rather than JPA because both tables are partitioned
+ * and append-only: no entity lifecycle, no dirty checking, and {@code user_events} has no
+ * JPA-friendly unique constraint to reconcile. Idempotency is enforced one level up by the inbox
  * {@code processed_messages} table (per envelope) plus deterministic row ids for impression items
  * (per batch item), so a replayed batch after partial failure cannot duplicate rows.
  */
@@ -54,7 +53,9 @@ public class RecommendationEventJdbcRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /** Inserts one row into {@code user_events}; idempotency is the caller's (inbox) responsibility. */
+    /**
+     * Inserts one row into {@code user_events}; idempotency is the caller's (inbox) responsibility.
+     */
     public void insertUserEvent(
             UUID id,
             UUID userId,
@@ -68,10 +69,21 @@ public class RecommendationEventJdbcRepository {
         jdbcTemplate.update(
                 INSERT_USER_EVENT_SQL,
                 userEventParams(
-                        id, userId, sessionId, eventType, entityType, entityId, metadataJson, platform, createdAt));
+                        id,
+                        userId,
+                        sessionId,
+                        eventType,
+                        entityType,
+                        entityId,
+                        metadataJson,
+                        platform,
+                        createdAt));
     }
 
-    /** Inserts one interaction-derived {@code user_events} row for an impression-batch post_view item. */
+    /**
+     * Inserts one interaction-derived {@code user_events} row for an impression-batch post_view
+     * item.
+     */
     public void insertUserEvent(
             UUID id,
             UUID userId,
@@ -81,7 +93,8 @@ public class RecommendationEventJdbcRepository {
             UUID entityId,
             String platform,
             OffsetDateTime createdAt) {
-        insertUserEvent(id, userId, sessionId, eventType, entityType, entityId, null, platform, createdAt);
+        insertUserEvent(
+                id, userId, sessionId, eventType, entityType, entityId, null, platform, createdAt);
     }
 
     /** Inserts every impression item in one batch; duplicate ids are silently skipped. */
@@ -92,7 +105,9 @@ public class RecommendationEventJdbcRepository {
                         .map(
                                 item -> {
                                     OffsetDateTime occurredAt =
-                                            item.occurredAt() == null ? defaultOccurredAt : item.occurredAt();
+                                            item.occurredAt() == null
+                                                    ? defaultOccurredAt
+                                                    : item.occurredAt();
                                     // Deterministic id from the client event id so a replayed batch
                                     // after partial failure never duplicates rows.
                                     UUID rowId = deterministicId(item.clientEventId());
@@ -103,8 +118,11 @@ public class RecommendationEventJdbcRepository {
                                             .addValue("source", item.source())
                                             .addValue("position", item.position())
                                             .addValue("requestId", batch.requestId())
-                                            .addValue("blendScore", (BigDecimal) null, Types.NUMERIC)
-                                            .addValue("createdAt", Timestamp.from(occurredAt.toInstant()));
+                                            .addValue(
+                                                    "blendScore", (BigDecimal) null, Types.NUMERIC)
+                                            .addValue(
+                                                    "createdAt",
+                                                    Timestamp.from(occurredAt.toInstant()));
                                 })
                         .toArray(MapSqlParameterSource[]::new);
         if (params.length == 0) {

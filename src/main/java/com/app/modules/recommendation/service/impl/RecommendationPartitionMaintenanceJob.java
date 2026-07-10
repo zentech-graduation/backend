@@ -14,18 +14,20 @@ import org.springframework.stereotype.Component;
 import com.app.modules.recommendation.config.RecommendationProperties;
 
 /**
- * Daily job that pre-creates the next monthly partitions for {@code user_events} and
- * {@code impressions} and drops impressions partitions past the retention window.
+ * Daily job that pre-creates the next monthly partitions for {@code user_events} and {@code
+ * impressions} and drops impressions partitions past the retention window.
  *
  * <p>DDL runs via {@link JdbcTemplate} because declarative partitioning has no JPA equivalent and
  * the precedent ({@code HashtagTrendingServiceImpl}) uses the same approach. Pre-creation is
  * idempotent ({@code CREATE TABLE IF NOT EXISTS}); drop only touches whole monthly partitions older
- * than {@code app.recommendation.partition.impressions-retention-months}, so no per-row deletes run.
+ * than {@code app.recommendation.partition.impressions-retention-months}, so no per-row deletes
+ * run.
  */
 @Component
 public class RecommendationPartitionMaintenanceJob {
 
-    private static final Logger log = LoggerFactory.getLogger(RecommendationPartitionMaintenanceJob.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(RecommendationPartitionMaintenanceJob.class);
 
     private static final String USER_EVENTS = "user_events";
     private static final String IMPRESSIONS = "impressions";
@@ -70,7 +72,8 @@ public class RecommendationPartitionMaintenanceJob {
 
     private int dropExpiredImpressionPartitions() {
         YearMonth cutoff =
-                YearMonth.now().minusMonths(properties.getPartition().getImpressionsRetentionMonths());
+                YearMonth.now()
+                        .minusMonths(properties.getPartition().getImpressionsRetentionMonths());
         int dropped = 0;
         for (YearMonth month : existingImpressionPartitionsBefore(cutoff)) {
             jdbcTemplate.execute("DROP TABLE IF EXISTS impressions_" + suffix(month));
@@ -119,8 +122,8 @@ public class RecommendationPartitionMaintenanceJob {
 						JOIN pg_class p ON p.oid = i.inhparent
 						JOIN pg_namespace n ON n.oid = p.relnamespace
 						WHERE n.nspname = 'public'
-						  AND p.relname = 'impressions'
-						  AND c.relname LIKE 'impressions\\\\_\\\\____\\\\_\\\\____'
+						AND p.relname = 'impressions'
+						AND c.relname LIKE 'impressions\\\\_\\\\____\\\\_\\\\____'
 						""",
                         String.class);
         List<YearMonth> result = new ArrayList<>();

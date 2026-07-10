@@ -122,7 +122,8 @@ class RabbitMqTopologyConfigTest {
                     assertThat(context.getBeansOfType(Binding.class).values())
                             .noneMatch(binding -> futureQueues.contains(binding.getDestination()));
                     // Active bindings declared in RabbitMqTopologyConfig: dead-letter bindings for
-                    // mail, notification, hashtag.index, post.index, comment.notification, rec.events,
+                    // mail, notification, hashtag.index, post.index, comment.notification,
+                    // rec.events,
                     // and rec.trending queues, plus the comment live exchange-to-exchange binding.
                     assertThat(context.getBeansOfType(Binding.class)).hasSize(8);
                 });

@@ -23,7 +23,8 @@ import com.app.modules.recommendation.service.RecommendationEventWeightService;
 @Service
 public class RecommendationEventWeightServiceImpl implements RecommendationEventWeightService {
 
-    private static final Logger log = LoggerFactory.getLogger(RecommendationEventWeightServiceImpl.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(RecommendationEventWeightServiceImpl.class);
 
     // Refresh cadence matches the plan's 5-minute target; reads are cheap and the table is small.
     private static final Duration REFRESH_TTL = Duration.ofMinutes(5);
@@ -82,7 +83,8 @@ public class RecommendationEventWeightServiceImpl implements RecommendationEvent
 
     @Transactional(readOnly = true)
     protected Snapshot loadSnapshot() {
-        Map<RecommendationEventType, BigDecimal> weights = new EnumMap<>(RecommendationEventType.class);
+        Map<RecommendationEventType, BigDecimal> weights =
+                new EnumMap<>(RecommendationEventType.class);
         Set<RecommendationEventType> cf = new HashSet<>();
         Set<RecommendationEventType> trending = new HashSet<>();
         Set<RecommendationEventType> affinity = new HashSet<>();
@@ -118,8 +120,7 @@ public class RecommendationEventWeightServiceImpl implements RecommendationEvent
             Set<RecommendationEventType> trendingEnabled,
             Set<RecommendationEventType> affinityEnabled) {
         static Snapshot empty() {
-            return new Snapshot(
-                    Map.of(), Set.of(), Set.of(), Set.of());
+            return new Snapshot(Map.of(), Set.of(), Set.of(), Set.of());
         }
     }
 }

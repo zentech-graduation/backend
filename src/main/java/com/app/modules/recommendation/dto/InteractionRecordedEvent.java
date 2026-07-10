@@ -6,8 +6,8 @@ import java.util.UUID;
  * Payload of {@code rec.interaction.recorded.v1}, describing one server-side engagement.
  *
  * @param eventType one of the {@code event_type} enum values (e.g. {@code post_like})
- * @param entityType entity class ({@code post}, {@code hashtag}, {@code story}); matches
- *     {@code user_events.entity_type}
+ * @param entityType entity class ({@code post}, {@code hashtag}, {@code story}); matches {@code
+ *     user_events.entity_type}
  * @param entityId target entity id; inserted into {@code user_events.entity_id} (no FK, so history
  *     survives post hard-delete)
  * @param targetUserId author of the target entity when known; used by the trending consumer for

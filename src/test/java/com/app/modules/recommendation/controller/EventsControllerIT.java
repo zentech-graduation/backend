@@ -133,11 +133,16 @@ class EventsControllerIT {
     void ingestEvents_negativePosition_returns400() {
         Map<String, Object> item =
                 Map.of(
-                        "clientEventId", UUID.randomUUID().toString(),
-                        "type", "impression",
-                        "postId", UUID.randomUUID().toString(),
-                        "position", -1,
-                        "source", "cf");
+                        "clientEventId",
+                        UUID.randomUUID().toString(),
+                        "type",
+                        "impression",
+                        "postId",
+                        UUID.randomUUID().toString(),
+                        "position",
+                        -1,
+                        "source",
+                        "cf");
         Map<String, Object> batch =
                 Map.of(
                         "sessionId", UUID.randomUUID().toString(),
@@ -161,11 +166,16 @@ class EventsControllerIT {
         for (int i = 0; i < itemCount; i++) {
             items.add(
                     Map.of(
-                            "clientEventId", UUID.randomUUID().toString(),
-                            "type", "impression",
-                            "postId", UUID.randomUUID().toString(),
-                            "position", i,
-                            "source", "cf"));
+                            "clientEventId",
+                            UUID.randomUUID().toString(),
+                            "type",
+                            "impression",
+                            "postId",
+                            UUID.randomUUID().toString(),
+                            "position",
+                            i,
+                            "source",
+                            "cf"));
         }
         return Map.of(
                 "sessionId", UUID.randomUUID().toString(),

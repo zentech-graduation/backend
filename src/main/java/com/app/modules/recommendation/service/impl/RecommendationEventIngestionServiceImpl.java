@@ -20,7 +20,8 @@ import com.app.modules.recommendation.messaging.RecommendationEventTypes;
 import com.app.modules.recommendation.service.RecommendationEventIngestionService;
 
 @Service
-public class RecommendationEventIngestionServiceImpl implements RecommendationEventIngestionService {
+public class RecommendationEventIngestionServiceImpl
+        implements RecommendationEventIngestionService {
 
     private static final Set<String> ALLOWED_TYPES = Set.of("impression", "post_view");
     private static final Set<String> ALLOWED_SOURCES =
@@ -38,8 +39,7 @@ public class RecommendationEventIngestionServiceImpl implements RecommendationEv
         List<ImpressionBatchEvent.Item> items =
                 request.items().stream().map(item -> toBatchItem(item)).toList();
         ImpressionBatchEvent batch =
-                new ImpressionBatchEvent(
-                        request.sessionId(), "web", request.requestId(), items);
+                new ImpressionBatchEvent(request.sessionId(), "web", request.requestId(), items);
 
         Map<String, Object> data = new HashMap<>();
         data.put("sessionId", batch.sessionId().toString());

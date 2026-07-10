@@ -1,5 +1,7 @@
 package com.app.modules.recommendation.controller;
 
+import jakarta.validation.Valid;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,7 +17,6 @@ import com.app.modules.recommendation.dto.request.ClientEventBatchRequest;
 import com.app.modules.recommendation.service.RecommendationEventIngestionService;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
-import jakarta.validation.Valid;
 
 /** HTTP surface for client-side behavioral event ingestion. */
 @RestController

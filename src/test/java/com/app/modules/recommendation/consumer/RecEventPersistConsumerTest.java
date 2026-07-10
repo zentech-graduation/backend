@@ -93,7 +93,8 @@ class RecEventPersistConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(eventRepository, never()).insertUserEvent(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(eventRepository, never())
+                .insertUserEvent(any(), any(), any(), any(), any(), any(), any(), any());
         verify(channel).basicAck(1L, false);
     }
 
@@ -116,7 +117,8 @@ class RecEventPersistConsumerTest {
         consumer.consume(message, channel);
 
         verify(eventRepository)
-                .insertUserEvent(any(), eq(ACTOR_ID), any(), eq("post_like"), any(), any(), any(), any());
+                .insertUserEvent(
+                        any(), eq(ACTOR_ID), any(), eq("post_like"), any(), any(), any(), any());
         verify(channel).basicAck(1L, false);
     }
 
@@ -144,7 +146,10 @@ class RecEventPersistConsumerTest {
                 .thenThrow(new PermanentMessageException("bad payload"));
         doThrow(new IllegalStateException("dlq down"))
                 .when(deadLetterPublisher)
-                .publish(message, RabbitMqTopologyConfig.REC_EVENTS_DEAD_LETTER_ROUTING_KEY, "bad payload");
+                .publish(
+                        message,
+                        RabbitMqTopologyConfig.REC_EVENTS_DEAD_LETTER_ROUTING_KEY,
+                        "bad payload");
 
         consumer.consume(message, channel);
 
@@ -160,7 +165,8 @@ class RecEventPersistConsumerTest {
         consumer.consume(message, channel);
 
         // maxAttempts = 3, so processOnce is invoked 3 times before giving up and routing to DLQ.
-        verify(processedMessageService, org.mockito.Mockito.times(3)).processOnce(any(), any(), any(), any());
+        verify(processedMessageService, org.mockito.Mockito.times(3))
+                .processOnce(any(), any(), any(), any());
         verify(deadLetterPublisher)
                 .publish(
                         eq(message),
@@ -230,10 +236,14 @@ class RecEventPersistConsumerTest {
         return event(
                 RecommendationEventTypes.REC_INTERACTION_RECORDED_V1,
                 Map.of(
-                        "eventType", "post_like",
-                        "entityType", "post",
-                        "entityId", postId.toString(),
-                        "targetUserId", ACTOR_ID.toString()));
+                        "eventType",
+                        "post_like",
+                        "entityType",
+                        "post",
+                        "entityId",
+                        postId.toString(),
+                        "targetUserId",
+                        ACTOR_ID.toString()));
     }
 
     private DomainEventEnvelope event(String eventType, Map<String, Object> data) {

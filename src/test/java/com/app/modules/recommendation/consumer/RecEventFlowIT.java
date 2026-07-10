@@ -35,13 +35,13 @@ import com.app.modules.recommendation.messaging.RecommendationEventTypes;
 import com.rabbitmq.client.Channel;
 
 /**
- * Integration test for the recommendation event-persist path: the consumer receives a real
- * RabbitMQ message body, persists a {@code user_events} row, and enforces inbox idempotency.
+ * Integration test for the recommendation event-persist path: the consumer receives a real RabbitMQ
+ * message body, persists a {@code user_events} row, and enforces inbox idempotency.
  *
- * <p>PostgreSQL is required for the partitioned {@code user_events} table and the inbox
- * {@code processed_messages} dedup; Redis is present for context-cache parity with the rest of the
- * app; RabbitMQ is not strictly required because the consumer is invoked directly with a parsed
- * message body (matching {@code PostIndexSyncConsumerIT}).
+ * <p>PostgreSQL is required for the partitioned {@code user_events} table and the inbox {@code
+ * processed_messages} dedup; Redis is present for context-cache parity with the rest of the app;
+ * RabbitMQ is not strictly required because the consumer is invoked directly with a parsed message
+ * body (matching {@code PostIndexSyncConsumerIT}).
  */
 @SpringBootTest(
         properties = {
@@ -145,7 +145,9 @@ class RecEventFlowIT {
         assertThat(processedRows).isEqualTo(1);
         Integer eventRows =
                 jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM user_events WHERE user_id = ?", Integer.class, userId);
+                        "SELECT COUNT(*) FROM user_events WHERE user_id = ?",
+                        Integer.class,
+                        userId);
         assertThat(eventRows).isEqualTo(1);
     }
 
@@ -179,10 +181,12 @@ class RecEventFlowIT {
         Channel channel = mock(Channel.class);
 
         consumer.consume(
-                buildMessage(impressionBatchEnvelope(eventId, userId, postId, clientEventId)), channel);
+                buildMessage(impressionBatchEnvelope(eventId, userId, postId, clientEventId)),
+                channel);
         // Replay the same envelope; inbox dedup suppresses the handler entirely.
         consumer.consume(
-                buildMessage(impressionBatchEnvelope(eventId, userId, postId, clientEventId)), channel);
+                buildMessage(impressionBatchEnvelope(eventId, userId, postId, clientEventId)),
+                channel);
 
         Integer rows =
                 jdbcTemplate.queryForObject(
@@ -222,22 +226,32 @@ class RecEventFlowIT {
                 "post",
                 postId,
                 Map.of(
-                        "eventType", "post_like",
-                        "entityType", "post",
-                        "entityId", postId.toString(),
-                        "targetUserId", userId.toString()));
+                        "eventType",
+                        "post_like",
+                        "entityType",
+                        "post",
+                        "entityId",
+                        postId.toString(),
+                        "targetUserId",
+                        userId.toString()));
     }
 
     private DomainEventEnvelope impressionBatchEnvelope(
             UUID eventId, UUID userId, UUID postId, UUID clientEventId) {
         Map<String, Object> item =
                 Map.of(
-                        "clientEventId", clientEventId.toString(),
-                        "type", "impression",
-                        "postId", postId.toString(),
-                        "position", 0,
-                        "source", "cf",
-                        "occurredAt", OffsetDateTime.now(ZoneOffset.UTC).toString());
+                        "clientEventId",
+                        clientEventId.toString(),
+                        "type",
+                        "impression",
+                        "postId",
+                        postId.toString(),
+                        "position",
+                        0,
+                        "source",
+                        "cf",
+                        "occurredAt",
+                        OffsetDateTime.now(ZoneOffset.UTC).toString());
         return new DomainEventEnvelope(
                 eventId,
                 RecommendationEventTypes.REC_IMPRESSION_BATCH_V1,

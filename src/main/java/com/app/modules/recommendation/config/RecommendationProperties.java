@@ -2,10 +2,10 @@ package com.app.modules.recommendation.config;
 
 import java.time.Duration;
 
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
 import lombok.Getter;
 import lombok.Setter;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * Recommendation module knobs, bound under {@code app.recommendation.*}.
@@ -46,7 +46,10 @@ public class RecommendationProperties {
         /** Max client events accepted per batch on {@code POST /api/v1/events}. */
         private int maxBatchSize = 50;
 
-        /** Min interval between client flushes is client-side; this caps server-side per-batch size only. */
+        /**
+         * Min interval between client flushes is client-side; this caps server-side per-batch size
+         * only.
+         */
         private Duration ingestTimeout = Duration.ofSeconds(10);
     }
 }

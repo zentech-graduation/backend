@@ -35,7 +35,8 @@ class RecommendationEventWeightServiceImplTest {
         service.refresh();
 
         assertThat(service.weight(RecommendationEventType.post_like)).isEqualByComparingTo("3.0");
-        assertThat(service.weight(RecommendationEventType.post_unlike)).isEqualByComparingTo("-3.0");
+        assertThat(service.weight(RecommendationEventType.post_unlike))
+                .isEqualByComparingTo("-3.0");
         assertThat(service.weight(RecommendationEventType.search)).isNull();
         assertThat(service.cfEnabled())
                 .containsExactlyInAnyOrder(
@@ -44,7 +45,8 @@ class RecommendationEventWeightServiceImplTest {
                         RecommendationEventType.post_unlike);
         assertThat(service.trendingEnabled()).containsExactly(RecommendationEventType.post_like);
         assertThat(service.affinityEnabled())
-                .containsExactly(RecommendationEventType.post_like, RecommendationEventType.profile_follow);
+                .containsExactly(
+                        RecommendationEventType.post_like, RecommendationEventType.profile_follow);
     }
 
     @Test
@@ -62,7 +64,9 @@ class RecommendationEventWeightServiceImplTest {
 
     @Test
     void refresh_failureKeepsPreviousSnapshot() {
-        when(repository.findAll()).thenReturn(seedRows()).thenThrow(new RuntimeException("db blip"));
+        when(repository.findAll())
+                .thenReturn(seedRows())
+                .thenThrow(new RuntimeException("db blip"));
 
         service.refresh();
         BigDecimal weightBefore = service.weight(RecommendationEventType.post_like);
@@ -88,6 +92,11 @@ class RecommendationEventWeightServiceImplTest {
             boolean trending,
             boolean affinity) {
         return new RecommendationEventWeight(
-                type, new BigDecimal(weight), cf, trending, affinity, java.time.OffsetDateTime.now());
+                type,
+                new BigDecimal(weight),
+                cf,
+                trending,
+                affinity,
+                java.time.OffsetDateTime.now());
     }
 }
