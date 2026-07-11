@@ -24,6 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.messaging.RecommendationInteractionContract;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
@@ -500,10 +501,8 @@ public class CommentServiceImpl implements CommentService {
         recData.put("entityId", post.getId().toString());
         recData.put("targetUserId", post.getUserId().toString());
         outboxService.enqueue(
-                com.app.common.messaging.RecommendationInteractionContract
-                        .REC_INTERACTION_RECORDED_V1,
-                com.app.common.messaging.RecommendationInteractionContract
-                        .REC_INTERACTION_RECORDED_V1,
+                RecommendationInteractionContract.REC_INTERACTION_RECORDED_V1,
+                RecommendationInteractionContract.REC_INTERACTION_RECORDED_V1,
                 AGGREGATE_TYPE,
                 post.getId(),
                 actorId,
