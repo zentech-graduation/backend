@@ -40,21 +40,24 @@ public interface UserService {
     UserProfileResponse updateMyProfile(UUID userId, UpdateProfileRequest request);
 
     /**
-     * Returns the public-facing profile of the specified user.
+     * Returns the public-facing profile of the specified user, enforcing block and private-account
+     * visibility rules.
      *
-     * <p>Private accounts ({@code isPrivate = true}) return HTTP 401 regardless of authentication
-     * state. For public accounts, counter fields ({@code followerCount}, {@code followingCount},
-     * {@code postCount}) are populated only when {@code isAuthenticated} is {@code true}.
+     * <p>A block in either direction between the viewer and the target yields {@code NOT_FOUND} so
+     * a blocked caller cannot confirm the account exists. Social counter fields ({@code
+     * followerCount}, {@code followingCount}, {@code postCount}) are relationship-gated: the owner
+     * always sees them, a private account reveals them only to accepted followers, and a public
+     * account reveals them to any authenticated caller. Any other viewer receives the profile card
+     * with the counters masked to {@code null}.
      *
+     * @param viewerId the authenticated caller's identifier, or {@code null} for an anonymous
+     *     caller
      * @param targetUserId the profile owner's identifier
-     * @param isAuthenticated whether the caller supplied a valid Bearer token
      * @return public profile DTO
      * @throws com.app.common.exception.AppException with {@code NOT_FOUND} if the target user does
-     *     not exist or has been soft-deleted
-     * @throws com.app.common.exception.AppException with {@code UNAUTHORIZED} if the target account
-     *     is private
+     *     not exist, has been soft-deleted, or is blocked with respect to the viewer
      */
-    PublicUserProfileResponse getUserProfile(UUID targetUserId, boolean isAuthenticated);
+    PublicUserProfileResponse getUserProfile(UUID viewerId, UUID targetUserId);
 
     /**
      * Returns the notification and privacy settings for the authenticated user.
