@@ -557,6 +557,14 @@ CREATE TABLE user_events_2026_05 PARTITION OF user_events
     FOR VALUES FROM ('2026-05-01') TO ('2026-06-01');
 CREATE TABLE user_events_2026_06 PARTITION OF user_events
     FOR VALUES FROM ('2026-06-01') TO ('2026-07-01');
+-- V28 opened a rolling window past the original 2026-06 ceiling; UserEventsPartitionJob keeps it
+-- advancing (creates the partition two months ahead each month).
+CREATE TABLE user_events_2026_07 PARTITION OF user_events
+    FOR VALUES FROM ('2026-07-01') TO ('2026-08-01');
+CREATE TABLE user_events_2026_08 PARTITION OF user_events
+    FOR VALUES FROM ('2026-08-01') TO ('2026-09-01');
+CREATE TABLE user_events_2026_09 PARTITION OF user_events
+    FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
 CREATE TABLE user_events_default PARTITION OF user_events DEFAULT;
 
 -- Aggregated post interaction scores (updated by background scheduler)
