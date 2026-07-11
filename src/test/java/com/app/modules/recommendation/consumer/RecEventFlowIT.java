@@ -124,6 +124,13 @@ class RecEventFlowIT {
                         Integer.class,
                         userId);
         assertThat(rows).isEqualTo(1);
+        // The behavioral timestamp is the envelope's occurredAt, not consumption time.
+        OffsetDateTime createdAt =
+                jdbcTemplate.queryForObject(
+                        "SELECT created_at FROM user_events WHERE user_id = ?",
+                        OffsetDateTime.class,
+                        userId);
+        assertThat(createdAt.toInstant()).isEqualTo(event.occurredAt().toInstant());
     }
 
     @Test
@@ -163,13 +170,28 @@ class RecEventFlowIT {
         consumer.consume(buildMessage(event), channel);
 
         verify(channel).basicAck(0L, false);
-        Integer rows =
+        // The impression item lands in impressions only; the post_view item lands in user_events
+        // only, so it feeds CF training without inflating the CTR denominator.
+        Integer impressionRows =
                 jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM impressions WHERE user_id = ? AND post_id = ?",
                         Integer.class,
                         userId,
                         postId);
-        assertThat(rows).isEqualTo(1);
+        assertThat(impressionRows).isEqualTo(1);
+        Integer postViewRows =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM user_events"
+                                + " WHERE user_id = ? AND event_type = 'post_view'",
+                        Integer.class,
+                        userId);
+        assertThat(postViewRows).isEqualTo(1);
+        Integer postViewImpressionRows =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM impressions WHERE user_id = ?",
+                        Integer.class,
+                        userId);
+        assertThat(postViewImpressionRows).isEqualTo(1);
     }
 
     @Test
@@ -195,6 +217,13 @@ class RecEventFlowIT {
                         userId,
                         postId);
         assertThat(rows).isEqualTo(1);
+        Integer postViewRows =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM user_events"
+                                + " WHERE user_id = ? AND event_type = 'post_view'",
+                        Integer.class,
+                        userId);
+        assertThat(postViewRows).isEqualTo(1);
     }
 
     private UUID insertUser() {
@@ -218,10 +247,12 @@ class RecEventFlowIT {
     }
 
     private DomainEventEnvelope interactionEnvelope(UUID eventId, UUID userId, UUID postId) {
+        // Millisecond precision survives both the JSON round trip and the timestamptz column
+        // (microsecond precision) intact, so the created_at equality assertion is exact.
         return new DomainEventEnvelope(
                 eventId,
                 RecommendationEventTypes.REC_INTERACTION_RECORDED_V1,
-                OffsetDateTime.now(ZoneOffset.UTC),
+                OffsetDateTime.parse("2026-07-10T08:15:30.123Z"),
                 userId,
                 "post",
                 postId,
@@ -238,7 +269,10 @@ class RecEventFlowIT {
 
     private DomainEventEnvelope impressionBatchEnvelope(
             UUID eventId, UUID userId, UUID postId, UUID clientEventId) {
-        Map<String, Object> item =
+        // Timestamps derive from the eventId so a replayed envelope is byte-for-byte identical
+        // and the deterministic row ids actually collide on replay.
+        OffsetDateTime occurredAt = OffsetDateTime.parse("2026-07-10T08:15:30.123Z");
+        Map<String, Object> impressionItem =
                 Map.of(
                         "clientEventId",
                         clientEventId.toString(),
@@ -251,18 +285,35 @@ class RecEventFlowIT {
                         "source",
                         "cf",
                         "occurredAt",
-                        OffsetDateTime.now(ZoneOffset.UTC).toString());
+                        occurredAt.toString());
+        // Deterministic ids derived from the batch's clientEventId keep replays identical.
+        Map<String, Object> postViewItem =
+                Map.of(
+                        "clientEventId",
+                        UUID.nameUUIDFromBytes(clientEventId.toString().getBytes()).toString(),
+                        "type",
+                        "post_view",
+                        "postId",
+                        UUID.nameUUIDFromBytes(postId.toString().getBytes()).toString(),
+                        "position",
+                        1,
+                        "source",
+                        "trending",
+                        "occurredAt",
+                        occurredAt.toString());
         return new DomainEventEnvelope(
                 eventId,
                 RecommendationEventTypes.REC_IMPRESSION_BATCH_V1,
-                OffsetDateTime.now(ZoneOffset.UTC),
+                occurredAt,
                 userId,
                 "user",
                 userId,
                 Map.of(
-                        "sessionId", UUID.randomUUID().toString(),
+                        "sessionId",
+                                UUID.nameUUIDFromBytes(eventId.toString().getBytes()).toString(),
                         "platform", "web",
-                        "requestId", UUID.randomUUID().toString(),
-                        "items", List.of(item)));
+                        "requestId",
+                                UUID.nameUUIDFromBytes(userId.toString().getBytes()).toString(),
+                        "items", List.of(impressionItem, postViewItem)));
     }
 }

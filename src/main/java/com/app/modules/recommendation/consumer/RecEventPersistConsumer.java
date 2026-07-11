@@ -151,7 +151,6 @@ public class RecEventPersistConsumer {
                 sleepBeforeRetry(attempt);
             }
         }
-        metrics.consumed(CONSUMER_NAME, "dlq");
         throw lastFailure;
     }
 
@@ -159,7 +158,12 @@ public class RecEventPersistConsumer {
         switch (event.eventType()) {
             case RecommendationEventTypes.REC_INTERACTION_RECORDED_V1 -> {
                 Map<String, Object> data = event.data();
-                OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+                // The envelope timestamp is when the user acted; consumption time would skew decay
+                // and training windows whenever the queue lags or a DLQ replay happens.
+                OffsetDateTime occurredAt =
+                        event.occurredAt() != null
+                                ? event.occurredAt()
+                                : OffsetDateTime.now(ZoneOffset.UTC);
                 eventRepository.insertUserEvent(
                         UUID.randomUUID(),
                         event.actorId(),
@@ -168,11 +172,14 @@ public class RecEventPersistConsumer {
                         readString(data, "entityType"),
                         readUuid(data, "entityId"),
                         readString(data, "platform"),
-                        now);
+                        occurredAt);
             }
             case RecommendationEventTypes.REC_IMPRESSION_BATCH_V1 -> {
-                eventRepository.insertImpressions(
-                        event.actorId(), parseImpressionBatch(event.data()));
+                ImpressionBatchEvent batch = parseImpressionBatch(event.data());
+                eventRepository.insertImpressions(event.actorId(), batch);
+                // post_view items are behavioral interactions, not just display records; without
+                // this write the collaborative filter would never see any view signal.
+                eventRepository.insertPostViewUserEvents(event.actorId(), batch);
             }
             default ->
                     throw new PermanentMessageException("unknown event type: " + event.eventType());
@@ -280,6 +287,9 @@ public class RecEventPersistConsumer {
                     message,
                     RabbitMqTopologyConfig.REC_EVENTS_DEAD_LETTER_ROUTING_KEY,
                     failure.getMessage());
+            // Counted here rather than in the retry loop so permanent failures (parse errors,
+            // unknown event types) are included in the dlq outcome, not only retry exhaustion.
+            metrics.consumed(CONSUMER_NAME, "dlq");
             ack(channel, deliveryTag);
         } catch (RuntimeException dlqFailure) {
             log.warn(
