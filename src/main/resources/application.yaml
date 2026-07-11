@@ -160,6 +160,20 @@ app:
       enabled: ${COMMENT_CONSUMER_ENABLED:false}
     live:
       enabled: ${COMMENT_LIVE_ENABLED:false}
+  recommendation:
+    consumer:
+      enabled: ${RECOMMENDATION_CONSUMER_ENABLED:false}
+    explore:
+      enabled: ${RECOMMENDATION_EXPLORE_ENABLED:false}
+    weights:
+      refresh-interval: ${RECOMMENDATION_WEIGHTS_REFRESH_INTERVAL:PT5M}
+    partition:
+      lookahead-months: ${RECOMMENDATION_PARTITION_LOOKAHEAD_MONTHS:2}
+      impressions-retention-months: ${RECOMMENDATION_IMPRESSIONS_RETENTION_MONTHS:3}
+      initial-delay: ${RECOMMENDATION_PARTITION_INITIAL_DELAY:PT1M}
+      fixed-delay: ${RECOMMENDATION_PARTITION_FIXED_DELAY:PT24H}
+    events:
+      max-batch-size: ${RECOMMENDATION_EVENTS_MAX_BATCH_SIZE:50}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
@@ -185,6 +199,9 @@ app:
         window-seconds: 3600
       "[/api/v1/posts]":
         max-attempts: 30
+        window-seconds: 60
+      "[/api/v1/events]":
+        max-attempts: 60
         window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
 

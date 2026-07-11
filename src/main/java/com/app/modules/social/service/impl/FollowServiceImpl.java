@@ -67,6 +67,9 @@ public class FollowServiceImpl implements FollowService {
         FollowStatus status = targetUser.isPrivate() ? FollowStatus.PENDING : FollowStatus.ACCEPTED;
         Follow follow = insertFollow(followerId, targetUserId, status);
         socialEventService.publishFollowCreated(follow);
+        if (status == FollowStatus.ACCEPTED) {
+            socialEventService.publishProfileFollowInteraction(followerId, targetUserId);
+        }
         return followMapper.toResponse(follow);
     }
 

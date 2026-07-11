@@ -11,6 +11,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Per-instance live-comment RabbitMQ queue now declares durable instead of non-durable, resolving a broker-rejected `queue.declare` (`transient_nonexcl_queues` deprecation on RabbitMQ 4.x) that crash-looped the live-comment consumer connection on startup.
 
 ### Added
+- Recommendation event-tracking foundation: server-side engagements (like, save, comment, follow, and their undo counterparts) flow into the behavioral `user_events` table through the transactional outbox, idempotently via the shared inbox pattern.
+- Client impression ingestion endpoint `POST /api/v1/events` accepting batched viewport impressions with deterministic per-item row ids so partial-failure replays never duplicate rows.
+- Recommendation event-weight config table driving collaborative-filter, trending, and affinity weighting from metadata, with an in-memory cached read refreshed every five minutes.
+- Monthly partition automation for `user_events` and `impressions`, pre-creating the next partitions and dropping expired impressions partitions past the retention window.
+- Metrics for recommendation event consumption (processed, duplicate, dead-letter outcomes).
+
+### Fixed
+- Resolved the duplicate Flyway version conflict between the text-post-type and comment-moderation-status migrations by renumbering the comment moderation migration to V27, allowing fresh databases (including Testcontainers) to apply all migrations.
+- Impressions retention now works: the monthly-partition name match and suffix parsing were both broken, so expired partitions were never dropped.
+- Client `post_view` events now persist into `user_events` so collaborative-filter training receives view signal, and click-throughs no longer count as impressions.
+- Behavioral events are stamped with the event's `occurredAt` instead of consumption time, so queue lag or dead-letter replay cannot skew behavioral history.
+- Recommendation consumer and explore configuration toggles now bind to their documented YAML keys, and the event batch-size cap is enforced from its config knob.
+- The recommendation trending queue is no longer bound to the event bus until its consumer exists, preventing unbounded message accumulation.
+- The recommendation dead-letter metric now counts permanent failures, not only retry exhaustion.
+
+### Changed
+- Extended `user_events` partitions through 2027-06 and relocated rows that had leaked into the default partition since July 2026.
+
+### Tests
+- Recommendation consumer unit tests covering processed, duplicate, permanent dead-letter, transient retry, unknown event type, and ack/nack IOException paths.
+- Event-weight cache service unit tests covering weight and flag reads, cross-call caching, and snapshot retention on refresh failure.
+- Integration tests for the client event ingestion endpoint (202 with outbox row, 401 without JWT, 400 on invalid or oversized batches) and the event-persist consumer flow against real PostgreSQL and Redis (single-row persistence, inbox idempotency, post-view persistence, and impression-batch replay safety).
+- Partition maintenance job unit tests covering lookahead pre-creation, skip-when-present, retention drop, suffix parsing, and database-failure tolerance.
+
+### Added
 - Comment module: create, edit, soft-delete (subtree), likes, and nested replies up to depth 10, with cursor-paginated listing of top-level comments and replies.
 - Synchronous comment moderation (content normalization plus rule-based rejection for empty, over-length, blocked-word, and spam content).
 - HTTP write idempotency for comment creation via an `Idempotency-Key` header, replaying the original response on a matching retry and rejecting key reuse with a different payload.
