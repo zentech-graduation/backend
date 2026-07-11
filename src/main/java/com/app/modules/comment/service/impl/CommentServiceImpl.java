@@ -15,6 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -296,8 +297,15 @@ public class CommentServiceImpl implements CommentService {
             if (commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId)) {
                 throw new AppException(ApiErrorCode.COMMENT_ALREADY_LIKED);
             }
-            commentLikeRepository.save(
-                    CommentLike.builder().id(new CommentLikeId(actorId, commentId)).build());
+            try {
+                commentLikeRepository.saveAndFlush(
+                        CommentLike.builder().id(new CommentLikeId(actorId, commentId)).build());
+            } catch (DataIntegrityViolationException ex) {
+                // A concurrent double-submit lost the insert race; the composite (user_id,
+                // comment_id) primary key already recorded the like, so surface the same clean
+                // conflict rather than a 500.
+                throw new AppException(ApiErrorCode.COMMENT_ALREADY_LIKED);
+            }
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", comment.getPostId().toString());
