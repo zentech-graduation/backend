@@ -18,8 +18,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record CreatePostRequest(
         @Schema(
                         description =
-                                "Post caption; #tokens are extracted as hashtags at publish time",
+                                "Post caption (max 2200 characters); #tokens are extracted as"
+                                        + " hashtags at publish time",
                         example = "Sunset at the beach #sunset #beach")
+                @Size(max = 2200)
                 String caption,
         @Schema(
                         description = "Post type",
