@@ -34,7 +34,13 @@ public enum ApiErrorCode {
 
 	// Users
 	USER_EMAIL_ALREADY_EXISTS("USER_EMAIL_ALREADY_EXISTS", "An account with this email already exists", HttpStatus.CONFLICT),
-	USER_USERNAME_ALREADY_EXISTS("USER_USERNAME_ALREADY_EXISTS", "Username is already taken", HttpStatus.CONFLICT);
+	USER_USERNAME_ALREADY_EXISTS("USER_USERNAME_ALREADY_EXISTS", "Username is already taken", HttpStatus.CONFLICT),
+
+	// Reports
+	REPORT_NOT_FOUND("REPORT_NOT_FOUND", "Report was not found", HttpStatus.NOT_FOUND),
+	REPORT_TARGET_NOT_FOUND("REPORT_TARGET_NOT_FOUND", "Reported entity was not found", HttpStatus.NOT_FOUND),
+	REPORT_DUPLICATE("REPORT_DUPLICATE", "An active report already exists for this entity", HttpStatus.CONFLICT),
+	REPORT_INVALID_TRANSITION("REPORT_INVALID_TRANSITION", "Invalid report status transition", HttpStatus.CONFLICT);
 
 	// spotless:on
 
