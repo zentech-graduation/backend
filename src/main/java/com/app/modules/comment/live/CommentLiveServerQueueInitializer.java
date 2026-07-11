@@ -16,7 +16,8 @@ import org.springframework.context.annotation.Configuration;
  *
  * <p>Each application instance binds its own auto-delete queue to the comment live fanout exchange,
  * so every instance receives all comment events and can push them to the sessions it locally holds.
- * The queue is non-durable and auto-deletes when the instance disconnects.
+ * The queue is durable (RabbitMQ 4.x rejects non-durable, non-exclusive queue declarations) but
+ * still auto-deletes when the instance's consumer disconnects.
  */
 @Configuration
 @ConditionalOnProperty(prefix = "app.comment.live", name = "enabled", havingValue = "true")
@@ -35,7 +36,7 @@ public class CommentLiveServerQueueInitializer {
 
     @Bean
     Queue commentLiveServerQueue() {
-        return QueueBuilder.nonDurable(queueName).autoDelete().build();
+        return QueueBuilder.durable(queueName).autoDelete().build();
     }
 
     @Bean
