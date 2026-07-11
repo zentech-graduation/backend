@@ -47,8 +47,7 @@ class CommentWebSocketJwtHandshakeInterceptorTest {
 
     @Test
     void handshake_validNonBlacklistedToken_returnsTrue() throws Exception {
-        JwtClaims claims =
-                new JwtClaims(UUID.randomUUID(), "u@test.com", "user", JTI, Instant.now());
+        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "user", JTI, Instant.now());
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
 
@@ -64,8 +63,7 @@ class CommentWebSocketJwtHandshakeInterceptorTest {
 
     @Test
     void handshake_blacklistedToken_returnsFalse() throws Exception {
-        JwtClaims claims =
-                new JwtClaims(UUID.randomUUID(), "u@test.com", "user", JTI, Instant.now());
+        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "user", JTI, Instant.now());
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(true);
 
