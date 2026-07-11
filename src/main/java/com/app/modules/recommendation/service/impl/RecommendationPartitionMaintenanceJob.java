@@ -2,8 +2,11 @@ package com.app.modules.recommendation.service.impl;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +34,10 @@ public class RecommendationPartitionMaintenanceJob {
 
     private static final String USER_EVENTS = "user_events";
     private static final String IMPRESSIONS = "impressions";
+
+    // Partition suffixes are formatted and parsed as e.g. "2026_07"; YearMonth.parse alone would
+    // require the ISO "2026-07" form and reject every real partition name.
+    private static final DateTimeFormatter SUFFIX_FORMAT = DateTimeFormatter.ofPattern("uuuu_MM");
 
     private final JdbcTemplate jdbcTemplate;
     private final RecommendationProperties properties;
@@ -71,8 +78,10 @@ public class RecommendationPartitionMaintenanceJob {
     }
 
     private int dropExpiredImpressionPartitions() {
+        // All decay/retention math is anchored to UTC; YearMonth.now() would use the machine
+        // timezone and drift the cutoff by a month around midnight boundaries.
         YearMonth cutoff =
-                YearMonth.now()
+                YearMonth.now(ZoneOffset.UTC)
                         .minusMonths(properties.getPartition().getImpressionsRetentionMonths());
         int dropped = 0;
         for (YearMonth month : existingImpressionPartitionsBefore(cutoff)) {
@@ -84,6 +93,9 @@ public class RecommendationPartitionMaintenanceJob {
 
     private int createIfAbsent(String table, YearMonth month) {
         String partitionName = table + "_" + suffix(month);
+        if (partitionExists(partitionName)) {
+            return 0;
+        }
         LocalDate start = month.atDay(1);
         LocalDate end = month.plusMonths(1).atDay(1);
         // IF NOT EXISTS makes this idempotent across restarts and concurrent runs.
@@ -101,9 +113,17 @@ public class RecommendationPartitionMaintenanceJob {
         return 1;
     }
 
+    private boolean partitionExists(String partitionName) {
+        // to_regclass returns NULL when the relation does not exist, without throwing.
+        String found =
+                jdbcTemplate.queryForObject(
+                        "SELECT to_regclass(?)::text", String.class, "public." + partitionName);
+        return found != null;
+    }
+
     private List<YearMonth> upcomingMonths(int count) {
         List<YearMonth> months = new ArrayList<>();
-        YearMonth current = YearMonth.now();
+        YearMonth current = YearMonth.now(ZoneOffset.UTC);
         for (int i = 0; i < count; i++) {
             months.add(current.plusMonths(i));
         }
@@ -111,8 +131,8 @@ public class RecommendationPartitionMaintenanceJob {
     }
 
     private List<YearMonth> existingImpressionPartitionsBefore(YearMonth cutoff) {
-        // pg_inherits lists child partitions of the impressions parent table; only monthly-named
-        // partitions (impressions_YYYY_MM) are candidates for retention drop.
+        // pg_inherits lists child partitions of the impressions parent table; the POSIX regex keeps
+        // only monthly-named partitions (impressions_YYYY_MM), excluding impressions_default.
         List<String> names =
                 jdbcTemplate.queryForList(
                         """
@@ -123,7 +143,7 @@ public class RecommendationPartitionMaintenanceJob {
 						JOIN pg_namespace n ON n.oid = p.relnamespace
 						WHERE n.nspname = 'public'
 						AND p.relname = 'impressions'
-						AND c.relname LIKE 'impressions\\\\_\\\\____\\\\_\\\\____'
+						AND c.relname ~ '^impressions_\\d{4}_\\d{2}$'
 						""",
                         String.class);
         List<YearMonth> result = new ArrayList<>();
@@ -139,16 +159,16 @@ public class RecommendationPartitionMaintenanceJob {
         return result;
     }
 
-    private static java.util.Optional<YearMonth> parseSuffix(String partitionName) {
+    static Optional<YearMonth> parseSuffix(String partitionName) {
         String suffix = partitionName.substring("impressions_".length());
         try {
-            return java.util.Optional.of(YearMonth.parse(suffix));
+            return Optional.of(YearMonth.parse(suffix, SUFFIX_FORMAT));
         } catch (RuntimeException ex) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
     }
 
     private static String suffix(YearMonth month) {
-        return month.getYear() + "_" + String.format("%02d", month.getMonthValue());
+        return month.format(SUFFIX_FORMAT);
     }
 }
