@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Resolved Flyway duplicate-version conflict on V25: renamed `V25__add_comment_moderation_status.sql` to V26 and `V26__create_comment_write_idempotency.sql` to V27, restoring application startup and unblocking all 144 integration-test errors.
+- Per-instance live-comment RabbitMQ queue now declares durable instead of non-durable, resolving a broker-rejected `queue.declare` (`transient_nonexcl_queues` deprecation on RabbitMQ 4.x) that crash-looped the live-comment consumer connection on startup.
 
 ### Added
 - Comment module: create, edit, soft-delete (subtree), likes, and nested replies up to depth 10, with cursor-paginated listing of top-level comments and replies.
