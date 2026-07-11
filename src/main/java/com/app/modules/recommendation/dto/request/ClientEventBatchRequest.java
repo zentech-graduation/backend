@@ -4,10 +4,10 @@ import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 
 /**
  * Request body for {@code POST /api/v1/events}, a client-flushed batch of viewport impressions and
@@ -19,13 +19,12 @@ import jakarta.validation.constraints.Size;
  *
  * @param sessionId client session id
  * @param requestId page-level id shared by every item served in one explore response
- * @param items impression/post-view rows, max {@code app.recommendation.events.max-batch-size}
- *     (default 50)
+ * @param items impression/post-view rows; the size cap comes from {@code
+ *     app.recommendation.events.max-batch-size} (default 50), enforced in the ingestion service so
+ *     the knob stays authoritative
  */
 public record ClientEventBatchRequest(
-        @NotNull UUID sessionId,
-        @NotNull UUID requestId,
-        @NotEmpty @Size(max = 50) @Valid List<Item> items) {
+        @NotNull UUID sessionId, @NotNull UUID requestId, @NotEmpty @Valid List<Item> items) {
 
     /**
      * One client-side event.
@@ -41,6 +40,6 @@ public record ClientEventBatchRequest(
             @NotNull UUID clientEventId,
             @NotBlank String type,
             @NotNull UUID postId,
-            @jakarta.validation.constraints.Min(0) int position,
+            @Min(0) int position,
             @NotBlank String source) {}
 }

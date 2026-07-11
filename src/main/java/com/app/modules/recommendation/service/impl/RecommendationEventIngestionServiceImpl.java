@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.modules.recommendation.config.RecommendationProperties;
 import com.app.modules.recommendation.dto.ImpressionBatchEvent;
 import com.app.modules.recommendation.dto.request.ClientEventBatchRequest;
 import com.app.modules.recommendation.messaging.RecommendationEventTypes;
@@ -28,14 +29,22 @@ public class RecommendationEventIngestionServiceImpl
             Set.of("cf", "content", "graph", "trending", "explore_slot", "fallback");
 
     private final OutboxService outboxService;
+    private final RecommendationProperties properties;
 
-    public RecommendationEventIngestionServiceImpl(OutboxService outboxService) {
+    public RecommendationEventIngestionServiceImpl(
+            OutboxService outboxService, RecommendationProperties properties) {
         this.outboxService = outboxService;
+        this.properties = properties;
     }
 
     @Override
     @Transactional
     public void ingestBatch(UUID userId, ClientEventBatchRequest request) {
+        int maxBatchSize = properties.getEvents().getMaxBatchSize();
+        if (request.items().size() > maxBatchSize) {
+            throw new AppException(
+                    ApiErrorCode.BAD_REQUEST, "Batch exceeds max size of " + maxBatchSize);
+        }
         List<ImpressionBatchEvent.Item> items =
                 request.items().stream().map(item -> toBatchItem(item)).toList();
         ImpressionBatchEvent batch =

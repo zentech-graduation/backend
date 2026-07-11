@@ -130,6 +130,22 @@ class EventsControllerIT {
     }
 
     @Test
+    void ingestEvents_oversizedBatch_returns400() {
+        // Default app.recommendation.events.max-batch-size is 50; the cap is enforced in the
+        // ingestion service so the config knob stays authoritative.
+        Map<String, Object> batch = validBatch(51);
+
+        ResponseEntity<Map> response = postWithToken("/api/v1/events", batch, user);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        Integer rowCount =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM outbox_events WHERE event_type = 'rec.impression.batch.v1'",
+                        Integer.class);
+        assertThat(rowCount).isZero();
+    }
+
+    @Test
     void ingestEvents_negativePosition_returns400() {
         Map<String, Object> item =
                 Map.of(
