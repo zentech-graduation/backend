@@ -17,10 +17,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
-import com.app.common.response.PageResponse;
+import com.app.common.response.CursorPageResponse;
 import com.app.modules.report.dto.request.CreateReportRequest;
 import com.app.modules.report.dto.request.UpdateReportStatusRequest;
 import com.app.modules.report.dto.response.ReportResponse;
+import com.app.modules.report.dto.response.ReportSummaryResponse;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 
@@ -79,8 +80,8 @@ public interface ReportApi {
     @Operation(
             summary = "List reports",
             description =
-                    "Returns an offset-paginated moderation queue filtered by status and target"
-                            + " type. Requires MODERATOR or ADMIN.")
+                    "Returns a cursor-paginated moderation queue filtered by status and target"
+                            + " type, ordered newest first. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -88,7 +89,7 @@ public interface ReportApi {
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = PageResponse.class))),
+                                schema = @Schema(implementation = CursorPageResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -98,10 +99,37 @@ public interface ReportApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping
-    ResponseEntity<ApiResponse<PageResponse<ReportResponse>>> listReports(
+    ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> listReports(
             @RequestParam(required = false) ReportStatus status,
             @RequestParam(required = false) ReportType reportType,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
+
+    /** Lists pending reports in FIFO order for moderator and administrator triage. */
+    @Operation(
+            summary = "List pending reports",
+            description =
+                    "Returns the pending moderation queue in FIFO order matching the"
+                            + " pending_reports view. Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Pending report page returned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = CursorPageResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Reports.PENDING)
+    ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getPendingReports(
+            @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
 
     /** Returns one report for moderator or administrator review. */

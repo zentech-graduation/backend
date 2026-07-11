@@ -17,6 +17,8 @@ public class ReportTargetRepositoryImpl implements ReportTargetRepository {
 
     @Override
     public Optional<UUID> findOwnerId(ReportType reportType, UUID entityId) {
+        // Report targets are polymorphic across modules. Native SQL keeps this lookup in one
+        // round trip without repository coupling, at the cost of compile-time column safety.
         String query =
                 switch (reportType) {
                     case POST ->

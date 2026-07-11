@@ -1,20 +1,23 @@
 package com.app.modules.report.service.impl;
 
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.Base64;
+import java.util.Collections;
 import java.util.UUID;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
-import com.app.common.response.PageResponse;
+import com.app.common.response.CursorPageResponse;
 import com.app.modules.report.dto.request.CreateReportRequest;
 import com.app.modules.report.dto.request.UpdateReportStatusRequest;
 import com.app.modules.report.dto.response.ReportResponse;
+import com.app.modules.report.dto.response.ReportSummaryResponse;
 import com.app.modules.report.entity.Report;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
@@ -27,6 +30,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 public class ReportServiceImpl implements ReportService {
+
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final String CURSOR_SEPARATOR = "|";
 
     private final ReportRepository reportRepository;
     private final ReportMapper reportMapper;
@@ -59,20 +66,34 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<ReportResponse> listReports(
-            ReportStatus status, ReportType reportType, Pageable pageable) {
-        Page<Report> entities;
-        if (status != null && reportType != null) {
-            entities = reportRepository.findAllByStatusAndReportType(status, reportType, pageable);
-        } else if (status != null) {
-            entities = reportRepository.findAllByStatus(status, pageable);
-        } else if (reportType != null) {
-            entities = reportRepository.findAllByReportType(reportType, pageable);
-        } else {
-            entities = reportRepository.findAll(pageable);
-        }
-        Page<ReportResponse> reports = entities.map(reportMapper::toResponse);
-        return PageResponse.from(reports);
+    public CursorPageResponse<ReportSummaryResponse> listReports(
+            ReportStatus status, ReportType reportType, String cursor, int size) {
+        int pageSize = normalizeLimit(size);
+        ReportCursor decoded = decodeCursor(cursor);
+        PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
+        var reports =
+                decoded.isEmpty()
+                        ? findFirstReportPage(status, reportType, pageRequest)
+                        : findReportPageAfterCursor(status, reportType, decoded, pageRequest);
+        return toSummaryPage(reports, pageSize, cursor != null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<ReportSummaryResponse> getPendingReports(String cursor, int size) {
+        int pageSize = normalizeLimit(size);
+        ReportCursor decoded = decodeCursor(cursor);
+        PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
+        var reports =
+                decoded.isEmpty()
+                        ? reportRepository.findAllByStatusOrderByCreatedAtAscIdAsc(
+                                ReportStatus.PENDING, pageRequest)
+                        : reportRepository.findAllByStatusAfterCursor(
+                                ReportStatus.PENDING,
+                                decoded.createdAt(),
+                                decoded.id(),
+                                pageRequest);
+        return toSummaryPage(reports, pageSize, cursor != null);
     }
 
     @Override
@@ -140,5 +161,106 @@ public class ReportServiceImpl implements ReportService {
 
     private boolean isTerminal(ReportStatus status) {
         return status == ReportStatus.RESOLVED || status == ReportStatus.DISMISSED;
+    }
+
+    private java.util.List<Report> findFirstReportPage(
+            ReportStatus status, ReportType reportType, PageRequest pageRequest) {
+        if (status != null && reportType != null) {
+            return reportRepository.findAllByStatusAndReportTypeOrderByCreatedAtDescIdDesc(
+                    status, reportType, pageRequest);
+        }
+        if (status != null) {
+            return reportRepository.findAllByStatusOrderByCreatedAtDescIdDesc(status, pageRequest);
+        }
+        if (reportType != null) {
+            return reportRepository.findAllByReportTypeOrderByCreatedAtDescIdDesc(
+                    reportType, pageRequest);
+        }
+        return reportRepository.findAllByOrderByCreatedAtDescIdDesc(pageRequest);
+    }
+
+    private java.util.List<Report> findReportPageAfterCursor(
+            ReportStatus status,
+            ReportType reportType,
+            ReportCursor cursor,
+            PageRequest pageRequest) {
+        if (status != null && reportType != null) {
+            return reportRepository.findAllByStatusAndReportTypeBeforeCursor(
+                    status, reportType, cursor.createdAt(), cursor.id(), pageRequest);
+        }
+        if (status != null) {
+            return reportRepository.findAllByStatusBeforeCursor(
+                    status, cursor.createdAt(), cursor.id(), pageRequest);
+        }
+        if (reportType != null) {
+            return reportRepository.findAllByReportTypeBeforeCursor(
+                    reportType, cursor.createdAt(), cursor.id(), pageRequest);
+        }
+        return reportRepository.findAllBeforeCursor(cursor.createdAt(), cursor.id(), pageRequest);
+    }
+
+    private CursorPageResponse<ReportSummaryResponse> toSummaryPage(
+            java.util.List<Report> reports, int pageSize, boolean hasPreviousPage) {
+        boolean hasNextPage = reports.size() > pageSize;
+        java.util.List<Report> pageReports = hasNextPage ? reports.subList(0, pageSize) : reports;
+        if (pageReports.isEmpty()) {
+            return CursorPageResponse.<ReportSummaryResponse>builder()
+                    .content(Collections.emptyList())
+                    .pageInfo(
+                            CursorPageResponse.PageInfo.builder()
+                                    .hasNextPage(false)
+                                    .hasPreviousPage(hasPreviousPage)
+                                    .startCursor(null)
+                                    .endCursor(null)
+                                    .build())
+                    .build();
+        }
+        java.util.List<ReportSummaryResponse> content =
+                reportMapper.toSummaryResponseList(pageReports);
+        return CursorPageResponse.<ReportSummaryResponse>builder()
+                .content(content)
+                .pageInfo(
+                        CursorPageResponse.PageInfo.builder()
+                                .hasNextPage(hasNextPage)
+                                .hasPreviousPage(hasPreviousPage)
+                                .startCursor(encodeCursor(pageReports.get(0)))
+                                .endCursor(encodeCursor(pageReports.get(pageReports.size() - 1)))
+                                .build())
+                .build();
+    }
+
+    private int normalizeLimit(int size) {
+        if (size < 1) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(size, MAX_PAGE_SIZE);
+    }
+
+    private String encodeCursor(Report report) {
+        String raw = report.getCreatedAt() + CURSOR_SEPARATOR + report.getId();
+        return Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private ReportCursor decodeCursor(String cursor) {
+        if (cursor == null || cursor.isBlank()) {
+            return new ReportCursor(null, null);
+        }
+        try {
+            String raw = new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8);
+            String[] parts = raw.split("\\|", 2);
+            if (parts.length != 2) {
+                throw new IllegalArgumentException("Cursor must contain createdAt and id");
+            }
+            return new ReportCursor(OffsetDateTime.parse(parts[0]), UUID.fromString(parts[1]));
+        } catch (Exception e) {
+            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
+        }
+    }
+
+    private record ReportCursor(OffsetDateTime createdAt, UUID id) {
+
+        boolean isEmpty() {
+            return createdAt == null || id == null;
+        }
     }
 }

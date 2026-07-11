@@ -6,8 +6,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,12 +21,13 @@ import com.app.common.ApiConstants;
 import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
-import com.app.common.response.PageResponse;
+import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.report.api.ReportApi;
 import com.app.modules.report.dto.request.CreateReportRequest;
 import com.app.modules.report.dto.request.UpdateReportStatusRequest;
 import com.app.modules.report.dto.response.ReportResponse;
+import com.app.modules.report.dto.response.ReportSummaryResponse;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.service.ReportService;
@@ -62,17 +61,28 @@ public class ReportController extends BaseController implements ReportApi {
     @GetMapping
     @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<PageResponse<ReportResponse>>> listReports(
+    public ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> listReports(
             @RequestParam(required = false) ReportStatus status,
             @RequestParam(required = false) ReportType reportType,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        PageRequest pageable =
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         return ResponseEntity.ok(
                 ApiResponse.success(
                         ApiSuccessCode.OK,
-                        reportService.listReports(status, reportType, pageable)));
+                        reportService.listReports(status, reportType, cursor, size)));
+    }
+
+    /** Returns pending reports in FIFO order to authenticated moderators and administrators. */
+    @Override
+    @GetMapping(ApiConstants.Reports.PENDING)
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getPendingReports(
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK, reportService.getPendingReports(cursor, size)));
     }
 
     /** Returns one report to an authenticated moderator or administrator. */

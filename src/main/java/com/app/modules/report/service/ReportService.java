@@ -2,13 +2,12 @@ package com.app.modules.report.service;
 
 import java.util.UUID;
 
-import org.springframework.data.domain.Pageable;
-
 import com.app.common.exception.AppException;
-import com.app.common.response.PageResponse;
+import com.app.common.response.CursorPageResponse;
 import com.app.modules.report.dto.request.CreateReportRequest;
 import com.app.modules.report.dto.request.UpdateReportStatusRequest;
 import com.app.modules.report.dto.response.ReportResponse;
+import com.app.modules.report.dto.response.ReportSummaryResponse;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 
@@ -29,11 +28,21 @@ public interface ReportService {
      *
      * @param status optional lifecycle status filter
      * @param reportType optional target-type filter
-     * @param pageable offset pagination and ordering
+     * @param cursor opaque cursor from the prior page
+     * @param size requested page size
      * @return matching report page
      */
-    PageResponse<ReportResponse> listReports(
-            ReportStatus status, ReportType reportType, Pageable pageable);
+    CursorPageResponse<ReportSummaryResponse> listReports(
+            ReportStatus status, ReportType reportType, String cursor, int size);
+
+    /**
+     * Lists pending reports in FIFO order for moderator triage.
+     *
+     * @param cursor opaque cursor from the prior page
+     * @param size requested page size
+     * @return pending report page ordered oldest first
+     */
+    CursorPageResponse<ReportSummaryResponse> getPendingReports(String cursor, int size);
 
     /**
      * Returns a report by identifier for moderation review.

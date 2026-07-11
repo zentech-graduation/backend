@@ -186,6 +186,24 @@ class ReportControllerIT {
     }
 
     @Test
+    void getPendingReports_moderator_returnsOldestReportsFirst() {
+        TestUser reporter = createUser("pending_reporter", "user");
+        TestUser firstTarget = createUser("pending_target_first", "user");
+        TestUser secondTarget = createUser("pending_target_second", "user");
+        TestUser moderator = createUser("pending_moderator", "moderator");
+        UUID firstReport = insertReport(reporter.id(), firstTarget.id(), "2026-07-11T08:00:00Z");
+        UUID secondReport = insertReport(reporter.id(), secondTarget.id(), "2026-07-11T09:00:00Z");
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/pending?size=2", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<?, ?>> content = contentOf(response);
+        assertThat(content).hasSize(2);
+        assertThat(content.get(0).get("id")).isEqualTo(firstReport.toString());
+        assertThat(content.get(1).get("id")).isEqualTo(secondReport.toString());
+    }
+
+    @Test
     void updateStatus_terminalWithoutNote_returnsBadRequest() {
         TestUser reporter = createUser("note_reporter", "user");
         TestUser target = createUser("note_target", "user");
@@ -198,6 +216,25 @@ class ReportControllerIT {
                 patchWithAuth(
                         "/api/v1/reports/" + reportId + "/status",
                         Map.of("status", "resolved"),
+                        moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_RESOLUTION_NOTE_REQUIRED");
+    }
+
+    @Test
+    void updateStatus_dismissedWithoutNote_returnsBadRequest() {
+        TestUser reporter = createUser("dismiss_note_reporter", "user");
+        TestUser target = createUser("dismiss_note_target", "user");
+        TestUser moderator = createUser("dismiss_note_moderator", "moderator");
+        ResponseEntity<Map> submitted = submitReport(reporter, target.id(), "scam", null);
+        UUID reportId =
+                UUID.fromString((String) ((Map<?, ?>) submitted.getBody().get("data")).get("id"));
+
+        ResponseEntity<Map> response =
+                patchWithAuth(
+                        "/api/v1/reports/" + reportId + "/status",
+                        Map.of("status", "dismissed"),
                         moderator);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -232,6 +269,20 @@ class ReportControllerIT {
                 HttpMethod.POST,
                 new HttpEntity<>(payload, authHeaders(reporter)),
                 Map.class);
+    }
+
+    private UUID insertReport(UUID reporterId, UUID targetId, String createdAt) {
+        UUID reportId = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO reports "
+                        + "(id, reporter_id, report_type, report_reason, entity_id, status, "
+                        + "created_at) "
+                        + "VALUES (?, ?, 'user', 'spam', ?, 'pending', CAST(? AS timestamptz))",
+                reportId,
+                reporterId,
+                targetId,
+                createdAt);
+        return reportId;
     }
 
     private ResponseEntity<Map> getWithAuth(String path, TestUser user) {

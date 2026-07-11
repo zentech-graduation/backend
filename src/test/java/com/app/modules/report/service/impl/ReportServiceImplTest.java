@@ -17,7 +17,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import com.app.common.enums.ApiErrorCode;
@@ -25,6 +24,7 @@ import com.app.common.exception.AppException;
 import com.app.modules.report.dto.request.CreateReportRequest;
 import com.app.modules.report.dto.request.UpdateReportStatusRequest;
 import com.app.modules.report.dto.response.ReportResponse;
+import com.app.modules.report.dto.response.ReportSummaryResponse;
 import com.app.modules.report.entity.Report;
 import com.app.modules.report.enums.ReportReason;
 import com.app.modules.report.enums.ReportStatus;
@@ -135,19 +135,33 @@ class ReportServiceImplTest {
     }
 
     @Test
-    void listReports_filteredPage_mapsContent() {
+    void listReports_filteredCursor_mapsSummaryContent() {
         Report report = Report.builder().status(ReportStatus.PENDING).build();
-        ReportResponse mapped = response(ReportStatus.PENDING);
-        PageRequest pageable = PageRequest.of(0, 20);
-        when(reportRepository.findAllByStatusAndReportType(
-                        ReportStatus.PENDING, ReportType.POST, pageable))
-                .thenReturn(new PageImpl<>(List.of(report), pageable, 1));
-        when(reportMapper.toResponse(report)).thenReturn(mapped);
+        ReportSummaryResponse mapped = summary(ReportStatus.PENDING);
+        when(reportRepository.findAllByStatusAndReportTypeOrderByCreatedAtDescIdDesc(
+                        ReportStatus.PENDING, ReportType.POST, PageRequest.of(0, 21)))
+                .thenReturn(List.of(report));
+        when(reportMapper.toSummaryResponseList(List.of(report))).thenReturn(List.of(mapped));
 
-        var result = service.listReports(ReportStatus.PENDING, ReportType.POST, pageable);
+        var result = service.listReports(ReportStatus.PENDING, ReportType.POST, null, 20);
 
         assertThat(result.getContent()).containsExactly(mapped);
-        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getPageInfo().isHasNextPage()).isFalse();
+    }
+
+    @Test
+    void getPendingReports_firstPage_queriesPendingQueueInFifoOrder() {
+        Report report = Report.builder().status(ReportStatus.PENDING).build();
+        ReportSummaryResponse mapped = summary(ReportStatus.PENDING);
+        when(reportRepository.findAllByStatusOrderByCreatedAtAscIdAsc(
+                        ReportStatus.PENDING, PageRequest.of(0, 21)))
+                .thenReturn(List.of(report));
+        when(reportMapper.toSummaryResponseList(List.of(report))).thenReturn(List.of(mapped));
+
+        var result = service.getPendingReports(null, 20);
+
+        assertThat(result.getContent()).containsExactly(mapped);
+        assertThat(result.getPageInfo().isHasPreviousPage()).isFalse();
     }
 
     @Test
@@ -198,6 +212,25 @@ class ReportServiceImplTest {
     }
 
     @Test
+    void updateStatus_dismissedWithoutNote_throwsResolutionNoteRequired() {
+        UUID reportId = UUID.randomUUID();
+        Report report = Report.builder().id(reportId).status(ReportStatus.REVIEWING).build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(
+                        () ->
+                                service.updateStatus(
+                                        reportId,
+                                        UUID.randomUUID(),
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.DISMISSED, null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_RESOLUTION_NOTE_REQUIRED);
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
     void updateStatus_terminalReport_throwsInvalidTransition() {
         UUID reportId = UUID.randomUUID();
         Report report = Report.builder().id(reportId).status(ReportStatus.RESOLVED).build();
@@ -227,6 +260,17 @@ class ReportServiceImplTest {
                 null,
                 null,
                 null,
+                null);
+    }
+
+    private static ReportSummaryResponse summary(ReportStatus status) {
+        return new ReportSummaryResponse(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                ReportType.POST,
+                ReportReason.SPAM,
+                UUID.randomUUID(),
+                status,
                 null);
     }
 }
