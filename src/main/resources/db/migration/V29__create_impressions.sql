@@ -19,30 +19,24 @@ CREATE TABLE impressions (
     PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 
-CREATE TABLE impressions_2026_07 PARTITION OF impressions
-    FOR VALUES FROM ('2026-07-01') TO ('2026-08-01');
-CREATE TABLE impressions_2026_08 PARTITION OF impressions
-    FOR VALUES FROM ('2026-08-01') TO ('2026-09-01');
-CREATE TABLE impressions_2026_09 PARTITION OF impressions
-    FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
-CREATE TABLE impressions_2026_10 PARTITION OF impressions
-    FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');
-CREATE TABLE impressions_2026_11 PARTITION OF impressions
-    FOR VALUES FROM ('2026-11-01') TO ('2026-12-01');
-CREATE TABLE impressions_2026_12 PARTITION OF impressions
-    FOR VALUES FROM ('2026-12-01') TO ('2027-01-01');
-CREATE TABLE impressions_2027_01 PARTITION OF impressions
-    FOR VALUES FROM ('2027-01-01') TO ('2027-02-01');
-CREATE TABLE impressions_2027_02 PARTITION OF impressions
-    FOR VALUES FROM ('2027-02-01') TO ('2027-03-01');
-CREATE TABLE impressions_2027_03 PARTITION OF impressions
-    FOR VALUES FROM ('2027-03-01') TO ('2027-04-01');
-CREATE TABLE impressions_2027_04 PARTITION OF impressions
-    FOR VALUES FROM ('2027-04-01') TO ('2027-05-01');
-CREATE TABLE impressions_2027_05 PARTITION OF impressions
-    FOR VALUES FROM ('2027-05-01') TO ('2027-06-01');
-CREATE TABLE impressions_2027_06 PARTITION OF impressions
-    FOR VALUES FROM ('2027-06-01') TO ('2027-07-01');
+-- One loop instead of twelve hand-written statements; format() quotes the range bounds and
+-- to_char() derives the partition name, so adding months means changing one bound only.
+DO $$
+DECLARE
+    month_start date;
+BEGIN
+    FOR month_start IN
+        SELECT generate_series(date '2026-07-01', date '2027-06-01', interval '1 month')::date
+    LOOP
+        EXECUTE format(
+            'CREATE TABLE IF NOT EXISTS impressions_%s PARTITION OF impressions'
+            ' FOR VALUES FROM (%L) TO (%L)',
+            to_char(month_start, 'YYYY_MM'),
+            month_start,
+            (month_start + interval '1 month')::date);
+    END LOOP;
+END $$;
+
 CREATE TABLE impressions_default PARTITION OF impressions DEFAULT;
 
 CREATE INDEX idx_impressions_user   ON impressions (user_id, created_at DESC);

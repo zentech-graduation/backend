@@ -8,30 +8,23 @@
 -- Detach the default partition so the new range partitions can be created without overlap.
 ALTER TABLE user_events DETACH PARTITION user_events_default;
 
-CREATE TABLE user_events_2026_07 PARTITION OF user_events
-    FOR VALUES FROM ('2026-07-01') TO ('2026-08-01');
-CREATE TABLE user_events_2026_08 PARTITION OF user_events
-    FOR VALUES FROM ('2026-08-01') TO ('2026-09-01');
-CREATE TABLE user_events_2026_09 PARTITION OF user_events
-    FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
-CREATE TABLE user_events_2026_10 PARTITION OF user_events
-    FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');
-CREATE TABLE user_events_2026_11 PARTITION OF user_events
-    FOR VALUES FROM ('2026-11-01') TO ('2026-12-01');
-CREATE TABLE user_events_2026_12 PARTITION OF user_events
-    FOR VALUES FROM ('2026-12-01') TO ('2027-01-01');
-CREATE TABLE user_events_2027_01 PARTITION OF user_events
-    FOR VALUES FROM ('2027-01-01') TO ('2027-02-01');
-CREATE TABLE user_events_2027_02 PARTITION OF user_events
-    FOR VALUES FROM ('2027-02-01') TO ('2027-03-01');
-CREATE TABLE user_events_2027_03 PARTITION OF user_events
-    FOR VALUES FROM ('2027-03-01') TO ('2027-04-01');
-CREATE TABLE user_events_2027_04 PARTITION OF user_events
-    FOR VALUES FROM ('2027-04-01') TO ('2027-05-01');
-CREATE TABLE user_events_2027_05 PARTITION OF user_events
-    FOR VALUES FROM ('2027-05-01') TO ('2027-06-01');
-CREATE TABLE user_events_2027_06 PARTITION OF user_events
-    FOR VALUES FROM ('2027-06-01') TO ('2027-07-01');
+-- One loop instead of twelve hand-written statements; format() quotes the range bounds and
+-- to_char() derives the partition name, so adding months means changing one bound only.
+DO $$
+DECLARE
+    month_start date;
+BEGIN
+    FOR month_start IN
+        SELECT generate_series(date '2026-07-01', date '2027-06-01', interval '1 month')::date
+    LOOP
+        EXECUTE format(
+            'CREATE TABLE IF NOT EXISTS user_events_%s PARTITION OF user_events'
+            ' FOR VALUES FROM (%L) TO (%L)',
+            to_char(month_start, 'YYYY_MM'),
+            month_start,
+            (month_start + interval '1 month')::date);
+    END LOOP;
+END $$;
 
 -- Relocate rows that leaked into the default partition back into their proper partitions.
 -- user_events_default is now a standalone table, so this is a plain cross-table move.
