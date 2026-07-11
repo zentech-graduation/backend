@@ -60,7 +60,7 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity(proxyTargetClass = true)
 @EnableConfigurationProperties({JwtProperties.class, CorsProperties.class})
 public class SecurityConfig {
 
@@ -206,6 +206,14 @@ public class SecurityConfig {
                     auth) {
         auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN");
         auth.requestMatchers("/api/v1/moderator/**").hasAnyRole("MODERATOR", "ADMIN");
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Reports.ROOT,
+                        ApiConstants.Reports.ROOT + "/**")
+                .hasAnyRole("MODERATOR", "ADMIN");
+        auth.requestMatchers(
+                        HttpMethod.PATCH, ApiConstants.Reports.ROOT + ApiConstants.Reports.STATUS)
+                .hasAnyRole("MODERATOR", "ADMIN");
     }
 
     /** Permits unauthenticated access to public user profile lookups. */

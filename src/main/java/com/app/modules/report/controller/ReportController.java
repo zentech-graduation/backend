@@ -1,0 +1,103 @@
+package com.app.modules.report.controller;
+
+import java.util.UUID;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.app.common.ApiConstants;
+import com.app.common.base.BaseController;
+import com.app.common.enums.ApiSuccessCode;
+import com.app.common.response.ApiResponse;
+import com.app.common.response.PageResponse;
+import com.app.common.security.util.SecurityUtils;
+import com.app.modules.report.api.ReportApi;
+import com.app.modules.report.dto.request.CreateReportRequest;
+import com.app.modules.report.dto.request.UpdateReportStatusRequest;
+import com.app.modules.report.dto.response.ReportResponse;
+import com.app.modules.report.enums.ReportStatus;
+import com.app.modules.report.enums.ReportType;
+import com.app.modules.report.service.ReportService;
+
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+
+/** REST endpoints for authenticated report submission and role-restricted moderation review. */
+@RestController
+public class ReportController extends BaseController implements ReportApi {
+
+    private final ReportService reportService;
+
+    public ReportController(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    /** Submits a validated report for the authenticated caller and returns the pending record. */
+    @Override
+    @PostMapping
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<ReportResponse>> submitReport(
+            @Valid @RequestBody CreateReportRequest request) {
+        ReportResponse response =
+                reportService.submitReport(SecurityUtils.getCurrentUserId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(ApiSuccessCode.CREATED, response));
+    }
+
+    /** Returns a filtered report page to authenticated moderators and administrators. */
+    @Override
+    @GetMapping
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<PageResponse<ReportResponse>>> listReports(
+            @RequestParam(required = false) ReportStatus status,
+            @RequestParam(required = false) ReportType reportType,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        PageRequest pageable =
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        reportService.listReports(status, reportType, pageable)));
+    }
+
+    /** Returns one report to an authenticated moderator or administrator. */
+    @Override
+    @GetMapping(ApiConstants.Reports.BY_ID)
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<ReportResponse>> getReport(
+            @PathVariable("reportId") UUID reportId) {
+        return ResponseEntity.ok(
+                ApiResponse.success(ApiSuccessCode.OK, reportService.getReport(reportId)));
+    }
+
+    /** Applies a lifecycle transition and records the authenticated moderator as reviewer. */
+    @Override
+    @PatchMapping(ApiConstants.Reports.STATUS)
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<ReportResponse>> updateStatus(
+            @PathVariable("reportId") UUID reportId,
+            @Valid @RequestBody UpdateReportStatusRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        reportService.updateStatus(
+                                reportId, SecurityUtils.getCurrentUserId(), request)));
+    }
+}

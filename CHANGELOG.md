@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Per-instance live-comment RabbitMQ queue now declares durable instead of non-durable, resolving a broker-rejected `queue.declare` (`transient_nonexcl_queues` deprecation on RabbitMQ 4.x) that crash-looped the live-comment consumer connection on startup.
 
 ### Added
+- Report submission and moderation workflow with polymorphic target validation, duplicate and self-report prevention, role-restricted retrieval, and controlled status transitions.
+- Unit and Testcontainers integration coverage for report submission, validation, authorization, retrieval, and status transitions.
 - Comment module: create, edit, soft-delete (subtree), likes, and nested replies up to depth 10, with cursor-paginated listing of top-level comments and replies.
 - Synchronous comment moderation (content normalization plus rule-based rejection for empty, over-length, blocked-word, and spam content).
 - HTTP write idempotency for comment creation via an `Idempotency-Key` header, replaying the original response on a matching retry and rejecting key reuse with a different payload.
