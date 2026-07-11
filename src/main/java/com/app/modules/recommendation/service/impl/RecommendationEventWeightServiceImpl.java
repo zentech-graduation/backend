@@ -13,8 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import com.app.modules.recommendation.config.RecommendationProperties;
 import com.app.modules.recommendation.entity.RecommendationEventWeight;
 import com.app.modules.recommendation.enums.RecommendationEventType;
 import com.app.modules.recommendation.repository.RecommendationEventWeightRepository;
@@ -26,10 +26,8 @@ public class RecommendationEventWeightServiceImpl implements RecommendationEvent
     private static final Logger log =
             LoggerFactory.getLogger(RecommendationEventWeightServiceImpl.class);
 
-    // Refresh cadence matches the plan's 5-minute target; reads are cheap and the table is small.
-    private static final Duration REFRESH_TTL = Duration.ofMinutes(5);
-
     private final RecommendationEventWeightRepository repository;
+    private final RecommendationProperties properties;
 
     // Volatile snapshot: a read of the map and its contained sets is atomic after a refresh.
     // A read may briefly observe the previous snapshot while a refresh is in flight, which is
@@ -40,14 +38,18 @@ public class RecommendationEventWeightServiceImpl implements RecommendationEvent
     // refresh() do not race on staleness checks.
     private volatile Instant lastRefreshAt = Instant.EPOCH;
 
-    public RecommendationEventWeightServiceImpl(RecommendationEventWeightRepository repository) {
+    public RecommendationEventWeightServiceImpl(
+            RecommendationEventWeightRepository repository, RecommendationProperties properties) {
         this.repository = repository;
+        this.properties = properties;
     }
 
     @Override
     public BigDecimal weight(RecommendationEventType eventType) {
         ensureFresh();
-        return snapshot.weights.get(eventType);
+        // A missing row means the event carries no recommendation signal; zero keeps callers free
+        // of null checks when a new enum value has not been seeded yet.
+        return snapshot.weights.getOrDefault(eventType, BigDecimal.ZERO);
     }
 
     @Override
@@ -69,7 +71,7 @@ public class RecommendationEventWeightServiceImpl implements RecommendationEvent
     }
 
     @Override
-    @Scheduled(fixedDelayString = "${app.recommendation.weights.refresh-ms:PT5M}")
+    @Scheduled(fixedDelayString = "${app.recommendation.weights.refresh-interval:PT5M}")
     public synchronized void refresh() {
         try {
             snapshot = loadSnapshot();
@@ -81,8 +83,7 @@ public class RecommendationEventWeightServiceImpl implements RecommendationEvent
         }
     }
 
-    @Transactional(readOnly = true)
-    protected Snapshot loadSnapshot() {
+    private Snapshot loadSnapshot() {
         Map<RecommendationEventType, BigDecimal> weights =
                 new EnumMap<>(RecommendationEventType.class);
         Set<RecommendationEventType> cf = new HashSet<>();
@@ -108,8 +109,9 @@ public class RecommendationEventWeightServiceImpl implements RecommendationEvent
     }
 
     private void ensureFresh() {
+        Duration staleness = properties.getWeights().getRefreshInterval();
         if (lastRefreshAt.equals(Instant.EPOCH)
-                || Duration.between(lastRefreshAt, Instant.now()).compareTo(REFRESH_TTL) > 0) {
+                || Duration.between(lastRefreshAt, Instant.now()).compareTo(staleness) > 0) {
             refresh();
         }
     }

@@ -9,12 +9,12 @@ import com.app.modules.recommendation.enums.RecommendationEventType;
  * In-memory cached read of the {@code recommendation_event_weights} config table.
  *
  * <p>The Java trending updater, the blend scorer, and the serving path all read weights through
- * this service so tuning is metadata-driven. A {@code null} return means the event type has no
- * configured weight (treated as zero contribution by callers).
+ * this service so tuning is metadata-driven. An event type without a configured row weighs zero, so
+ * callers never null-check.
  */
 public interface RecommendationEventWeightService {
 
-    /** Returns the configured weight for the event type, or {@code null} if no row exists. */
+    /** Returns the configured weight for the event type, or zero if no row exists. */
     BigDecimal weight(RecommendationEventType eventType);
 
     /** Event types enabled for the collaborative-filter subsystem. */

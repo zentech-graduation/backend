@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.app.modules.recommendation.config.RecommendationProperties;
 import com.app.modules.recommendation.entity.RecommendationEventWeight;
 import com.app.modules.recommendation.enums.RecommendationEventType;
 import com.app.modules.recommendation.repository.RecommendationEventWeightRepository;
@@ -25,7 +26,9 @@ class RecommendationEventWeightServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new RecommendationEventWeightServiceImpl(repository);
+        service =
+                new RecommendationEventWeightServiceImpl(
+                        repository, new RecommendationProperties());
     }
 
     @Test
@@ -37,15 +40,18 @@ class RecommendationEventWeightServiceImplTest {
         assertThat(service.weight(RecommendationEventType.post_like)).isEqualByComparingTo("3.0");
         assertThat(service.weight(RecommendationEventType.post_unlike))
                 .isEqualByComparingTo("-3.0");
-        assertThat(service.weight(RecommendationEventType.search)).isNull();
+        // An unseeded event type carries no signal; zero spares callers a null check.
+        assertThat(service.weight(RecommendationEventType.search)).isEqualByComparingTo("0");
+        // The flag views are HashSet-backed, so ordered assertions would be flaky.
         assertThat(service.cfEnabled())
                 .containsExactlyInAnyOrder(
                         RecommendationEventType.post_like,
                         RecommendationEventType.post_save,
                         RecommendationEventType.post_unlike);
-        assertThat(service.trendingEnabled()).containsExactly(RecommendationEventType.post_like);
+        assertThat(service.trendingEnabled())
+                .containsExactlyInAnyOrder(RecommendationEventType.post_like);
         assertThat(service.affinityEnabled())
-                .containsExactly(
+                .containsExactlyInAnyOrder(
                         RecommendationEventType.post_like, RecommendationEventType.profile_follow);
     }
 

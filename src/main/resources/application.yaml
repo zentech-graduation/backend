@@ -166,7 +166,7 @@ app:
     explore:
       enabled: ${RECOMMENDATION_EXPLORE_ENABLED:false}
     weights:
-      refresh-ms: ${RECOMMENDATION_WEIGHTS_REFRESH_MS:PT5M}
+      refresh-interval: ${RECOMMENDATION_WEIGHTS_REFRESH_INTERVAL:PT5M}
     partition:
       lookahead-months: ${RECOMMENDATION_PARTITION_LOOKAHEAD_MONTHS:2}
       impressions-retention-months: ${RECOMMENDATION_IMPRESSIONS_RETENTION_MONTHS:3}
@@ -174,7 +174,6 @@ app:
       fixed-delay: ${RECOMMENDATION_PARTITION_FIXED_DELAY:PT24H}
     events:
       max-batch-size: ${RECOMMENDATION_EVENTS_MAX_BATCH_SIZE:50}
-      ingest-timeout: ${RECOMMENDATION_EVENTS_INGEST_TIMEOUT:PT10S}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
