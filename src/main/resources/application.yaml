@@ -27,6 +27,7 @@ spring:
   flyway:
     enabled: true
     out-of-order: true
+    locations: classpath:db/migration
   data:
     redis:
       host: ${REDIS_HOST}
