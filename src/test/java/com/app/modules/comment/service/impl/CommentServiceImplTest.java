@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -381,7 +382,7 @@ class CommentServiceImplTest {
 
         service.likeComment(actorId, commentId);
 
-        verify(commentLikeRepository).save(any());
+        verify(commentLikeRepository).saveAndFlush(any());
         verify(outboxService)
                 .enqueue(
                         eq(CommentEventTypes.COMMENT_LIKED_V1),
@@ -390,6 +391,24 @@ class CommentServiceImplTest {
                         eq(commentId),
                         eq(actorId),
                         anyMap());
+    }
+
+    @Test
+    void likeComment_concurrentDuplicateInsert_throwsAlreadyLiked() {
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
+                .thenReturn(false);
+        when(commentLikeRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.likeComment(actorId, commentId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.COMMENT_ALREADY_LIKED);
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), anyMap());
     }
 
     @Test

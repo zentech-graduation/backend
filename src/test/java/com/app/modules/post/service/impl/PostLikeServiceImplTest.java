@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -89,6 +90,18 @@ class PostLikeServiceImplTest {
         assertThat(response.postId()).isEqualTo(postId);
         assertThat(response.liked()).isTrue();
         assertThat(response.likeCount()).isEqualTo(1);
+    }
+
+    @Test
+    void likePost_concurrentDuplicateInsert_throwsAlreadyLiked() {
+        when(postLikeRepository.existsById(likeId)).thenReturn(false);
+        when(postLikeRepository.saveAndFlush(any(PostLike.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.likePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_ALREADY_LIKED);
     }
 
     @Test

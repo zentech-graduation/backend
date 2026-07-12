@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,7 +67,13 @@ public class PostLikeServiceImpl implements PostLikeService {
         }
         // Flush forces the INSERT (and its AFTER INSERT counter trigger) before the scalar
         // re-read; the entity in the persistence context still carries the stale counter.
-        postLikeRepository.saveAndFlush(PostLike.builder().id(likeId).build());
+        try {
+            postLikeRepository.saveAndFlush(PostLike.builder().id(likeId).build());
+        } catch (DataIntegrityViolationException ex) {
+            // A concurrent double-submit lost the insert race; the (user_id, post_id) primary key
+            // already recorded the like, so surface the same clean conflict rather than a 500.
+            throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
+        }
         return new LikeActionResponse(postId, true, postRepository.findLikeCount(postId));
     }
 
