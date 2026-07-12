@@ -4,6 +4,8 @@ spring:
       - classpath:resilience/circuitbreaker/resilience4j-dev.yml
       - classpath:resilience/ratelimiter/resilience4j-dev.yml
       - classpath:resilience/retry/resilience4j-dev.yml
+  flyway:
+    locations: classpath:db/migration,classpath:db/dev-seed
   jpa:
     hibernate:
       ddl-auto: validate
