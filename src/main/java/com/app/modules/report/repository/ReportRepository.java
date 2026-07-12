@@ -4,9 +4,9 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.app.modules.report.entity.Report;
@@ -19,18 +19,78 @@ public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTar
     boolean existsByReporterIdAndReportTypeAndEntityId(
             UUID reporterId, ReportType reportType, UUID entityId);
 
-    List<Report> findAllByOrderByCreatedAtDescIdDesc(Pageable pageable);
+    /**
+     * Finds the newest reports up to the requested limit.
+     *
+     * @param limit maximum number of reports to return
+     * @return reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query("SELECT r FROM Report r ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstReports(@Param("limit") int limit);
 
-    List<Report> findAllByStatusOrderByCreatedAtDescIdDesc(ReportStatus status, Pageable pageable);
+    /**
+     * Finds the newest reports with the requested status up to the requested limit.
+     *
+     * @param status status used to filter reports
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.status = :status "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstReportsByStatus(
+            @Param("status") ReportStatus status, @Param("limit") int limit);
 
-    List<Report> findAllByReportTypeOrderByCreatedAtDescIdDesc(
-            ReportType reportType, Pageable pageable);
+    /**
+     * Finds the newest reports with the requested target type up to the requested limit.
+     *
+     * @param reportType target type used to filter reports
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.reportType = :reportType "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstReportsByReportType(
+            @Param("reportType") ReportType reportType, @Param("limit") int limit);
 
-    List<Report> findAllByStatusAndReportTypeOrderByCreatedAtDescIdDesc(
-            ReportStatus status, ReportType reportType, Pageable pageable);
+    /**
+     * Finds the newest reports with the requested status and target type up to the requested limit.
+     *
+     * @param status status used to filter reports
+     * @param reportType target type used to filter reports
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.status = :status AND r.reportType = :reportType "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstReportsByStatusAndReportType(
+            @Param("status") ReportStatus status,
+            @Param("reportType") ReportType reportType,
+            @Param("limit") int limit);
 
-    List<Report> findAllByStatusOrderByCreatedAtAscIdAsc(ReportStatus status, Pageable pageable);
+    /**
+     * Finds the oldest reports with the requested status up to the requested limit.
+     *
+     * @param status status used to filter reports
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered oldest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.status = :status "
+                    + "ORDER BY r.createdAt ASC, r.id ASC LIMIT :limit")
+    List<Report> findFirstReportsByStatusOldestFirst(
+            @Param("status") ReportStatus status, @Param("limit") int limit);
 
+    /**
+     * Finds reports strictly before a descending cursor up to the requested limit.
+     *
+     * @param cursorCreatedAt cursor creation timestamp
+     * @param cursorId cursor UUID used as the stable tie-breaker
+     * @param limit maximum number of reports to return
+     * @return reports following the cursor in newest-first order
+     */
     @Query(
             """
 			SELECT r
@@ -38,71 +98,113 @@ public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTar
 			WHERE r.createdAt < :cursorCreatedAt
 			OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId)
 			ORDER BY r.createdAt DESC, r.id DESC
+			LIMIT :limit
 			""")
     List<Report> findAllBeforeCursor(
-            OffsetDateTime cursorCreatedAt, UUID cursorId, Pageable pageable);
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 
+    /**
+     * Finds reports with a status strictly before a descending cursor.
+     *
+     * @param status status used to filter reports
+     * @param cursorCreatedAt cursor creation timestamp
+     * @param cursorId cursor UUID used as the stable tie-breaker
+     * @param limit maximum number of reports to return
+     * @return matching reports following the cursor in newest-first order
+     */
     @Query(
             """
 			SELECT r
 			FROM Report r
 			WHERE r.status = :status
-			AND (
-				r.createdAt < :cursorCreatedAt
-				OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId)
-			)
+			AND (r.createdAt < :cursorCreatedAt
+				OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId))
 			ORDER BY r.createdAt DESC, r.id DESC
+			LIMIT :limit
 			""")
     List<Report> findAllByStatusBeforeCursor(
-            ReportStatus status, OffsetDateTime cursorCreatedAt, UUID cursorId, Pageable pageable);
+            @Param("status") ReportStatus status,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 
+    /**
+     * Finds reports with a target type strictly before a descending cursor.
+     *
+     * @param reportType target type used to filter reports
+     * @param cursorCreatedAt cursor creation timestamp
+     * @param cursorId cursor UUID used as the stable tie-breaker
+     * @param limit maximum number of reports to return
+     * @return matching reports following the cursor in newest-first order
+     */
     @Query(
             """
 			SELECT r
 			FROM Report r
 			WHERE r.reportType = :reportType
-			AND (
-				r.createdAt < :cursorCreatedAt
-				OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId)
-			)
+			AND (r.createdAt < :cursorCreatedAt
+				OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId))
 			ORDER BY r.createdAt DESC, r.id DESC
+			LIMIT :limit
 			""")
     List<Report> findAllByReportTypeBeforeCursor(
-            ReportType reportType,
-            OffsetDateTime cursorCreatedAt,
-            UUID cursorId,
-            Pageable pageable);
+            @Param("reportType") ReportType reportType,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 
+    /**
+     * Finds reports with a status and target type strictly before a descending cursor.
+     *
+     * @param status status used to filter reports
+     * @param reportType target type used to filter reports
+     * @param cursorCreatedAt cursor creation timestamp
+     * @param cursorId cursor UUID used as the stable tie-breaker
+     * @param limit maximum number of reports to return
+     * @return matching reports following the cursor in newest-first order
+     */
     @Query(
             """
 			SELECT r
 			FROM Report r
 			WHERE r.status = :status
 			AND r.reportType = :reportType
-			AND (
-				r.createdAt < :cursorCreatedAt
-				OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId)
-			)
+			AND (r.createdAt < :cursorCreatedAt
+				OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId))
 			ORDER BY r.createdAt DESC, r.id DESC
+			LIMIT :limit
 			""")
     List<Report> findAllByStatusAndReportTypeBeforeCursor(
-            ReportStatus status,
-            ReportType reportType,
-            OffsetDateTime cursorCreatedAt,
-            UUID cursorId,
-            Pageable pageable);
+            @Param("status") ReportStatus status,
+            @Param("reportType") ReportType reportType,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 
+    /**
+     * Finds reports with a status strictly after an ascending cursor.
+     *
+     * @param status status used to filter reports
+     * @param cursorCreatedAt cursor creation timestamp
+     * @param cursorId cursor UUID used as the stable tie-breaker
+     * @param limit maximum number of reports to return
+     * @return matching reports following the cursor in oldest-first order
+     */
     @Query(
             """
 			SELECT r
 			FROM Report r
 			WHERE r.status = :status
-			AND (
-				r.createdAt > :cursorCreatedAt
-				OR (r.createdAt = :cursorCreatedAt AND r.id > :cursorId)
-			)
+			AND (r.createdAt > :cursorCreatedAt
+				OR (r.createdAt = :cursorCreatedAt AND r.id > :cursorId))
 			ORDER BY r.createdAt ASC, r.id ASC
+			LIMIT :limit
 			""")
     List<Report> findAllByStatusAfterCursor(
-            ReportStatus status, OffsetDateTime cursorCreatedAt, UUID cursorId, Pageable pageable);
+            @Param("status") ReportStatus status,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 }

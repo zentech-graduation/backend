@@ -147,6 +147,28 @@ class ReportControllerIT {
     }
 
     @Test
+    void getPendingReports_regularUser_returnsForbidden() {
+        TestUser user = createUser("pending_forbidden_user", "user");
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/pending", user);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void updateStatus_regularUser_returnsForbidden() {
+        TestUser user = createUser("status_forbidden_user", "user");
+
+        ResponseEntity<Map> response =
+                patchWithAuth(
+                        "/api/v1/reports/" + UUID.randomUUID() + "/status",
+                        Map.of("status", "reviewing"),
+                        user);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
     void reviewWorkflow_moderator_listsGetsAndResolvesReport() {
         TestUser reporter = createUser("workflow_reporter", "user");
         TestUser target = createUser("workflow_target", "user");

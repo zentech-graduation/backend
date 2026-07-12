@@ -6,7 +6,6 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.UUID;
 
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -70,11 +69,11 @@ public class ReportServiceImpl implements ReportService {
             ReportStatus status, ReportType reportType, String cursor, int size) {
         int pageSize = normalizeLimit(size);
         ReportCursor decoded = decodeCursor(cursor);
-        PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
+        int queryLimit = pageSize + 1;
         var reports =
                 decoded.isEmpty()
-                        ? findFirstReportPage(status, reportType, pageRequest)
-                        : findReportPageAfterCursor(status, reportType, decoded, pageRequest);
+                        ? findFirstReportPage(status, reportType, queryLimit)
+                        : findReportPageAfterCursor(status, reportType, decoded, queryLimit);
         return toSummaryPage(reports, pageSize, cursor != null);
     }
 
@@ -83,16 +82,16 @@ public class ReportServiceImpl implements ReportService {
     public CursorPageResponse<ReportSummaryResponse> getPendingReports(String cursor, int size) {
         int pageSize = normalizeLimit(size);
         ReportCursor decoded = decodeCursor(cursor);
-        PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
+        int queryLimit = pageSize + 1;
         var reports =
                 decoded.isEmpty()
-                        ? reportRepository.findAllByStatusOrderByCreatedAtAscIdAsc(
-                                ReportStatus.PENDING, pageRequest)
+                        ? reportRepository.findFirstReportsByStatusOldestFirst(
+                                ReportStatus.PENDING, queryLimit)
                         : reportRepository.findAllByStatusAfterCursor(
                                 ReportStatus.PENDING,
                                 decoded.createdAt(),
                                 decoded.id(),
-                                pageRequest);
+                                queryLimit);
         return toSummaryPage(reports, pageSize, cursor != null);
     }
 
@@ -164,39 +163,35 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private java.util.List<Report> findFirstReportPage(
-            ReportStatus status, ReportType reportType, PageRequest pageRequest) {
+            ReportStatus status, ReportType reportType, int limit) {
         if (status != null && reportType != null) {
-            return reportRepository.findAllByStatusAndReportTypeOrderByCreatedAtDescIdDesc(
-                    status, reportType, pageRequest);
+            return reportRepository.findFirstReportsByStatusAndReportType(
+                    status, reportType, limit);
         }
         if (status != null) {
-            return reportRepository.findAllByStatusOrderByCreatedAtDescIdDesc(status, pageRequest);
+            return reportRepository.findFirstReportsByStatus(status, limit);
         }
         if (reportType != null) {
-            return reportRepository.findAllByReportTypeOrderByCreatedAtDescIdDesc(
-                    reportType, pageRequest);
+            return reportRepository.findFirstReportsByReportType(reportType, limit);
         }
-        return reportRepository.findAllByOrderByCreatedAtDescIdDesc(pageRequest);
+        return reportRepository.findFirstReports(limit);
     }
 
     private java.util.List<Report> findReportPageAfterCursor(
-            ReportStatus status,
-            ReportType reportType,
-            ReportCursor cursor,
-            PageRequest pageRequest) {
+            ReportStatus status, ReportType reportType, ReportCursor cursor, int limit) {
         if (status != null && reportType != null) {
             return reportRepository.findAllByStatusAndReportTypeBeforeCursor(
-                    status, reportType, cursor.createdAt(), cursor.id(), pageRequest);
+                    status, reportType, cursor.createdAt(), cursor.id(), limit);
         }
         if (status != null) {
             return reportRepository.findAllByStatusBeforeCursor(
-                    status, cursor.createdAt(), cursor.id(), pageRequest);
+                    status, cursor.createdAt(), cursor.id(), limit);
         }
         if (reportType != null) {
             return reportRepository.findAllByReportTypeBeforeCursor(
-                    reportType, cursor.createdAt(), cursor.id(), pageRequest);
+                    reportType, cursor.createdAt(), cursor.id(), limit);
         }
-        return reportRepository.findAllBeforeCursor(cursor.createdAt(), cursor.id(), pageRequest);
+        return reportRepository.findAllBeforeCursor(cursor.createdAt(), cursor.id(), limit);
     }
 
     private CursorPageResponse<ReportSummaryResponse> toSummaryPage(

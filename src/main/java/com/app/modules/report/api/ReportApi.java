@@ -70,6 +70,13 @@ public interface ReportApi {
                 content =
                         @Content(
                                 mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping
@@ -93,6 +100,13 @@ public interface ReportApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -125,6 +139,13 @@ public interface ReportApi {
                 content =
                         @Content(
                                 mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Reports.PENDING)
@@ -154,6 +175,13 @@ public interface ReportApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -201,6 +229,13 @@ public interface ReportApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description = "Invalid lifecycle transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
                 content =
                         @Content(
                                 mediaType = "application/json",

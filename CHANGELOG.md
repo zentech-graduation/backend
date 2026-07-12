@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Comment subsystem metrics and a Redis/RabbitMQ health indicator.
 
 ### Changed
+- Report cursor pagination now uses explicit query limits without Spring Data offset pagination abstractions.
 - Report moderation list endpoints now return cursor-paginated `ReportSummaryResponse` pages instead of offset-paginated full report details.
 - `ApiErrorCode` gains comment-scoped error codes.
 - RabbitMQ topology gains the `comment.live.events` fanout exchange (bound to the event bus for `comment.#`) and a dedicated `comment.notification.queue` with its dead-letter queue.
@@ -61,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Logged OAuth2 state-cookie signature and deserialization failures instead of silently treating a tampered or corrupted cookie as an absent authorization request.
 
 ### Tests
+- Added authorization coverage for regular users accessing the pending report queue and report status updates.
 - Added WebSocket JWT handshake interceptor unit tests covering valid non-blacklisted token, revoked (blacklisted) token, missing token parameter, and invalid token paths.
 - Added pagination boundary unit tests verifying `hasNextPage=false` on an exactly-full final page and `hasNextPage=true` with one probe row beyond the limit.
 - Added comment-module coverage for the idempotency replay and conflict paths (unit + controller IT), admin-delete authorization, read-side visibility on private posts, and the reply/like/mention notification consumer branches.

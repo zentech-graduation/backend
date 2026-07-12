@@ -17,7 +17,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageRequest;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -138,8 +137,8 @@ class ReportServiceImplTest {
     void listReports_filteredCursor_mapsSummaryContent() {
         Report report = Report.builder().status(ReportStatus.PENDING).build();
         ReportSummaryResponse mapped = summary(ReportStatus.PENDING);
-        when(reportRepository.findAllByStatusAndReportTypeOrderByCreatedAtDescIdDesc(
-                        ReportStatus.PENDING, ReportType.POST, PageRequest.of(0, 21)))
+        when(reportRepository.findFirstReportsByStatusAndReportType(
+                        ReportStatus.PENDING, ReportType.POST, 21))
                 .thenReturn(List.of(report));
         when(reportMapper.toSummaryResponseList(List.of(report))).thenReturn(List.of(mapped));
 
@@ -153,8 +152,7 @@ class ReportServiceImplTest {
     void getPendingReports_firstPage_queriesPendingQueueInFifoOrder() {
         Report report = Report.builder().status(ReportStatus.PENDING).build();
         ReportSummaryResponse mapped = summary(ReportStatus.PENDING);
-        when(reportRepository.findAllByStatusOrderByCreatedAtAscIdAsc(
-                        ReportStatus.PENDING, PageRequest.of(0, 21)))
+        when(reportRepository.findFirstReportsByStatusOldestFirst(ReportStatus.PENDING, 21))
                 .thenReturn(List.of(report));
         when(reportMapper.toSummaryResponseList(List.of(report))).thenReturn(List.of(mapped));
 
