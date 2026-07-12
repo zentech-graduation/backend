@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- Removed the email address from JWT access-token claims so account email is no longer readable from the unencrypted token payload.
+- Public user-profile lookups now enforce block and private-account visibility: a block in either direction returns 404, and follower/following/post counts are hidden from non-followers of a private account.
+- Post captions and user bio are now length-bounded at the request layer (2200 and 500 characters respectively).
+
+### Fixed
+- Concurrent duplicate like or save on a post, and duplicate like on a comment, now return a clean 409 conflict instead of a 500.
+
 ### Fixed
 - Resolved Flyway duplicate-version conflict on V25: renamed `V25__add_comment_moderation_status.sql` to V26 and `V26__create_comment_write_idempotency.sql` to V27, restoring application startup and unblocking all 144 integration-test errors.
 - Per-instance live-comment RabbitMQ queue now declares durable instead of non-durable, resolving a broker-rejected `queue.declare` (`transient_nonexcl_queues` deprecation on RabbitMQ 4.x) that crash-looped the live-comment consumer connection on startup.
