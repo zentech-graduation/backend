@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.modules.social.service.SocialService;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
 import com.app.modules.users.dto.response.PublicUserProfileResponse;
@@ -35,12 +36,14 @@ class UserServiceImplTest {
     @Mock private UserRepository userRepository;
     @Mock private UserSettingsRepository settingsRepository;
     @Mock private UserMapper userMapper;
+    @Mock private SocialService socialService;
 
     private UserServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new UserServiceImpl(userRepository, settingsRepository, userMapper);
+        service =
+                new UserServiceImpl(userRepository, settingsRepository, userMapper, socialService);
     }
 
     // ── getMyProfile ──────────────────────────────────────────────────────────
@@ -168,12 +171,14 @@ class UserServiceImplTest {
     @Test
     void getUserProfile_publicAccount_authenticated_returnsWithCounts() {
         UUID id = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
         User user = publicUser(id, "bob");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(socialService.isBlockedBetween(viewerId, id)).thenReturn(false);
         when(userMapper.toPublicProfileResponse(user, 0, 0, 0))
                 .thenReturn(publicProfileResponse(id, 0, 0, 0));
 
-        service.getUserProfile(id, true);
+        service.getUserProfile(viewerId, id);
 
         verify(userMapper).toPublicProfileResponse(user, 0, 0, 0);
     }
@@ -186,7 +191,7 @@ class UserServiceImplTest {
         when(userMapper.toPublicProfileResponse(user, null, null, null))
                 .thenReturn(publicProfileResponse(id, null, null, null));
 
-        PublicUserProfileResponse result = service.getUserProfile(id, false);
+        PublicUserProfileResponse result = service.getUserProfile(null, id);
 
         verify(userMapper).toPublicProfileResponse(user, null, null, null);
         assertThat(result.followerCount()).isNull();
@@ -195,15 +200,79 @@ class UserServiceImplTest {
     }
 
     @Test
-    void getUserProfile_privateAccount_unauthenticated_throwsUnauthorized() {
+    void getUserProfile_privateAccount_nonFollower_returnsMaskedCounts() {
+        UUID id = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        User user = privateUser(id, "carol");
+        when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(socialService.isBlockedBetween(viewerId, id)).thenReturn(false);
+        when(socialService.hasAcceptedFollow(viewerId, id)).thenReturn(false);
+        when(userMapper.toPublicProfileResponse(user, null, null, null))
+                .thenReturn(publicProfileResponse(id, null, null, null));
+
+        PublicUserProfileResponse result = service.getUserProfile(viewerId, id);
+
+        verify(userMapper).toPublicProfileResponse(user, null, null, null);
+        assertThat(result.followerCount()).isNull();
+        assertThat(result.followingCount()).isNull();
+        assertThat(result.postCount()).isNull();
+    }
+
+    @Test
+    void getUserProfile_privateAccount_acceptedFollower_returnsFullProfile() {
+        UUID id = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        User user = privateUser(id, "carol");
+        when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(socialService.isBlockedBetween(viewerId, id)).thenReturn(false);
+        when(socialService.hasAcceptedFollow(viewerId, id)).thenReturn(true);
+        when(userMapper.toPublicProfileResponse(user, 0, 0, 0))
+                .thenReturn(publicProfileResponse(id, 0, 0, 0));
+
+        service.getUserProfile(viewerId, id);
+
+        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0);
+    }
+
+    @Test
+    void getUserProfile_privateAccount_unauthenticated_returnsMaskedCounts() {
         UUID id = UUID.randomUUID();
         User user = privateUser(id, "carol");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(userMapper.toPublicProfileResponse(user, null, null, null))
+                .thenReturn(publicProfileResponse(id, null, null, null));
 
-        assertThatThrownBy(() -> service.getUserProfile(id, false))
+        PublicUserProfileResponse result = service.getUserProfile(null, id);
+
+        verify(userMapper).toPublicProfileResponse(user, null, null, null);
+        assertThat(result.followerCount()).isNull();
+    }
+
+    @Test
+    void getUserProfile_blockedCaller_throwsNotFound() {
+        UUID id = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        User user = publicUser(id, "bob");
+        when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(socialService.isBlockedBetween(viewerId, id)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.getUserProfile(viewerId, id))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.UNAUTHORIZED);
+                .isEqualTo(ApiErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void getUserProfile_owner_returnsFullProfile() {
+        UUID id = UUID.randomUUID();
+        User user = privateUser(id, "carol");
+        when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(userMapper.toPublicProfileResponse(user, 0, 0, 0))
+                .thenReturn(publicProfileResponse(id, 0, 0, 0));
+
+        service.getUserProfile(id, id);
+
+        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0);
     }
 
     @Test
@@ -211,7 +280,7 @@ class UserServiceImplTest {
         UUID id = UUID.randomUUID();
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getUserProfile(id, false))
+        assertThatThrownBy(() -> service.getUserProfile(null, id))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.NOT_FOUND);

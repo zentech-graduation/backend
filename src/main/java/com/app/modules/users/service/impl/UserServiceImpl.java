@@ -8,6 +8,7 @@ import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.modules.social.service.SocialService;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
 import com.app.modules.users.dto.response.PublicUserProfileResponse;
@@ -26,14 +27,17 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserSettingsRepository settingsRepository;
     private final UserMapper userMapper;
+    private final SocialService socialService;
 
     public UserServiceImpl(
             UserRepository userRepository,
             UserSettingsRepository settingsRepository,
-            UserMapper userMapper) {
+            UserMapper userMapper,
+            SocialService socialService) {
         this.userRepository = userRepository;
         this.settingsRepository = settingsRepository;
         this.userMapper = userMapper;
+        this.socialService = socialService;
     }
 
     @Override
@@ -92,22 +96,37 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public PublicUserProfileResponse getUserProfile(UUID targetUserId, boolean isAuthenticated) {
+    public PublicUserProfileResponse getUserProfile(UUID viewerId, UUID targetUserId) {
         User user =
                 userRepository
                         .findByIdAndDeletedAtIsNull(targetUserId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
 
-        if (user.isPrivate() && !isAuthenticated) {
-            throw new AppException(ApiErrorCode.UNAUTHORIZED);
+        boolean isOwner = viewerId != null && viewerId.equals(targetUserId);
+
+        // A block in either direction hides the account entirely; return NOT_FOUND so a blocked
+        // caller cannot even confirm the account exists.
+        if (!isOwner
+                && viewerId != null
+                && socialService.isBlockedBetween(viewerId, targetUserId)) {
+            throw new AppException(ApiErrorCode.NOT_FOUND);
         }
 
-        // TODO(VR-NNN): enforce private account visibility once social module exposes follow-state
-        // query
+        // Social counts are relationship-gated: the owner always sees them, a private account
+        // reveals them only to accepted followers, and a public account reveals them to any
+        // authenticated caller. Everyone else receives the profile card with counts masked to null.
+        boolean detailed;
+        if (isOwner) {
+            detailed = true;
+        } else if (user.isPrivate()) {
+            detailed = viewerId != null && socialService.hasAcceptedFollow(viewerId, targetUserId);
+        } else {
+            detailed = viewerId != null;
+        }
 
-        Integer followerCount = isAuthenticated ? user.getFollowerCount() : null;
-        Integer followingCount = isAuthenticated ? user.getFollowingCount() : null;
-        Integer postCount = isAuthenticated ? user.getPostCount() : null;
+        Integer followerCount = detailed ? user.getFollowerCount() : null;
+        Integer followingCount = detailed ? user.getFollowingCount() : null;
+        Integer postCount = detailed ? user.getPostCount() : null;
 
         return userMapper.toPublicProfileResponse(user, followerCount, followingCount, postCount);
     }

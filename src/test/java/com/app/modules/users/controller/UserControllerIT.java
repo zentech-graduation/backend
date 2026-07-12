@@ -190,9 +190,7 @@ class UserControllerIT {
     }
 
     @Test
-    void getUserProfile_privateAccount_unauthenticated_returns401() {
-        // Finding F-2: authenticated callers currently receive 200 for private accounts
-        // (TODO VR-NNN: enforce visibility once follow-state query is implemented)
+    void getUserProfile_privateAccount_unauthenticated_returns200WithMaskedCounts() {
         String email = uniqueEmail("priv_target");
         String access =
                 registerVerifyAndLogin("user_priv_target", email, "password1").get("accessToken");
@@ -202,8 +200,35 @@ class UserControllerIT {
 
         ResponseEntity<Map> response = getNoAuth("/api/v1/users/" + targetId);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(response.getBody().get("code")).isEqualTo("UNAUTHORIZED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("followerCount")).isNull();
+        assertThat(data.get("followingCount")).isNull();
+        assertThat(data.get("postCount")).isNull();
+    }
+
+    @Test
+    void getUserProfile_privateAccount_authenticatedNonFollower_returns200WithMaskedCounts() {
+        String targetEmail = uniqueEmail("priv_target2");
+        String targetAccess =
+                registerVerifyAndLogin("user_priv_target2", targetEmail, "password1")
+                        .get("accessToken");
+        UUID targetId =
+                userRepository.findByEmailAndDeletedAtIsNull(targetEmail).orElseThrow().getId();
+        patchWithAuth("/api/v1/users/me", Map.of("isPrivate", true), targetAccess);
+
+        String callerEmail = uniqueEmail("priv_caller");
+        String callerAccess =
+                registerVerifyAndLogin("user_priv_caller", callerEmail, "password1")
+                        .get("accessToken");
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/users/" + targetId, callerAccess);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("followerCount")).isNull();
+        assertThat(data.get("followingCount")).isNull();
+        assertThat(data.get("postCount")).isNull();
     }
 
     @Test
