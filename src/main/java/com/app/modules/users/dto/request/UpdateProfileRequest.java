@@ -22,7 +22,10 @@ public record UpdateProfileRequest(
         @Schema(description = "Display name shown on the profile", example = "Jane Doe")
                 @Size(max = 100)
                 String displayName,
-        @Schema(description = "Short bio; send empty string to clear", example = "Coffee lover")
+        @Schema(
+                        description = "Short bio (max 500 characters); send empty string to clear",
+                        example = "Coffee lover")
+                @Size(max = 500)
                 String bio,
         @Schema(
                         description = "CDN URL of the avatar image; send empty string to clear",
