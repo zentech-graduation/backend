@@ -66,9 +66,10 @@ public class UserController extends BaseController implements UserApi {
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<PublicUserProfileResponse>> getUserProfile(
             @PathVariable UUID userId, @AuthenticationPrincipal UserPrincipal principal) {
+        UUID viewerId = principal != null ? principal.userId() : null;
         return ResponseEntity.ok(
                 ApiResponse.success(
-                        ApiSuccessCode.OK, userService.getUserProfile(userId, principal != null)));
+                        ApiSuccessCode.OK, userService.getUserProfile(viewerId, userId)));
     }
 
     /** Returns the notification and privacy settings of the authenticated user. */

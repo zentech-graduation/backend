@@ -64,12 +64,15 @@ public class JwtTokenProvider {
     /**
      * Mints a new access token for the given identity.
      *
+     * <p>The payload intentionally excludes email and other PII: a JWT payload is only Base64URL
+     * encoded, not encrypted, and any holder of the token can read it. Downstream code resolves the
+     * user (and email, when needed) from the {@code sub} claim server-side.
+     *
      * @param userId stable user identifier; placed in the {@code sub} claim
-     * @param email user email; placed in a custom {@code email} claim
      * @param role user role name; placed in a custom {@code role} claim
      * @return the encoded JWT string
      */
-    public String generateAccessToken(UUID userId, String email, String role) {
+    public String generateAccessToken(UUID userId, String role) {
         Instant now = Instant.now();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         JwtClaimsSet claims =
@@ -77,7 +80,6 @@ public class JwtTokenProvider {
                         .issuer(properties.issuer())
                         .audience(List.of(properties.audience()))
                         .subject(userId.toString())
-                        .claim("email", email)
                         .claim("role", role)
                         .claim("jti", UUID.randomUUID().toString())
                         .issuedAt(now)
@@ -125,9 +127,8 @@ public class JwtTokenProvider {
             throw new AppException(ApiErrorCode.AUTH_TOKEN_INVALID);
         }
 
-        String email = jwt.getClaimAsString("email");
         String role = jwt.getClaimAsString("role");
         String jti = jwt.getClaimAsString("jti");
-        return new JwtClaims(userId, email, role, jti, expiresAt);
+        return new JwtClaims(userId, role, jti, expiresAt);
     }
 }

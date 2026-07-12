@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,7 +70,13 @@ public class PostSaveServiceImpl implements PostSaveService {
         if (postSaveRepository.existsById(saveId)) {
             throw new AppException(ApiErrorCode.POST_ALREADY_SAVED);
         }
-        postSaveRepository.save(PostSave.builder().id(saveId).build());
+        try {
+            postSaveRepository.saveAndFlush(PostSave.builder().id(saveId).build());
+        } catch (DataIntegrityViolationException ex) {
+            // A concurrent double-submit lost the insert race; the (user_id, post_id) primary key
+            // already recorded the save, so surface the same clean conflict rather than a 500.
+            throw new AppException(ApiErrorCode.POST_ALREADY_SAVED);
+        }
     }
 
     @Override

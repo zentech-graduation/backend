@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- Removed the email address from JWT access-token claims so account email is no longer readable from the unencrypted token payload.
+- Public user-profile lookups now enforce block and private-account visibility: a block in either direction returns 404, and follower/following/post counts are hidden from non-followers of a private account.
+- Post captions and user bio are now length-bounded at the request layer (2200 and 500 characters respectively).
+
+### Fixed
+- Concurrent duplicate like or save on a post, and duplicate like on a comment, now return a clean 409 conflict instead of a 500.
 ### Added
 - Automated `user_events` monthly partition management: a migration backfills the current and next two months' partitions, and a scheduled job pre-creates the partition two months ahead each month so new events no longer accumulate in the default catch-all partition.
 

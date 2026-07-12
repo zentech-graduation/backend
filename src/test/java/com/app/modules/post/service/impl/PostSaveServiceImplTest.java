@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 
 import com.app.common.enums.ApiErrorCode;
@@ -88,7 +89,7 @@ class PostSaveServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_ALREADY_SAVED);
-        verify(postSaveRepository, never()).save(any());
+        verify(postSaveRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -97,7 +98,19 @@ class PostSaveServiceImplTest {
 
         service.savePost(userId, postId);
 
-        verify(postSaveRepository).save(any(PostSave.class));
+        verify(postSaveRepository).saveAndFlush(any(PostSave.class));
+    }
+
+    @Test
+    void savePost_concurrentDuplicateInsert_throwsAlreadySaved() {
+        when(postSaveRepository.existsById(saveId)).thenReturn(false);
+        when(postSaveRepository.saveAndFlush(any(PostSave.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.savePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_ALREADY_SAVED);
     }
 
     @Test

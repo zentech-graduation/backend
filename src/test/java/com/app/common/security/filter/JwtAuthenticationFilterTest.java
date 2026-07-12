@@ -62,9 +62,7 @@ class JwtAuthenticationFilterTest {
                         jwtTokenProvider, userRepository, securityMapper, tokenBlacklistService);
         SecurityContextHolder.clearContext();
 
-        JwtClaims claims =
-                new JwtClaims(
-                        USER_ID, "user@example.com", "USER", JTI, Instant.now().plusSeconds(300));
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
         when(request.getHeader("Authorization")).thenReturn("Bearer " + TOKEN);
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);

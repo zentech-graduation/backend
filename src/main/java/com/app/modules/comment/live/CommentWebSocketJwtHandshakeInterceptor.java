@@ -60,9 +60,11 @@ public class CommentWebSocketJwtHandshakeInterceptor implements HandshakeInterce
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return false;
             }
+            // Email is intentionally absent from the access token (PII); the WebSocket principal
+            // only needs the user id and role for fan-out and authorization.
             attributes.put(
                     PRINCIPAL_ATTRIBUTE,
-                    new UserPrincipal(claims.userId(), claims.email(), claims.role(), "ACTIVE"));
+                    new UserPrincipal(claims.userId(), null, claims.role(), "ACTIVE"));
             return true;
         } catch (RuntimeException ex) {
             log.debug("Rejected WebSocket handshake: {}", ex.getMessage());
