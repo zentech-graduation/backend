@@ -254,8 +254,7 @@ public class AuthServiceImpl implements AuthService {
                         .orElse(false);
 
         String accessToken =
-                jwtTokenProvider.generateAccessToken(
-                        user.getId(), user.getEmail(), user.getRole().name());
+                jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
 
         return new AuthResponse(
                 accessToken,
@@ -423,8 +422,7 @@ public class AuthServiceImpl implements AuthService {
     private AuthResponse issueSession(
             User user, boolean emailVerified, HttpServletRequest httpRequest) {
         String accessToken =
-                jwtTokenProvider.generateAccessToken(
-                        user.getId(), user.getEmail(), user.getRole().name());
+                jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
         String refreshToken =
                 refreshTokenService.issue(
                         user.getId(),
