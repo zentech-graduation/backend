@@ -39,6 +39,7 @@ public enum ApiErrorCode {
     USER_ALREADY_EXISTS("USER_ALREADY_EXISTS", "An account with these details already exists", HttpStatus.CONFLICT),
     USER_EMAIL_ALREADY_EXISTS("USER_EMAIL_ALREADY_EXISTS", "An account with this email already exists", HttpStatus.CONFLICT),
     USER_USERNAME_ALREADY_EXISTS("USER_USERNAME_ALREADY_EXISTS", "Username is already taken", HttpStatus.CONFLICT),
+    USER_NOT_FOUND("USER_NOT_FOUND", "User not found", HttpStatus.NOT_FOUND),
 
     // Social
     SOCIAL_SELF_FOLLOW("SOCIAL_SELF_FOLLOW", "You cannot follow yourself", HttpStatus.BAD_REQUEST),
@@ -85,7 +86,12 @@ public enum ApiErrorCode {
     REPORT_DUPLICATE("REPORT_DUPLICATE", "You have already reported this entity", HttpStatus.CONFLICT),
     REPORT_SELF_NOT_ALLOWED("REPORT_SELF_NOT_ALLOWED", "You cannot report your own content", HttpStatus.BAD_REQUEST),
     REPORT_INVALID_TRANSITION("REPORT_INVALID_TRANSITION", "Invalid report status transition", HttpStatus.CONFLICT),
-    REPORT_RESOLUTION_NOTE_REQUIRED("REPORT_RESOLUTION_NOTE_REQUIRED", "A resolution note is required to close a report", HttpStatus.BAD_REQUEST);
+    REPORT_RESOLUTION_NOTE_REQUIRED("REPORT_RESOLUTION_NOTE_REQUIRED", "A resolution note is required to close a report", HttpStatus.BAD_REQUEST),
+
+    // Admin
+    ADMIN_ACTION_NOT_FOUND("ADMIN_ACTION_NOT_FOUND", "Admin action not found", HttpStatus.NOT_FOUND),
+    ADMIN_INVALID_ACTION("ADMIN_INVALID_ACTION", "Action is not valid for this target", HttpStatus.BAD_REQUEST),
+    ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT);
 
     // spotless:on
 

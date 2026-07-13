@@ -140,10 +140,11 @@ public final class ApiConstants {
         private Admin() {}
 
         public static final String ROOT = ADMIN;
-        public static final String USERS = ADMIN + "/users";
-        public static final String USER_BY_ID = ADMIN + "/users/{userId}";
-        public static final String REPORTS = ADMIN + "/reports";
-        public static final String REPORT_BY_ID = ADMIN + "/reports/{reportId}";
-        public static final String ACTIONS = ADMIN + "/actions";
+        public static final String USER_STATUS = "/users/{userId}/status";
+        public static final String POST_STATUS = "/posts/{postId}/status";
+        public static final String COMMENT_STATUS = "/comments/{commentId}/status";
+        public static final String REPORT_STATUS = "/reports/{reportId}/status";
+        public static final String ACTIONS = "/actions";
+        public static final String ACTION_BY_ID = "/actions/{actionId}";
     }
 }

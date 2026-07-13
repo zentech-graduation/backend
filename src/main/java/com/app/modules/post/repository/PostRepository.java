@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -18,6 +19,43 @@ import com.app.modules.post.enums.PostStatus;
 public interface PostRepository extends JpaRepository<Post, UUID> {
 
     Optional<Post> findByIdAndDeletedAtIsNull(UUID id);
+
+    /**
+     * Reads the author of a post regardless of its soft-delete state.
+     *
+     * @param postId post identifier
+     * @return author identifier when the post exists
+     */
+    @Query(value = "SELECT user_id FROM posts WHERE id = :postId", nativeQuery = true)
+    Optional<UUID> findOwnerIdIncludingDeleted(@Param("postId") UUID postId);
+
+    /**
+     * Reads the persisted status of a post regardless of its soft-delete state.
+     *
+     * @param postId post identifier
+     * @return lowercase PostgreSQL status when the post exists
+     */
+    @Query(value = "SELECT status::text FROM posts WHERE id = :postId", nativeQuery = true)
+    Optional<String> findStatusIncludingDeleted(@Param("postId") UUID postId);
+
+    /**
+     * Applies an administrator-controlled status and soft-delete state to a post.
+     *
+     * @param postId post identifier
+     * @param status lowercase PostgreSQL post status
+     * @param deletedAt soft-delete timestamp, or null when restoring
+     * @return number of updated posts
+     */
+    @Modifying
+    @Query(
+            value =
+                    "UPDATE posts SET status = CAST(:status AS post_status), "
+                            + "deleted_at = :deletedAt WHERE id = :postId",
+            nativeQuery = true)
+    int applyAdminModeration(
+            @Param("postId") UUID postId,
+            @Param("status") String status,
+            @Param("deletedAt") OffsetDateTime deletedAt);
 
     /**
      * First keyset page of a user's posts in the given status, newest first.

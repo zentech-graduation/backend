@@ -204,7 +204,7 @@ public class SecurityConfig {
     private void configureRoleBasedEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
-        auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN");
+        auth.requestMatchers("/api/v1/admin/**").hasAnyRole("MODERATOR", "ADMIN");
         auth.requestMatchers("/api/v1/moderator/**").hasAnyRole("MODERATOR", "ADMIN");
         auth.requestMatchers(
                         HttpMethod.GET,
