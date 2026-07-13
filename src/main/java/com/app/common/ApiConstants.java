@@ -131,7 +131,9 @@ public final class ApiConstants {
         private Reports() {}
 
         public static final String ROOT = API_V1 + "/reports";
+        public static final String PENDING = "/pending";
         public static final String BY_ID = "/{reportId}";
+        public static final String STATUS = "/{reportId}/status";
     }
 
     public static final class Admin {

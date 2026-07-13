@@ -24,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Per-instance live-comment RabbitMQ queue now declares durable instead of non-durable, resolving a broker-rejected `queue.declare` (`transient_nonexcl_queues` deprecation on RabbitMQ 4.x) that crash-looped the live-comment consumer connection on startup.
 
 ### Added
+- Report submission and moderation workflow with polymorphic target validation, duplicate and self-report prevention, role-restricted retrieval, and controlled status transitions.
+- Report pending moderation endpoint returning FIFO cursor-paginated queue summaries.
+- Unit and Testcontainers integration coverage for report submission, validation, authorization, retrieval, and status transitions.
 - Comment module: create, edit, soft-delete (subtree), likes, and nested replies up to depth 10, with cursor-paginated listing of top-level comments and replies.
 - Synchronous comment moderation (content normalization plus rule-based rejection for empty, over-length, blocked-word, and spam content).
 - HTTP write idempotency for comment creation via an `Idempotency-Key` header, replaying the original response on a matching retry and rejecting key reuse with a different payload.
@@ -34,11 +37,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Comment subsystem metrics and a Redis/RabbitMQ health indicator.
 
 ### Changed
+- Report cursor pagination now uses explicit query limits without Spring Data offset pagination abstractions.
+- Report moderation list endpoints now return cursor-paginated `ReportSummaryResponse` pages instead of offset-paginated full report details.
 - `ApiErrorCode` gains comment-scoped error codes.
 - RabbitMQ topology gains the `comment.live.events` fanout exchange (bound to the event bus for `comment.#`) and a dedicated `comment.notification.queue` with its dead-letter queue.
 - Comment write and live-delivery paths emit MDC correlation fields (commentId, postId, userId, eventId, serverId).
 
 ### Fixed
+- Report response OpenAPI schemas now include examples and required-field metadata.
 - Comment list endpoints now enforce post visibility; private posts return 403 to non-followers, consistent with the create and WebSocket paths.
 - Idempotency key races are resolved with an `INSERT ... ON CONFLICT DO NOTHING` reservation in the request transaction, so a concurrent duplicate cannot poison the transaction and a rolled-back create frees the key.
 - WebSocket handshake now rejects blacklisted (revoked but unexpired) access tokens.
@@ -69,6 +75,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Logged OAuth2 state-cookie signature and deserialization failures instead of silently treating a tampered or corrupted cookie as an absent authorization request.
 
 ### Tests
+- Added authorization coverage for regular users accessing the pending report queue and report status updates.
 - Added WebSocket JWT handshake interceptor unit tests covering valid non-blacklisted token, revoked (blacklisted) token, missing token parameter, and invalid token paths.
 - Added pagination boundary unit tests verifying `hasNextPage=false` on an exactly-full final page and `hasNextPage=true` with one probe row beyond the limit.
 - Added comment-module coverage for the idempotency replay and conflict paths (unit + controller IT), admin-delete authorization, read-side visibility on private posts, and the reply/like/mention notification consumer branches.

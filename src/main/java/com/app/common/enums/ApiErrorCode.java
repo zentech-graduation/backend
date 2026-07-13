@@ -77,7 +77,15 @@ public enum ApiErrorCode {
     COMMENT_NOT_LIKED("COMMENT_NOT_LIKED", "Comment has not been liked", HttpStatus.CONFLICT),
     COMMENT_SLOW_MODE_ACTIVE("COMMENT_SLOW_MODE_ACTIVE", "Slow mode is active. Please wait before commenting again.", HttpStatus.TOO_MANY_REQUESTS),
     COMMENT_IDEMPOTENCY_CONFLICT("COMMENT_IDEMPOTENCY_CONFLICT", "Idempotency key reused with different request payload", HttpStatus.CONFLICT),
-    POST_COMMENTING_RESTRICTED("POST_COMMENTING_RESTRICTED", "You do not have access to comment on this post", HttpStatus.FORBIDDEN);
+    POST_COMMENTING_RESTRICTED("POST_COMMENTING_RESTRICTED", "You do not have access to comment on this post", HttpStatus.FORBIDDEN),
+
+    // Report
+    REPORT_NOT_FOUND("REPORT_NOT_FOUND", "Report not found", HttpStatus.NOT_FOUND),
+    REPORT_TARGET_NOT_FOUND("REPORT_TARGET_NOT_FOUND", "Reported entity not found", HttpStatus.NOT_FOUND),
+    REPORT_DUPLICATE("REPORT_DUPLICATE", "You have already reported this entity", HttpStatus.CONFLICT),
+    REPORT_SELF_NOT_ALLOWED("REPORT_SELF_NOT_ALLOWED", "You cannot report your own content", HttpStatus.BAD_REQUEST),
+    REPORT_INVALID_TRANSITION("REPORT_INVALID_TRANSITION", "Invalid report status transition", HttpStatus.CONFLICT),
+    REPORT_RESOLUTION_NOTE_REQUIRED("REPORT_RESOLUTION_NOTE_REQUIRED", "A resolution note is required to close a report", HttpStatus.BAD_REQUEST);
 
     // spotless:on
 
