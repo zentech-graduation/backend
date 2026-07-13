@@ -22,11 +22,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
-import com.app.modules.admin.dto.request.CommentModerationActionRequest;
-import com.app.modules.admin.dto.request.PostModerationActionRequest;
-import com.app.modules.admin.dto.request.ReportResolutionActionRequest;
-import com.app.modules.admin.dto.request.UserStatusActionRequest;
+import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
+import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
@@ -67,7 +65,7 @@ class AdminServiceImplTest {
     }
 
     @Test
-    void updateUserStatus_suspendActiveUser_updatesAndAudits() {
+    void suspendUser_activeUser_updatesAndAudits() {
         UUID actorId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         User user = User.builder().id(userId).status(UserStatus.ACTIVE).build();
@@ -76,11 +74,8 @@ class AdminServiceImplTest {
         stubAudit(expected);
 
         AdminActionResponse result =
-                service.updateUserStatus(
-                        actorId,
-                        userId,
-                        new UserStatusActionRequest(
-                                AdminActionType.SUSPEND_USER, "Policy breach", Map.of()));
+                service.suspendUser(
+                        actorId, userId, new AdminActionRequest("Policy breach", null, Map.of()));
 
         assertThat(result).isEqualTo(expected);
         assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
@@ -92,18 +87,17 @@ class AdminServiceImplTest {
     }
 
     @Test
-    void updateUserStatus_unbanActiveUser_throwsInvalidTransition() {
+    void unbanUser_activeUser_throwsInvalidTransition() {
         UUID userId = UUID.randomUUID();
         when(userRepository.findByIdAndDeletedAtIsNull(userId))
                 .thenReturn(Optional.of(User.builder().status(UserStatus.ACTIVE).build()));
 
         assertThatThrownBy(
                         () ->
-                                service.updateUserStatus(
+                                service.unbanUser(
                                         UUID.randomUUID(),
                                         userId,
-                                        new UserStatusActionRequest(
-                                                AdminActionType.UNBAN_USER, "Review", null)))
+                                        new AdminActionRequest("Review", null, null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
@@ -111,7 +105,7 @@ class AdminServiceImplTest {
     }
 
     @Test
-    void moderatePost_removeLivePost_softDeletesAndAudits() {
+    void removePost_livePost_softDeletesAndAudits() {
         UUID postId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         AdminActionResponse expected = response(AdminActionType.REMOVE_POST);
@@ -121,11 +115,8 @@ class AdminServiceImplTest {
         stubAudit(expected);
 
         AdminActionResponse result =
-                service.moderatePost(
-                        UUID.randomUUID(),
-                        postId,
-                        new PostModerationActionRequest(
-                                AdminActionType.REMOVE_POST, "Violation", null, null));
+                service.removePost(
+                        UUID.randomUUID(), postId, new AdminActionRequest("Violation", null, null));
 
         assertThat(result).isEqualTo(expected);
         verify(postRepository)
@@ -136,7 +127,7 @@ class AdminServiceImplTest {
     }
 
     @Test
-    void moderateComment_restoreDeletedComment_clearsDeletedAtAndAudits() {
+    void restoreComment_deletedComment_clearsDeletedAtAndAudits() {
         UUID commentId = UUID.randomUUID();
         when(commentRepository.findOwnerIdIncludingDeleted(commentId))
                 .thenReturn(Optional.of(UUID.randomUUID()));
@@ -145,11 +136,10 @@ class AdminServiceImplTest {
         stubAudit(expected);
 
         AdminActionResponse result =
-                service.moderateComment(
+                service.restoreComment(
                         UUID.randomUUID(),
                         commentId,
-                        new CommentModerationActionRequest(
-                                AdminActionType.RESTORE_COMMENT, "Appeal accepted", null, null));
+                        new AdminActionRequest("Appeal accepted", null, null));
 
         assertThat(result).isEqualTo(expected);
         verify(commentRepository).applyAdminModeration(commentId, null);
@@ -173,10 +163,7 @@ class AdminServiceImplTest {
 
         AdminActionResponse result =
                 service.resolveReport(
-                        actorId,
-                        reportId,
-                        new ReportResolutionActionRequest(
-                                AdminActionType.RESOLVE_REPORT, "Confirmed", null));
+                        actorId, reportId, new AdminActionRequest("Confirmed", null, null));
 
         assertThat(result).isEqualTo(expected);
         assertThat(report.getStatus()).isEqualTo(ReportStatus.RESOLVED);
@@ -196,25 +183,22 @@ class AdminServiceImplTest {
                                 service.resolveReport(
                                         UUID.randomUUID(),
                                         reportId,
-                                        new ReportResolutionActionRequest(
-                                                AdminActionType.RESOLVE_REPORT,
-                                                "Reopen not allowed",
-                                                null)))
+                                        new AdminActionRequest("Reopen not allowed", null, null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
     }
 
     @Test
-    void listActions_firstPage_mapsContentAndProbeRow() {
+    void getActions_firstPage_mapsContentAndProbeRow() {
         AdminAction first = action(AdminActionType.BAN_USER);
         AdminAction probe = action(AdminActionType.REMOVE_POST);
-        AdminActionResponse mapped = response(AdminActionType.BAN_USER);
+        AdminActionSummaryResponse mapped = summary(AdminActionType.BAN_USER);
         when(adminActionRepository.findActions(null, null, null, null, null, 2))
                 .thenReturn(List.of(first, probe));
-        when(adminActionMapper.toResponseList(List.of(first))).thenReturn(List.of(mapped));
+        when(adminActionMapper.toSummaryResponseList(List.of(first))).thenReturn(List.of(mapped));
 
-        var result = service.listActions(null, null, null, null, 1);
+        var result = service.getActions(null, null, null, 1);
 
         assertThat(result.getContent()).containsExactly(mapped);
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
@@ -222,11 +206,11 @@ class AdminServiceImplTest {
     }
 
     @Test
-    void getAction_missingAction_throwsNotFound() {
+    void getActionById_missingAction_throwsNotFound() {
         UUID actionId = UUID.randomUUID();
         when(adminActionRepository.findById(actionId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getAction(actionId))
+        assertThatThrownBy(() -> service.getActionById(actionId))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);
@@ -257,6 +241,19 @@ class AdminServiceImplTest {
                 null,
                 "Reason",
                 Map.of(),
+                OffsetDateTime.now());
+    }
+
+    private static AdminActionSummaryResponse summary(AdminActionType actionType) {
+        return new AdminActionSummaryResponse(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                actionType,
+                UUID.randomUUID(),
+                "user",
+                UUID.randomUUID(),
+                null,
+                "Reason",
                 OffsetDateTime.now());
     }
 }

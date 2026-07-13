@@ -41,15 +41,15 @@ This table cannot be rebuilt from any other source if lost.
 | Rule | Service / Component |
 |------|---------------------|
 | Only users with `role = 'admin'` or `role = 'moderator'` may create `admin_actions` rows | `SecurityConfig`, `AdminController` |
-| `ban_user` action must update `users.status = 'banned'` in the same transaction | `AdminServiceImpl.updateUserStatus` |
-| `unban_user` action must update `users.status = 'active'` in the same transaction | `AdminServiceImpl.updateUserStatus` |
-| `suspend_user` action must update `users.status = 'suspended'` in the same transaction | `AdminServiceImpl.updateUserStatus` |
-| `unsuspend_user` action must update `users.status = 'active'` in the same transaction | `AdminServiceImpl.updateUserStatus` |
-| `remove_post` action must set `posts.status = 'removed'` and `posts.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.moderatePost` |
-| `restore_post` action must clear `posts.deleted_at` and reset `posts.status = 'published'` in the same transaction | `AdminServiceImpl.moderatePost` |
-| `remove_comment` action must set `comments.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.moderateComment` |
-| `restore_comment` action must clear `comments.deleted_at` in the same transaction | `AdminServiceImpl.moderateComment` |
-| `resolve_report` and `dismiss_report` must update `reports.status` and `reports.reviewed_by` / `reviewed_at` in the same transaction | `AdminServiceImpl.resolveReport` |
+| `ban_user` action must update `users.status = 'banned'` in the same transaction | `AdminServiceImpl.banUser` |
+| `unban_user` action must update `users.status = 'active'` in the same transaction | `AdminServiceImpl.unbanUser` |
+| `suspend_user` action must update `users.status = 'suspended'` in the same transaction | `AdminServiceImpl.suspendUser` |
+| `unsuspend_user` action must update `users.status = 'active'` in the same transaction | `AdminServiceImpl.unsuspendUser` |
+| `remove_post` action must set `posts.status = 'removed'` and `posts.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removePost` |
+| `restore_post` action must clear `posts.deleted_at` and reset `posts.status = 'published'` in the same transaction | `AdminServiceImpl.restorePost` |
+| `remove_comment` action must set `comments.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removeComment` |
+| `restore_comment` action must clear `comments.deleted_at` in the same transaction | `AdminServiceImpl.restoreComment` |
+| `resolve_report` and `dismiss_report` must update `reports.status` and `reports.reviewed_by` / `reviewed_at` in the same transaction | `AdminServiceImpl.resolveReport`, `AdminServiceImpl.dismissReport` |
 | `admin_actions` rows must never be updated or deleted once created; they are the permanent audit trail | `AdminActionRepository` exposes read and insert operations only |
 
 **`admin_id` cascade behavior** `[RESOLVED IN V29]`:
@@ -61,7 +61,7 @@ This table cannot be rebuilt from any other source if lost.
 - No role-based action restrictions beyond `admin` vs `moderator` — both roles can currently perform all `action_type` values.
 - No approval workflow for high-impact actions (e.g., banning a user does not require a second admin to confirm).
 - `metadata` JSONB schema per `action_type` is convention-based, not enforced by the database.
-- No admin audit log UI; data is queryable via SQL only in v1.
+- No admin audit log UI; audit data is exposed through role-restricted query endpoints in v1.
 
 ---
 

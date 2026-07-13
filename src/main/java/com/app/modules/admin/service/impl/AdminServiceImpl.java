@@ -14,11 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
-import com.app.modules.admin.dto.request.CommentModerationActionRequest;
-import com.app.modules.admin.dto.request.PostModerationActionRequest;
-import com.app.modules.admin.dto.request.ReportResolutionActionRequest;
-import com.app.modules.admin.dto.request.UserStatusActionRequest;
+import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
+import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
@@ -69,18 +67,104 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional
-    public AdminActionResponse updateUserStatus(
-            UUID actorId, UUID userId, UserStatusActionRequest request) {
+    public AdminActionResponse banUser(UUID actorId, UUID userId, AdminActionRequest request) {
+        return changeUserStatus(actorId, userId, AdminActionType.BAN_USER, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse unbanUser(UUID actorId, UUID userId, AdminActionRequest request) {
+        return changeUserStatus(actorId, userId, AdminActionType.UNBAN_USER, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse suspendUser(UUID actorId, UUID userId, AdminActionRequest request) {
+        return changeUserStatus(actorId, userId, AdminActionType.SUSPEND_USER, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse unsuspendUser(
+            UUID actorId, UUID userId, AdminActionRequest request) {
+        return changeUserStatus(actorId, userId, AdminActionType.UNSUSPEND_USER, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse removePost(UUID actorId, UUID postId, AdminActionRequest request) {
+        return moderatePost(actorId, postId, AdminActionType.REMOVE_POST, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse restorePost(UUID actorId, UUID postId, AdminActionRequest request) {
+        return moderatePost(actorId, postId, AdminActionType.RESTORE_POST, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse removeComment(
+            UUID actorId, UUID commentId, AdminActionRequest request) {
+        return moderateComment(actorId, commentId, AdminActionType.REMOVE_COMMENT, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse restoreComment(
+            UUID actorId, UUID commentId, AdminActionRequest request) {
+        return moderateComment(actorId, commentId, AdminActionType.RESTORE_COMMENT, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse resolveReport(
+            UUID actorId, UUID reportId, AdminActionRequest request) {
+        return closeReport(actorId, reportId, AdminActionType.RESOLVE_REPORT, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse dismissReport(
+            UUID actorId, UUID reportId, AdminActionRequest request) {
+        return closeReport(actorId, reportId, AdminActionType.DISMISS_REPORT, request);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<AdminActionSummaryResponse> getActions(
+            UUID adminId, AdminActionType actionType, String cursor, int size) {
+        return findActions(adminId, null, actionType, cursor, size);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminActionResponse getActionById(UUID actionId) {
+        return adminActionMapper.toResponse(
+                adminActionRepository
+                        .findById(actionId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<AdminActionSummaryResponse> getActionsForUser(
+            UUID userId, String cursor, int size) {
+        return findActions(null, userId, null, cursor, size);
+    }
+
+    private AdminActionResponse changeUserStatus(
+            UUID actorId, UUID userId, AdminActionType actionType, AdminActionRequest request) {
         User user =
                 userRepository
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
-        UserStatus targetStatus = targetUserStatus(request.actionType(), user.getStatus());
+        UserStatus targetStatus = targetUserStatus(actionType, user.getStatus());
         user.setStatus(targetStatus);
         userRepository.save(user);
         return recordAction(
                 actorId,
-                request.actionType(),
+                actionType,
                 userId,
                 "user",
                 userId,
@@ -89,12 +173,8 @@ public class AdminServiceImpl implements AdminService {
                 request.metadata());
     }
 
-    @Override
-    @Transactional
-    public AdminActionResponse moderatePost(
-            UUID actorId, UUID postId, PostModerationActionRequest request) {
-        requireAction(
-                request.actionType(), AdminActionType.REMOVE_POST, AdminActionType.RESTORE_POST);
+    private AdminActionResponse moderatePost(
+            UUID actorId, UUID postId, AdminActionType actionType, AdminActionRequest request) {
         UUID ownerId =
                 postRepository
                         .findOwnerIdIncludingDeleted(postId)
@@ -103,7 +183,7 @@ public class AdminServiceImpl implements AdminService {
                 postRepository
                         .findStatusIncludingDeleted(postId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
-        boolean restore = request.actionType() == AdminActionType.RESTORE_POST;
+        boolean restore = actionType == AdminActionType.RESTORE_POST;
         if ((restore && !PostStatus.REMOVED.toJson().equals(currentStatus))
                 || (!restore && PostStatus.REMOVED.toJson().equals(currentStatus))) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
@@ -115,7 +195,7 @@ public class AdminServiceImpl implements AdminService {
                 restore ? null : OffsetDateTime.now());
         return recordAction(
                 actorId,
-                request.actionType(),
+                actionType,
                 ownerId,
                 "post",
                 postId,
@@ -124,14 +204,8 @@ public class AdminServiceImpl implements AdminService {
                 request.metadata());
     }
 
-    @Override
-    @Transactional
-    public AdminActionResponse moderateComment(
-            UUID actorId, UUID commentId, CommentModerationActionRequest request) {
-        requireAction(
-                request.actionType(),
-                AdminActionType.REMOVE_COMMENT,
-                AdminActionType.RESTORE_COMMENT);
+    private AdminActionResponse moderateComment(
+            UUID actorId, UUID commentId, AdminActionType actionType, AdminActionRequest request) {
         UUID ownerId =
                 commentRepository
                         .findOwnerIdIncludingDeleted(commentId)
@@ -140,7 +214,7 @@ public class AdminServiceImpl implements AdminService {
                 commentRepository
                         .isDeletedIncludingDeleted(commentId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
-        boolean restore = request.actionType() == AdminActionType.RESTORE_COMMENT;
+        boolean restore = actionType == AdminActionType.RESTORE_COMMENT;
         if (restore != deleted) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
@@ -148,7 +222,7 @@ public class AdminServiceImpl implements AdminService {
         commentRepository.applyAdminModeration(commentId, restore ? null : OffsetDateTime.now());
         return recordAction(
                 actorId,
-                request.actionType(),
+                actionType,
                 ownerId,
                 "comment",
                 commentId,
@@ -157,14 +231,8 @@ public class AdminServiceImpl implements AdminService {
                 request.metadata());
     }
 
-    @Override
-    @Transactional
-    public AdminActionResponse resolveReport(
-            UUID actorId, UUID reportId, ReportResolutionActionRequest request) {
-        requireAction(
-                request.actionType(),
-                AdminActionType.RESOLVE_REPORT,
-                AdminActionType.DISMISS_REPORT);
+    private AdminActionResponse closeReport(
+            UUID actorId, UUID reportId, AdminActionType actionType, AdminActionRequest request) {
         Report report =
                 reportRepository
                         .findById(reportId)
@@ -174,7 +242,7 @@ public class AdminServiceImpl implements AdminService {
             throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
         }
         report.setStatus(
-                request.actionType() == AdminActionType.RESOLVE_REPORT
+                actionType == AdminActionType.RESOLVE_REPORT
                         ? ReportStatus.RESOLVED
                         : ReportStatus.DISMISSED);
         report.setReviewedBy(actorId);
@@ -184,7 +252,7 @@ public class AdminServiceImpl implements AdminService {
         UUID targetUserId = report.getReportType() == ReportType.USER ? report.getEntityId() : null;
         return recordAction(
                 actorId,
-                request.actionType(),
+                actionType,
                 targetUserId,
                 report.getReportType().toJson(),
                 report.getEntityId(),
@@ -193,9 +261,7 @@ public class AdminServiceImpl implements AdminService {
                 request.metadata());
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public CursorPageResponse<AdminActionResponse> listActions(
+    private CursorPageResponse<AdminActionSummaryResponse> findActions(
             UUID adminId, UUID targetUserId, AdminActionType actionType, String cursor, int size) {
         int pageSize = normalizeLimit(size);
         int queryLimit = pageSize + 1;
@@ -209,15 +275,6 @@ public class AdminServiceImpl implements AdminService {
                         decoded.id(),
                         queryLimit);
         return toPage(actions, pageSize, cursor != null);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public AdminActionResponse getAction(UUID actionId) {
-        return adminActionMapper.toResponse(
-                adminActionRepository
-                        .findById(actionId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND)));
     }
 
     private UserStatus targetUserStatus(AdminActionType actionType, UserStatus currentStatus) {
@@ -246,13 +303,6 @@ public class AdminServiceImpl implements AdminService {
 
     private UserStatus throwInvalidTransition() {
         throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
-    }
-
-    private void requireAction(
-            AdminActionType actual, AdminActionType first, AdminActionType second) {
-        if (actual != first && actual != second) {
-            throw new AppException(ApiErrorCode.ADMIN_INVALID_ACTION);
-        }
     }
 
     private void validateLinkedReport(UUID reportId) {
@@ -284,12 +334,12 @@ public class AdminServiceImpl implements AdminService {
         return adminActionMapper.toResponse(adminActionRepository.insert(action));
     }
 
-    private CursorPageResponse<AdminActionResponse> toPage(
+    private CursorPageResponse<AdminActionSummaryResponse> toPage(
             List<AdminAction> actions, int pageSize, boolean hasPreviousPage) {
         boolean hasNextPage = actions.size() > pageSize;
         List<AdminAction> pageActions = hasNextPage ? actions.subList(0, pageSize) : actions;
         if (pageActions.isEmpty()) {
-            return CursorPageResponse.<AdminActionResponse>builder()
+            return CursorPageResponse.<AdminActionSummaryResponse>builder()
                     .content(Collections.emptyList())
                     .pageInfo(
                             CursorPageResponse.PageInfo.builder()
@@ -298,8 +348,8 @@ public class AdminServiceImpl implements AdminService {
                                     .build())
                     .build();
         }
-        return CursorPageResponse.<AdminActionResponse>builder()
-                .content(adminActionMapper.toResponseList(pageActions))
+        return CursorPageResponse.<AdminActionSummaryResponse>builder()
+                .content(adminActionMapper.toSummaryResponseList(pageActions))
                 .pageInfo(
                         CursorPageResponse.PageInfo.builder()
                                 .hasNextPage(hasNextPage)

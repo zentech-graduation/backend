@@ -460,7 +460,7 @@ CREATE TABLE reports (
 
 CREATE TABLE admin_actions (
     id                      UUID                PRIMARY KEY DEFAULT gen_random_uuid(),
-    admin_id                UUID                NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    admin_id                UUID                REFERENCES users(id) ON DELETE SET NULL,
     action_type             admin_action_type   NOT NULL,
     target_user_id          UUID                REFERENCES users(id) ON DELETE SET NULL,
     target_entity_type      VARCHAR(50),

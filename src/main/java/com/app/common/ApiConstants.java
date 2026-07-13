@@ -140,11 +140,18 @@ public final class ApiConstants {
         private Admin() {}
 
         public static final String ROOT = ADMIN;
-        public static final String USER_STATUS = "/users/{userId}/status";
-        public static final String POST_STATUS = "/posts/{postId}/status";
-        public static final String COMMENT_STATUS = "/comments/{commentId}/status";
-        public static final String REPORT_STATUS = "/reports/{reportId}/status";
+        public static final String BAN_USER = "/users/{userId}/ban";
+        public static final String UNBAN_USER = "/users/{userId}/unban";
+        public static final String SUSPEND_USER = "/users/{userId}/suspend";
+        public static final String UNSUSPEND_USER = "/users/{userId}/unsuspend";
+        public static final String REMOVE_POST = "/posts/{postId}/remove";
+        public static final String RESTORE_POST = "/posts/{postId}/restore";
+        public static final String REMOVE_COMMENT = "/comments/{commentId}/remove";
+        public static final String RESTORE_COMMENT = "/comments/{commentId}/restore";
+        public static final String RESOLVE_REPORT = "/reports/{reportId}/resolve";
+        public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
+        public static final String ACTIONS_FOR_USER = "/users/{userId}/actions";
     }
 }

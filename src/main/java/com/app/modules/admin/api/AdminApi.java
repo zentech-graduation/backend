@@ -17,11 +17,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
-import com.app.modules.admin.dto.request.CommentModerationActionRequest;
-import com.app.modules.admin.dto.request.PostModerationActionRequest;
-import com.app.modules.admin.dto.request.ReportResolutionActionRequest;
-import com.app.modules.admin.dto.request.UserStatusActionRequest;
+import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
+import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,173 +33,468 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping(ApiConstants.Admin.ROOT)
 public interface AdminApi {
 
-    /** Changes a user status and returns the immutable audit event. */
-    @Operation(
-            summary = "Moderate a user account",
-            description =
-                    "Bans, unbans, suspends, or unsuspends a user atomically with an audit event.")
+    /** Bans a user and returns the persisted audit event. */
+    @Operation(summary = "Ban a user")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User status updated",
-                content = @Content(schema = @Schema(implementation = AdminActionResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Action does not apply to users",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "User banned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "User not found",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "User is already in the requested state",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "Invalid user status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PatchMapping(ApiConstants.Admin.USER_STATUS)
-    ResponseEntity<ApiResponse<AdminActionResponse>> updateUserStatus(
-            @PathVariable("userId") UUID userId,
-            @Valid @RequestBody UserStatusActionRequest request);
+    @PatchMapping(ApiConstants.Admin.BAN_USER)
+    ResponseEntity<ApiResponse<AdminActionResponse>> banUser(
+            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
 
-    /** Removes or restores a post and returns the immutable audit event. */
-    @Operation(
-            summary = "Moderate a post",
-            description =
-                    "Removes or restores a post atomically with an optional report link and audit event.")
+    /** Unbans a banned user and returns the persisted audit event. */
+    @Operation(summary = "Unban a user")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post moderation applied",
-                content = @Content(schema = @Schema(implementation = AdminActionResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Action does not apply to posts",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "User unbanned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "User not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Invalid user status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PatchMapping(ApiConstants.Admin.UNBAN_USER)
+    ResponseEntity<ApiResponse<AdminActionResponse>> unbanUser(
+            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Suspends an active user and returns the persisted audit event. */
+    @Operation(summary = "Suspend a user")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "User suspended",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "User not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Invalid user status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
+    ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
+            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Unsuspends a suspended user and returns the persisted audit event. */
+    @Operation(summary = "Unsuspend a user")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "User unsuspended",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "User not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Invalid user status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PatchMapping(ApiConstants.Admin.UNSUSPEND_USER)
+    ResponseEntity<ApiResponse<AdminActionResponse>> unsuspendUser(
+            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Removes a post and returns the persisted audit event. */
+    @Operation(summary = "Remove a post")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Post removed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Post or linked report not found",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "Post is already in the requested state",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "Invalid post status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PatchMapping(ApiConstants.Admin.POST_STATUS)
-    ResponseEntity<ApiResponse<AdminActionResponse>> moderatePost(
-            @PathVariable("postId") UUID postId,
-            @Valid @RequestBody PostModerationActionRequest request);
+    @PatchMapping(ApiConstants.Admin.REMOVE_POST)
+    ResponseEntity<ApiResponse<AdminActionResponse>> removePost(
+            @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
 
-    /** Removes or restores a comment and returns the immutable audit event. */
-    @Operation(
-            summary = "Moderate a comment",
-            description =
-                    "Removes or restores a comment atomically with an optional report link and audit event.")
+    /** Restores a removed post and returns the persisted audit event. */
+    @Operation(summary = "Restore a post")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment moderation applied",
-                content = @Content(schema = @Schema(implementation = AdminActionResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Action does not apply to comments",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "Post restored",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Post or linked report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Invalid post status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PatchMapping(ApiConstants.Admin.RESTORE_POST)
+    ResponseEntity<ApiResponse<AdminActionResponse>> restorePost(
+            @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Removes a comment and returns the persisted audit event. */
+    @Operation(summary = "Remove a comment")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Comment removed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Comment or linked report not found",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "Comment is already in the requested state",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "Invalid comment status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PatchMapping(ApiConstants.Admin.COMMENT_STATUS)
-    ResponseEntity<ApiResponse<AdminActionResponse>> moderateComment(
+    @PatchMapping(ApiConstants.Admin.REMOVE_COMMENT)
+    ResponseEntity<ApiResponse<AdminActionResponse>> removeComment(
             @PathVariable("commentId") UUID commentId,
-            @Valid @RequestBody CommentModerationActionRequest request);
+            @Valid @RequestBody AdminActionRequest request);
 
-    /** Resolves or dismisses a report and returns the immutable audit event. */
-    @Operation(
-            summary = "Close a report",
-            description =
-                    "Resolves or dismisses a report while recording reviewer metadata and an audit event.")
+    /** Restores a removed comment and returns the persisted audit event. */
+    @Operation(summary = "Restore a comment")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report closed",
-                content = @Content(schema = @Schema(implementation = AdminActionResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Action does not apply to reports",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "Comment restored",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "Report not found",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "Comment or linked report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "Report is already terminal",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                description = "Invalid comment status transition",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PatchMapping(ApiConstants.Admin.REPORT_STATUS)
+    @PatchMapping(ApiConstants.Admin.RESTORE_COMMENT)
+    ResponseEntity<ApiResponse<AdminActionResponse>> restoreComment(
+            @PathVariable("commentId") UUID commentId,
+            @Valid @RequestBody AdminActionRequest request);
+
+    /** Resolves a report and returns the persisted audit event. */
+    @Operation(summary = "Resolve a report")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Report resolved",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Report is already terminal",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PatchMapping(ApiConstants.Admin.RESOLVE_REPORT)
     ResponseEntity<ApiResponse<AdminActionResponse>> resolveReport(
             @PathVariable("reportId") UUID reportId,
-            @Valid @RequestBody ReportResolutionActionRequest request);
+            @Valid @RequestBody AdminActionRequest request);
 
-    /** Lists audit events with optional filters and cursor pagination. */
-    @Operation(
-            summary = "List moderation audit events",
-            description =
-                    "Returns immutable audit events ordered newest first with optional filters.")
+    /** Dismisses a report and returns the persisted audit event. */
+    @Operation(summary = "Dismiss a report")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Report dismissed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Report is already terminal",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PatchMapping(ApiConstants.Admin.DISMISS_REPORT)
+    ResponseEntity<ApiResponse<AdminActionResponse>> dismissReport(
+            @PathVariable("reportId") UUID reportId,
+            @Valid @RequestBody AdminActionRequest request);
+
+    /** Lists audit-event summaries with optional actor and action-type filters. */
+    @Operation(summary = "List moderation audit events")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Audit event page returned",
-                content = @Content(schema = @Schema(implementation = CursorPageResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = CursorPageResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Admin.ACTIONS)
-    ResponseEntity<ApiResponse<CursorPageResponse<AdminActionResponse>>> listActions(
+    ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActions(
             @RequestParam(required = false) UUID adminId,
-            @RequestParam(required = false) UUID targetUserId,
             @RequestParam(required = false) AdminActionType actionType,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
@@ -212,21 +505,64 @@ public interface AdminApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Audit event returned",
-                content = @Content(schema = @Schema(implementation = AdminActionResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = AdminActionResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Audit event not found",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
-                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Admin.ACTION_BY_ID)
-    ResponseEntity<ApiResponse<AdminActionResponse>> getAction(
+    ResponseEntity<ApiResponse<AdminActionResponse>> getActionById(
             @PathVariable("actionId") UUID actionId);
+
+    /** Lists audit-event summaries for one affected user. */
+    @Operation(summary = "List moderation audit events for a user")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "User audit event page returned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = CursorPageResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Admin.ACTIONS_FOR_USER)
+    ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActionsForUser(
+            @PathVariable("userId") UUID userId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
 }

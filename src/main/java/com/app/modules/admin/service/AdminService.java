@@ -4,82 +4,55 @@ import java.util.UUID;
 
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
-import com.app.modules.admin.dto.request.CommentModerationActionRequest;
-import com.app.modules.admin.dto.request.PostModerationActionRequest;
-import com.app.modules.admin.dto.request.ReportResolutionActionRequest;
-import com.app.modules.admin.dto.request.UserStatusActionRequest;
+import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
+import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
 public interface AdminService {
 
-    /**
-     * Changes a user lifecycle status and records the action atomically.
-     *
-     * @param actorId authenticated moderator or administrator identifier
-     * @param userId target user identifier
-     * @param request status action and audit context
-     * @return persisted audit event
-     * @throws AppException when the user is missing or the action is invalid
-     */
-    AdminActionResponse updateUserStatus(
-            UUID actorId, UUID userId, UserStatusActionRequest request);
+    /** Bans a user and records the action atomically. */
+    AdminActionResponse banUser(UUID actorId, UUID userId, AdminActionRequest request);
 
-    /**
-     * Removes or restores a post and records the action atomically.
-     *
-     * @param actorId authenticated moderator or administrator identifier
-     * @param postId target post identifier
-     * @param request moderation action and audit context
-     * @return persisted audit event
-     * @throws AppException when the post or linked report is missing, or the action is invalid
-     */
-    AdminActionResponse moderatePost(
-            UUID actorId, UUID postId, PostModerationActionRequest request);
+    /** Unbans a banned user and records the action atomically. */
+    AdminActionResponse unbanUser(UUID actorId, UUID userId, AdminActionRequest request);
 
-    /**
-     * Removes or restores a comment and records the action atomically.
-     *
-     * @param actorId authenticated moderator or administrator identifier
-     * @param commentId target comment identifier
-     * @param request moderation action and audit context
-     * @return persisted audit event
-     * @throws AppException when the comment or linked report is missing, or the action is invalid
-     */
-    AdminActionResponse moderateComment(
-            UUID actorId, UUID commentId, CommentModerationActionRequest request);
+    /** Suspends an active user and records the action atomically. */
+    AdminActionResponse suspendUser(UUID actorId, UUID userId, AdminActionRequest request);
 
-    /**
-     * Resolves or dismisses a report and records the action atomically.
-     *
-     * @param actorId authenticated moderator or administrator identifier
-     * @param reportId target report identifier
-     * @param request terminal action and resolution reason
-     * @return persisted audit event
-     * @throws AppException when the report is missing, terminal, or the action is invalid
-     */
-    AdminActionResponse resolveReport(
-            UUID actorId, UUID reportId, ReportResolutionActionRequest request);
+    /** Unsuspends a suspended user and records the action atomically. */
+    AdminActionResponse unsuspendUser(UUID actorId, UUID userId, AdminActionRequest request);
 
-    /**
-     * Lists immutable audit events with optional filters and keyset pagination.
-     *
-     * @param adminId optional actor filter
-     * @param targetUserId optional affected-user filter
-     * @param actionType optional action-type filter
-     * @param cursor opaque cursor from the prior page
-     * @param size requested page size
-     * @return matching audit event page
-     */
-    CursorPageResponse<AdminActionResponse> listActions(
-            UUID adminId, UUID targetUserId, AdminActionType actionType, String cursor, int size);
+    /** Removes a post and records the action atomically. */
+    AdminActionResponse removePost(UUID actorId, UUID postId, AdminActionRequest request);
+
+    /** Restores a removed post and records the action atomically. */
+    AdminActionResponse restorePost(UUID actorId, UUID postId, AdminActionRequest request);
+
+    /** Removes a comment and records the action atomically. */
+    AdminActionResponse removeComment(UUID actorId, UUID commentId, AdminActionRequest request);
+
+    /** Restores a removed comment and records the action atomically. */
+    AdminActionResponse restoreComment(UUID actorId, UUID commentId, AdminActionRequest request);
+
+    /** Resolves a pending report and records the action atomically. */
+    AdminActionResponse resolveReport(UUID actorId, UUID reportId, AdminActionRequest request);
+
+    /** Dismisses a pending report and records the action atomically. */
+    AdminActionResponse dismissReport(UUID actorId, UUID reportId, AdminActionRequest request);
+
+    /** Lists audit-event summaries with optional actor and action-type filters. */
+    CursorPageResponse<AdminActionSummaryResponse> getActions(
+            UUID adminId, AdminActionType actionType, String cursor, int size);
 
     /**
      * Returns one immutable audit event.
      *
-     * @param actionId audit event identifier
-     * @return audit event details
      * @throws AppException when the audit event does not exist
      */
-    AdminActionResponse getAction(UUID actionId);
+    AdminActionResponse getActionById(UUID actionId);
+
+    /** Lists audit-event summaries for one affected user. */
+    CursorPageResponse<AdminActionSummaryResponse> getActionsForUser(
+            UUID userId, String cursor, int size);
 }

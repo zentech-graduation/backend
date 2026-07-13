@@ -87,6 +87,9 @@ class AdminControllerIT {
 
     @AfterEach
     void cleanup() {
+        jdbcTemplate.execute(
+                "DROP TRIGGER IF EXISTS trg_fail_admin_action_insert ON admin_actions");
+        jdbcTemplate.execute("DROP FUNCTION IF EXISTS fail_admin_action_insert()");
         jdbcTemplate.update("DELETE FROM admin_actions");
         jdbcTemplate.update("DELETE FROM reports");
         jdbcTemplate.update("DELETE FROM comments");
@@ -95,38 +98,62 @@ class AdminControllerIT {
     }
 
     @Test
-    void updateUserStatus_regularUser_returnsForbidden() {
+    void banUser_regularUser_returnsForbidden() {
         TestUser actor = createUser("forbidden_actor", "user");
         TestUser target = createUser("forbidden_target", "user");
 
         ResponseEntity<Map> response =
                 patch(
-                        "/api/v1/admin/users/" + target.id() + "/status",
-                        Map.of("actionType", "suspend_user", "reason", "Violation"),
+                        "/api/v1/admin/users/" + target.id() + "/ban",
+                        Map.of("reason", "Violation"),
                         actor);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test
-    void updateUserStatus_moderator_suspendsUserAndPersistsAudit() {
+    void userStatusOperations_moderator_applyAllFourContracts() {
         TestUser actor = createUser("status_moderator", "moderator");
         TestUser target = createUser("status_target", "user");
 
-        ResponseEntity<Map> response =
-                patch(
-                        "/api/v1/admin/users/" + target.id() + "/status",
-                        Map.of("actionType", "suspend_user", "reason", "Repeated harassment"),
-                        actor);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/suspend",
+                                        Map.of("reason", "Repeated harassment"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/unsuspend",
+                                        Map.of("reason", "Suspension completed"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/ban",
+                                        Map.of("reason", "Severe abuse"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/unban",
+                                        Map.of("reason", "Appeal accepted"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
         assertThat(
                         jdbcTemplate.queryForObject(
                                 "SELECT status::text FROM users WHERE id = ?",
                                 String.class,
                                 target.id()))
-                .isEqualTo("suspended");
+                .isEqualTo("active");
         assertThat(auditCount("suspend_user", target.id())).isEqualTo(1);
+        assertThat(auditCount("unsuspend_user", target.id())).isEqualTo(1);
+        assertThat(auditCount("ban_user", target.id())).isEqualTo(1);
+        assertThat(auditCount("unban_user", target.id())).isEqualTo(1);
     }
 
     @Test
@@ -137,13 +164,13 @@ class AdminControllerIT {
 
         ResponseEntity<Map> removed =
                 patch(
-                        "/api/v1/admin/posts/" + postId + "/status",
-                        Map.of("actionType", "remove_post", "reason", "Policy violation"),
+                        "/api/v1/admin/posts/" + postId + "/remove",
+                        Map.of("reason", "Policy violation"),
                         actor);
         ResponseEntity<Map> restored =
                 patch(
-                        "/api/v1/admin/posts/" + postId + "/status",
-                        Map.of("actionType", "restore_post", "reason", "Appeal accepted"),
+                        "/api/v1/admin/posts/" + postId + "/restore",
+                        Map.of("reason", "Appeal accepted"),
                         actor);
 
         assertThat(removed.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -167,23 +194,15 @@ class AdminControllerIT {
 
         assertThat(
                         patch(
-                                        "/api/v1/admin/comments/" + commentId + "/status",
-                                        Map.of(
-                                                "actionType",
-                                                "remove_comment",
-                                                "reason",
-                                                "Harassment"),
+                                        "/api/v1/admin/comments/" + commentId + "/remove",
+                                        Map.of("reason", "Harassment"),
                                         actor)
                                 .getStatusCode())
                 .isEqualTo(HttpStatus.OK);
         assertThat(
                         patch(
-                                        "/api/v1/admin/comments/" + commentId + "/status",
-                                        Map.of(
-                                                "actionType",
-                                                "restore_comment",
-                                                "reason",
-                                                "Appeal accepted"),
+                                        "/api/v1/admin/comments/" + commentId + "/restore",
+                                        Map.of("reason", "Appeal accepted"),
                                         actor)
                                 .getStatusCode())
                 .isEqualTo(HttpStatus.OK);
@@ -199,24 +218,31 @@ class AdminControllerIT {
     }
 
     @Test
-    void resolveReport_admin_closesReportAndRecordsAudit() {
+    void reportOperations_admin_resolveAndDismissReports() {
         TestUser actor = createUser("report_admin", "admin");
         TestUser reporter = createUser("report_reporter", "user");
         TestUser target = createUser("report_target", "user");
-        UUID reportId = insertReport(reporter.id(), target.id());
+        UUID resolvedReportId = insertReport(reporter.id(), target.id());
+        UUID dismissedReportId = insertReport(reporter.id(), target.id());
 
-        ResponseEntity<Map> response =
+        ResponseEntity<Map> resolved =
                 patch(
-                        "/api/v1/admin/reports/" + reportId + "/status",
-                        Map.of("actionType", "dismiss_report", "reason", "No violation found"),
+                        "/api/v1/admin/reports/" + resolvedReportId + "/resolve",
+                        Map.of("reason", "Violation confirmed"),
+                        actor);
+        ResponseEntity<Map> dismissed =
+                patch(
+                        "/api/v1/admin/reports/" + dismissedReportId + "/dismiss",
+                        Map.of("reason", "No violation found"),
                         actor);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(resolved.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dismissed.getStatusCode()).isEqualTo(HttpStatus.OK);
         Map<String, Object> report =
                 jdbcTemplate.queryForMap(
                         "SELECT status::text AS status, reviewed_by, resolution_note "
                                 + "FROM reports WHERE id = ?",
-                        reportId);
+                        dismissedReportId);
         assertThat(report.get("status")).isEqualTo("dismissed");
         assertThat(report.get("reviewed_by")).isEqualTo(actor.id());
         assertThat(report.get("resolution_note")).isEqualTo("No violation found");
@@ -224,8 +250,14 @@ class AdminControllerIT {
                         jdbcTemplate.queryForObject(
                                 "SELECT COUNT(*) FROM admin_actions WHERE report_id = ?",
                                 Integer.class,
-                                reportId))
+                                dismissedReportId))
                 .isEqualTo(1);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM reports WHERE id = ?",
+                                String.class,
+                                resolvedReportId))
+                .isEqualTo("resolved");
     }
 
     @Test
@@ -234,19 +266,21 @@ class AdminControllerIT {
         TestUser target = createUser("query_target", "user");
         ResponseEntity<Map> mutation =
                 patch(
-                        "/api/v1/admin/users/" + target.id() + "/status",
-                        Map.of("actionType", "ban_user", "reason", "Severe abuse"),
+                        "/api/v1/admin/users/" + target.id() + "/ban",
+                        Map.of("reason", "Severe abuse"),
                         actor);
         UUID actionId = UUID.fromString((String) dataOf(mutation).get("id"));
 
-        ResponseEntity<Map> list =
-                get("/api/v1/admin/actions?actionType=ban_user&targetUserId=" + target.id(), actor);
+        ResponseEntity<Map> list = get("/api/v1/admin/actions?actionType=ban_user", actor);
         ResponseEntity<Map> detail = get("/api/v1/admin/actions/" + actionId, actor);
+        ResponseEntity<Map> forUser = get("/api/v1/admin/users/" + target.id() + "/actions", actor);
 
         assertThat(list.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(contentOf(list)).hasSize(1);
         assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(dataOf(detail).get("id")).isEqualTo(actionId.toString());
+        assertThat(forUser.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(forUser)).hasSize(1);
     }
 
     @Test
@@ -255,8 +289,8 @@ class AdminControllerIT {
         TestUser target = createUser("cascade_target", "user");
         ResponseEntity<Map> mutation =
                 patch(
-                        "/api/v1/admin/users/" + target.id() + "/status",
-                        Map.of("actionType", "ban_user", "reason", "Permanent violation"),
+                        "/api/v1/admin/users/" + target.id() + "/ban",
+                        Map.of("reason", "Permanent violation"),
                         actor);
         UUID actionId = UUID.fromString((String) dataOf(mutation).get("id"));
 
@@ -267,6 +301,38 @@ class AdminControllerIT {
                         "SELECT id, admin_id FROM admin_actions WHERE id = ?", actionId);
         assertThat(audit.get("id")).isEqualTo(actionId);
         assertThat(audit.get("admin_id")).isNull();
+    }
+
+    @Test
+    void banUser_auditInsertFails_rollsBackUserStatus() {
+        TestUser actor = createUser("rollback_admin", "admin");
+        TestUser target = createUser("rollback_target", "user");
+        jdbcTemplate.execute(
+                "CREATE FUNCTION fail_admin_action_insert() RETURNS trigger AS $$ "
+                        + "BEGIN RAISE EXCEPTION 'forced audit failure'; END; $$ LANGUAGE plpgsql");
+        jdbcTemplate.execute(
+                "CREATE TRIGGER trg_fail_admin_action_insert BEFORE INSERT ON admin_actions "
+                        + "FOR EACH ROW EXECUTE FUNCTION fail_admin_action_insert()");
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/users/" + target.id() + "/ban",
+                        Map.of("reason", "Rollback verification"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM users WHERE id = ?",
+                                String.class,
+                                target.id()))
+                .isEqualTo("active");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM admin_actions WHERE target_user_id = ?",
+                                Integer.class,
+                                target.id()))
+                .isZero();
     }
 
     private TestUser createUser(String prefix, String role) {
