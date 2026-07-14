@@ -273,7 +273,7 @@ class ReportControllerIT {
                 username,
                 email,
                 role);
-        String token = jwtTokenProvider.generateAccessToken(id, email, role.toUpperCase());
+        String token = jwtTokenProvider.generateAccessToken(id, role.toUpperCase());
         return new TestUser(id, token);
     }
 

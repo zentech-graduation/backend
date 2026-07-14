@@ -20,6 +20,40 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
     Optional<Comment> findByIdAndDeletedAtIsNull(UUID id);
 
     /**
+     * Reads the author of a comment regardless of its soft-delete state.
+     *
+     * @param commentId comment identifier
+     * @return author identifier when the comment exists
+     */
+    @Query(value = "SELECT user_id FROM comments WHERE id = :commentId", nativeQuery = true)
+    Optional<UUID> findOwnerIdIncludingDeleted(@Param("commentId") UUID commentId);
+
+    /**
+     * Determines whether a comment is soft-deleted.
+     *
+     * @param commentId comment identifier
+     * @return true when the comment has a deletion timestamp
+     */
+    @Query(
+            value = "SELECT deleted_at IS NOT NULL FROM comments WHERE id = :commentId",
+            nativeQuery = true)
+    Optional<Boolean> isDeletedIncludingDeleted(@Param("commentId") UUID commentId);
+
+    /**
+     * Applies an administrator-controlled soft-delete state to one comment.
+     *
+     * @param commentId comment identifier
+     * @param deletedAt soft-delete timestamp, or null when restoring
+     * @return number of updated comments
+     */
+    @Modifying
+    @Query(
+            value = "UPDATE comments SET deleted_at = :deletedAt WHERE id = :commentId",
+            nativeQuery = true)
+    int applyAdminModeration(
+            @Param("commentId") UUID commentId, @Param("deletedAt") OffsetDateTime deletedAt);
+
+    /**
      * First keyset page of approved top-level comments for a post, newest first.
      *
      * <p>Paired with {@link #findTopLevelBefore}; the no-cursor variant avoids binding an untyped

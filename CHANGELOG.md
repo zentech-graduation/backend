@@ -12,8 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Post captions and user bio are now length-bounded at the request layer (2200 and 500 characters respectively).
 
 ### Fixed
+- Preserved moderation audit history when an acting administrator is permanently deleted by changing the actor foreign key to `ON DELETE SET NULL`.
+- Synchronized `database/schema.sql` with Flyway V29 so new environments preserve audit rows after an acting administrator is deleted.
 - Concurrent duplicate like or save on a post, and duplicate like on a comment, now return a clean 409 conflict instead of a 500.
 ### Added
+- Admin moderation workflows for user status, post and comment removal/restoration, report closure, and cursor-paginated immutable audit history.
+- Split admin moderation into 13 explicit API operations and added user-specific audit history, summary DTO mapping, append-only repository verification, and transactional rollback coverage.
+- OpenAPI-documented admin endpoints with moderator/administrator role enforcement and structured audit metadata.
+- Admin unit and full-stack integration coverage for authorization, target mutations, audit queries, and actor-deletion retention.
 - Automated `user_events` monthly partition management: a migration backfills the current and next two months' partitions, and a scheduled job pre-creates the partition two months ahead each month so new events no longer accumulate in the default catch-all partition.
 
 ### Security
