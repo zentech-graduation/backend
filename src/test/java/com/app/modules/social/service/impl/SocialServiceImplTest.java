@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -93,7 +95,7 @@ class SocialServiceImplTest {
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
 
-        verify(followRepository, never()).save(any());
+        verify(followRepository, never()).insert(any(), any(), any());
     }
 
     @Test
@@ -133,33 +135,94 @@ class SocialServiceImplTest {
     }
 
     @Test
-    void followUser_publicTarget_savesAcceptedAndPublishes() {
+    void followUser_publicTarget_insertsAcceptedAndPublishes() {
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
                 .thenReturn(Optional.of(user(target, false)));
         when(blockRepository.existsById(any())).thenReturn(false);
         when(followRepository.existsById(any())).thenReturn(false);
+        when(followRepository.insert(follower, target, FollowStatus.ACCEPTED))
+                .thenReturn(follow(follower, target, FollowStatus.ACCEPTED));
 
         FollowResponse response = service.followUser(follower, target);
 
         assertThat(response.status()).isEqualTo(FollowStatus.ACCEPTED);
-        verify(followRepository).save(any(Follow.class));
+        verify(followRepository).insert(follower, target, FollowStatus.ACCEPTED);
         verify(socialEventService).publishFollowCreated(any(Follow.class));
     }
 
     @Test
-    void followUser_privateTarget_savesPending() {
+    void followUser_privateTarget_insertsPending() {
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
                 .thenReturn(Optional.of(user(target, true)));
         when(blockRepository.existsById(any())).thenReturn(false);
         when(followRepository.existsById(any())).thenReturn(false);
+        when(followRepository.insert(follower, target, FollowStatus.PENDING))
+                .thenReturn(follow(follower, target, FollowStatus.PENDING));
 
         FollowResponse response = service.followUser(follower, target);
 
         assertThat(response.status()).isEqualTo(FollowStatus.PENDING);
+    }
+
+    @Test
+    void followUser_concurrentDuplicateInsert_publicTarget_throwsAlreadyFollowing() {
+        UUID follower = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
+                .thenReturn(Optional.of(user(target, false)));
+        when(blockRepository.existsById(any())).thenReturn(false);
+        when(followRepository.existsById(any())).thenReturn(false);
+        when(followRepository.insert(follower, target, FollowStatus.ACCEPTED))
+                .thenThrow(uniqueViolation());
+
+        assertThatThrownBy(() -> service.followUser(follower, target))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.SOCIAL_ALREADY_FOLLOWING);
+
+        verify(socialEventService, never()).publishFollowCreated(any());
+    }
+
+    @Test
+    void followUser_concurrentDuplicateInsert_privateTarget_throwsAlreadyRequested() {
+        UUID follower = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
+                .thenReturn(Optional.of(user(target, true)));
+        when(blockRepository.existsById(any())).thenReturn(false);
+        when(followRepository.existsById(any())).thenReturn(false);
+        when(followRepository.insert(follower, target, FollowStatus.PENDING))
+                .thenThrow(uniqueViolation());
+
+        assertThatThrownBy(() -> service.followUser(follower, target))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.SOCIAL_ALREADY_REQUESTED);
+
+        verify(socialEventService, never()).publishFollowCreated(any());
+    }
+
+    @Test
+    void followUser_nonUniqueIntegrityViolation_isRethrown() {
+        UUID follower = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
+                .thenReturn(Optional.of(user(target, false)));
+        when(blockRepository.existsById(any())).thenReturn(false);
+        when(followRepository.existsById(any())).thenReturn(false);
+        DataIntegrityViolationException fkViolation =
+                new DataIntegrityViolationException(
+                        "fk", new SQLException("violates foreign key constraint", "23503"));
+        when(followRepository.insert(follower, target, FollowStatus.ACCEPTED))
+                .thenThrow(fkViolation);
+
+        assertThatThrownBy(() -> service.followUser(follower, target)).isSameAs(fkViolation);
+
+        verify(socialEventService, never()).publishFollowCreated(any());
     }
 
     @Test
@@ -545,6 +608,11 @@ class SocialServiceImplTest {
                 .isPrivate(isPrivate)
                 .isVerified(false)
                 .build();
+    }
+
+    private static DataIntegrityViolationException uniqueViolation() {
+        return new DataIntegrityViolationException(
+                "duplicate key", new SQLException("duplicate key value", "23505"));
     }
 
     private static Follow follow(UUID follower, UUID following, FollowStatus status) {

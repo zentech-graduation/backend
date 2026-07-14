@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Concurrent duplicate follow requests now resolve atomically: the losing request receives a clean already-following/already-requested error instead of a generic conflict, and duplicate follow notifications are no longer emitted.
+
 ### Security
 - Removed the email address from JWT access-token claims so account email is no longer readable from the unencrypted token payload.
 - Public user-profile lookups now enforce block and private-account visibility: a block in either direction returns 404, and follower/following/post counts are hidden from non-followers of a private account.
