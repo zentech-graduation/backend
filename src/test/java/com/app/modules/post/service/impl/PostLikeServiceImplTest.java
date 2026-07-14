@@ -105,13 +105,45 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void unlikePost_notLiked_throwsNotFound() {
+    void unlikePost_notLiked_throwsPostNotFound() {
         when(postLikeRepository.findById(likeId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.unlikePost(userId, postId))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.NOT_FOUND);
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+    }
+
+    @Test
+    void unlikePost_hiddenPostNonOwner_throwsPostNotFound() {
+        Post draftPost =
+                Post.builder()
+                        .id(postId)
+                        .userId(UUID.randomUUID())
+                        .status(PostStatus.DRAFT)
+                        .build();
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
+
+        assertThatThrownBy(() -> service.unlikePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+        verify(postLikeRepository, never()).findById(any());
+        verify(postLikeRepository, never()).delete(any());
+    }
+
+    @Test
+    void unlikePost_hiddenPostOwner_reachesLikeLookup() {
+        Post draftPost = Post.builder().id(postId).userId(userId).status(PostStatus.DRAFT).build();
+        PostLike like = PostLike.builder().id(likeId).build();
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
+        when(postLikeRepository.findById(likeId)).thenReturn(Optional.of(like));
+        when(postRepository.findLikeCount(postId)).thenReturn(0);
+
+        LikeActionResponse response = service.unlikePost(userId, postId);
+
+        assertThat(response.liked()).isFalse();
+        verify(postLikeRepository).delete(like);
     }
 
     @Test

@@ -114,13 +114,43 @@ class PostSaveServiceImplTest {
     }
 
     @Test
-    void unsavePost_notSaved_throwsNotFound() {
+    void unsavePost_notSaved_throwsPostNotFound() {
         when(postSaveRepository.findById(saveId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.unsavePost(userId, postId))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.NOT_FOUND);
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+    }
+
+    @Test
+    void unsavePost_hiddenPostNonOwner_throwsPostNotFound() {
+        Post draftPost =
+                Post.builder()
+                        .id(postId)
+                        .userId(UUID.randomUUID())
+                        .status(PostStatus.DRAFT)
+                        .build();
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
+
+        assertThatThrownBy(() -> service.unsavePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
+        verify(postSaveRepository, never()).findById(any());
+        verify(postSaveRepository, never()).delete(any());
+    }
+
+    @Test
+    void unsavePost_hiddenPostOwner_reachesSaveLookup() {
+        Post draftPost = Post.builder().id(postId).userId(userId).status(PostStatus.DRAFT).build();
+        PostSave existing = PostSave.builder().id(saveId).build();
+        when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
+        when(postSaveRepository.findById(saveId)).thenReturn(Optional.of(existing));
+
+        service.unsavePost(userId, postId);
+
+        verify(postSaveRepository).delete(existing);
     }
 
     @Test

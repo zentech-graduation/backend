@@ -82,15 +82,20 @@ public class PostSaveServiceImpl implements PostSaveService {
     @Override
     @Transactional
     public void unsavePost(UUID userId, UUID postId) {
-        postRepository
-                .findByIdAndDeletedAtIsNull(postId)
-                .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        Post post =
+                postRepository
+                        .findByIdAndDeletedAtIsNull(postId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        // Unpublished posts surface as not-found to avoid leaking their existence, and a missing
+        // save row collapses onto the same code so it cannot serve as a separate oracle.
+        if (post.getStatus() != PostStatus.PUBLISHED && !userId.equals(post.getUserId())) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
         PostSaveId saveId = new PostSaveId(userId, postId);
         PostSave save =
                 postSaveRepository
                         .findById(saveId)
-                        .orElseThrow(
-                                () -> new AppException(ApiErrorCode.NOT_FOUND, "Save not found"));
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         postSaveRepository.delete(save);
     }
 
