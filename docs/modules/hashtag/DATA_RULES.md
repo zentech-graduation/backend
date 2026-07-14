@@ -54,6 +54,7 @@ These tables cannot be rebuilt from any other source if lost.
 **Normalization before insert**:
 - `hashtags.name` is stored lowercase. The DB UNIQUE constraint is case-sensitive.
 - The Service layer MUST normalize hashtag names to lowercase before any insert or lookup.
+- Names longer than 100 characters (the `hashtags.name` column bound) are dropped during normalization, not truncated, so a truncated prefix never aliases a legitimately distinct shorter tag.
 - Failure to normalize before insert will result in duplicate hashtags differing only by case, bypassing the uniqueness guarantee.
 - Rule owner: `HashtagService` — normalize to lowercase before `findByName` or `save`.
 

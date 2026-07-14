@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Hashtag names longer than 100 characters are now dropped during normalization instead of failing the whole post publish or caption update with a misleading conflict error.
+
 ### Security
 - Removed the email address from JWT access-token claims so account email is no longer readable from the unencrypted token payload.
 - Public user-profile lookups now enforce block and private-account visibility: a block in either direction returns 404, and follower/following/post counts are hidden from non-followers of a private account.

@@ -57,6 +57,31 @@ class HashtagServiceImplTest {
     }
 
     @Test
+    void normalize_nameAtMaxLength_isKept() {
+        String name = "a".repeat(100);
+        assertThat(service.normalize("#" + name)).isEqualTo(name);
+    }
+
+    @Test
+    void normalize_nameExceedingMaxLength_returnsEmpty() {
+        assertThat(service.normalize("#" + "a".repeat(101))).isEmpty();
+        assertThat(service.normalize("a".repeat(150))).isEmpty();
+    }
+
+    @Test
+    void upsertHashtagsForPost_overlongTag_isSkipped() {
+        UUID postId = UUID.randomUUID();
+        Hashtag hashtag = Hashtag.builder().id(UUID.randomUUID()).name("spring").build();
+        when(hashtagRepository.findByName("spring")).thenReturn(Optional.of(hashtag));
+
+        service.upsertHashtagsForPost(postId, List.of("#Spring", "#" + "x".repeat(150)));
+
+        verify(hashtagRepository, times(1)).upsertByName("spring");
+        verify(hashtagRepository, times(1)).upsertByName(any());
+        verify(postHashtagRepository, times(1)).save(any(PostHashtag.class));
+    }
+
+    @Test
     void upsertHashtagsForPost_caseDifferingDuplicates_insertsOnce() {
         UUID postId = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(UUID.randomUUID()).name("spring").build();
