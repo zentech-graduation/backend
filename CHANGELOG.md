@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Security
+- Comment like and unlike now enforce the parent post's visibility rules, closing a gap that let blocked or non-follower users like comments on posts they cannot view.
 - Removed the email address from JWT access-token claims so account email is no longer readable from the unencrypted token payload.
 - Public user-profile lookups now enforce block and private-account visibility: a block in either direction returns 404, and follower/following/post counts are hidden from non-followers of a private account.
 - Post captions and user bio are now length-bounded at the request layer (2200 and 500 characters respectively).
