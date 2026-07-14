@@ -107,12 +107,16 @@ public class NotificationServiceImpl implements NotificationService {
         UUID resolvedCursor = null;
         OffsetDateTime cursorTime = null;
         if (cursor != null) {
-            Optional<Notification> pivot = notificationRepository.findById(cursor);
+            // Scoping the pivot to the caller keeps a foreign notification UUID from acting as an
+            // existence/timestamp oracle, matching the ownership check in markAsRead.
+            Optional<Notification> pivot =
+                    notificationRepository.findByIdAndRecipientId(cursor, recipientId);
             if (pivot.isPresent()) {
                 resolvedCursor = cursor;
                 cursorTime = pivot.get().getCreatedAt();
             }
-            // Pivot absent means the cursor notification was deleted; fall back to the first page.
+            // Pivot absent means the cursor notification was deleted or is not the caller's own;
+            // fall back to the first page.
         }
 
         List<Notification> rows =
