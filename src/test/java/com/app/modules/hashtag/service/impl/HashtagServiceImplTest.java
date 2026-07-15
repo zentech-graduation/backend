@@ -68,6 +68,27 @@ class HashtagServiceImplTest {
         assertThat(service.normalize("a".repeat(150))).isEmpty();
     }
 
+    // U+20000 (CJK Unified Ideograph Extension B, first codepoint) is a supplementary-plane
+    // letter: two UTF-16 code units ("𠀀") per codepoint, category Lo so toLowerCase is
+    // a no-op. Used to prove the 100-character bound counts code points, not UTF-16 units.
+    private static final String SUPPLEMENTARY_LETTER = "𠀀";
+
+    @Test
+    void normalize_supplementaryPlaneAtMaxCodePoints_isKept() {
+        String name = SUPPLEMENTARY_LETTER.repeat(100);
+        assertThat(name.codePointCount(0, name.length())).isEqualTo(100);
+
+        assertThat(service.normalize("#" + name)).isEqualTo(name);
+    }
+
+    @Test
+    void normalize_supplementaryPlaneExceedingMaxCodePoints_returnsEmpty() {
+        String name = SUPPLEMENTARY_LETTER.repeat(101);
+        assertThat(name.codePointCount(0, name.length())).isEqualTo(101);
+
+        assertThat(service.normalize("#" + name)).isEmpty();
+    }
+
     @Test
     void upsertHashtagsForPost_overlongTag_isSkipped() {
         UUID postId = UUID.randomUUID();

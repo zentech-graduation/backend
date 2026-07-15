@@ -59,9 +59,13 @@ public class HashtagServiceImpl implements HashtagService {
         String withoutHash = trimmed.replaceFirst("^#+", "");
         // Locale.ROOT lowercasing keeps the unique-index key stable across server locales.
         String normalized = withoutHash.strip().toLowerCase(Locale.ROOT);
-        // Over-long tags are dropped rather than truncated so a truncated prefix never aliases a
-        // legitimately distinct shorter tag.
-        return normalized.length() > MAX_NAME_LENGTH ? "" : normalized;
+        // codePointCount, not length(), matches the VARCHAR(100) character limit: a
+        // supplementary-plane letter (e.g. CJK Extension B) occupies two UTF-16 code units in a
+        // Java String but counts as one Postgres character, so length() would drop valid values
+        // early. Over-long tags are dropped rather than truncated so a truncated prefix never
+        // aliases a legitimately distinct shorter tag.
+        int codePointCount = normalized.codePointCount(0, normalized.length());
+        return codePointCount > MAX_NAME_LENGTH ? "" : normalized;
     }
 
     @Override
