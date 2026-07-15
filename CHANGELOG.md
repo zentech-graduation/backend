@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Malformed path or query parameter values (for example a non-UUID user ID) now return 400 Bad Request instead of 500, and no longer write attacker-controllable stack traces to the error log.
+
 ### Security
 - Comment like and unlike now enforce the parent post's visibility rules, closing a gap that let blocked or non-follower users like comments on posts they cannot view.
 - OAuth2 sign-in now requires the identity provider to assert the email as verified before creating a new local account, preventing account squatting on an unverified email address.
