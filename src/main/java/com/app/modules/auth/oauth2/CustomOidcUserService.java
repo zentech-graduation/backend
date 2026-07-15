@@ -79,7 +79,8 @@ public class CustomOidcUserService extends OidcUserService {
         }
     }
 
-    private OidcUser processOidcUser(OidcUserRequest request, OidcUser oidcUser) {
+    // VisibleForTesting
+    OidcUser processOidcUser(OidcUserRequest request, OidcUser oidcUser) {
         OAuthProvider provider = resolveProvider(request);
         String email = oidcUser.getEmail();
         String providerId = oidcUser.getSubject();
@@ -97,6 +98,15 @@ public class CustomOidcUserService extends OidcUserService {
                             .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
             userStateValidator.enforceActive(user);
         } else {
+            // Trust the IdP-asserted email only when the IdP confirms it is verified. Without
+            // this gate a hostile or misconfigured IdP could take over an existing local account
+            // by email, or squat a new local account on an address the principal does not
+            // control. Checked before the email lookup so every branch, including new-user
+            // creation and any future provider, inherits it.
+            if (!Boolean.TRUE.equals(oidcUser.getEmailVerified())) {
+                throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+            }
+
             Optional<User> existingByEmail = userRepository.findByEmail(email);
 
             if (existingByEmail.isPresent()) {
@@ -105,12 +115,6 @@ public class CustomOidcUserService extends OidcUserService {
                 // Silently creating a new account would hit the constraint; surface a clear error.
                 if (found.getDeletedAt() != null) {
                     throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
-                }
-                // Refuse to link an OAuth identity to a pre-existing local account unless the
-                // IdP confirms the email is verified. Without this gate, a hostile or
-                // misconfigured IdP could be used to take over any account by email.
-                if (!Boolean.TRUE.equals(oidcUser.getEmailVerified())) {
-                    throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
                 }
                 user = found;
                 userStateValidator.enforceActive(user);
