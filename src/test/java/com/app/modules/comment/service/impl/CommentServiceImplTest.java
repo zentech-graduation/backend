@@ -351,10 +351,29 @@ class CommentServiceImplTest {
         Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
         assertThatThrownBy(() -> service.likeComment(actorId, commentId))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.COMMENT_FORBIDDEN);
+    }
+
+    @Test
+    void likeComment_postNotVisible_throwsForbidden() {
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.likeComment(actorId, commentId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+        verify(commentLikeRepository, never()).saveAndFlush(any());
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), anyMap());
     }
 
     @Test
@@ -363,6 +382,8 @@ class CommentServiceImplTest {
                 Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
         when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
                 .thenReturn(true);
         assertThatThrownBy(() -> service.likeComment(actorId, commentId))
@@ -377,6 +398,8 @@ class CommentServiceImplTest {
                 Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
         when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
                 .thenReturn(false);
 
@@ -399,6 +422,8 @@ class CommentServiceImplTest {
                 Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
         when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
                 .thenReturn(false);
         when(commentLikeRepository.saveAndFlush(any()))
@@ -417,6 +442,8 @@ class CommentServiceImplTest {
                 Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
         when(commentLikeRepository.deleteByUserAndComment(actorId, commentId)).thenReturn(0);
         assertThatThrownBy(() -> service.unlikeComment(actorId, commentId))
                 .isInstanceOf(AppException.class)
@@ -425,11 +452,30 @@ class CommentServiceImplTest {
     }
 
     @Test
+    void unlikeComment_postNotVisible_throwsForbidden() {
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.unlikeComment(actorId, commentId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+        verify(commentLikeRepository, never()).deleteByUserAndComment(any(), any());
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), anyMap());
+    }
+
+    @Test
     void unlikeComment_success_enqueues() {
         Comment comment =
                 Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
         when(commentLikeRepository.deleteByUserAndComment(actorId, commentId)).thenReturn(1);
 
         service.unlikeComment(actorId, commentId);
