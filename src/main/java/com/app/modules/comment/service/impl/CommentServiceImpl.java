@@ -290,10 +290,15 @@ public class CommentServiceImpl implements CommentService {
                     commentRepository
                             .findByIdAndDeletedAtIsNull(commentId)
                             .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
+            MDC.put("postId", comment.getPostId().toString());
+            Post post =
+                    postRepository
+                            .findById(comment.getPostId())
+                            .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+            assertCanRead(actorId, post);
             if (comment.getUserId().equals(actorId)) {
                 throw new AppException(ApiErrorCode.COMMENT_FORBIDDEN);
             }
-            MDC.put("postId", comment.getPostId().toString());
             if (commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId)) {
                 throw new AppException(ApiErrorCode.COMMENT_ALREADY_LIKED);
             }
@@ -333,6 +338,11 @@ public class CommentServiceImpl implements CommentService {
                             .findByIdAndDeletedAtIsNull(commentId)
                             .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
             MDC.put("postId", comment.getPostId().toString());
+            Post post =
+                    postRepository
+                            .findById(comment.getPostId())
+                            .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+            assertCanRead(actorId, post);
             int removed = commentLikeRepository.deleteByUserAndComment(actorId, commentId);
             if (removed == 0) {
                 throw new AppException(ApiErrorCode.COMMENT_NOT_LIKED);
@@ -394,9 +404,9 @@ public class CommentServiceImpl implements CommentService {
         return toPage(replies, pageSize, cursor);
     }
 
-    // Read-side visibility gate, consistent with the create path and the WebSocket SUBSCRIBE
-    // interceptor. A null viewer (anonymous) cannot read; post visibility covers block and
-    // private-follow rules.
+    // Visibility gate shared by the read, like, and unlike paths, consistent with the create path
+    // and the WebSocket SUBSCRIBE interceptor. A null viewer (anonymous) cannot read; post
+    // visibility covers block and private-follow rules.
     private void assertCanRead(UUID viewerId, Post post) {
         if (viewerId == null || !postVisibilityService.isVisibleTo(viewerId, post)) {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);

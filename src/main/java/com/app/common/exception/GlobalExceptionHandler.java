@@ -14,6 +14,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.app.common.enums.ApiErrorCode;
@@ -84,6 +85,17 @@ public class GlobalExceptionHandler {
         String message = "HTTP method not supported: " + ex.getMethod();
         return ResponseEntity.status(ApiErrorCode.BAD_REQUEST.getHttpStatus())
                 .body(ApiResponse.failure(ApiErrorCode.BAD_REQUEST, message, null));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<?>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex) {
+        // Client input error, not a server fault: WARN without a stack trace keeps an
+        // unauthenticated caller from flooding the ERROR log, and the offending value is never
+        // echoed back.
+        log.warn("Type mismatch on request parameter '{}'", ex.getName());
+        return ResponseEntity.status(ApiErrorCode.BAD_REQUEST.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.BAD_REQUEST));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
