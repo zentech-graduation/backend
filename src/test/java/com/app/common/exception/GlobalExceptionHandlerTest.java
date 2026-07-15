@@ -23,6 +23,7 @@ import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.app.common.enums.ApiErrorCode;
@@ -142,6 +143,18 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().getCode()).isEqualTo("BAD_REQUEST");
         assertThat(response.getBody().getMessage()).contains("DELETE");
+    }
+
+    @Test
+    void methodArgumentTypeMismatchException_returnsBadRequest() {
+        MethodArgumentTypeMismatchException ex = mock(MethodArgumentTypeMismatchException.class);
+        when(ex.getName()).thenReturn("userId");
+
+        ResponseEntity<ApiResponse<?>> response = handler.handleTypeMismatch(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getCode()).isEqualTo("BAD_REQUEST");
     }
 
     @Test

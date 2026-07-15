@@ -312,7 +312,8 @@ class NotificationServiceImplTest {
         UUID recipientId = UUID.randomUUID();
         UUID cursorId = UUID.randomUUID();
         Notification row = mockNotification();
-        when(notificationRepository.findById(cursorId)).thenReturn(Optional.empty());
+        when(notificationRepository.findByIdAndRecipientId(cursorId, recipientId))
+                .thenReturn(Optional.empty());
         when(notificationRepository.findByRecipientIdWithCursor(
                         eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
                 .thenReturn(List.of(row));
@@ -322,9 +323,55 @@ class NotificationServiceImplTest {
                 service.listNotifications(recipientId, cursorId, 20);
 
         assertThat(result.getContent()).hasSize(1);
-        // Cursor was provided but pivot was absent — result is still flagged as "past-cursor" page
+        // Cursor was provided but pivot was absent - result is still flagged as "past-cursor" page
         verify(notificationRepository)
                 .findByRecipientIdWithCursor(recipientId, null, null, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void listNotifications_ownedCursorPivot_paginatesFromPivotTimestamp() {
+        UUID recipientId = UUID.randomUUID();
+        UUID cursorId = UUID.randomUUID();
+        OffsetDateTime pivotTime = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        Notification pivot =
+                Notification.builder()
+                        .id(cursorId)
+                        .recipientId(recipientId)
+                        .type(NotificationType.LIKE_POST)
+                        .createdAt(pivotTime)
+                        .build();
+        when(notificationRepository.findByIdAndRecipientId(cursorId, recipientId))
+                .thenReturn(Optional.of(pivot));
+        when(notificationRepository.findByRecipientIdWithCursor(
+                        eq(recipientId), eq(cursorId), eq(pivotTime), any(PageRequest.class)))
+                .thenReturn(List.of(mockNotification()));
+        when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
+
+        CursorPageResponse<NotificationResponse> result =
+                service.listNotifications(recipientId, cursorId, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(notificationRepository)
+                .findByRecipientIdWithCursor(
+                        recipientId, cursorId, pivotTime, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void listNotifications_foreignCursor_neverResolvesUnscopedPivot() {
+        UUID recipientId = UUID.randomUUID();
+        UUID foreignNotificationId = UUID.randomUUID();
+        when(notificationRepository.findByIdAndRecipientId(foreignNotificationId, recipientId))
+                .thenReturn(Optional.empty());
+        when(notificationRepository.findByRecipientIdWithCursor(
+                        eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
+                .thenReturn(List.of());
+        when(notificationMapper.toResponseList(any())).thenReturn(List.of());
+
+        service.listNotifications(recipientId, foreignNotificationId, 20);
+
+        // A cursor belonging to another user must behave exactly like a nonexistent one: the
+        // unscoped lookup is never used, so no cross-tenant existence signal remains.
+        verify(notificationRepository, never()).findById(any(UUID.class));
     }
 
     private static Notification mockNotification() {
