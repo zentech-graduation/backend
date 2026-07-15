@@ -91,6 +91,12 @@ public class PostSaveServiceImpl implements PostSaveService {
         if (post.getStatus() != PostStatus.PUBLISHED && !userId.equals(post.getUserId())) {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
+        // A published post can still be hidden from this viewer by a block, a private owner
+        // without an accepted follow, or a soft-deleted owner; apply the same account-level
+        // decision savePost uses before mutating the relation.
+        if (!postVisibilityService.isVisibleTo(userId, post)) {
+            throw new AppException(ApiErrorCode.POST_FORBIDDEN);
+        }
         PostSaveId saveId = new PostSaveId(userId, postId);
         PostSave save =
                 postSaveRepository

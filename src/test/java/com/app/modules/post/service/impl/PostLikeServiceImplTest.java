@@ -133,10 +133,23 @@ class PostLikeServiceImplTest {
     }
 
     @Test
+    void unlikePost_publishedPostNotVisible_throwsPostForbidden() {
+        when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.unlikePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+        verify(postLikeRepository, never()).findById(any());
+        verify(postLikeRepository, never()).delete(any());
+    }
+
+    @Test
     void unlikePost_hiddenPostOwner_reachesLikeLookup() {
         Post draftPost = Post.builder().id(postId).userId(userId).status(PostStatus.DRAFT).build();
         PostLike like = PostLike.builder().id(likeId).build();
         when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
+        when(postVisibilityService.isVisibleTo(userId, draftPost)).thenReturn(true);
         when(postLikeRepository.findById(likeId)).thenReturn(Optional.of(like));
         when(postRepository.findLikeCount(postId)).thenReturn(0);
 
