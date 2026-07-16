@@ -1,5 +1,6 @@
 package com.app.modules.social.service.impl;
 
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
@@ -11,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,8 @@ import com.app.modules.users.entity.User;
 
 @Service
 public class SocialServiceImpl implements SocialService {
+
+    private static final String UNIQUE_VIOLATION_SQLSTATE = "23505";
 
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
@@ -87,12 +91,36 @@ public class SocialServiceImpl implements SocialService {
 
         FollowStatus status = targetUser.isPrivate() ? FollowStatus.PENDING : FollowStatus.ACCEPTED;
 
-        Follow follow = Follow.builder().id(followId).status(status).build();
-        followRepository.save(follow);
+        Follow follow;
+        try {
+            // Single-statement INSERT ... RETURNING: the composite primary key rejects a
+            // concurrent duplicate atomically, unlike save()/merge which silently no-ops on an
+            // already-committed row and would re-publish the follow event.
+            follow = followRepository.insert(currentUserId, targetUserId, status);
+        } catch (DataIntegrityViolationException ex) {
+            if (isUniqueViolation(ex)) {
+                throw new AppException(
+                        status == FollowStatus.PENDING
+                                ? ApiErrorCode.SOCIAL_ALREADY_REQUESTED
+                                : ApiErrorCode.SOCIAL_ALREADY_FOLLOWING);
+            }
+            throw ex;
+        }
 
         socialEventService.publishFollowCreated(follow);
 
         return new FollowResponse(currentUserId, targetUserId, status, follow.getCreatedAt());
+    }
+
+    private static boolean isUniqueViolation(DataIntegrityViolationException ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof SQLException sqlException) {
+                return UNIQUE_VIOLATION_SQLSTATE.equals(sqlException.getSQLState());
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     @Override

@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Concurrent duplicate follow requests now resolve atomically: the losing request receives a clean already-following/already-requested error instead of a generic conflict, and duplicate follow notifications are no longer emitted.
 - Hashtag names longer than 100 characters are now dropped during normalization instead of failing the whole post publish or caption update with a misleading conflict error.
 - Malformed path or query parameter values (for example a non-UUID user ID) now return 400 Bad Request instead of 500, and no longer write attacker-controllable stack traces to the error log.
 
