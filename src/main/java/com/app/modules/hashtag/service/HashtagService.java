@@ -11,11 +11,13 @@ public interface HashtagService {
     /**
      * Normalizes a raw tag by stripping a leading {@code #}, trimming, and lowercasing.
      *
-     * <p>Returns an empty string for a {@code null} or blank input so callers can drop it.
+     * <p>Returns an empty string for a {@code null} or blank input so callers can drop it. Also
+     * returns an empty string when the normalized tag exceeds the {@code hashtags.name} column
+     * bound of 100 Unicode code points, so callers drop it instead of failing the insert.
      *
      * @param raw the raw tag as supplied by the client
-     * @return the normalized lowercase hashtag name, or an empty string when {@code raw} is null or
-     *     blank
+     * @return the normalized lowercase hashtag name, or an empty string when {@code raw} is null,
+     *     blank, or exceeds 100 Unicode code points
      */
     String normalize(String raw);
 

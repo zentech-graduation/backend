@@ -57,6 +57,52 @@ class HashtagServiceImplTest {
     }
 
     @Test
+    void normalize_nameAtMaxLength_isKept() {
+        String name = "a".repeat(100);
+        assertThat(service.normalize("#" + name)).isEqualTo(name);
+    }
+
+    @Test
+    void normalize_nameExceedingMaxLength_returnsEmpty() {
+        assertThat(service.normalize("#" + "a".repeat(101))).isEmpty();
+        assertThat(service.normalize("a".repeat(150))).isEmpty();
+    }
+
+    // U+20000 (CJK Unified Ideograph Extension B, first codepoint) is a supplementary-plane
+    // letter: two UTF-16 code units ("𠀀") per codepoint, category Lo so toLowerCase is
+    // a no-op. Used to prove the 100-character bound counts code points, not UTF-16 units.
+    private static final String SUPPLEMENTARY_LETTER = "𠀀";
+
+    @Test
+    void normalize_supplementaryPlaneAtMaxCodePoints_isKept() {
+        String name = SUPPLEMENTARY_LETTER.repeat(100);
+        assertThat(name.codePointCount(0, name.length())).isEqualTo(100);
+
+        assertThat(service.normalize("#" + name)).isEqualTo(name);
+    }
+
+    @Test
+    void normalize_supplementaryPlaneExceedingMaxCodePoints_returnsEmpty() {
+        String name = SUPPLEMENTARY_LETTER.repeat(101);
+        assertThat(name.codePointCount(0, name.length())).isEqualTo(101);
+
+        assertThat(service.normalize("#" + name)).isEmpty();
+    }
+
+    @Test
+    void upsertHashtagsForPost_overlongTag_isSkipped() {
+        UUID postId = UUID.randomUUID();
+        Hashtag hashtag = Hashtag.builder().id(UUID.randomUUID()).name("spring").build();
+        when(hashtagRepository.findByName("spring")).thenReturn(Optional.of(hashtag));
+
+        service.upsertHashtagsForPost(postId, List.of("#Spring", "#" + "x".repeat(150)));
+
+        verify(hashtagRepository, times(1)).upsertByName("spring");
+        verify(hashtagRepository, times(1)).upsertByName(any());
+        verify(postHashtagRepository, times(1)).save(any(PostHashtag.class));
+    }
+
+    @Test
     void upsertHashtagsForPost_caseDifferingDuplicates_insertsOnce() {
         UUID postId = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(UUID.randomUUID()).name("spring").build();
