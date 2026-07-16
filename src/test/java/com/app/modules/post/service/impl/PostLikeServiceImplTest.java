@@ -133,13 +133,13 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void unlikePost_publishedPostNotVisible_throwsPostForbidden() {
+    void unlikePost_publishedPostNotVisible_throwsPostNotFound() {
         when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(false);
 
         assertThatThrownBy(() -> service.unlikePost(userId, postId))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
         verify(postLikeRepository, never()).findById(any());
         verify(postLikeRepository, never()).delete(any());
     }
@@ -180,13 +180,13 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void listLikers_postNotVisible_throwsPostForbidden() {
+    void listLikers_postNotVisible_throwsPostNotFound() {
         when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(false);
 
         assertThatThrownBy(() -> service.listLikers(userId, postId, null, 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
     }
 
     @Test

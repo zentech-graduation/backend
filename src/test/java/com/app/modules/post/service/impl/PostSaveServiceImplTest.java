@@ -142,13 +142,13 @@ class PostSaveServiceImplTest {
     }
 
     @Test
-    void unsavePost_publishedPostNotVisible_throwsPostForbidden() {
+    void unsavePost_publishedPostNotVisible_throwsPostNotFound() {
         when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(false);
 
         assertThatThrownBy(() -> service.unsavePost(userId, postId))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
         verify(postSaveRepository, never()).findById(any());
         verify(postSaveRepository, never()).delete(any());
     }
@@ -227,13 +227,13 @@ class PostSaveServiceImplTest {
     }
 
     @Test
-    void savePost_postNotVisible_throwsPostForbidden() {
+    void savePost_postNotVisible_throwsPostNotFound() {
         when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(false);
 
         assertThatThrownBy(() -> service.savePost(userId, postId))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.POST_FORBIDDEN);
+                .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
     }
 
     @Test

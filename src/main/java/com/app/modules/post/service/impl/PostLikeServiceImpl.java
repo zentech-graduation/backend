@@ -93,7 +93,7 @@ public class PostLikeServiceImpl implements PostLikeService {
         // without an accepted follow, or a soft-deleted owner; apply the same account-level
         // decision likePost uses before mutating the relation.
         if (!postVisibilityService.isVisibleTo(userId, post)) {
-            throw new AppException(ApiErrorCode.POST_FORBIDDEN);
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
         PostLikeId likeId = new PostLikeId(userId, postId);
         PostLike like =
@@ -149,7 +149,7 @@ public class PostLikeServiceImpl implements PostLikeService {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
         if (!postVisibilityService.isVisibleTo(viewerId, post)) {
-            throw new AppException(ApiErrorCode.POST_FORBIDDEN);
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
         return post;
     }
