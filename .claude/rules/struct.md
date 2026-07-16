@@ -166,8 +166,8 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `comment` | Empty (`.gitkeep`) | — |
 | `story` | Empty (`.gitkeep`) | — |
 | `message` | Empty (`.gitkeep`) | — |
-| `report` | Empty (`.gitkeep`) | — |
-| `admin` | Empty (`.gitkeep`) | — |
+| `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
+| `admin` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `recommendation` | Empty (`.gitkeep`) | — |
 
 **Module responsibilities:**
@@ -179,6 +179,8 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`post`**: Post CRUD (image/video/carousel), likes, saves, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
 - **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback.
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
+- **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
+- **`admin`**: Immutable moderation audit log and atomic moderation actions; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -242,6 +244,11 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
 | `modules/users/service/impl` | `UserServiceImplTest` |
+| `modules/report/controller` | `ReportControllerIT` |
+| `modules/report/service/impl` | `ReportServiceImplTest` |
+| `modules/admin/controller` | `AdminControllerIT` |
+| `modules/admin/repository` | `AdminActionRepositoryTest` |
+| `modules/admin/service/impl` | `AdminServiceImplTest` |
 
 ---
 
@@ -250,7 +257,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 24 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: true`); 29 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -281,6 +288,8 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V25 | add_text_post_type |
 | V26 | add_comment_moderation_status |
 | V27 | create_comment_write_idempotency |
+| V28 | add_user_events_upcoming_partitions |
+| V29 | preserve_admin_action_audit_history |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
