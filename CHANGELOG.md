@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- STRUCT.md updated to reflect `comment` module as fully implemented, adding sub-package list, module responsibility, test coverage rows, `comment.live.events` fanout exchange, `comment.notification.queue` with its DLQ, and three binding rows.
 - STRUCT.md updated to reflect `report` and `admin` modules as fully implemented, including accurate sub-package lists, module responsibility descriptions, test coverage rows, and Flyway migration count corrected to 29 (V28 add_user_events_upcoming_partitions and V29 preserve_admin_action_audit_history added).
 - `docs/modules/report/DATA_RULES.md` implementation status updated from scaffolding-only to fully implemented; all business rule entries annotated with the service methods that now enforce them.
 
