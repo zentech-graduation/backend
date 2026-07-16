@@ -1,6 +1,6 @@
 # Report Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Fully implemented with report submission, moderation triage, lifecycle status transitions, and REST/OpenAPI endpoints with unit/integration coverage.
 
 ---
 
@@ -40,13 +40,13 @@ This table cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| A user may not report the same entity more than once | `[NOT YET IMPLEMENTED]` — no UNIQUE constraint in schema; must be enforced at service layer |
-| A user may not report their own content | `[NOT YET IMPLEMENTED]` |
-| `entity_id` must correspond to an existing entity of the declared `report_type`; validate before insert | `[NOT YET IMPLEMENTED]` |
-| Transitioning `status` to `'reviewing'` must record `reviewed_by` and `reviewed_at` | `[NOT YET IMPLEMENTED]` |
-| Transitioning `status` to `'resolved'` or `'dismissed'` must include a `resolution_note` | `[NOT YET IMPLEMENTED]` |
-| Only users with `role = 'moderator'` or `role = 'admin'` may update report status | `[NOT YET IMPLEMENTED]` |
-| Resolving a report with action `remove_post` or `ban_user` must be coordinated with the admin module's `admin_actions` log | `[NOT YET IMPLEMENTED]` |
+| A user may not report the same entity more than once | `ReportServiceImpl.validateDuplicateReport` — enforced via `ReportRepository.existsByReporterIdAndReportTypeAndEntityId` |
+| A user may not report their own content | `ReportServiceImpl.submitReport` — throws `REPORT_SELF_NOT_ALLOWED` when `reporterId` equals the entity owner |
+| `entity_id` must correspond to an existing entity of the declared `report_type`; validate before insert | `ReportServiceImpl.validateEntityExists` — resolves owner via `ReportRepository.findOwnerId`; throws `REPORT_TARGET_NOT_FOUND` if absent |
+| Transitioning `status` to `'reviewing'` must record `reviewed_by` and `reviewed_at` | `ReportServiceImpl.updateStatus` — sets both fields on every valid transition |
+| Transitioning `status` to `'resolved'` or `'dismissed'` must include a `resolution_note` | `ReportServiceImpl.validateResolutionNote` — throws `REPORT_RESOLUTION_NOTE_REQUIRED` for terminal targets with blank note |
+| Only users with `role = 'moderator'` or `role = 'admin'` may update report status | `SecurityConfig`, `ReportController` — role enforcement via Spring Security |
+| Resolving a report with action `remove_post` or `ban_user` must be coordinated with the admin module's `admin_actions` log | Coordination delegated to `AdminServiceImpl.resolveReport` and `AdminServiceImpl.dismissReport` — the admin module is the entry point for resolution actions that carry moderation consequences |
 
 ### C. Scope Simplifications
 

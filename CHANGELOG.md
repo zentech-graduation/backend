@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- STRUCT.md updated to reflect `report` and `admin` modules as fully implemented, including accurate sub-package lists, module responsibility descriptions, test coverage rows, and Flyway migration count corrected to 29 (V28 add_user_events_upcoming_partitions and V29 preserve_admin_action_audit_history added).
+- `docs/modules/report/DATA_RULES.md` implementation status updated from scaffolding-only to fully implemented; all business rule entries annotated with the service methods that now enforce them.
+
 ### Fixed
 - Concurrent duplicate follow requests now resolve atomically: the losing request receives a clean already-following/already-requested error instead of a generic conflict, and duplicate follow notifications are no longer emitted.
 - Hashtag names longer than 100 characters are now dropped during normalization instead of failing the whole post publish or caption update with a misleading conflict error.
