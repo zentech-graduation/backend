@@ -64,7 +64,7 @@ public class PostSaveServiceImpl implements PostSaveService {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
         if (!postVisibilityService.isVisibleTo(userId, post)) {
-            throw new AppException(ApiErrorCode.POST_FORBIDDEN);
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
         PostSaveId saveId = new PostSaveId(userId, postId);
         if (postSaveRepository.existsById(saveId)) {
@@ -82,15 +82,26 @@ public class PostSaveServiceImpl implements PostSaveService {
     @Override
     @Transactional
     public void unsavePost(UUID userId, UUID postId) {
-        postRepository
-                .findByIdAndDeletedAtIsNull(postId)
-                .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        Post post =
+                postRepository
+                        .findByIdAndDeletedAtIsNull(postId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        // Unpublished posts surface as not-found to avoid leaking their existence, and a missing
+        // save row collapses onto the same code so it cannot serve as a separate oracle.
+        if (post.getStatus() != PostStatus.PUBLISHED && !userId.equals(post.getUserId())) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
+        // A published post can still be hidden from this viewer by a block, a private owner
+        // without an accepted follow, or a soft-deleted owner; apply the same account-level
+        // decision savePost uses before mutating the relation.
+        if (!postVisibilityService.isVisibleTo(userId, post)) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
         PostSaveId saveId = new PostSaveId(userId, postId);
         PostSave save =
                 postSaveRepository
                         .findById(saveId)
-                        .orElseThrow(
-                                () -> new AppException(ApiErrorCode.NOT_FOUND, "Save not found"));
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         postSaveRepository.delete(save);
     }
 

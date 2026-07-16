@@ -80,15 +80,26 @@ public class PostLikeServiceImpl implements PostLikeService {
     @Override
     @Transactional
     public LikeActionResponse unlikePost(UUID userId, UUID postId) {
-        postRepository
-                .findByIdAndDeletedAtIsNull(postId)
-                .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        Post post =
+                postRepository
+                        .findByIdAndDeletedAtIsNull(postId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+        // Unpublished posts surface as not-found to avoid leaking their existence, and a missing
+        // like row collapses onto the same code so it cannot serve as a separate oracle.
+        if (post.getStatus() != PostStatus.PUBLISHED && !userId.equals(post.getUserId())) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
+        // A published post can still be hidden from this viewer by a block, a private owner
+        // without an accepted follow, or a soft-deleted owner; apply the same account-level
+        // decision likePost uses before mutating the relation.
+        if (!postVisibilityService.isVisibleTo(userId, post)) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
         PostLikeId likeId = new PostLikeId(userId, postId);
         PostLike like =
                 postLikeRepository
                         .findById(likeId)
-                        .orElseThrow(
-                                () -> new AppException(ApiErrorCode.NOT_FOUND, "Like not found"));
+                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         postLikeRepository.delete(like);
         postLikeRepository.flush();
         return new LikeActionResponse(postId, false, postRepository.findLikeCount(postId));
@@ -138,7 +149,7 @@ public class PostLikeServiceImpl implements PostLikeService {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
         if (!postVisibilityService.isVisibleTo(viewerId, post)) {
-            throw new AppException(ApiErrorCode.POST_FORBIDDEN);
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
         return post;
     }
