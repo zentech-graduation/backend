@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 - Unlike and unsave now mask hidden (draft or archived) posts as not-found for non-owners, closing an existence oracle that revealed the lifecycle state of other users' unpublished posts, and reject unlike/unsave on a published post that is blocked, private without an accepted follow, or owned by a deactivated account.
+- Visibility-gate rejections on like, unlike, save, and unsave now return `POST_NOT_FOUND` uniformly instead of `POST_FORBIDDEN`, preventing callers from distinguishing a hidden post from a nonexistent one by error code.
 - Notification list cursor lookups are now scoped to the authenticated recipient, removing a cross-user oracle that disclosed whether an arbitrary notification ID exists and when it was created.
 - Comment like and unlike now enforce the parent post's visibility rules, closing a gap that let blocked or non-follower users like comments on posts they cannot view.
 - OAuth2 sign-in now requires the identity provider to assert the email as verified before creating a new local account, preventing account squatting on an unverified email address.
