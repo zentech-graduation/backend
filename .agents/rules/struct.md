@@ -163,7 +163,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, mapper, messaging, repository, runner, search, service/impl |
 | `hashtag` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, event, mapper, messaging, repository, runner, search, service/impl |
 | `notification` | **Implemented** | api, controller, dto/response, entity, entity/converter, entity/enums, mapper, messaging, repository, service/impl |
-| `comment` | Empty (`.gitkeep`) | — |
+| `comment` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, live, mapper, messaging, observability, repository, service/impl, util |
 | `story` | Empty (`.gitkeep`) | — |
 | `message` | Empty (`.gitkeep`) | — |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
@@ -179,6 +179,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`post`**: Post CRUD (image/video/carousel), likes, saves, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
 - **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback.
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
+- **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
 - **`admin`**: Immutable moderation audit log and atomic moderation actions; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
 
@@ -244,6 +245,10 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
 | `modules/users/service/impl` | `UserServiceImplTest` |
+| `modules/comment/consumer` | `CommentNotificationConsumerIT` |
+| `modules/comment/controller` | `CommentControllerIT` |
+| `modules/comment/live` | `CommentWebSocketJwtHandshakeInterceptorTest` |
+| `modules/comment/service/impl` | `CommentModerationServiceImplTest`, `CommentServiceImplTest` |
 | `modules/report/controller` | `ReportControllerIT` |
 | `modules/report/service/impl` | `ReportServiceImplTest` |
 | `modules/admin/controller` | `AdminControllerIT` |
@@ -341,6 +346,7 @@ PostgreSQL enum types:
 |----------|------|---------|------|
 | `social.events` | Topic | yes | Primary event bus for all domain events |
 | `social.events.dlx` | Topic | yes | Dead-letter exchange for failed messages |
+| `comment.live.events` | Fanout | yes | Live comment fanout tier; receives all `comment.*` events via exchange-to-exchange binding from `social.events` |
 
 **Queues and DLQs (all durable):**
 
@@ -350,6 +356,7 @@ PostgreSQL enum types:
 | `notification.queue` | `notification.dlq` | `notification.dead-letter` |
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
+| `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
 
 **Bindings (queue → `social.events`):**
 
@@ -364,6 +371,9 @@ PostgreSQL enum types:
 | `notification.queue` | `user.follow-requested.v1` | `NotificationRabbitBindingConfig` |
 | `hashtag.index.sync` | `hashtag.index.#` (wildcard) | `HashtagRabbitBindingConfig` |
 | `post.index.sync` | `post.index.#` (wildcard) | `PostRabbitBindingConfig` |
+| `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
+| `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
+| `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 
 **RabbitMQ configuration (application.yaml):**
 - `publisher-confirm-type: correlated` — broker confirms wired to outbox acknowledge logic
