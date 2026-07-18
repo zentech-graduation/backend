@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -59,6 +60,21 @@ class PostSearchServiceImplTest {
         assertThat(page.getContent()).isEmpty();
         assertThat(page.getPageInfo().getStartCursor()).isNull();
         assertThat(page.getPageInfo().getEndCursor()).isNull();
+    }
+
+    @Test
+    void searchPosts_limitAboveMax_clampsElasticsearchPageSize() {
+        when(searchHits.getSearchHits()).thenReturn(List.of());
+        ArgumentCaptor<NativeQuery> queryCaptor = ArgumentCaptor.forClass(NativeQuery.class);
+        when(elasticsearchOperations.search(queryCaptor.capture(), eq(PostDocument.class)))
+                .thenReturn(searchHits);
+
+        service.searchPosts(UUID.randomUUID(), "cats", null, 10_000);
+
+        // The Elasticsearch page size (and thus the number of posts hydrated from PostgreSQL) must
+        // be capped so an oversized limit can neither force a mass multi-table hydration nor push
+        // from+size past the Elasticsearch max_result_window into a 500.
+        assertThat(queryCaptor.getValue().getPageable().getPageSize()).isEqualTo(100);
     }
 
     @Test
