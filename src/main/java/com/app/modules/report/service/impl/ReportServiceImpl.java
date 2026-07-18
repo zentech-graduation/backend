@@ -6,6 +6,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.UUID;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -60,7 +61,14 @@ public class ReportServiceImpl implements ReportService {
                         .description(request.description())
                         .status(ReportStatus.PENDING)
                         .build();
-        return reportMapper.toResponse(reportRepository.save(report));
+        try {
+            return reportMapper.toResponse(reportRepository.saveAndFlush(report));
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent duplicate passed the application-level existence check and lost the
+            // insert race; the (reporter_id, report_type, entity_id) unique index rejects it, so
+            // surface the same clean conflict instead of a silent duplicate row or a generic 500.
+            throw new AppException(ApiErrorCode.REPORT_DUPLICATE);
+        }
     }
 
     @Override

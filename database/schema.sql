@@ -848,6 +848,7 @@ CREATE INDEX idx_messages_sender        ON messages (sender_id);
 CREATE INDEX idx_reports_status         ON reports (status, created_at DESC);
 CREATE INDEX idx_reports_entity         ON reports (entity_id, report_type);
 CREATE INDEX idx_reports_reporter       ON reports (reporter_id);
+CREATE UNIQUE INDEX uq_reports_reporter_entity ON reports (reporter_id, report_type, entity_id);
 
 -- admin_actions
 CREATE INDEX idx_admin_actions_admin    ON admin_actions (admin_id, created_at DESC);

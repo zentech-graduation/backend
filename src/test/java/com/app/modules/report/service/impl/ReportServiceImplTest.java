@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -55,7 +56,7 @@ class ReportServiceImplTest {
         ReportResponse expected = response(ReportStatus.PENDING);
         when(reportRepository.findOwnerId(ReportType.POST, entityId))
                 .thenReturn(Optional.of(ownerId));
-        when(reportRepository.save(any(Report.class)))
+        when(reportRepository.saveAndFlush(any(Report.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(reportMapper.toResponse(any(Report.class))).thenReturn(expected);
 
@@ -63,7 +64,7 @@ class ReportServiceImplTest {
 
         assertThat(result).isEqualTo(expected);
         ArgumentCaptor<Report> captor = ArgumentCaptor.forClass(Report.class);
-        verify(reportRepository).save(captor.capture());
+        verify(reportRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getReporterId()).isEqualTo(reporterId);
         assertThat(captor.getValue().getStatus()).isEqualTo(ReportStatus.PENDING);
     }
@@ -128,6 +129,26 @@ class ReportServiceImplTest {
                                                 ReportReason.HATE_SPEECH,
                                                 entityId,
                                                 null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_DUPLICATE);
+    }
+
+    @Test
+    void submitReport_concurrentDuplicateRace_mapsConstraintViolationToConflict() {
+        UUID reporterId = UUID.randomUUID();
+        UUID entityId = UUID.randomUUID();
+        CreateReportRequest request =
+                new CreateReportRequest(ReportType.POST, ReportReason.SPAM, entityId, null);
+        when(reportRepository.findOwnerId(ReportType.POST, entityId))
+                .thenReturn(Optional.of(UUID.randomUUID()));
+        when(reportRepository.existsByReporterIdAndReportTypeAndEntityId(
+                        reporterId, ReportType.POST, entityId))
+                .thenReturn(false);
+        when(reportRepository.saveAndFlush(any(Report.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.submitReport(reporterId, request))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.REPORT_DUPLICATE);

@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Malformed path or query parameter values (for example a non-UUID user ID) now return 400 Bad Request instead of 500, and no longer write attacker-controllable stack traces to the error log.
 
 ### Security
+- Duplicate report submissions are now rejected by a database uniqueness constraint on the reporter and target, closing a concurrent-submission race that let a user create duplicate reports of the same content and flood the moderation queue; a duplicate now returns a clean conflict.
 - Unlike and unsave now mask hidden (draft or archived) posts as not-found for non-owners, closing an existence oracle that revealed the lifecycle state of other users' unpublished posts, and reject unlike/unsave on a published post that is blocked, private without an accepted follow, or owned by a deactivated account.
 - Visibility-gate rejections on like, unlike, save, and unsave now return `POST_NOT_FOUND` uniformly instead of `POST_FORBIDDEN`, preventing callers from distinguishing a hidden post from a nonexistent one by error code.
 - Notification list cursor lookups are now scoped to the authenticated recipient, removing a cross-user oracle that disclosed whether an arbitrary notification ID exists and when it was created.
