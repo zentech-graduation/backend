@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -106,6 +107,30 @@ class R2ObjectStoragePresignServiceTest {
         }
 
         assertThat(appender.list).anyMatch(event -> event.getLevel() == Level.ERROR);
+    }
+
+    @Test
+    void presignPutObject_validConfiguration_bindsContentLengthAsRequiredHeader() {
+        R2ObjectStoragePresignService service =
+                new R2ObjectStoragePresignService(configuredProperties());
+
+        // Presigning is a local SigV4 computation; no R2 network call is made. This asserts on the
+        // generated request contract, not on a live upload.
+        ObjectStoragePresignService.PresignedUpload upload =
+                service.presignPutObject("users/u/media/file.jpg", "image/jpeg", 12345L);
+
+        assertThat(upload.method()).isEqualTo("PUT");
+        // Content-Length must be part of the signature so R2 rejects a body larger than the client
+        // declared; without it the presigned URL accepts an arbitrarily large upload.
+        assertThat(headerValue(upload.requiredHeaders(), "content-length")).isEqualTo("12345");
+    }
+
+    private static String headerValue(Map<String, String> headers, String name) {
+        return headers.entrySet().stream()
+                .filter(entry -> entry.getKey().equalsIgnoreCase(name))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
     }
 
     private static MediaProperties configuredProperties() {
