@@ -216,6 +216,41 @@ class CommentControllerIT {
     }
 
     @Test
+    void createReply_parentOnDifferentPost_returnsNotFound() {
+        TestUser attacker = registerUser("xpost_attacker");
+        TestUser victim = registerUser("xpost_victim");
+        UUID postA = createImagePost(attacker, "attacker post");
+        UUID postB = createImagePost(victim, "victim post");
+
+        // Victim's top-level comment on their own post B; the attacker is a non-follower and, once
+        // B is private, cannot see or comment on B directly.
+        UUID parentOnB = createComment(victim, postB, null, "victim thread", null);
+        jdbcTemplate.update("UPDATE users SET is_private = TRUE WHERE id = ?", victim.id());
+
+        // Attacker replies through post A's endpoint but points parentId at a comment on post B,
+        // attempting to inject into B's thread while bypassing B's commenting gate.
+        Map<String, Object> body = new HashMap<>();
+        body.put("postId", postA.toString());
+        body.put("parentId", parentOnB.toString());
+        body.put("content", "cross-post injection");
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts/" + postA + "/comments",
+                        HttpMethod.POST,
+                        new HttpEntity<>(body, authHeaders(attacker)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("COMMENT_NOT_FOUND");
+        // The parent's trigger-maintained reply_count must not move, and the injected reply must
+        // not surface under the parent thread on post B.
+        assertThat(replyCount(parentOnB)).isZero();
+        ResponseEntity<Map> replies =
+                getWithAuth("/api/v1/comments/" + parentOnB + "/replies", victim);
+        assertThat(contentOf(replies)).isEmpty();
+    }
+
+    @Test
     void listComments_privatePostStranger_returnsForbidden() {
         TestUser owner = registerUser("vis_owner");
         TestUser stranger = registerUser("vis_stranger");
@@ -263,6 +298,11 @@ class CommentControllerIT {
     private int likeCount(UUID commentId) {
         return jdbcTemplate.queryForObject(
                 "SELECT like_count FROM comments WHERE id = ?", Integer.class, commentId);
+    }
+
+    private int replyCount(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT reply_count FROM comments WHERE id = ?", Integer.class, commentId);
     }
 
     private TestUser registerUser(String username) {
