@@ -43,6 +43,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PostSearchServiceImpl implements PostSearchService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final PostRepository postRepository;
@@ -66,7 +67,7 @@ public class PostSearchServiceImpl implements PostSearchService {
     public CursorPageResponse<PostResponse> searchPosts(
             UUID viewerId, String query, String cursor, int size) {
         int offset = decodeCursor(cursor);
-        int effectiveLimit = size > 0 ? size : DEFAULT_PAGE_SIZE;
+        int effectiveLimit = normalizeLimit(size);
         // Page the ES query by the exact cursor offset. PageRequest derives `from` as page * size,
         // which truncates any offset not divisible by the page size (e.g. when the client varies
         // the limit between requests) and silently skips or repeats results.
@@ -134,7 +135,7 @@ public class PostSearchServiceImpl implements PostSearchService {
                 t.getClass().getSimpleName(),
                 t.getMessage(),
                 t);
-        int effectiveLimit = size > 0 ? size : DEFAULT_PAGE_SIZE;
+        int effectiveLimit = normalizeLimit(size);
         return CursorPageResponse.of(List.of(), effectiveLimit, null, null, false);
     }
 
@@ -179,6 +180,13 @@ public class PostSearchServiceImpl implements PostSearchService {
     private static String encodeCursor(int offset) {
         return Base64.getEncoder()
                 .encodeToString(Integer.toString(offset).getBytes(StandardCharsets.UTF_8));
+    }
+
+    // Clamp the caller-supplied page size to the module-wide maximum, mirroring the other post
+    // list endpoints, so search cannot be used to force an oversized hydration or a from+size
+    // overflow of the Elasticsearch result window.
+    private static int normalizeLimit(int limit) {
+        return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
     private static int decodeCursor(String cursor) {
