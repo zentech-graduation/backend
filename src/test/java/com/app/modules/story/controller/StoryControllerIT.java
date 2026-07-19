@@ -30,6 +30,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.modules.story.service.impl.StoryCleanupScheduler;
+
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -75,6 +77,7 @@ class StoryControllerIT {
 
     @Autowired private TestRestTemplate rest;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private StoryCleanupScheduler cleanupScheduler;
 
     private record TestUser(UUID id, String token) {}
 
@@ -213,6 +216,29 @@ class StoryControllerIT {
     }
 
     @Test
+    void cleanupScheduler_purgesOnlySoftDeletedExpiredStories() {
+        TestUser owner = registerUser("cleanup_owner");
+        UUID deletedAndExpired = createStory(owner, "deleted and expired");
+        UUID expiredOnly = createStory(owner, "expired only");
+        UUID deletedOnly = createStory(owner, "deleted only");
+
+        jdbcTemplate.update(
+                "UPDATE stories SET deleted_at = NOW(), expires_at = NOW() - INTERVAL '1 hour'"
+                        + " WHERE id = ?",
+                deletedAndExpired);
+        jdbcTemplate.update(
+                "UPDATE stories SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = ?",
+                expiredOnly);
+        jdbcTemplate.update("UPDATE stories SET deleted_at = NOW() WHERE id = ?", deletedOnly);
+
+        cleanupScheduler.purgeSoftDeletedExpiredStories();
+
+        assertThat(storyExistsIgnoringFilters(deletedAndExpired)).isFalse();
+        assertThat(storyExistsIgnoringFilters(expiredOnly)).isTrue();
+        assertThat(storyExistsIgnoringFilters(deletedOnly)).isTrue();
+    }
+
+    @Test
     void createStory_mediaNotOwned_returnsForbidden() {
         TestUser author = registerUser("wrong_owner");
         TestUser other = registerUser("asset_owner");
@@ -316,6 +342,13 @@ class StoryControllerIT {
                 "SELECT COUNT(*) FROM outbox_events WHERE event_type = ?",
                 Integer.class,
                 eventType);
+    }
+
+    private boolean storyExistsIgnoringFilters(UUID storyId) {
+        Integer count =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM stories WHERE id = ?", Integer.class, storyId);
+        return count != null && count > 0;
     }
 
     private UUID createStory(TestUser author, String caption) {

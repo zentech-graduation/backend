@@ -164,6 +164,9 @@ app:
   story:
     consumer:
       enabled: ${STORY_CONSUMER_ENABLED:false}
+    cleanup:
+      initial-delay: ${STORY_CLEANUP_INITIAL_DELAY:PT10M}
+      fixed-delay: ${STORY_CLEANUP_FIXED_DELAY:PT1H}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
