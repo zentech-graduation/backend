@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Deduplicated story view recording, with the trigger-maintained view count returned on every call and owner views exempted from counting.
+- Owner-only cursor-paginated list of a story's viewers, newest view first.
+- A `story_view` notification is created for the story owner on a viewer's first view of a story.
+- Scheduled hourly cleanup that hard-deletes stories once they are both soft-deleted and past expiry.
+
+### Tests
+- Story view recording and viewer-list unit coverage, notification-consumer unit and integration coverage, and integration coverage for view deduplication, the outbox event, the viewer list, and the cleanup job's selectivity.
+
+### Added
 - Story creation backed by an owned media asset, with story type and 24-hour expiry derived automatically.
 - Story reads: a single story, a user's active stories, and a feed tray grouped by author with unseen-first ordering.
 - Owner-only soft delete of a story.
