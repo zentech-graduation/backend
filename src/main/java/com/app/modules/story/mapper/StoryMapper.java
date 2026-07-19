@@ -1,11 +1,14 @@
 package com.app.modules.story.mapper;
 
+import java.time.OffsetDateTime;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.story.dto.response.StoryMediaResponse;
 import com.app.modules.story.dto.response.StoryResponse;
+import com.app.modules.story.dto.response.StoryViewerResponse;
 import com.app.modules.story.entity.Story;
 import com.app.modules.users.entity.User;
 
@@ -45,4 +48,14 @@ public interface StoryMapper {
      */
     @Mapping(source = "id", target = "mediaAssetId")
     StoryMediaResponse toMediaResponse(MediaAsset asset);
+
+    /**
+     * Projects a viewer's user row and view timestamp onto the story viewer summary shape.
+     *
+     * @param user the viewing user
+     * @param viewedAt when the view was recorded
+     * @return the viewer summary
+     */
+    @Mapping(source = "user.id", target = "viewerId")
+    StoryViewerResponse toViewerResponse(User user, OffsetDateTime viewedAt);
 }
