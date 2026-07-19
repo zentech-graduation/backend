@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Story creation backed by an owned media asset, with story type and 24-hour expiry derived automatically.
+- Story reads: a single story, a user's active stories, and a feed tray grouped by author with unseen-first ordering.
+- Owner-only soft delete of a story.
+- Story visibility enforcement: private accounts require an accepted follow, and blocks hide stories in both directions.
+
+### Tests
+- Story lifecycle and visibility service unit coverage, and an end-to-end integration test covering creation, feed, per-user listing, deletion, media-ownership rejection, expiry, private-account gating, and blocking.
+
 ### Changed
 - STRUCT.md updated to reflect `comment` module as fully implemented, adding sub-package list, module responsibility, test coverage rows, `comment.live.events` fanout exchange, `comment.notification.queue` with its DLQ, and three binding rows.
 - STRUCT.md updated to reflect `report` and `admin` modules as fully implemented, including accurate sub-package lists, module responsibility descriptions, test coverage rows, and Flyway migration count corrected to 29 (V28 add_user_events_upcoming_partitions and V29 preserve_admin_action_audit_history added).
