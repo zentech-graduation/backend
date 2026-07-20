@@ -11,14 +11,19 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
+import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.request.CreateStoryRequest;
 import com.app.modules.story.dto.response.StoryFeedItemResponse;
 import com.app.modules.story.dto.response.StoryResponse;
+import com.app.modules.story.dto.response.StoryViewActionResponse;
+import com.app.modules.story.dto.response.StoryViewerResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -175,4 +180,75 @@ public interface StoryApi {
     })
     @DeleteMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.BY_ID)
     ResponseEntity<ApiResponse<Void>> deleteStory(@PathVariable("storyId") UUID storyId);
+
+    @Operation(
+            summary = "Record a story view",
+            description =
+                    "Records that the caller viewed the story, deduplicated by (story, viewer)."
+                            + " Owner views and repeat views are idempotent no-ops that still return"
+                            + " 200 with the current view count. Requires authentication.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "View recorded (or already present)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = StoryViewActionResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Story missing, deleted, expired, or not visible to the caller",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.VIEWS)
+    ResponseEntity<ApiResponse<StoryViewActionResponse>> recordView(
+            @PathVariable("storyId") UUID storyId);
+
+    @Operation(
+            summary = "List a story's viewers",
+            description =
+                    "Cursor-paginated viewers of the story, newest view first. Owner-only."
+                            + " Requires authentication as the owner.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Cursor page of viewers",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Malformed cursor",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Requester is not the story owner",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Story missing, deleted, or expired",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.VIEWS)
+    ResponseEntity<ApiResponse<CursorPageResponse<StoryViewerResponse>>> listViewers(
+            @PathVariable("storyId") UUID storyId,
+            @Parameter(description = "Opaque cursor from the previous page")
+                    @RequestParam(value = "cursor", required = false)
+                    String cursor,
+            @Parameter(description = "Page size, 1-100, default 20")
+                    @RequestParam(value = "limit", defaultValue = "20")
+                    int limit);
 }

@@ -30,6 +30,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.modules.story.service.impl.StoryCleanupScheduler;
+
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -75,6 +77,7 @@ class StoryControllerIT {
 
     @Autowired private TestRestTemplate rest;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private StoryCleanupScheduler cleanupScheduler;
 
     private record TestUser(UUID id, String token) {}
 
@@ -125,6 +128,22 @@ class StoryControllerIT {
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(listItems(listResponse)).hasSize(1);
 
+        // Follower records a view; outbox row written, story_views row inserted, counter bumped.
+        ResponseEntity<Map> viewed = recordView(follower, storyId);
+        assertThat(viewed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> viewData = (Map<?, ?>) viewed.getBody().get("data");
+        assertThat(viewData.get("viewed")).isEqualTo(true);
+        assertThat(viewData.get("viewCount")).isEqualTo(1);
+        assertThat(storyViewCount(storyId)).isEqualTo(1);
+        assertThat(outboxEventCount("story.viewed.v1")).isEqualTo(1);
+
+        // Owner lists viewers; the follower shows up.
+        ResponseEntity<Map> viewers = getWithAuth("/api/v1/stories/" + storyId + "/views", author);
+        assertThat(viewers.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<?, ?>> viewerContent = viewerContentOf(viewers);
+        assertThat(viewerContent).hasSize(1);
+        assertThat(viewerContent.get(0).get("viewerId")).isEqualTo(follower.id().toString());
+
         // Owner deletes; subsequent reads 404.
         ResponseEntity<Map> deleted =
                 rest.exchange(
@@ -137,6 +156,86 @@ class StoryControllerIT {
         ResponseEntity<Map> afterDelete = getWithAuth("/api/v1/stories/" + storyId, author);
         assertThat(afterDelete.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(afterDelete.getBody().get("code")).isEqualTo("STORY_NOT_FOUND");
+    }
+
+    @Test
+    void recordView_owner_insertsNoRowAndNoOutboxEvent() {
+        TestUser author = registerUser("view_owner_self");
+        UUID storyId = createStory(author, "own story");
+
+        ResponseEntity<Map> response = recordView(author, storyId);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("viewed")).isEqualTo(false);
+        assertThat(storyViewRowCount(storyId)).isZero();
+        assertThat(outboxEventCount("story.viewed.v1")).isZero();
+    }
+
+    @Test
+    void recordView_twice_singleRowAndViewCountOne() {
+        TestUser author = registerUser("view_twice_owner");
+        TestUser viewer = registerUser("view_twice_viewer");
+        UUID storyId = createStory(author, "viewed twice");
+
+        ResponseEntity<Map> first = recordView(viewer, storyId);
+        ResponseEntity<Map> second = recordView(viewer, storyId);
+
+        assertThat(((Map<?, ?>) first.getBody().get("data")).get("viewed")).isEqualTo(true);
+        assertThat(((Map<?, ?>) second.getBody().get("data")).get("viewed")).isEqualTo(false);
+        assertThat(storyViewRowCount(storyId)).isEqualTo(1);
+        assertThat(storyViewCount(storyId)).isEqualTo(1);
+        assertThat(outboxEventCount("story.viewed.v1")).isEqualTo(1);
+    }
+
+    @Test
+    void recordView_expiredStory_returnsNotFound() {
+        TestUser author = registerUser("view_expiry_owner");
+        TestUser viewer = registerUser("view_expiry_viewer");
+        UUID storyId = createStory(author, "expiring");
+        jdbcTemplate.update(
+                "UPDATE stories SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = ?", storyId);
+
+        ResponseEntity<Map> response = recordView(viewer, storyId);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("STORY_NOT_FOUND");
+    }
+
+    @Test
+    void listViewers_nonOwner_returnsForbidden() {
+        TestUser author = registerUser("viewers_owner");
+        TestUser stranger = registerUser("viewers_stranger");
+        UUID storyId = createStory(author, "private viewers");
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/stories/" + storyId + "/views", stranger);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("STORY_FORBIDDEN");
+    }
+
+    @Test
+    void cleanupScheduler_purgesOnlySoftDeletedExpiredStories() {
+        TestUser owner = registerUser("cleanup_owner");
+        UUID deletedAndExpired = createStory(owner, "deleted and expired");
+        UUID expiredOnly = createStory(owner, "expired only");
+        UUID deletedOnly = createStory(owner, "deleted only");
+
+        jdbcTemplate.update(
+                "UPDATE stories SET deleted_at = NOW(), expires_at = NOW() - INTERVAL '1 hour'"
+                        + " WHERE id = ?",
+                deletedAndExpired);
+        jdbcTemplate.update(
+                "UPDATE stories SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = ?",
+                expiredOnly);
+        jdbcTemplate.update("UPDATE stories SET deleted_at = NOW() WHERE id = ?", deletedOnly);
+
+        cleanupScheduler.purgeSoftDeletedExpiredStories();
+
+        assertThat(storyExistsIgnoringFilters(deletedAndExpired)).isFalse();
+        assertThat(storyExistsIgnoringFilters(expiredOnly)).isTrue();
+        assertThat(storyExistsIgnoringFilters(deletedOnly)).isTrue();
     }
 
     @Test
@@ -218,6 +317,38 @@ class StoryControllerIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody().get("code")).isEqualTo("STORY_FORBIDDEN");
+    }
+
+    private ResponseEntity<Map> recordView(TestUser viewer, UUID storyId) {
+        return rest.exchange(
+                "/api/v1/stories/" + storyId + "/views",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(viewer)),
+                Map.class);
+    }
+
+    private int storyViewRowCount(UUID storyId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM story_views WHERE story_id = ?", Integer.class, storyId);
+    }
+
+    private int storyViewCount(UUID storyId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT view_count FROM stories WHERE id = ?", Integer.class, storyId);
+    }
+
+    private int outboxEventCount(String eventType) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_events WHERE event_type = ?",
+                Integer.class,
+                eventType);
+    }
+
+    private boolean storyExistsIgnoringFilters(UUID storyId) {
+        Integer count =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM stories WHERE id = ?", Integer.class, storyId);
+        return count != null && count > 0;
     }
 
     private UUID createStory(TestUser author, String caption) {
@@ -318,6 +449,13 @@ class StoryControllerIT {
     private static List<Map<?, ?>> listItems(ResponseEntity<Map> response) {
         assertThat(response.getBody()).isNotNull();
         return (List<Map<?, ?>>) response.getBody().get("data");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<?, ?>> viewerContentOf(ResponseEntity<Map> response) {
+        assertThat(response.getBody()).isNotNull();
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        return (List<Map<?, ?>>) data.get("content");
     }
 
     private static String uniqueIp() {

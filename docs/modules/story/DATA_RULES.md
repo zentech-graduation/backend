@@ -1,6 +1,6 @@
 # Story Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Fully implemented with story creation, expiry-gated reads, a grouped feed tray, deduplicated view tracking, owner-only soft delete, `story_view` notifications, and a scheduled cleanup job, with unit/integration coverage. Story replies (via the `message` module) remain out of scope — see Section C.
 
 ---
 
@@ -21,7 +21,7 @@ These tables cannot be rebuilt from any other source if lost.
 |------|----------|--------------|-----------------|
 | `stories.view_count` | `stories` table | `COUNT(*)` from `story_views` where `story_id = story.id` | Trigger `trg_story_view_count` (V16) |
 | Active stories view | `active_stories` (DB view, V17) | `stories` where `deleted_at IS NULL` and `expires_at > NOW()` | Query-time |
-| Story feed cache | Redis | Rebuild from `stories` joined with `follows` | Cache miss or TTL expiry |
+| Story feed cache | Redis | Rebuild from `stories` joined with `follows` | `[DEFERRED]` — the feed tray is served directly from three indexed queries (`StoryServiceImpl.getStoryFeed`); a Redis cache was not needed at current scale |
 
 ---
 
@@ -43,22 +43,22 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| Stories must not be returned if `expires_at <= NOW()` or `deleted_at IS NOT NULL`; use the `active_stories` view or equivalent filter | `[NOT YET IMPLEMENTED]` |
-| When the story owner views their own story, a row must NOT be inserted into `story_views`. This is enforced by the Service layer, not the DB. | `[NOT YET IMPLEMENTED]` |
-| Only the story owner may soft-delete their story | `[NOT YET IMPLEMENTED]` |
-| Viewing a story inserts into `story_views`; duplicate inserts (same viewer) must be ignored (`INSERT ... ON CONFLICT DO NOTHING`) | `[NOT YET IMPLEMENTED]` |
-| Stories from private accounts are only visible to accepted followers | `[NOT YET IMPLEMENTED]` |
-| Stories from blocked accounts must be excluded from the viewer's feed | `[NOT YET IMPLEMENTED]` |
-| Viewing a story generates a `story_view` notification for the story owner | `[NOT YET IMPLEMENTED]` |
-| A background cleanup job removes rows that have already been soft-deleted (`deleted_at IS NOT NULL`) AND have passed their expiry time (`expires_at < NOW()`). Stories that are expired but not yet soft-deleted are NOT targets for the cleanup job. | `[NOT YET IMPLEMENTED]` |
-| `user_settings.allow_story_replies` governs whether viewers can reply to a story | `[NOT YET IMPLEMENTED]` |
+| Stories must not be returned if `expires_at <= NOW()` or `deleted_at IS NOT NULL` | `StoryRepository.findActiveById` / `findActiveByUser` / `findActiveByAuthors` apply an explicit `expiresAt > :now` predicate; the entity's `@SQLRestriction("deleted_at IS NULL")` supplies the soft-delete filter on every JPQL read |
+| When the story owner views their own story, a row must NOT be inserted into `story_views` | `StoryViewServiceImpl.recordView` short-circuits before the insert when the viewer equals the story owner |
+| Only the story owner may soft-delete their story | `StoryServiceImpl.deleteStory` — throws `STORY_FORBIDDEN` for a visible non-owner, `STORY_NOT_FOUND` for a non-visible one |
+| Viewing a story inserts into `story_views`; duplicate inserts (same viewer) must be ignored | `StoryViewRepository.insertIgnoringDuplicate` (native `INSERT ... ON CONFLICT DO NOTHING`), called from `StoryViewServiceImpl.recordView` |
+| Stories from private accounts are only visible to accepted followers | `StoryVisibilityServiceImpl.isVisibleTo` — delegates to `SocialService.hasAcceptedFollow` for a private owner |
+| Stories from blocked accounts must be excluded from the viewer's feed | `StoryVisibilityServiceImpl.isVisibleTo` (block check via `SocialService.isBlockedBetween`) for single-story reads; `StoryServiceImpl.getStoryFeed` sources authors from `SocialService.getAcceptedFollowingExcludingBlocks` for the tray |
+| Viewing a story generates a `story_view` notification for the story owner | `StoryViewServiceImpl.recordView` enqueues `story.viewed.v1` on first view only; `StoryNotificationConsumer.dispatch` creates the `STORY_VIEW` notification via `NotificationService.create` |
+| A background cleanup job removes rows that have already been soft-deleted (`deleted_at IS NOT NULL`) AND have passed their expiry time (`expires_at < NOW()`). Stories that are expired but not yet soft-deleted are NOT targets for the cleanup job. | `StoryCleanupScheduler.purgeSoftDeletedExpiredStories`, backed by the native `StoryRepository.purgeSoftDeletedExpired` query |
+| `user_settings.allow_story_replies` governs whether viewers can reply to a story | `[NOT YET IMPLEMENTED]` — blocked on the `message` module, which has no reply-send path yet; see Section C |
 
 ### C. Scope Simplifications
 
-- Expired stories are not automatically removed from the database; a scheduled cleanup job is required. Until the job runs, `expires_at` must be checked on every read.
 - No story highlights (saving stories beyond 24 hours).
 - No story polls, questions, or interactive stickers.
-- Story replies are direct messages (`message_type = 'story_share'`); no dedicated reply table.
+- Story replies are direct messages (`message_type = 'story_share'`); the `message` module has no implementation yet, so this rule and `user_settings.allow_story_replies` stay unenforced until that module lands.
+- No admin takedown action for stories (`admin_action_type` has no `remove_story`/`restore_story`); moderation currently happens only via the report flow plus owner or account-level actions.
 
 ---
 

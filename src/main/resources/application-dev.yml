@@ -40,6 +40,9 @@ app:
       enabled: true
     live:
       enabled: true
+  story:
+    consumer:
+      enabled: true
   mail:
     consumer:
       enabled: true
@@ -77,6 +80,12 @@ app:
         max-attempts: 10
         window-seconds: 60
       "[/api/v1/posts]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/api/v1/stories]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/api/v1/stories/feed]":
         max-attempts: 200
         window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
