@@ -80,6 +80,10 @@ public enum ApiErrorCode {
     COMMENT_IDEMPOTENCY_CONFLICT("COMMENT_IDEMPOTENCY_CONFLICT", "Idempotency key reused with different request payload", HttpStatus.CONFLICT),
     POST_COMMENTING_RESTRICTED("POST_COMMENTING_RESTRICTED", "You do not have access to comment on this post", HttpStatus.FORBIDDEN),
 
+    // Story
+    STORY_NOT_FOUND("STORY_NOT_FOUND", "Story not found", HttpStatus.NOT_FOUND),
+    STORY_FORBIDDEN("STORY_FORBIDDEN", "You do not have access to this story", HttpStatus.FORBIDDEN),
+
     // Report
     REPORT_NOT_FOUND("REPORT_NOT_FOUND", "Report not found", HttpStatus.NOT_FOUND),
     REPORT_TARGET_NOT_FOUND("REPORT_TARGET_NOT_FOUND", "Reported entity not found", HttpStatus.NOT_FOUND),
