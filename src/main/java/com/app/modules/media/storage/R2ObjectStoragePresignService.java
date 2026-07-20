@@ -43,6 +43,10 @@ public class R2ObjectStoragePresignService implements ObjectStoragePresignServic
                         .bucket(r2.getBucket().trim())
                         .key(storageKey)
                         .contentType(mimeType)
+                        // Sign the content length so the presigned URL only accepts a body of the
+                        // exact size the client declared; without it R2 accepts an arbitrarily
+                        // large upload, defeating the max-media-size limit.
+                        .contentLength(fileSize)
                         .build();
         PutObjectPresignRequest presignRequest =
                 PutObjectPresignRequest.builder()
