@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The local PostgreSQL container now accepts the legacy IANA timezone name `Asia/Saigon`, which some database clients (for example DBeaver) send by default, resolving a connection failure for users in that timezone.
+
 ### Added
 - Deduplicated story view recording, with the trigger-maintained view count returned on every call and owner views exempted from counting.
 - Owner-only cursor-paginated list of a story's viewers, newest view first.
