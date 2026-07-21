@@ -171,6 +171,8 @@ app:
     group-chat-enabled: ${MESSAGE_GROUP_CHAT_ENABLED:true}
     idempotency-ttl-hours: ${MESSAGE_IDEMPOTENCY_TTL_HOURS:24}
     max-group-participants: ${MESSAGE_MAX_GROUP_PARTICIPANTS:256}
+    consumer:
+      enabled: ${MESSAGE_CONSUMER_ENABLED:false}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":

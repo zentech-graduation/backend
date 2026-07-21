@@ -49,6 +49,11 @@ public class RabbitMqTopologyConfig {
     public static final String STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
             "story.notification.dead-letter";
 
+    public static final String MESSAGE_NOTIFICATION_QUEUE = "message.notification.queue";
+    public static final String MESSAGE_NOTIFICATION_DEAD_LETTER_QUEUE = "message.notification.dlq";
+    public static final String MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
+            "message.notification.dead-letter";
+
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
     public static final String SEARCH_INDEX_QUEUE = "search-index.queue";
@@ -196,5 +201,28 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(storyNotificationDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue messageNotificationQueue() {
+        return QueueBuilder.durable(MESSAGE_NOTIFICATION_QUEUE)
+                .withArgument("x-dead-letter-exchange", SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE)
+                .withArgument(
+                        "x-dead-letter-routing-key", MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    Queue messageNotificationDeadLetterQueue() {
+        return QueueBuilder.durable(MESSAGE_NOTIFICATION_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding messageNotificationDeadLetterBinding(
+            Queue messageNotificationDeadLetterQueue,
+            TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(messageNotificationDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
     }
 }

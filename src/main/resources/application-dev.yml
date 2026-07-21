@@ -43,6 +43,9 @@ app:
   story:
     consumer:
       enabled: true
+  message:
+    consumer:
+      enabled: true
   mail:
     consumer:
       enabled: true
