@@ -422,7 +422,7 @@ CREATE TABLE conversation_participants (
 CREATE TABLE messages (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id     UUID            NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    sender_id           UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sender_id           UUID            REFERENCES users(id) ON DELETE SET NULL,
     message_type        message_type    NOT NULL DEFAULT 'text',
     content             TEXT,
     media_asset_id      UUID            REFERENCES media_assets(id),
