@@ -148,6 +148,12 @@ public class CommentServiceImpl implements CommentService {
                     commentRepository
                             .findByIdAndDeletedAtIsNull(request.parentId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
+            // The parent must belong to the same post the reply targets. Otherwise a reply could
+            // attach to a comment on a different post - including one the caller cannot access -
+            // bypassing the post-level permission gate and corrupting reply/comment counters.
+            if (!parent.getPostId().equals(post.getId())) {
+                throw new AppException(ApiErrorCode.COMMENT_NOT_FOUND);
+            }
             depth = (short) (parent.getDepth() + 1);
             if (depth > MAX_DEPTH) {
                 throw new AppException(ApiErrorCode.COMMENT_DEPTH_EXCEEDED);

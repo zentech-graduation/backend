@@ -230,6 +230,35 @@ class CommentControllerIT {
         assertThat(response.getBody().get("code")).isEqualTo("POST_FORBIDDEN");
     }
 
+    @Test
+    void createReply_parentFromDifferentPost_returnsNotFound() {
+        TestUser attacker = registerUser("xpost_attacker");
+        TestUser owner = registerUser("xpost_owner");
+
+        UUID postA = createImagePost(attacker, "attacker post");
+        UUID postB = createImagePost(owner, "owner post");
+        UUID parentOnB = createComment(owner, postB, null, "owner top-level", null);
+        jdbcTemplate.update("UPDATE users SET is_private = TRUE WHERE id = ?", owner.id());
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("postId", postA.toString());
+        body.put("parentId", parentOnB.toString());
+        body.put("content", "cross-post reply");
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts/" + postA + "/comments",
+                        HttpMethod.POST,
+                        new HttpEntity<>(body, authHeaders(attacker)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(replyCount(parentOnB)).isZero();
+        assertThat(commentCount(postA)).isZero();
+        ResponseEntity<Map> replies =
+                getWithAuth("/api/v1/comments/" + parentOnB + "/replies", owner);
+        assertThat(contentOf(replies)).isEmpty();
+    }
+
     private UUID createComment(
             TestUser user, UUID postId, UUID parentId, String content, String idempotencyKey) {
         Map<String, Object> body = new HashMap<>();
@@ -258,6 +287,16 @@ class CommentControllerIT {
                         + " deleted_at IS NULL",
                 Integer.class,
                 postId);
+    }
+
+    private int replyCount(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT reply_count FROM comments WHERE id = ?", Integer.class, commentId);
+    }
+
+    private int commentCount(UUID postId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT comment_count FROM posts WHERE id = ?", Integer.class, postId);
     }
 
     private int likeCount(UUID commentId) {
