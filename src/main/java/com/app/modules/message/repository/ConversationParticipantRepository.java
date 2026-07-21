@@ -1,5 +1,6 @@
 package com.app.modules.message.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,8 +22,15 @@ public interface ConversationParticipantRepository
     Optional<ConversationParticipant> findByIdConversationIdAndIdUserId(
             UUID conversationId, UUID userId);
 
-    List<ConversationParticipant> findByIdConversationIdAndLeftAtIsNullOrderByJoinedAtAsc(
-            UUID conversationId);
+    /** All members (active and former) of one conversation, for detail/participant-list views. */
+    List<ConversationParticipant> findByIdConversationIdOrderByJoinedAtAsc(UUID conversationId);
+
+    /**
+     * Active members across many conversations in one query, for batched conversation-list
+     * hydration (avoids one query per conversation).
+     */
+    List<ConversationParticipant> findByIdConversationIdInAndLeftAtIsNull(
+            Collection<UUID> conversationIds);
 
     int countByIdConversationIdAndLeftAtIsNull(UUID conversationId);
 }

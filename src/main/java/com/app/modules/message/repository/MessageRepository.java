@@ -44,9 +44,9 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
 					SELECT m.conversation_id AS conversationId, COUNT(*) AS unreadCount
 					FROM messages m
 					JOIN conversation_participants p
-					    ON p.conversation_id = m.conversation_id
-					    AND p.user_id = :userId
-					    AND p.left_at IS NULL
+						ON p.conversation_id = m.conversation_id
+						AND p.user_id = :userId
+						AND p.left_at IS NULL
 					WHERE m.conversation_id IN (:conversationIds)
 					AND m.is_deleted = FALSE
 					AND m.sender_id IS DISTINCT FROM :userId

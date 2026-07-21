@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
+- A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
+
+### Tests
+- Unit coverage for conversation creation and deduplication, participant and group-admin gating, group admin handoff on leave, and conversation-list cursor pagination.
+
 ### Fixed
 - Out-of-range request parameters (such as an oversized page size or limit) on the notification, moderation-action, and report listing endpoints now return 400 Bad Request instead of 500 Internal Server Error.
 - A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.

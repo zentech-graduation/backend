@@ -17,9 +17,8 @@ import com.app.modules.message.entity.Conversation;
 public interface ConversationRepository extends JpaRepository<Conversation, UUID> {
 
     /**
-     * Finds the existing 1-1 conversation between the two users, regardless of either
-     * participant's {@code left_at} state, so a re-initiated conversation is reused rather than
-     * duplicated.
+     * Finds the existing 1-1 conversation between the two users, regardless of either participant's
+     * {@code left_at} state, so a re-initiated conversation is reused rather than duplicated.
      */
     @Query(
             value =
@@ -27,11 +26,11 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
 					SELECT c.* FROM conversations c
 					WHERE c.is_group = FALSE
 					AND EXISTS (SELECT 1 FROM conversation_participants p1
-					            WHERE p1.conversation_id = c.id AND p1.user_id = :userA)
+								WHERE p1.conversation_id = c.id AND p1.user_id = :userA)
 					AND EXISTS (SELECT 1 FROM conversation_participants p2
-					            WHERE p2.conversation_id = c.id AND p2.user_id = :userB)
+								WHERE p2.conversation_id = c.id AND p2.user_id = :userB)
 					AND (SELECT COUNT(*) FROM conversation_participants px
-					     WHERE px.conversation_id = c.id) = 2
+						WHERE px.conversation_id = c.id) = 2
 					LIMIT 1
 					""",
             nativeQuery = true)
@@ -40,16 +39,16 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
     /**
      * First page of the caller's active conversations, newest activity first.
      *
-     * <p>Conversations with no message yet ({@code last_message_at IS NULL}) sort last and are
-     * only guaranteed to appear on this first page; this is an accepted trade-off since a
-     * conversation reaches that state only in the brief window before its first message.
+     * <p>Conversations with no message yet ({@code last_message_at IS NULL}) sort last and are only
+     * guaranteed to appear on this first page; this is an accepted trade-off since a conversation
+     * reaches that state only in the brief window before its first message.
      */
     @Query(
             value =
                     """
 					SELECT c.* FROM conversations c
 					JOIN conversation_participants p
-					    ON p.conversation_id = c.id AND p.user_id = :userId AND p.left_at IS NULL
+						ON p.conversation_id = c.id AND p.user_id = :userId AND p.left_at IS NULL
 					ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC
 					""",
             nativeQuery = true)
@@ -61,9 +60,9 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
                     """
 					SELECT c.* FROM conversations c
 					JOIN conversation_participants p
-					    ON p.conversation_id = c.id AND p.user_id = :userId AND p.left_at IS NULL
+						ON p.conversation_id = c.id AND p.user_id = :userId AND p.left_at IS NULL
 					WHERE c.last_message_at < :cursorTime
-					   OR (c.last_message_at = :cursorTime AND c.id < :cursorId)
+					OR (c.last_message_at = :cursorTime AND c.id < :cursorId)
 					ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC
 					""",
             nativeQuery = true)
