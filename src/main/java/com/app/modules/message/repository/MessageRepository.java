@@ -1,8 +1,11 @@
 package com.app.modules.message.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +16,27 @@ import com.app.modules.message.entity.Message;
 /** Persistence access for {@link Message}. */
 @Repository
 public interface MessageRepository extends JpaRepository<Message, UUID> {
+
+    Optional<Message> findByIdAndConversationId(UUID id, UUID conversationId);
+
+    /**
+     * First page of a conversation's history, newest first. Deleted (tombstoned) messages are
+     * included so clients can render a "message deleted" placeholder in place.
+     */
+    @Query(
+            "SELECT m FROM Message m WHERE m.conversationId = :conversationId "
+                    + "ORDER BY m.createdAt DESC")
+    List<Message> findFirstByConversation(
+            @Param("conversationId") UUID conversationId, Pageable pageable);
+
+    /** Keyset page of a conversation's history older than the cursor, newest first. */
+    @Query(
+            "SELECT m FROM Message m WHERE m.conversationId = :conversationId "
+                    + "AND m.createdAt < :cursor ORDER BY m.createdAt DESC")
+    List<Message> findByConversationBefore(
+            @Param("conversationId") UUID conversationId,
+            @Param("cursor") OffsetDateTime cursor,
+            Pageable pageable);
 
     /**
      * One row per conversation - its most recent message - for batched conversation-list preview
