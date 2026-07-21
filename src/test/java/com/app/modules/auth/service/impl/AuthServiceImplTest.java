@@ -57,6 +57,7 @@ import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.auth.service.AuthResendVerificationEventService;
 import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
@@ -84,6 +85,7 @@ class AuthServiceImplTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuthMailEventService authMailEventService;
     @Mock private AuthForgotPasswordEventService authForgotPasswordEventService;
+    @Mock private AuthResendVerificationEventService authResendVerificationEventService;
     @Mock private ForgotPasswordTimingEqualizer forgotPasswordTimingEqualizer;
     @Mock private AuthMapper authMapper;
     @Mock private TokenBlacklistService tokenBlacklistService;
@@ -144,6 +146,7 @@ class AuthServiceImplTest {
                         passwordEncoder,
                         authMailEventService,
                         authForgotPasswordEventService,
+                        authResendVerificationEventService,
                         forgotPasswordTimingEqualizer,
                         authMapper,
                         tokenBlacklistService,
@@ -562,40 +565,25 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void resendVerification_unknownEmail_returnsSilentlyAndCreatesNoEvent() {
-        when(userRepository.findByEmailAndDeletedAtIsNull("ghost@x.y"))
-                .thenReturn(Optional.empty());
+    void resendVerification_delegatesDurableEventRecordingAndEqualizesTiming() {
+        service.resendVerification("alice@example.com");
 
-        service.resendVerification("ghost@x.y");
-
-        verify(authMailEventService, never()).publishEmailVerificationRequested(any(), any());
+        verify(authResendVerificationEventService)
+                .recordResendVerificationRequest("alice@example.com");
+        verify(forgotPasswordTimingEqualizer).equalizeFrom(anyLong());
         verify(tokenService, never()).createEmailVerificationToken(any());
     }
 
     @Test
-    void resendVerification_verifiedAccount_returnsSilentlyAndCreatesNoEvent() {
-        User u = activeUser();
-        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
-        when(credentialRepository.findByUserId(u.getId()))
-                .thenReturn(Optional.of(verifiedCredential(u.getId(), "HASH")));
+    void resendVerification_equalizesTimingWhenEventRecordingFails() {
+        doThrow(new IllegalStateException("db down"))
+                .when(authResendVerificationEventService)
+                .recordResendVerificationRequest("alice@example.com");
 
-        service.resendVerification(u.getEmail());
+        assertThatThrownBy(() -> service.resendVerification("alice@example.com"))
+                .isInstanceOf(IllegalStateException.class);
 
-        verify(authMailEventService, never()).publishEmailVerificationRequested(any(), any());
-        verify(tokenService, never()).createEmailVerificationToken(any());
-    }
-
-    @Test
-    void resendVerification_unverifiedAccount_recordsVerificationEventWithoutCreatingRawToken() {
-        User u = activeUser();
-        when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
-        when(credentialRepository.findByUserId(u.getId()))
-                .thenReturn(Optional.of(credential(u.getId(), "HASH")));
-
-        service.resendVerification(u.getEmail());
-
-        verify(authMailEventService).publishEmailVerificationRequested(u, null);
-        verify(tokenService, never()).createEmailVerificationToken(any());
+        verify(forgotPasswordTimingEqualizer).equalizeFrom(anyLong());
     }
 
     @Test
