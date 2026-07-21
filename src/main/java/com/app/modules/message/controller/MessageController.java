@@ -1,0 +1,157 @@
+package com.app.modules.message.controller;
+
+import java.util.List;
+import java.util.UUID;
+
+import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.app.common.ApiConstants;
+import com.app.common.base.BaseController;
+import com.app.common.enums.ApiSuccessCode;
+import com.app.common.response.ApiResponse;
+import com.app.common.response.CursorPageResponse;
+import com.app.common.security.util.SecurityUtils;
+import com.app.modules.message.api.MessageApi;
+import com.app.modules.message.dto.request.AddParticipantsRequest;
+import com.app.modules.message.dto.request.CreateDirectConversationRequest;
+import com.app.modules.message.dto.request.CreateGroupRequest;
+import com.app.modules.message.dto.request.UpdateGroupRequest;
+import com.app.modules.message.dto.response.ConversationResponse;
+import com.app.modules.message.dto.response.ConversationSummaryResponse;
+import com.app.modules.message.dto.response.ParticipantResponse;
+import com.app.modules.message.service.ConversationService;
+
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+
+/** HTTP surface for conversation creation, membership, and group management. */
+@RestController
+public class MessageController extends BaseController implements MessageApi {
+
+    private final ConversationService conversationService;
+
+    public MessageController(ConversationService conversationService) {
+        this.conversationService = conversationService;
+    }
+
+    /** Starts or reuses a 1-1 conversation with the target user; returns 201. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<ConversationResponse>> createDirectConversation(
+            @Valid @RequestBody CreateDirectConversationRequest request) {
+        ConversationResponse body =
+                conversationService.createDirectConversation(
+                        SecurityUtils.getCurrentUserId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(ApiSuccessCode.CREATED, body));
+    }
+
+    /** Creates a group conversation with the caller as its first admin; returns 201. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.GROUP)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<ConversationResponse>> createGroupConversation(
+            @Valid @RequestBody CreateGroupRequest request) {
+        ConversationResponse body =
+                conversationService.createGroupConversation(
+                        SecurityUtils.getCurrentUserId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(ApiSuccessCode.CREATED, body));
+    }
+
+    /** Lists the authenticated user's active conversations, newest activity first. */
+    @Override
+    @GetMapping(ApiConstants.Messages.ROOT)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<ConversationSummaryResponse>>>
+            listMyConversations(
+                    @RequestParam(value = "cursor", required = false) String cursor,
+                    @RequestParam(value = "limit", defaultValue = "20") int limit) {
+        CursorPageResponse<ConversationSummaryResponse> body =
+                conversationService.listMyConversations(
+                        SecurityUtils.getCurrentUserId(), cursor, limit);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /** Returns one conversation's detail for an active participant. */
+    @Override
+    @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<ConversationResponse>> getConversation(
+            @PathVariable("conversationId") UUID conversationId) {
+        ConversationResponse body =
+                conversationService.getConversation(
+                        SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /** Renames a group and/or changes its avatar for an active group admin. */
+    @Override
+    @PatchMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<ConversationResponse>> updateGroup(
+            @PathVariable("conversationId") UUID conversationId,
+            @Valid @RequestBody UpdateGroupRequest request) {
+        ConversationResponse body =
+                conversationService.updateGroup(
+                        SecurityUtils.getCurrentUserId(), conversationId, request);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /** Lists a conversation's active and former members for an active participant. */
+    @Override
+    @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<List<ParticipantResponse>>> listParticipants(
+            @PathVariable("conversationId") UUID conversationId) {
+        List<ParticipantResponse> body =
+                conversationService.listParticipants(
+                        SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /** Adds members to a group conversation for an active group admin. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> addParticipants(
+            @PathVariable("conversationId") UUID conversationId,
+            @Valid @RequestBody AddParticipantsRequest request) {
+        conversationService.addParticipants(
+                SecurityUtils.getCurrentUserId(), conversationId, request);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Removes an active member from a group conversation for an active group admin. */
+    @Override
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANT_BY_ID)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> removeParticipant(
+            @PathVariable("conversationId") UUID conversationId,
+            @PathVariable("userId") UUID userId) {
+        conversationService.removeParticipant(
+                SecurityUtils.getCurrentUserId(), conversationId, userId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Leaves a conversation for the authenticated caller; idempotent. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.LEAVE)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> leaveConversation(
+            @PathVariable("conversationId") UUID conversationId) {
+        conversationService.leaveConversation(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+}
