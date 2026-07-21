@@ -32,10 +32,12 @@ import com.app.modules.message.dto.request.CreateGroupRequest;
 import com.app.modules.message.dto.request.UpdateGroupRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
+import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.dto.response.ParticipantResponse;
 import com.app.modules.message.entity.Conversation;
 import com.app.modules.message.entity.ConversationParticipant;
 import com.app.modules.message.entity.ConversationParticipantId;
+import com.app.modules.message.entity.Message;
 import com.app.modules.message.mapper.MessageMapper;
 import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.message.repository.ConversationRepository;
@@ -203,6 +205,11 @@ public class ConversationServiceImpl implements ConversationService {
                                 Collectors.toMap(
                                         ConversationUnreadCount::getConversationId,
                                         ConversationUnreadCount::getUnreadCount));
+        Map<UUID, MessageResponse> lastMessageByConversation =
+                messageRepository.findLastMessagePerConversation(conversationIds).stream()
+                        .collect(
+                                Collectors.toMap(
+                                        Message::getConversationId, mapper::toMessageResponse));
 
         List<ConversationSummaryResponse> content =
                 conversations.stream()
@@ -212,7 +219,8 @@ public class ConversationServiceImpl implements ConversationService {
                                                 c,
                                                 participantsByConversation.getOrDefault(
                                                         c.getId(), List.of()),
-                                                unreadByConversation.getOrDefault(c.getId(), 0L)))
+                                                unreadByConversation.getOrDefault(c.getId(), 0L),
+                                                lastMessageByConversation.get(c.getId())))
                         .toList();
         String startCursor = encodeCursor(conversations.get(0));
         String endCursor = encodeCursor(conversations.get(conversations.size() - 1));

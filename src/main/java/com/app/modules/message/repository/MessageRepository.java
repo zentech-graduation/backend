@@ -80,4 +80,24 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             nativeQuery = true)
     List<ConversationUnreadCount> countUnreadPerConversation(
             @Param("userId") UUID userId, @Param("conversationIds") List<UUID> conversationIds);
+
+    /**
+     * Total unread-message count across every active conversation for the given user; same counting
+     * rule as {@link #countUnreadPerConversation} without the per-conversation breakdown.
+     */
+    @Query(
+            value =
+                    """
+					SELECT COUNT(*)
+					FROM messages m
+					JOIN conversation_participants p
+						ON p.conversation_id = m.conversation_id
+						AND p.user_id = :userId
+						AND p.left_at IS NULL
+					WHERE m.is_deleted = FALSE
+					AND m.sender_id IS DISTINCT FROM :userId
+					AND (p.last_read_at IS NULL OR m.created_at > p.last_read_at)
+					""",
+            nativeQuery = true)
+    long countTotalUnreadForUser(@Param("userId") UUID userId);
 }

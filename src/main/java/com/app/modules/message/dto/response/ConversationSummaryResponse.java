@@ -17,4 +17,9 @@ public record ConversationSummaryResponse(
         @Schema(description = "Active members.") List<ParticipantResponse> participants,
         @Schema(description = "Number of unread messages for the caller.") long unreadCount,
         @Schema(description = "Creation time of the newest message; null if none yet.")
-                OffsetDateTime lastMessageAt) {}
+                OffsetDateTime lastMessageAt,
+        @Schema(
+                        description =
+                                "Preview of the newest message, including a tombstoned one; null"
+                                        + " if the conversation has no message yet.")
+                MessageResponse lastMessage) {}

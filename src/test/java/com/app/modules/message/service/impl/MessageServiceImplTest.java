@@ -1,0 +1,554 @@
+package com.app.modules.message.service.impl;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
+
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
+import com.app.common.response.CursorPageResponse;
+import com.app.modules.message.dto.request.SendMessageRequest;
+import com.app.modules.message.dto.response.MessageResponse;
+import com.app.modules.message.entity.Conversation;
+import com.app.modules.message.entity.ConversationParticipant;
+import com.app.modules.message.entity.ConversationParticipantId;
+import com.app.modules.message.entity.Message;
+import com.app.modules.message.entity.MessageWriteIdempotency;
+import com.app.modules.message.enums.MessageType;
+import com.app.modules.message.mapper.MessageMapper;
+import com.app.modules.message.messaging.MessageEventTypes;
+import com.app.modules.message.repository.ConversationParticipantRepository;
+import com.app.modules.message.repository.ConversationRepository;
+import com.app.modules.message.repository.MessageIdempotencyRepository;
+import com.app.modules.message.repository.MessageMediaAssetRepository;
+import com.app.modules.message.repository.MessagePostRepository;
+import com.app.modules.message.repository.MessageRepository;
+import com.app.modules.message.repository.MessageStoryRepository;
+import com.app.modules.social.service.SocialService;
+
+import tools.jackson.databind.ObjectMapper;
+
+@ExtendWith(MockitoExtension.class)
+class MessageServiceImplTest {
+
+    @Mock private MessageRepository messageRepository;
+    @Mock private MessageIdempotencyRepository idempotencyRepository;
+    @Mock private ConversationRepository conversationRepository;
+    @Mock private ConversationParticipantRepository participantRepository;
+    @Mock private MessageMediaAssetRepository mediaAssetRepository;
+    @Mock private MessagePostRepository postRepository;
+    @Mock private MessageStoryRepository storyRepository;
+    @Mock private SocialService socialService;
+    @Mock private MessageMapper mapper;
+    @Mock private OutboxService outboxService;
+    @Mock private ObjectMapper objectMapper;
+
+    private MessageServiceImpl service;
+
+    @BeforeEach
+    void setUp() {
+        service =
+                new MessageServiceImpl(
+                        messageRepository,
+                        idempotencyRepository,
+                        conversationRepository,
+                        participantRepository,
+                        mediaAssetRepository,
+                        postRepository,
+                        storyRepository,
+                        socialService,
+                        mapper,
+                        outboxService,
+                        objectMapper);
+        lenient()
+                .when(mapper.toMessageResponse(any()))
+                .thenAnswer(
+                        inv -> {
+                            Message m = inv.getArgument(0);
+                            return new MessageResponse(
+                                    m.getId(),
+                                    m.getConversationId(),
+                                    m.getSenderId(),
+                                    m.getMessageType(),
+                                    m.getContent(),
+                                    m.getMediaAssetId(),
+                                    m.getSharedPostId(),
+                                    m.getSharedStoryId(),
+                                    m.getReplyToId(),
+                                    m.isDeleted(),
+                                    m.getDeletedAt(),
+                                    m.getCreatedAt());
+                        });
+    }
+
+    @Test
+    void sendMessage_conversationNotFound_throwsConversationNotFound() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () -> service.sendMessage(actorId, conversationId, textRequest("hi"), null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_NOT_FOUND);
+    }
+
+    @Test
+    void sendMessage_nonParticipant_throwsConversationForbidden() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(groupConversation(conversationId)));
+        when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
+                        conversationId, actorId))
+                .thenReturn(false);
+
+        assertThatThrownBy(
+                        () -> service.sendMessage(actorId, conversationId, textRequest("hi"), null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void sendMessage_directConversationBlocked_throwsSocialBlocked() {
+        UUID actorId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(directConversation(conversationId)));
+        when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
+                        conversationId, actorId))
+                .thenReturn(true);
+        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
+                .thenReturn(
+                        List.of(
+                                participant(conversationId, actorId, null),
+                                participant(conversationId, otherId, null)));
+        when(socialService.isBlockedBetween(actorId, otherId)).thenReturn(true);
+
+        assertThatThrownBy(
+                        () -> service.sendMessage(actorId, conversationId, textRequest("hi"), null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+    }
+
+    @Test
+    void sendMessage_textWithoutContent_throwsInvalidPayload() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+
+        assertThatThrownBy(
+                        () -> service.sendMessage(actorId, conversationId, textRequest(null), null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+    }
+
+    @Test
+    void sendMessage_textWithMediaReference_throwsInvalidPayload() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        SendMessageRequest request =
+                new SendMessageRequest(MessageType.TEXT, "hi", UUID.randomUUID(), null, null, null);
+
+        assertThatThrownBy(() -> service.sendMessage(actorId, conversationId, request, null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+    }
+
+    @Test
+    void sendMessage_imageWithoutMediaAssetId_throwsInvalidPayload() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        SendMessageRequest request =
+                new SendMessageRequest(MessageType.IMAGE, null, null, null, null, null);
+
+        assertThatThrownBy(() -> service.sendMessage(actorId, conversationId, request, null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+    }
+
+    @Test
+    void sendMessage_imageWithMissingMediaAsset_throwsInvalidPayload() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID mediaAssetId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        when(mediaAssetRepository.existsById(mediaAssetId)).thenReturn(false);
+        SendMessageRequest request =
+                new SendMessageRequest(MessageType.IMAGE, null, mediaAssetId, null, null, null);
+
+        assertThatThrownBy(() -> service.sendMessage(actorId, conversationId, request, null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+    }
+
+    @Test
+    void sendMessage_postShareWithMissingPost_throwsInvalidPayload() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        when(postRepository.existsById(postId)).thenReturn(false);
+        SendMessageRequest request =
+                new SendMessageRequest(MessageType.POST_SHARE, null, null, postId, null, null);
+
+        assertThatThrownBy(() -> service.sendMessage(actorId, conversationId, request, null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+    }
+
+    @Test
+    void sendMessage_storyShareWithMissingStory_throwsInvalidPayload() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID storyId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        when(storyRepository.existsById(storyId)).thenReturn(false);
+        SendMessageRequest request =
+                new SendMessageRequest(MessageType.STORY_SHARE, null, null, null, storyId, null);
+
+        assertThatThrownBy(() -> service.sendMessage(actorId, conversationId, request, null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+    }
+
+    @Test
+    void sendMessage_replyToDifferentConversation_throwsInvalidPayload() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID replyToId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        when(messageRepository.findByIdAndConversationId(replyToId, conversationId))
+                .thenReturn(Optional.empty());
+        SendMessageRequest request =
+                new SendMessageRequest(MessageType.TEXT, "hi", null, null, null, replyToId);
+
+        assertThatThrownBy(() -> service.sendMessage(actorId, conversationId, request, null))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+    }
+
+    @Test
+    void sendMessage_success_persistsAndEnqueuesOutbox() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        Message saved =
+                Message.builder()
+                        .id(messageId)
+                        .conversationId(conversationId)
+                        .senderId(actorId)
+                        .messageType(MessageType.TEXT)
+                        .content("hello")
+                        .build();
+        when(messageRepository.save(any())).thenReturn(saved);
+
+        MessageResponse response =
+                service.sendMessage(actorId, conversationId, textRequest("hello"), null);
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(messageId);
+        verify(outboxService)
+                .enqueue(
+                        eq(MessageEventTypes.MESSAGE_SENT_V1),
+                        eq(MessageEventTypes.MESSAGE_SENT_V1),
+                        eq("message"),
+                        eq(messageId),
+                        eq(actorId),
+                        anyMap());
+        verify(idempotencyRepository, never()).insertIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    void sendMessage_idempotencyReplay_returnsCachedResponse() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        String hash = sha256(conversationId + "|TEXT|hello|null|null|null");
+        when(idempotencyRepository.insertIfAbsent(eq(actorId), eq("key-1"), eq(hash)))
+                .thenReturn(0);
+        MessageWriteIdempotency row =
+                MessageWriteIdempotency.builder()
+                        .userId(actorId)
+                        .idempotencyKey("key-1")
+                        .requestHash(hash)
+                        .responseBody("cached-json")
+                        .build();
+        when(idempotencyRepository.findByUserIdAndIdempotencyKey(actorId, "key-1"))
+                .thenReturn(Optional.of(row));
+        MessageResponse cached =
+                new MessageResponse(
+                        UUID.randomUUID(),
+                        conversationId,
+                        actorId,
+                        MessageType.TEXT,
+                        "hello",
+                        null,
+                        null,
+                        null,
+                        null,
+                        false,
+                        null,
+                        OffsetDateTime.now(ZoneOffset.UTC));
+        when(objectMapper.readValue("cached-json", MessageResponse.class)).thenReturn(cached);
+
+        MessageResponse response =
+                service.sendMessage(actorId, conversationId, textRequest("hello"), "key-1");
+
+        assertThat(response).isSameAs(cached);
+        verify(messageRepository, never()).save(any());
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), anyMap());
+    }
+
+    @Test
+    void sendMessage_idempotencyConflict_throwsConflict() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        when(idempotencyRepository.insertIfAbsent(eq(actorId), eq("key-2"), any())).thenReturn(0);
+        MessageWriteIdempotency row =
+                MessageWriteIdempotency.builder()
+                        .userId(actorId)
+                        .idempotencyKey("key-2")
+                        .requestHash("a-different-hash")
+                        .responseBody("cached-json")
+                        .build();
+        when(idempotencyRepository.findByUserIdAndIdempotencyKey(actorId, "key-2"))
+                .thenReturn(Optional.of(row));
+
+        assertThatThrownBy(
+                        () ->
+                                service.sendMessage(
+                                        actorId, conversationId, textRequest("hello"), "key-2"))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_IDEMPOTENCY_CONFLICT);
+    }
+
+    @Test
+    void listHistory_nonParticipant_throwsConversationForbidden() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(groupConversation(conversationId)));
+        when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
+                        conversationId, actorId))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.listHistory(actorId, conversationId, null, 20))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void listHistory_firstPage_returnsMessagesIncludingTombstones() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        Message tombstone =
+                Message.builder()
+                        .id(UUID.randomUUID())
+                        .conversationId(conversationId)
+                        .messageType(MessageType.TEXT)
+                        .isDeleted(true)
+                        .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
+                        .build();
+        when(messageRepository.findFirstByConversation(eq(conversationId), any(Pageable.class)))
+                .thenReturn(List.of(tombstone));
+
+        CursorPageResponse<MessageResponse> result =
+                service.listHistory(actorId, conversationId, null, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).isDeleted()).isTrue();
+    }
+
+    @Test
+    void deleteMessage_bySender_softDeletesAndEnqueuesOutbox() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        Message message =
+                Message.builder()
+                        .id(messageId)
+                        .conversationId(conversationId)
+                        .senderId(actorId)
+                        .messageType(MessageType.TEXT)
+                        .content("to be deleted")
+                        .build();
+        when(messageRepository.findByIdAndConversationId(messageId, conversationId))
+                .thenReturn(Optional.of(message));
+
+        service.deleteMessage(actorId, conversationId, messageId);
+
+        assertThat(message.isDeleted()).isTrue();
+        assertThat(message.getDeletedAt()).isNotNull();
+        assertThat(message.getContent()).isNull();
+        verify(messageRepository).save(message);
+        verify(outboxService)
+                .enqueue(
+                        eq(MessageEventTypes.MESSAGE_DELETED_V1),
+                        eq(MessageEventTypes.MESSAGE_DELETED_V1),
+                        eq("message"),
+                        eq(messageId),
+                        eq(actorId),
+                        anyMap());
+    }
+
+    @Test
+    void deleteMessage_byNonSender_throwsForbidden() {
+        UUID actorId = UUID.randomUUID();
+        UUID senderId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        Message message =
+                Message.builder()
+                        .id(messageId)
+                        .conversationId(conversationId)
+                        .senderId(senderId)
+                        .messageType(MessageType.TEXT)
+                        .content("not yours")
+                        .build();
+        when(messageRepository.findByIdAndConversationId(messageId, conversationId))
+                .thenReturn(Optional.of(message));
+
+        assertThatThrownBy(() -> service.deleteMessage(actorId, conversationId, messageId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_FORBIDDEN);
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteMessage_notFound_throwsMessageNotFound() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        when(messageRepository.findByIdAndConversationId(messageId, conversationId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteMessage(actorId, conversationId, messageId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_NOT_FOUND);
+    }
+
+    @Test
+    void markRead_activeParticipant_setsLastReadAt() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(groupConversation(conversationId)));
+        ConversationParticipant participant = participant(conversationId, actorId, null);
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(participant));
+
+        service.markRead(actorId, conversationId);
+
+        assertThat(participant.getLastReadAt()).isNotNull();
+        verify(participantRepository).save(participant);
+    }
+
+    @Test
+    void markRead_nonParticipant_throwsConversationForbidden() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(groupConversation(conversationId)));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.markRead(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void getUnreadCount_delegatesToRepository() {
+        UUID actorId = UUID.randomUUID();
+        when(messageRepository.countTotalUnreadForUser(actorId)).thenReturn(7L);
+
+        assertThat(service.getUnreadCount(actorId)).isEqualTo(7L);
+    }
+
+    private void stubActiveGroupParticipant(UUID conversationId, UUID actorId) {
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(groupConversation(conversationId)));
+        when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
+                        conversationId, actorId))
+                .thenReturn(true);
+    }
+
+    private static SendMessageRequest textRequest(String content) {
+        return new SendMessageRequest(MessageType.TEXT, content, null, null, null, null);
+    }
+
+    private static Conversation groupConversation(UUID id) {
+        return Conversation.builder().id(id).isGroup(true).build();
+    }
+
+    private static Conversation directConversation(UUID id) {
+        return Conversation.builder().id(id).isGroup(false).build();
+    }
+
+    private static ConversationParticipant participant(
+            UUID conversationId, UUID userId, OffsetDateTime leftAt) {
+        return ConversationParticipant.builder()
+                .id(new ConversationParticipantId(conversationId, userId))
+                .leftAt(leftAt)
+                .build();
+    }
+
+    private static String sha256(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}

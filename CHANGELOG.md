@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Sending a message (text, image, video, post share, or story share) into a conversation, with a reply reference, idempotent retries, and validation that the payload matches the declared message type.
+- Cursor-paginated message history for a conversation, including a placeholder for a deleted message.
+- Sender-only message deletion that preserves the message as a placeholder instead of removing it.
+- Marking a conversation read, and a total unread message count across all of a user's conversations.
+- The caller's conversation list now includes a preview of each conversation's newest message.
+
+### Tests
+- Unit coverage for message send validation and gating, idempotent retry and conflict handling, history pagination, sender-only delete, and read-state tracking.
+
+### Added
 - Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
