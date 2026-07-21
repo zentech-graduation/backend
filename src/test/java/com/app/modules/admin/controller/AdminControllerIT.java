@@ -222,8 +222,9 @@ class AdminControllerIT {
         TestUser actor = createUser("report_admin", "admin");
         TestUser reporter = createUser("report_reporter", "user");
         TestUser target = createUser("report_target", "user");
+        TestUser secondTarget = createUser("report_target_2", "user");
         UUID resolvedReportId = insertReport(reporter.id(), target.id());
-        UUID dismissedReportId = insertReport(reporter.id(), target.id());
+        UUID dismissedReportId = insertReport(reporter.id(), secondTarget.id());
 
         ResponseEntity<Map> resolved =
                 patch(

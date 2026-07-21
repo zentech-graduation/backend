@@ -6,6 +6,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.UUID;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -60,7 +61,14 @@ public class ReportServiceImpl implements ReportService {
                         .description(request.description())
                         .status(ReportStatus.PENDING)
                         .build();
-        return reportMapper.toResponse(reportRepository.save(report));
+        try {
+            // The pre-check above cannot close the race between two concurrent submissions. The
+            // unique index on (reporter_id, report_type, entity_id) is the authoritative guard;
+            // flush here so the violation surfaces as a duplicate rather than a late 500.
+            return reportMapper.toResponse(reportRepository.saveAndFlush(report));
+        } catch (DataIntegrityViolationException ex) {
+            throw new AppException(ApiErrorCode.REPORT_DUPLICATE);
+        }
     }
 
     @Override
