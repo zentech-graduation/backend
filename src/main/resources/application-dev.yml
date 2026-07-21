@@ -46,6 +46,8 @@ app:
   message:
     consumer:
       enabled: true
+    live:
+      enabled: true
   mail:
     consumer:
       enabled: true
