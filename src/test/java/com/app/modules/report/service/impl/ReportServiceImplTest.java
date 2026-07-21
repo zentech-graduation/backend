@@ -55,7 +55,7 @@ class ReportServiceImplTest {
         ReportResponse expected = response(ReportStatus.PENDING);
         when(reportRepository.findOwnerId(ReportType.POST, entityId))
                 .thenReturn(Optional.of(ownerId));
-        when(reportRepository.save(any(Report.class)))
+        when(reportRepository.saveAndFlush(any(Report.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(reportMapper.toResponse(any(Report.class))).thenReturn(expected);
 
@@ -63,7 +63,7 @@ class ReportServiceImplTest {
 
         assertThat(result).isEqualTo(expected);
         ArgumentCaptor<Report> captor = ArgumentCaptor.forClass(Report.class);
-        verify(reportRepository).save(captor.capture());
+        verify(reportRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getReporterId()).isEqualTo(reporterId);
         assertThat(captor.getValue().getStatus()).isEqualTo(ReportStatus.PENDING);
     }

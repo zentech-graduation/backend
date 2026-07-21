@@ -43,6 +43,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PostSearchServiceImpl implements PostSearchService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final PostRepository postRepository;
@@ -66,7 +67,7 @@ public class PostSearchServiceImpl implements PostSearchService {
     public CursorPageResponse<PostResponse> searchPosts(
             UUID viewerId, String query, String cursor, int size) {
         int offset = decodeCursor(cursor);
-        int effectiveLimit = size > 0 ? size : DEFAULT_PAGE_SIZE;
+        int effectiveLimit = normalizeLimit(size);
         // Page the ES query by the exact cursor offset. PageRequest derives `from` as page * size,
         // which truncates any offset not divisible by the page size (e.g. when the client varies
         // the limit between requests) and silently skips or repeats results.
@@ -134,8 +135,17 @@ public class PostSearchServiceImpl implements PostSearchService {
                 t.getClass().getSimpleName(),
                 t.getMessage(),
                 t);
-        int effectiveLimit = size > 0 ? size : DEFAULT_PAGE_SIZE;
+        int effectiveLimit = normalizeLimit(size);
         return CursorPageResponse.of(List.of(), effectiveLimit, null, null, false);
+    }
+
+    // Clamp the page size so an oversized request cannot force a mass hydration or exceed the
+    // Elasticsearch result-window ceiling, matching the bound applied by the other list endpoints.
+    private static int normalizeLimit(int size) {
+        if (size <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(size, MAX_PAGE_SIZE);
     }
 
     private List<PostResponse> hydrateVisible(UUID viewerId, List<UUID> ids) {

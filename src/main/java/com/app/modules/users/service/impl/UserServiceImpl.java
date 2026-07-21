@@ -60,8 +60,12 @@ public class UserServiceImpl implements UserService {
 
         if (request.username() != null) {
             String newUsername = request.username();
+            // The username UNIQUE constraint is table-wide and soft delete does not release a
+            // username, so the availability check must span soft-deleted rows too. A partial check
+            // would let a collision with a soft-deleted account fall through to a database error
+            // whose response differs from the active-collision response and reveals account state.
             if (!newUsername.equals(user.getUsername())
-                    && userRepository.existsByUsernameAndDeletedAtIsNull(newUsername)) {
+                    && userRepository.existsByUsername(newUsername)) {
                 throw new AppException(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
             }
             user.setUsername(newUsername);

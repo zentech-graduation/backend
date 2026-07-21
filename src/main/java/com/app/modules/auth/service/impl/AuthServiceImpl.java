@@ -2,7 +2,6 @@ package com.app.modules.auth.service.impl;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -39,6 +38,7 @@ import com.app.modules.auth.mapper.AuthMapper;
 import com.app.modules.auth.repository.UserCredentialRepository;
 import com.app.modules.auth.service.AuthForgotPasswordEventService;
 import com.app.modules.auth.service.AuthMailEventService;
+import com.app.modules.auth.service.AuthResendVerificationEventService;
 import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
@@ -66,6 +66,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthMailEventService authMailEventService;
     private final AuthForgotPasswordEventService authForgotPasswordEventService;
+    private final AuthResendVerificationEventService authResendVerificationEventService;
     private final ForgotPasswordTimingEqualizer forgotPasswordTimingEqualizer;
     private final AuthMapper authMapper;
     private final TokenBlacklistService tokenBlacklistService;
@@ -89,6 +90,7 @@ public class AuthServiceImpl implements AuthService {
             PasswordEncoder passwordEncoder,
             AuthMailEventService authMailEventService,
             AuthForgotPasswordEventService authForgotPasswordEventService,
+            AuthResendVerificationEventService authResendVerificationEventService,
             ForgotPasswordTimingEqualizer forgotPasswordTimingEqualizer,
             AuthMapper authMapper,
             TokenBlacklistService tokenBlacklistService,
@@ -106,6 +108,7 @@ public class AuthServiceImpl implements AuthService {
         this.passwordEncoder = passwordEncoder;
         this.authMailEventService = authMailEventService;
         this.authForgotPasswordEventService = authForgotPasswordEventService;
+        this.authResendVerificationEventService = authResendVerificationEventService;
         this.forgotPasswordTimingEqualizer = forgotPasswordTimingEqualizer;
         this.authMapper = authMapper;
         this.tokenBlacklistService = tokenBlacklistService;
@@ -324,19 +327,17 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
     public void resendVerification(String email) {
-        Optional<User> userOpt = userRepository.findByEmailAndDeletedAtIsNull(email);
-        if (userOpt.isEmpty()) {
-            return;
+        // Mirrors forgotPassword: the durable event recording runs in a separate transactional
+        // delegate and response time is normalised to a floor, so a registered address is not
+        // distinguishable from an unregistered one by latency. The equalizer runs on every path,
+        // including when the delegate throws.
+        long startNanos = System.nanoTime();
+        try {
+            authResendVerificationEventService.recordResendVerificationRequest(email);
+        } finally {
+            forgotPasswordTimingEqualizer.equalizeFrom(startNanos);
         }
-        User user = userOpt.get();
-        UserCredential credential = credentialRepository.findByUserId(user.getId()).orElse(null);
-        if (credential != null && credential.isEmailVerified()) {
-            return;
-        }
-
-        authMailEventService.publishEmailVerificationRequested(user, null);
     }
 
     @Override

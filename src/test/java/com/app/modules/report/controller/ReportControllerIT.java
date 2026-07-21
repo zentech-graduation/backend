@@ -147,6 +147,15 @@ class ReportControllerIT {
     }
 
     @Test
+    void listReports_sizeAboveMax_returnsBadRequest() {
+        TestUser moderator = createUser("list_size_moderator", "moderator");
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports?size=999", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void getPendingReports_regularUser_returnsForbidden() {
         TestUser user = createUser("pending_forbidden_user", "user");
 

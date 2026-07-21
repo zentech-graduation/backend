@@ -98,6 +98,25 @@ class AdminControllerIT {
     }
 
     @Test
+    void banUser_metadataAboveMax_returnsBadRequest() {
+        TestUser actor = createUser("meta_bound_moderator", "moderator");
+        TestUser target = createUser("meta_bound_target", "user");
+
+        Map<String, Object> metadata = new java.util.HashMap<>();
+        for (int i = 0; i < 21; i++) {
+            metadata.put("k" + i, "v" + i);
+        }
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("reason", "Severe abuse");
+        body.put("metadata", metadata);
+
+        ResponseEntity<Map> response =
+                patch("/api/v1/admin/users/" + target.id() + "/ban", body, actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void banUser_regularUser_returnsForbidden() {
         TestUser actor = createUser("forbidden_actor", "user");
         TestUser target = createUser("forbidden_target", "user");
@@ -222,8 +241,9 @@ class AdminControllerIT {
         TestUser actor = createUser("report_admin", "admin");
         TestUser reporter = createUser("report_reporter", "user");
         TestUser target = createUser("report_target", "user");
+        TestUser secondTarget = createUser("report_target_2", "user");
         UUID resolvedReportId = insertReport(reporter.id(), target.id());
-        UUID dismissedReportId = insertReport(reporter.id(), target.id());
+        UUID dismissedReportId = insertReport(reporter.id(), secondTarget.id());
 
         ResponseEntity<Map> resolved =
                 patch(
@@ -281,6 +301,15 @@ class AdminControllerIT {
         assertThat(dataOf(detail).get("id")).isEqualTo(actionId.toString());
         assertThat(forUser.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(contentOf(forUser)).hasSize(1);
+    }
+
+    @Test
+    void listActions_sizeAboveMax_returnsBadRequest() {
+        TestUser actor = createUser("size_moderator", "moderator");
+
+        ResponseEntity<Map> response = get("/api/v1/admin/actions?size=999", actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test

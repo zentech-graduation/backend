@@ -19,5 +19,5 @@ public record AdminActionRequest(
                 String reason,
         @Schema(description = "Optional report that prompted the moderation operation")
                 UUID reportId,
-        @Schema(description = "Optional structured moderation context")
+        @Schema(description = "Optional structured moderation context") @Size(max = 20)
                 Map<String, Object> metadata) {}

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -13,6 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -59,6 +61,19 @@ class PostSearchServiceImplTest {
         assertThat(page.getContent()).isEmpty();
         assertThat(page.getPageInfo().getStartCursor()).isNull();
         assertThat(page.getPageInfo().getEndCursor()).isNull();
+    }
+
+    @Test
+    void searchPosts_limitAboveMax_clampsElasticsearchPageSize() {
+        when(searchHits.getSearchHits()).thenReturn(List.of());
+        when(elasticsearchOperations.search(any(NativeQuery.class), eq(PostDocument.class)))
+                .thenReturn(searchHits);
+
+        service.searchPosts(UUID.randomUUID(), "sunset", null, 10_000);
+
+        ArgumentCaptor<NativeQuery> captor = ArgumentCaptor.forClass(NativeQuery.class);
+        verify(elasticsearchOperations).search(captor.capture(), eq(PostDocument.class));
+        assertThat(captor.getValue().getPageable().getPageSize()).isEqualTo(100);
     }
 
     @Test

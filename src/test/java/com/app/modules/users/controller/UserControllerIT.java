@@ -26,6 +26,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.modules.auth.service.TokenService;
+import com.app.modules.users.entity.User;
 import com.app.modules.users.repository.UserRepository;
 
 @SpringBootTest(
@@ -125,6 +126,26 @@ class UserControllerIT {
 
         ResponseEntity<Map> response =
                 patchWithAuth("/api/v1/users/me", Map.of("username", "user_cnfl1"), access2);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("USER_USERNAME_ALREADY_EXISTS");
+    }
+
+    @Test
+    void updateMyProfile_usernameHeldBySoftDeletedAccount_returnsConsistentConflict() {
+        String softDeletedEmail = uniqueEmail("softdel");
+        registerVerifyAndLogin("user_softdel", softDeletedEmail, "password1");
+        User softDeleted =
+                userRepository.findByEmailAndDeletedAtIsNull(softDeletedEmail).orElseThrow();
+        softDeleted.setDeletedAt(java.time.OffsetDateTime.now());
+        userRepository.save(softDeleted);
+
+        String access =
+                registerVerifyAndLogin("user_live", uniqueEmail("live"), "password1")
+                        .get("accessToken");
+
+        ResponseEntity<Map> response =
+                patchWithAuth("/api/v1/users/me", Map.of("username", "user_softdel"), access);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().get("code")).isEqualTo("USER_USERNAME_ALREADY_EXISTS");
