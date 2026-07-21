@@ -6,6 +6,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.app.modules.message.entity.ConversationParticipant;
@@ -33,4 +35,10 @@ public interface ConversationParticipantRepository
             Collection<UUID> conversationIds);
 
     int countByIdConversationIdAndLeftAtIsNull(UUID conversationId);
+
+    /** Active member user ids for one conversation, for notification fan-out recipient lookup. */
+    @Query(
+            "SELECT p.id.userId FROM ConversationParticipant p "
+                    + "WHERE p.id.conversationId = :conversationId AND p.leftAt IS NULL")
+    List<UUID> findActiveUserIdsByConversationId(@Param("conversationId") UUID conversationId);
 }
