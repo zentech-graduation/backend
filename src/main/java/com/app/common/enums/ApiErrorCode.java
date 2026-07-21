@@ -84,6 +84,20 @@ public enum ApiErrorCode {
     STORY_NOT_FOUND("STORY_NOT_FOUND", "Story not found", HttpStatus.NOT_FOUND),
     STORY_FORBIDDEN("STORY_FORBIDDEN", "You do not have access to this story", HttpStatus.FORBIDDEN),
 
+    // Message
+    CONVERSATION_NOT_FOUND("CONVERSATION_NOT_FOUND", "Conversation not found", HttpStatus.NOT_FOUND),
+    CONVERSATION_FORBIDDEN("CONVERSATION_FORBIDDEN", "You are not a participant of this conversation", HttpStatus.FORBIDDEN),
+    CONVERSATION_INVALID_PARTICIPANTS("CONVERSATION_INVALID_PARTICIPANTS", "Invalid participant list", HttpStatus.BAD_REQUEST),
+    CONVERSATION_NOT_GROUP("CONVERSATION_NOT_GROUP", "This operation requires a group conversation", HttpStatus.CONFLICT),
+    GROUP_CHAT_DISABLED("GROUP_CHAT_DISABLED", "Group chat is not enabled", HttpStatus.FORBIDDEN),
+    GROUP_ADMIN_REQUIRED("GROUP_ADMIN_REQUIRED", "Only a group admin may perform this action", HttpStatus.FORBIDDEN),
+    PARTICIPANT_NOT_FOUND("PARTICIPANT_NOT_FOUND", "Participant not found in this conversation", HttpStatus.NOT_FOUND),
+    MESSAGE_REQUEST_NOT_ALLOWED("MESSAGE_REQUEST_NOT_ALLOWED", "This user is not accepting message requests", HttpStatus.FORBIDDEN),
+    MESSAGE_NOT_FOUND("MESSAGE_NOT_FOUND", "Message not found", HttpStatus.NOT_FOUND),
+    MESSAGE_FORBIDDEN("MESSAGE_FORBIDDEN", "You do not have access to this message", HttpStatus.FORBIDDEN),
+    MESSAGE_INVALID_PAYLOAD("MESSAGE_INVALID_PAYLOAD", "Message payload does not match its type", HttpStatus.UNPROCESSABLE_ENTITY),
+    MESSAGE_IDEMPOTENCY_CONFLICT("MESSAGE_IDEMPOTENCY_CONFLICT", "Idempotency key reused with a different payload", HttpStatus.CONFLICT),
+
     // Report
     REPORT_NOT_FOUND("REPORT_NOT_FOUND", "Report not found", HttpStatus.NOT_FOUND),
     REPORT_TARGET_NOT_FOUND("REPORT_TARGET_NOT_FOUND", "Reported entity not found", HttpStatus.NOT_FOUND),
