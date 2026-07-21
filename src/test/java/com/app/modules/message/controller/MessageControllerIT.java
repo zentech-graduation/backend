@@ -351,6 +351,284 @@ class MessageControllerIT {
         assertThat(secondLeave.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
+    @Test
+    void sendMessage_text_success_appearsInHistory() {
+        TestUser alice = registerUser("send_text_alice");
+        TestUser bob = registerUser("send_text_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "text", "content", "hello bob"),
+                        null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("content")).isEqualTo("hello bob");
+        assertThat(data.get("senderId")).isEqualTo(alice.id().toString());
+
+        ResponseEntity<Map> history =
+                getWithAuth("/api/v1/conversations/" + conversationId + "/messages", bob);
+        List<Map<?, ?>> content = historyContent(history);
+        assertThat(content).hasSize(1);
+        assertThat(content.get(0).get("content")).isEqualTo("hello bob");
+    }
+
+    @Test
+    void sendMessage_image_success_referencesMediaAsset() {
+        TestUser alice = registerUser("send_image_alice");
+        TestUser bob = registerUser("send_image_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID mediaAssetId = insertMediaAsset(alice.id(), "image");
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "image", "mediaAssetId", mediaAssetId.toString()),
+                        null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("mediaAssetId")).isEqualTo(mediaAssetId.toString());
+    }
+
+    @Test
+    void sendMessage_postShare_success_referencesPost() {
+        TestUser alice = registerUser("send_post_alice");
+        TestUser bob = registerUser("send_post_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID postId = insertPost(alice.id());
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "post_share", "sharedPostId", postId.toString()),
+                        null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("sharedPostId")).isEqualTo(postId.toString());
+    }
+
+    @Test
+    void sendMessage_storyShare_success_referencesStory() {
+        TestUser alice = registerUser("send_story_alice");
+        TestUser bob = registerUser("send_story_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID mediaAssetId = insertMediaAsset(alice.id(), "image");
+        UUID storyId = insertStory(alice.id(), mediaAssetId);
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "story_share", "sharedStoryId", storyId.toString()),
+                        null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("sharedStoryId")).isEqualTo(storyId.toString());
+    }
+
+    @Test
+    void sendMessage_textWithoutContent_returnsUnprocessableEntity() {
+        TestUser alice = registerUser("send_invalid_alice");
+        TestUser bob = registerUser("send_invalid_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+
+        ResponseEntity<Map> response =
+                sendMessage(alice, conversationId, Map.of("messageType", "text"), null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
+    }
+
+    @Test
+    void sendMessage_nonParticipant_returnsForbidden() {
+        TestUser alice = registerUser("send_forbidden_alice");
+        TestUser bob = registerUser("send_forbidden_bob");
+        TestUser stranger = registerUser("send_forbidden_stranger");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        stranger,
+                        conversationId,
+                        Map.of("messageType", "text", "content", "hi"),
+                        null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("CONVERSATION_FORBIDDEN");
+    }
+
+    @Test
+    void sendMessage_idempotencyKeyReplay_returnsSameMessageSingleRow() {
+        TestUser alice = registerUser("idem_alice");
+        TestUser bob = registerUser("idem_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        Map<String, Object> body = Map.of("messageType", "text", "content", "idempotent hello");
+
+        ResponseEntity<Map> first = sendMessage(alice, conversationId, body, "msg-key-1");
+        ResponseEntity<Map> second = sendMessage(alice, conversationId, body, "msg-key-1");
+
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        String firstId = (String) ((Map<?, ?>) first.getBody().get("data")).get("id");
+        String secondId = (String) ((Map<?, ?>) second.getBody().get("data")).get("id");
+        assertThat(secondId).isEqualTo(firstId);
+        assertThat(messageCount(conversationId)).isEqualTo(1);
+    }
+
+    @Test
+    void listHistory_returnsMessagesNewestFirstIncludingTombstone() {
+        TestUser alice = registerUser("history_alice");
+        TestUser bob = registerUser("history_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        sendMessage(alice, conversationId, Map.of("messageType", "text", "content", "first"), null);
+        ResponseEntity<Map> secondSend =
+                sendMessage(
+                        bob,
+                        conversationId,
+                        Map.of("messageType", "text", "content", "second"),
+                        null);
+        UUID secondMessageId =
+                UUID.fromString((String) ((Map<?, ?>) secondSend.getBody().get("data")).get("id"));
+        rest.exchange(
+                "/api/v1/conversations/" + conversationId + "/messages/" + secondMessageId,
+                HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders(bob)),
+                Map.class);
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/conversations/" + conversationId + "/messages", alice);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<?, ?>> content = historyContent(response);
+        assertThat(content).hasSize(2);
+        assertThat(content.get(0).get("id")).isEqualTo(secondMessageId.toString());
+        assertThat(content.get(0).get("isDeleted")).isEqualTo(true);
+        assertThat(content.get(0).get("content")).isNull();
+        assertThat(content.get(1).get("content")).isEqualTo("first");
+    }
+
+    @Test
+    void deleteMessage_byNonSender_returnsForbidden() {
+        TestUser alice = registerUser("delnonsender_alice");
+        TestUser bob = registerUser("delnonsender_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        ResponseEntity<Map> sent =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "text", "content", "mine"),
+                        null);
+        UUID messageId =
+                UUID.fromString((String) ((Map<?, ?>) sent.getBody().get("data")).get("id"));
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/conversations/" + conversationId + "/messages/" + messageId,
+                        HttpMethod.DELETE,
+                        new HttpEntity<>(authHeaders(bob)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_FORBIDDEN");
+    }
+
+    @Test
+    void markRead_resetsUnreadCountToZero() {
+        TestUser alice = registerUser("read_alice");
+        TestUser bob = registerUser("read_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        sendMessage(
+                alice,
+                conversationId,
+                Map.of("messageType", "text", "content", "unread for bob"),
+                null);
+
+        ResponseEntity<Map> beforeRead = getWithAuth("/api/v1/conversations/unread-count", bob);
+        assertThat(((Map<?, ?>) beforeRead.getBody().get("data")).get("unreadCount")).isEqualTo(1);
+
+        ResponseEntity<Map> markReadResponse =
+                rest.exchange(
+                        "/api/v1/conversations/" + conversationId + "/read",
+                        HttpMethod.POST,
+                        new HttpEntity<>(authHeaders(bob)),
+                        Map.class);
+        assertThat(markReadResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<Map> afterRead = getWithAuth("/api/v1/conversations/unread-count", bob);
+        assertThat(((Map<?, ?>) afterRead.getBody().get("data")).get("unreadCount")).isEqualTo(0);
+    }
+
+    private ResponseEntity<Map> sendMessage(
+            TestUser actor, UUID conversationId, Map<String, Object> body, String idempotencyKey) {
+        HttpHeaders headers = authHeaders(actor);
+        if (idempotencyKey != null) {
+            headers.set("Idempotency-Key", idempotencyKey);
+        }
+        return rest.exchange(
+                "/api/v1/conversations/" + conversationId + "/messages",
+                HttpMethod.POST,
+                new HttpEntity<>(body, headers),
+                Map.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<?, ?>> historyContent(ResponseEntity<Map> response) {
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        return (List<Map<?, ?>>) data.get("content");
+    }
+
+    private int messageCount(UUID conversationId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = ?",
+                Integer.class,
+                conversationId);
+    }
+
+    private UUID insertMediaAsset(UUID ownerId, String mediaType) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO media_assets (id, user_id, storage_key, cdn_url, media_type,"
+                        + " mime_type, file_size) VALUES (?, ?, ?, ?, CAST(? AS media_type), ?, ?)",
+                id,
+                ownerId,
+                "test/" + id,
+                "https://cdn.test/" + id,
+                mediaType,
+                "image".equals(mediaType) ? "image/jpeg" : "video/mp4",
+                1024L);
+        return id;
+    }
+
+    private UUID insertPost(UUID ownerId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO posts (id, user_id, caption, post_type, status) "
+                        + "VALUES (?, ?, 'Shared post', 'text', 'published')",
+                id,
+                ownerId);
+        return id;
+    }
+
+    private UUID insertStory(UUID ownerId, UUID mediaAssetId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO stories (id, user_id, media_asset_id, story_type) "
+                        + "VALUES (?, ?, ?, CAST(? AS story_type))",
+                id,
+                ownerId,
+                mediaAssetId,
+                "image");
+        return id;
+    }
+
     private ResponseEntity<Map> createDirect(TestUser actor, UUID targetId) {
         return rest.exchange(
                 "/api/v1/conversations",

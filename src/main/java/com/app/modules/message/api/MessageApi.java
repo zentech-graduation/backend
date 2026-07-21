@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
@@ -20,10 +21,13 @@ import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.dto.request.AddParticipantsRequest;
 import com.app.modules.message.dto.request.CreateDirectConversationRequest;
 import com.app.modules.message.dto.request.CreateGroupRequest;
+import com.app.modules.message.dto.request.SendMessageRequest;
 import com.app.modules.message.dto.request.UpdateGroupRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
+import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.dto.response.ParticipantResponse;
+import com.app.modules.message.dto.response.UnreadCountResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -308,4 +312,155 @@ public interface MessageApi {
     @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.LEAVE)
     ResponseEntity<ApiResponse<Void>> leaveConversation(
             @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Send a message",
+            description =
+                    "Sends a message into a conversation. Required fields depend on {@code"
+                            + " messageType}. A retried request with the same Idempotency-Key and"
+                            + " an identical payload replays the original response. Requires"
+                            + " authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "201",
+                description = "Message sent (or replayed)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = MessageResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant, or a block applies",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "422",
+                description = "Payload does not match the declared message type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Idempotency key reused with a different payload",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.CONVERSATION_MESSAGES)
+    ResponseEntity<ApiResponse<MessageResponse>> sendMessage(
+            @PathVariable("conversationId") UUID conversationId,
+            @Valid @RequestBody SendMessageRequest request,
+            @Parameter(description = "Client-supplied replay key for a retried send")
+                    @RequestHeader(value = "Idempotency-Key", required = false)
+                    String idempotencyKey);
+
+    @Operation(
+            summary = "List a conversation's message history",
+            description =
+                    "Cursor-paginated message history, newest first, including a placeholder for a"
+                            + " deleted message. Requires authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Cursor page of messages",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.CONVERSATION_MESSAGES)
+    ResponseEntity<ApiResponse<CursorPageResponse<MessageResponse>>> listHistory(
+            @PathVariable("conversationId") UUID conversationId,
+            @Parameter(description = "Opaque cursor from the previous page")
+                    @RequestParam(value = "cursor", required = false)
+                    String cursor,
+            @Parameter(description = "Page size, 1-100, default 20")
+                    @RequestParam(value = "limit", defaultValue = "20")
+                    int limit);
+
+    @Operation(
+            summary = "Delete a sent message",
+            description =
+                    "Soft-deletes a message the caller sent, clearing its content to a placeholder;"
+                            + " the row remains visible in history. Requires authentication as the"
+                            + " message's sender.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Message deleted",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller did not send this message",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Message not found in this conversation",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.MESSAGE_BY_ID)
+    ResponseEntity<ApiResponse<Void>> deleteMessage(
+            @PathVariable("conversationId") UUID conversationId,
+            @PathVariable("messageId") UUID messageId);
+
+    @Operation(
+            summary = "Mark a conversation read",
+            description =
+                    "Marks a conversation read for the caller as of now, resetting their unread"
+                            + " count to zero. Requires authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation marked read",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.READ)
+    ResponseEntity<ApiResponse<Void>> markRead(@PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Get the caller's total unread message count",
+            description =
+                    "Returns the caller's total unread message count across every active"
+                            + " conversation. Requires authentication.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Total unread count",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = UnreadCountResponse.class)))
+    })
+    @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD_COUNT)
+    ResponseEntity<ApiResponse<UnreadCountResponse>> getUnreadCount();
 }
