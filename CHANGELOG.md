@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Conversations now deliver new and deleted messages to active participants in real time over a WebSocket connection, in addition to the existing REST history endpoint.
+
+### Security
+- A WebSocket subscription to a conversation's live message feed is rejected unless the subscriber is an active participant of that conversation.
+
+### Tests
+- Unit coverage for the WebSocket connection handshake authentication and for the per-conversation subscription authorization guard, including rejection of a non-participant, a departed participant, and an unauthenticated connection.
+
+### Added
 - Sending a message now notifies every other active participant in the conversation.
 
 ### Tests

@@ -1,6 +1,7 @@
-# Message Module — Data Rules
+# Message Module - Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Fully implemented.
+Conversation and group lifecycle, message send/history/delete/read, notification fan-out, and real-time WebSocket delivery are all in place.
 
 ---
 
@@ -40,36 +41,38 @@ These tables cannot be rebuilt from any other source if lost.
 | `messages.reply_to_id` becomes NULL if the replied-to message is deleted | `ON DELETE SET NULL` |
 | `conversations.created_by` becomes NULL if the creator deletes their account | `ON DELETE SET NULL` |
 | Deleting a conversation cascades to participants and messages | `ON DELETE CASCADE` |
-| Deleting a user cascades to their `conversation_participants` rows and their sent messages | `ON DELETE CASCADE` on FK to `users` |
+| Deleting a user cascades to their `conversation_participants` rows | `ON DELETE CASCADE` on FK to `users` |
 
 ### B. Rules Enforced by Application Code
 
 | Rule | Service / Component |
 |------|---------------------|
-| A user may only send messages to conversations they are an active participant of (`left_at IS NULL`) | `[NOT YET IMPLEMENTED]` |
-| For a 1-1 conversation (`is_group = FALSE`), there must be exactly 2 participants | `[NOT YET IMPLEMENTED]` |
-| A blocked user may not initiate or reply to messages with the blocker | `[NOT YET IMPLEMENTED]` |
-| Message soft-delete sets `is_deleted = TRUE` and `deleted_at = NOW()`; message `content` should be cleared or replaced with a tombstone | `[NOT YET IMPLEMENTED]` |
-| Only the message sender may delete their own message | `[NOT YET IMPLEMENTED]` |
-| `last_read_at` on `conversation_participants` is updated when the user reads the conversation | `[NOT YET IMPLEMENTED]` |
-| A message of type `'post_share'` must have `shared_post_id` set; `'story_share'` must have `shared_story_id` set | `[NOT YET IMPLEMENTED]` |
-| A message of type `'image'` or `'video'` must have `media_asset_id` set | `[NOT YET IMPLEMENTED]` |
-| Group admins may add/remove participants and update `group_name` / `group_avatar_url` | `[NOT YET IMPLEMENTED]` |
-| Sending a message generates a `message` notification for all participants except the sender | `[NOT YET IMPLEMENTED]` |
-| `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `[NOT YET IMPLEMENTED]` |
+| A user may only send messages to conversations they are an active participant of (`left_at IS NULL`) | `MessageServiceImpl.sendMessage`, `MessageServiceImpl.listHistory`, `MessageServiceImpl.markRead` |
+| For a 1-1 conversation (`is_group = FALSE`), there must be exactly 2 participants and duplicates are reused | `ConversationServiceImpl.createDirectConversation` |
+| A blocked user may not initiate or reply to messages with the blocker | `ConversationServiceImpl.createDirectConversation` (creation), `MessageServiceImpl.sendMessage` (1-1 send) |
+| Message soft-delete sets `is_deleted = TRUE` and `deleted_at = NOW()`, and clears `content` to a tombstone | `MessageServiceImpl.deleteMessage` |
+| Only the message sender may delete their own message | `MessageServiceImpl.deleteMessage` |
+| `last_read_at` on `conversation_participants` is updated when the user reads the conversation | `MessageServiceImpl.markRead` |
+| A message of type `'post_share'` must have `shared_post_id` set; `'story_share'` must have `shared_story_id` set | `MessageServiceImpl.sendMessage` payload validation |
+| A message of type `'image'` or `'video'` must have `media_asset_id` set | `MessageServiceImpl.sendMessage` payload validation |
+| Group admins may add/remove participants and update `group_name` / `group_avatar_url`; the last active admin leaving promotes the oldest remaining member | `ConversationServiceImpl` |
+| Sending a message generates a `message` notification for every other active participant | `MessageNotificationConsumer` |
+| `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `ConversationServiceImpl.createDirectConversation` |
+| A live WebSocket SUBSCRIBE to a conversation's topic is rejected unless the subscriber is an active participant | `MessageWebSocketAuthInterceptor` |
 
-**`sender_id` cascade behavior** `[KNOWN GAP — pending migration fix]`:
-- The current schema defines `sender_id` with `ON DELETE CASCADE`, meaning deleting a user deletes their sent messages.
-- This is a **known data integrity risk**: deleting a user should not destroy conversation history for remaining participants.
-- The intended behavior is `ON DELETE SET NULL` on `sender_id`, so deleted users' messages are preserved with a null sender.
+**`sender_id` cascade behavior** `[FIXED - V32]`:
+`sender_id` now uses `ON DELETE SET NULL` instead of `ON DELETE CASCADE` (migration V32).
+Deleting a user's account preserves their past messages for the remaining participants instead of destroying them; a null `sender_id` renders as a deleted-user placeholder in message responses.
 
 ### C. Scope Simplifications
 
 - Messages use a hybrid soft-delete pattern: `is_deleted BOOLEAN` + `deleted_at TIMESTAMPTZ`. This differs from the `deleted_at`-only pattern used by other modules. Both fields must be set on delete.
 - No end-to-end encryption in v1.
-- No real-time delivery via WebSocket in v1; clients must poll for new messages.
 - No message reactions.
 - No read receipts beyond `last_read_at` at the conversation level.
+- Group chat is gated by the `app.message.group-chat-enabled` configuration property, not the `feature_flags.group_chat` table row.
+  That table row is decorative; there is no runtime `feature_flags` reader in this codebase.
+- Real-time delivery uses a single in-process `SimpleBroker` (no distributed STOMP relay), so delivery is best-effort per instance; a client recovers any missed event through the message history endpoint on reconnect.
 
 ---
 
