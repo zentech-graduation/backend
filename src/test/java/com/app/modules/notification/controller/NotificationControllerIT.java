@@ -146,6 +146,13 @@ class NotificationControllerIT {
     }
 
     @Test
+    void listNotifications_limitAboveMax_returnsBadRequest() {
+        ResponseEntity<Map> response = getWithToken("/api/v1/notifications?limit=999", userA);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void markAsRead_ownNotification_returns200() {
         Notification n = seedFollow(userA.getId(), userB.getId());
 

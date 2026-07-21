@@ -284,6 +284,15 @@ class AdminControllerIT {
     }
 
     @Test
+    void listActions_sizeAboveMax_returnsBadRequest() {
+        TestUser actor = createUser("size_moderator", "moderator");
+
+        ResponseEntity<Map> response = get("/api/v1/admin/actions?size=999", actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void deleteActor_existingAuditEvent_preservesAuditWithNullActor() {
         TestUser actor = createUser("cascade_admin", "admin");
         TestUser target = createUser("cascade_target", "user");

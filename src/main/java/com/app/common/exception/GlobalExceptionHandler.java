@@ -14,6 +14,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -43,6 +44,24 @@ public class GlobalExceptionHandler {
         ex.getBindingResult()
                 .getFieldErrors()
                 .forEach(fe -> errors.put(fe.getField(), fe.getDefaultMessage()));
+        return ResponseEntity.status(ApiErrorCode.VALIDATION_ERROR.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.VALIDATION_ERROR, null, errors));
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiResponse<?>> handleHandlerMethodValidation(
+            HandlerMethodValidationException ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        ex.getParameterValidationResults()
+                .forEach(
+                        result ->
+                                result.getResolvableErrors()
+                                        .forEach(
+                                                error ->
+                                                        errors.put(
+                                                                result.getMethodParameter()
+                                                                        .getParameterName(),
+                                                                error.getDefaultMessage())));
         return ResponseEntity.status(ApiErrorCode.VALIDATION_ERROR.getHttpStatus())
                 .body(ApiResponse.failure(ApiErrorCode.VALIDATION_ERROR, null, errors));
     }
