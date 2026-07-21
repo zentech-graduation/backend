@@ -159,6 +159,22 @@ class SocialControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
+    @Test
+    void getFollowers_limitAboveMax_returnsBadRequest() {
+        String targetEmail = unique("sc_gfl_target");
+        String targetToken = registerAndLogin("sc_gfl_target_u", targetEmail);
+        UUID targetId = userIdByEmail(targetEmail);
+
+        ResponseEntity<Map> response =
+                exchange(
+                        "/api/v1/social/users/" + targetId + "/followers?limit=999",
+                        HttpMethod.GET,
+                        null,
+                        targetToken);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     // ── GET /api/v1/social/users/{userId}/following ───────────────────────────
 
     @Test

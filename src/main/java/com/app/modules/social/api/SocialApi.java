@@ -3,6 +3,10 @@ package com.app.modules.social.api;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -261,8 +265,8 @@ public interface SocialApi {
     @GetMapping("/users/{userId}/followers")
     ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowers(
             @PathVariable UUID userId,
-            @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") int limit);
+            @RequestParam(required = false) @Size(max = 512) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     @Operation(summary = "Get following list with cursor pagination")
     @ApiResponses({
@@ -291,6 +295,6 @@ public interface SocialApi {
     @GetMapping("/users/{userId}/following")
     ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowing(
             @PathVariable UUID userId,
-            @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") int limit);
+            @RequestParam(required = false) @Size(max = 512) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 }
