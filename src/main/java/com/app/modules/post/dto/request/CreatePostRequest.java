@@ -35,6 +35,7 @@ public record CreatePostRequest(
                                         + " Required for image, video, and carousel posts;"
                                         + " must be null or empty for text posts.",
                         requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+                @Size(max = 10)
                 List<UUID> mediaIds,
         @Schema(
                         description =

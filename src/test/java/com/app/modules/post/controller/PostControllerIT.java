@@ -168,6 +168,28 @@ class PostControllerIT {
     }
 
     @Test
+    void createPost_mediaIdsAboveMax_returnsBadRequest() {
+        TestUser author = registerUser("media_bound_author");
+
+        List<String> oversized = new java.util.ArrayList<>();
+        for (int i = 0; i < 11; i++) {
+            oversized.add(UUID.randomUUID().toString());
+        }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "carousel");
+        payload.put("mediaIds", oversized);
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     @Order(1)
     void createPost_carouselWithOneMedia_returnsBadRequest() {
         TestUser author = registerUser("carousel_author");
