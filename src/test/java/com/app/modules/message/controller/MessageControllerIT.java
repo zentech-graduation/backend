@@ -181,9 +181,24 @@ class MessageControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         UUID conversationId = UUID.fromString((String) data.get("id"));
+        assertThat(data.get("isGroup")).isEqualTo(true);
         assertThat(isAdmin(conversationId, owner.id())).isTrue();
         assertThat(isAdmin(conversationId, member1.id())).isFalse();
         assertThat(isAdmin(conversationId, member2.id())).isFalse();
+
+        ResponseEntity<Map> detail =
+                getWithAuth("/api/v1/conversations/" + conversationId, owner);
+        Map<?, ?> detailData = (Map<?, ?>) detail.getBody().get("data");
+        assertThat(detailData.get("isGroup")).isEqualTo(true);
+
+        ResponseEntity<Map> list = getWithAuth("/api/v1/conversations", owner);
+        List<Map<?, ?>> listContent = (List<Map<?, ?>>) ((Map<?, ?>) list.getBody().get("data")).get("content");
+        Map<?, ?> listEntry =
+                listContent.stream()
+                        .filter(entry -> conversationId.toString().equals(entry.get("id")))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(listEntry.get("isGroup")).isEqualTo(true);
     }
 
     @Test
