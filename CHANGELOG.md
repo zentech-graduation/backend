@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Tests
+- Regression coverage for conversation-list pagination across conversations with no messages yet.
 - Regression coverage for group-admin handoff when the last admin is forcibly removed from a group.
 - Unit coverage for conversation creation and deduplication, participant and group-admin gating, group admin handoff on leave, and conversation-list cursor pagination.
 - End-to-end integration coverage for the new conversation endpoints, covering creation, deduplication, listing, group management, and membership changes.
@@ -18,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Conversation creation, detail, and list responses now correctly report whether a conversation is a group instead of always reporting false.
 - Removing the last active admin from a group conversation (including the admin removing themselves) now automatically promotes a replacement admin, matching the existing behavior when an admin leaves voluntarily.
+- Paginating the conversation list past a conversation with no messages yet no longer returns a 500 error.
 - Out-of-range request parameters (such as an oversized page size or limit) on the notification, moderation-action, and report listing endpoints now return 400 Bad Request instead of 500 Internal Server Error.
 - A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.
 

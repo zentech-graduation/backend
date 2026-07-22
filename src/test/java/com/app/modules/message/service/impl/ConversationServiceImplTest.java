@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -585,6 +586,46 @@ class ConversationServiceImplTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getPageInfo().isHasPreviousPage()).isTrue();
+    }
+
+    @Test
+    void listMyConversations_cursorFromNullLastMessageAtRow_decodesToNullCursorTime() {
+        UUID actorId = UUID.randomUUID();
+        UUID conv1Id = UUID.randomUUID();
+        Conversation conv1 =
+                Conversation.builder().id(conv1Id).isGroup(false).lastMessageAt(null).build();
+        when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
+                .thenReturn(List.of(conv1));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(conv1Id)))
+                .thenReturn(List.of());
+        when(messageRepository.countUnreadPerConversation(eq(actorId), eq(List.of(conv1Id))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> firstPage =
+                service.listMyConversations(actorId, null, 20);
+        String endCursor = firstPage.getPageInfo().getEndCursor();
+        assertThat(endCursor).isNotBlank();
+
+        UUID conv2Id = UUID.randomUUID();
+        Conversation conv2 =
+                Conversation.builder().id(conv2Id).isGroup(false).lastMessageAt(null).build();
+        // Previously this cursor decoded to OffsetDateTime.MIN (a sentinel for "no message yet"),
+        // which is outside PostgreSQL's timestamptz range and caused a bind-time 500; it must now
+        // decode back to a genuine null so the repository receives real SQL NULL, not a sentinel.
+        when(conversationRepository.findMyConversationsBefore(
+                        eq(actorId), isNull(), eq(conv1Id), any(Pageable.class)))
+                .thenReturn(List.of(conv2));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(conv2Id)))
+                .thenReturn(List.of());
+        when(messageRepository.countUnreadPerConversation(eq(actorId), eq(List.of(conv2Id))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> secondPage =
+                service.listMyConversations(actorId, endCursor, 20);
+
+        assertThat(secondPage.getContent()).hasSize(1);
+        verify(conversationRepository)
+                .findMyConversationsBefore(eq(actorId), isNull(), eq(conv1Id), any(Pageable.class));
     }
 
     private static User user(UUID id) {

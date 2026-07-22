@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -214,6 +215,38 @@ class MessageControllerIT {
         List<Map<?, ?>> content = (List<Map<?, ?>>) data.get("content");
         assertThat(content).hasSize(1);
         assertThat(content.get(0).get("unreadCount")).isEqualTo(0);
+    }
+
+    @Test
+    void listMyConversations_cursorAcrossNullLastMessageAtRows_paginatesWithoutError() {
+        TestUser alice = registerUser("nullcursor_alice");
+        TestUser bob = registerUser("nullcursor_bob");
+        TestUser carol = registerUser("nullcursor_carol");
+        UUID conv1 = conversationIdOf(createDirect(alice, bob.id()));
+        UUID conv2 = conversationIdOf(createDirect(alice, carol.id()));
+
+        ResponseEntity<Map> firstPage = getWithAuth("/api/v1/conversations?limit=1", alice);
+
+        assertThat(firstPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> firstData = (Map<?, ?>) firstPage.getBody().get("data");
+        List<Map<?, ?>> firstContent = (List<Map<?, ?>>) firstData.get("content");
+        assertThat(firstContent).hasSize(1);
+        Map<?, ?> firstPageInfo = (Map<?, ?>) firstData.get("pageInfo");
+        String endCursor = (String) firstPageInfo.get("endCursor");
+        assertThat(endCursor).isNotBlank();
+
+        ResponseEntity<Map> secondPage =
+                getWithAuth("/api/v1/conversations?limit=1&cursor=" + endCursor, alice);
+
+        assertThat(secondPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> secondData = (Map<?, ?>) secondPage.getBody().get("data");
+        List<Map<?, ?>> secondContent = (List<Map<?, ?>>) secondData.get("content");
+        assertThat(secondContent).hasSize(1);
+        Set<String> seenIds =
+                Set.of(
+                        (String) firstContent.get(0).get("id"),
+                        (String) secondContent.get(0).get("id"));
+        assertThat(seenIds).containsExactlyInAnyOrder(conv1.toString(), conv2.toString());
     }
 
     @Test
