@@ -7,6 +7,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Out-of-range request parameters (such as an oversized page size or limit) on the notification, moderation-action, and report listing endpoints now return 400 Bad Request instead of 500 Internal Server Error.
+- A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.
+
+### Security
+- The follower and following list endpoints now reject an out-of-range limit or an oversized cursor with 400 instead of silently clamping the value.
+- The resend email verification endpoint now normalizes its response time to a floor, so a registered address can no longer be distinguished from an unregistered one by response latency.
+- Duplicate reports for the same reporter, target, and type are now prevented by a database uniqueness constraint, closing a race in which two concurrent submissions could both be recorded.
+- Username availability on profile update is now checked across all accounts including soft-deleted ones, so a collision with a soft-deleted account returns the same conflict response as an active one and no longer reveals account state.
+- Post search now bounds its page size, so an oversized request can no longer force a mass result hydration or exceed the search engine's result-window limit.
+- Post creation now bounds the number of media identifiers accepted, rejecting an oversized list at request validation.
+- Moderation action metadata is now bounded to a maximum number of entries, preventing unbounded growth of the moderation audit table.
+
+### Removed
+- Unused internal mail request type.
+
+### Fixed
 - The local PostgreSQL container now accepts the legacy IANA timezone name `Asia/Saigon`, which some database clients (for example DBeaver) send by default, resolving a connection failure for users in that timezone.
 
 ### Added
