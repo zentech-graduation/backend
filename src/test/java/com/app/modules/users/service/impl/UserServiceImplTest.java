@@ -79,7 +79,7 @@ class UserServiceImplTest {
         UUID id = UUID.randomUUID();
         User user = activeUser(id, "old");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
-        when(userRepository.existsByUsernameAndDeletedAtIsNull("newuser")).thenReturn(false);
+        when(userRepository.existsByUsername("newuser")).thenReturn(false);
         when(userMapper.toProfileResponse(user)).thenReturn(profileResponse(id));
 
         UpdateProfileRequest req =
@@ -116,7 +116,7 @@ class UserServiceImplTest {
         assertThat(user.getUsername()).isEqualTo("alice");
         assertThat(user.getDisplayName()).isEqualTo("Original");
         assertThat(user.getBio()).isEqualTo("original bio");
-        verify(userRepository, never()).existsByUsernameAndDeletedAtIsNull(any());
+        verify(userRepository, never()).existsByUsername(any());
     }
 
     @Test
@@ -124,7 +124,7 @@ class UserServiceImplTest {
         UUID id = UUID.randomUUID();
         User user = activeUser(id, "alice");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
-        when(userRepository.existsByUsernameAndDeletedAtIsNull("taken")).thenReturn(true);
+        when(userRepository.existsByUsername("taken")).thenReturn(true);
 
         assertThatThrownBy(
                         () ->
@@ -149,7 +149,7 @@ class UserServiceImplTest {
         service.updateMyProfile(
                 id, new UpdateProfileRequest("alice", null, null, null, null, null));
 
-        verify(userRepository, never()).existsByUsernameAndDeletedAtIsNull(any());
+        verify(userRepository, never()).existsByUsername(any());
         verify(userRepository).save(user);
     }
 
