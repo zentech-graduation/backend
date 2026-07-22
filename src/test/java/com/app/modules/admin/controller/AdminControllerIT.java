@@ -98,6 +98,25 @@ class AdminControllerIT {
     }
 
     @Test
+    void banUser_metadataAboveMax_returnsBadRequest() {
+        TestUser actor = createUser("meta_bound_moderator", "moderator");
+        TestUser target = createUser("meta_bound_target", "user");
+
+        Map<String, Object> metadata = new java.util.HashMap<>();
+        for (int i = 0; i < 21; i++) {
+            metadata.put("k" + i, "v" + i);
+        }
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("reason", "Severe abuse");
+        body.put("metadata", metadata);
+
+        ResponseEntity<Map> response =
+                patch("/api/v1/admin/users/" + target.id() + "/ban", body, actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void banUser_regularUser_returnsForbidden() {
         TestUser actor = createUser("forbidden_actor", "user");
         TestUser target = createUser("forbidden_target", "user");
