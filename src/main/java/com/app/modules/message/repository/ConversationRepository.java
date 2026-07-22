@@ -14,7 +14,8 @@ import com.app.modules.message.entity.Conversation;
 
 /** Persistence access for {@link Conversation}. */
 @Repository
-public interface ConversationRepository extends JpaRepository<Conversation, UUID> {
+public interface ConversationRepository
+        extends JpaRepository<Conversation, UUID>, ConversationRepositoryCustom {
 
     /**
      * Finds the existing 1-1 conversation between the two users, regardless of either participant's

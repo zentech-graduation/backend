@@ -229,6 +229,37 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void createDirectConversation_newConversation_locksPairAndPersistsPairKey() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        String pairKey = actorId + ":" + targetId;
+        when(userRepository.findByIdAndDeletedAtIsNull(targetId))
+                .thenReturn(Optional.of(user(targetId)));
+        when(conversationRepository.lockDirectConversationPair(actorId, targetId))
+                .thenReturn(pairKey);
+        when(conversationRepository.findDirectConversationBetween(actorId, targetId))
+                .thenReturn(Optional.empty());
+        when(conversationRepository.saveAndFlush(any(Conversation.class)))
+                .thenAnswer(
+                        inv -> {
+                            Conversation c = inv.getArgument(0);
+                            c.setId(conversationId);
+                            return c;
+                        });
+        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
+                .thenReturn(List.of());
+
+        service.createDirectConversation(actorId, new CreateDirectConversationRequest(targetId));
+
+        // The lock must be acquired before the check-then-create so a concurrent call for the same
+        // pair serializes behind it instead of racing into a duplicate conversation.
+        verify(conversationRepository).lockDirectConversationPair(actorId, targetId);
+        verify(conversationRepository)
+                .saveAndFlush(argThat(c -> pairKey.equals(c.getDirectPairKey())));
+    }
+
+    @Test
     void createDirectConversation_existingConversationWithLeftActor_reactivatesAndReuses() {
         UUID actorId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();

@@ -99,6 +99,13 @@ public class ConversationServiceImpl implements ConversationService {
         assertNotBlocked(actorId, targetId);
         assertMessageRequestAllowed(actorId, targetId);
 
+        // Serializes concurrent createDirectConversation calls for this pair so the
+        // check-then-create
+        // below cannot race into two conversations; the lock is released automatically at
+        // transaction
+        // end, and the returned key is reused on insert as a database-level uniqueness backstop.
+        String pairKey = conversationRepository.lockDirectConversationPair(actorId, targetId);
+
         Optional<Conversation> existing =
                 conversationRepository.findDirectConversationBetween(actorId, targetId);
         Conversation conversation;
@@ -116,7 +123,12 @@ public class ConversationServiceImpl implements ConversationService {
                 participantRepository.save(actorParticipant);
             }
         } else {
-            conversation = Conversation.builder().isGroup(false).createdBy(actorId).build();
+            conversation =
+                    Conversation.builder()
+                            .isGroup(false)
+                            .createdBy(actorId)
+                            .directPairKey(pairKey)
+                            .build();
             conversationRepository.saveAndFlush(conversation);
             participantRepository.save(newParticipant(conversation.getId(), actorId, false));
             participantRepository.save(newParticipant(conversation.getId(), targetId, false));
@@ -483,7 +495,8 @@ public class ConversationServiceImpl implements ConversationService {
             if (parts.length != 2) {
                 throw new IllegalArgumentException("Cursor must contain lastMessageAt and id");
             }
-            OffsetDateTime lastMessageAt = parts[0].isEmpty() ? null : OffsetDateTime.parse(parts[0]);
+            OffsetDateTime lastMessageAt =
+                    parts[0].isEmpty() ? null : OffsetDateTime.parse(parts[0]);
             return new ConversationCursor(lastMessageAt, UUID.fromString(parts[1]));
         } catch (RuntimeException e) {
             throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
