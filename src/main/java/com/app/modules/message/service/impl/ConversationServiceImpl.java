@@ -296,8 +296,15 @@ public class ConversationServiceImpl implements ConversationService {
                         .findByIdConversationIdAndIdUserId(conversationId, targetUserId)
                         .filter(p -> p.getLeftAt() == null)
                         .orElseThrow(() -> new AppException(ApiErrorCode.PARTICIPANT_NOT_FOUND));
+        boolean removedAdmin = target.isAdmin();
         target.setLeftAt(OffsetDateTime.now(ZoneOffset.UTC));
         participantRepository.save(target);
+
+        // Mirrors leaveConversation: removing the last active admin (including self-removal
+        // through this endpoint) must not leave the group permanently unmanageable.
+        if (removedAdmin) {
+            promoteReplacementAdminIfNeeded(conversationId);
+        }
     }
 
     @Override

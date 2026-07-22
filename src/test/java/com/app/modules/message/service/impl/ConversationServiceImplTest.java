@@ -409,6 +409,48 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void removeParticipant_soleAdminRemovesSelf_promotesReplacementAdmin() {
+        UUID conversationId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
+        ConversationParticipant admin = participant(conversationId, adminId, true, null);
+        ConversationParticipant other = participant(conversationId, otherId, false, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, adminId))
+                .thenReturn(Optional.of(admin));
+        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
+                .thenReturn(List.of(admin, other));
+
+        service.removeParticipant(adminId, conversationId, adminId);
+
+        assertThat(admin.getLeftAt()).isNotNull();
+        assertThat(other.isAdmin()).isTrue();
+        verify(participantRepository).save(admin);
+        verify(participantRepository).save(other);
+    }
+
+    @Test
+    void removeParticipant_nonAdminTargetRemoved_doesNotPromoteAnyone() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
+        ConversationParticipant admin = participant(conversationId, actorId, true, null);
+        ConversationParticipant target = participant(conversationId, targetId, false, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(admin));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, targetId))
+                .thenReturn(Optional.of(target));
+
+        service.removeParticipant(actorId, conversationId, targetId);
+
+        assertThat(target.getLeftAt()).isNotNull();
+        verify(participantRepository, never()).findByIdConversationIdOrderByJoinedAtAsc(any());
+    }
+
+    @Test
     void leaveConversation_lastActiveAdminLeaves_promotesOldestRemainingMember() {
         UUID conversationId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
