@@ -41,6 +41,7 @@ public interface MessageMapper {
      * @param participants active and former members, already hydrated
      * @return the conversation detail response
      */
+    @Mapping(source = "conversation.group", target = "isGroup")
     ConversationResponse toConversationResponse(
             Conversation conversation, List<ParticipantResponse> participants);
 
@@ -55,6 +56,7 @@ public interface MessageMapper {
      * @return the conversation summary response
      */
     @Mapping(source = "conversation.id", target = "id")
+    @Mapping(source = "conversation.group", target = "isGroup")
     ConversationSummaryResponse toSummaryResponse(
             Conversation conversation,
             List<ParticipantResponse> participants,
