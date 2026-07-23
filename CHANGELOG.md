@@ -8,14 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Conversations now deliver new and deleted messages to active participants in real time over a WebSocket connection, in addition to the existing REST history endpoint.
-
-### Security
-- A WebSocket subscription to a conversation's live message feed is rejected unless the subscriber is an active participant of that conversation.
-
-### Tests
-- Unit coverage for the WebSocket connection handshake authentication and for the per-conversation subscription authorization guard, including rejection of a non-participant, a departed participant, and an unauthenticated connection.
-
-### Added
 - Sending a message now notifies every other active participant in the conversation.
 - Sending a message (text, image, video, post share, or story share) into a conversation, with a reply reference, idempotent retries, and validation that the payload matches the declared message type.
 - Cursor-paginated message history for a conversation, including a placeholder for a deleted message.
@@ -26,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Tests
+- Unit coverage for the WebSocket connection handshake authentication and for the per-conversation subscription authorization guard, including rejection of a non-participant, a departed participant, and an unauthenticated connection.
 - Unit and end-to-end integration coverage for message notification fan-out, including suppression for a departed participant, a blocked recipient, and a recipient with message notifications disabled, and duplicate-event handling.
 - Unit coverage for message send validation and gating, idempotent retry and conflict handling, history pagination, sender-only delete, and read-state tracking.
 - End-to-end integration coverage for sending each message type, idempotent replay, history pagination, delete, and read-state endpoints.
@@ -43,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.
 
 ### Security
+- A WebSocket subscription to a conversation's live message feed is rejected unless the subscriber is an active participant of that conversation.
 - Two concurrent requests to start a 1-1 conversation with the same user can no longer create duplicate conversations; the request is now serialized and backed by a database uniqueness constraint.
 - The follower and following list endpoints now reject an out-of-range limit or an oversized cursor with 400 instead of silently clamping the value.
 - The resend email verification endpoint now normalizes its response time to a floor, so a registered address can no longer be distinguished from an unregistered one by response latency.
