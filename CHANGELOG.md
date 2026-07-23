@@ -6,11 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
+- A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
+
+### Tests
+- Regression coverage for concurrent attempts to start a 1-1 conversation with the same user, asserting exactly one conversation results.
+- Regression coverage for conversation-list pagination across conversations with no messages yet.
+- Regression coverage for group-admin handoff when the last admin is forcibly removed from a group.
+- Unit coverage for conversation creation and deduplication, participant and group-admin gating, group admin handoff on leave, and conversation-list cursor pagination.
+- End-to-end integration coverage for the new conversation endpoints, covering creation, deduplication, listing, group management, and membership changes.
+
 ### Fixed
+- Conversation creation, detail, and list responses now correctly report whether a conversation is a group instead of always reporting false.
+- Removing the last active admin from a group conversation (including the admin removing themselves) now automatically promotes a replacement admin, matching the existing behavior when an admin leaves voluntarily.
+- Paginating the conversation list past a conversation with no messages yet no longer returns a 500 error.
 - Out-of-range request parameters (such as an oversized page size or limit) on the notification, moderation-action, and report listing endpoints now return 400 Bad Request instead of 500 Internal Server Error.
 - A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.
 
 ### Security
+- Two concurrent requests to start a 1-1 conversation with the same user can no longer create duplicate conversations; the request is now serialized and backed by a database uniqueness constraint.
 - The follower and following list endpoints now reject an out-of-range limit or an oversized cursor with 400 instead of silently clamping the value.
 - The resend email verification endpoint now normalizes its response time to a floor, so a registered address can no longer be distinguished from an unregistered one by response latency.
 - Duplicate reports for the same reporter, target, and type are now prevented by a database uniqueness constraint, closing a race in which two concurrent submissions could both be recorded.
