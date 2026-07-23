@@ -14,7 +14,8 @@ import com.app.modules.message.entity.Conversation;
 
 /** Persistence access for {@link Conversation}. */
 @Repository
-public interface ConversationRepository extends JpaRepository<Conversation, UUID> {
+public interface ConversationRepository
+        extends JpaRepository<Conversation, UUID>, ConversationRepositoryCustom {
 
     /**
      * Finds the existing 1-1 conversation between the two users, regardless of either participant's
@@ -39,9 +40,9 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
     /**
      * First page of the caller's active conversations, newest activity first.
      *
-     * <p>Conversations with no message yet ({@code last_message_at IS NULL}) sort last and are only
-     * guaranteed to appear on this first page; this is an accepted trade-off since a conversation
-     * reaches that state only in the brief window before its first message.
+     * <p>Conversations with no message yet ({@code last_message_at IS NULL}) sort last, per {@code
+     * NULLS LAST}; continuing past them onto later pages is handled by {@link
+     * #findMyConversationsBefore}.
      */
     @Query(
             value =
@@ -54,15 +55,26 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
             nativeQuery = true)
     List<Conversation> findFirstMyConversations(UUID userId, Pageable pageable);
 
-    /** Keyset continuation after the {@code (lastMessageAt, conversationId)} cursor. */
+    /**
+     * Keyset continuation after the {@code (lastMessageAt, conversationId)} cursor.
+     *
+     * <p>{@code cursorTime} is {@code null} when the cursor itself points at a {@code
+     * last_message_at IS NULL} row; continuation then stays within that null group, ordered by
+     * {@code id DESC}. Otherwise every null row is included unconditionally, since {@code NULLS
+     * LAST} always places the whole null group after every non-null row.
+     */
     @Query(
             value =
                     """
 					SELECT c.* FROM conversations c
 					JOIN conversation_participants p
 						ON p.conversation_id = c.id AND p.user_id = :userId AND p.left_at IS NULL
-					WHERE c.last_message_at < :cursorTime
-					OR (c.last_message_at = :cursorTime AND c.id < :cursorId)
+					WHERE (CAST(:cursorTime AS timestamptz) IS NOT NULL
+							AND (c.last_message_at < :cursorTime
+								OR (c.last_message_at = :cursorTime AND c.id < :cursorId)
+								OR c.last_message_at IS NULL))
+						OR (CAST(:cursorTime AS timestamptz) IS NULL
+							AND c.last_message_at IS NULL AND c.id < :cursorId)
 					ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC
 					""",
             nativeQuery = true)
