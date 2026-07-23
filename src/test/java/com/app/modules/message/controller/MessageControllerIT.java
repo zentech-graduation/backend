@@ -2,10 +2,18 @@ package com.app.modules.message.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -123,6 +131,47 @@ class MessageControllerIT {
     }
 
     @Test
+    void createDirectConversation_concurrentCallsForSamePair_createExactlyOneConversation()
+            throws Exception {
+        TestUser alice = registerUser("race_alice");
+        TestUser bob = registerUser("race_bob");
+        int callers = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(callers);
+        CountDownLatch ready = new CountDownLatch(callers);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<ResponseEntity<Map>>> futures = new ArrayList<>();
+            for (int i = 0; i < callers; i++) {
+                TestUser caller = (i % 2 == 0) ? alice : bob;
+                UUID target = (i % 2 == 0) ? bob.id() : alice.id();
+                futures.add(
+                        pool.submit(
+                                () -> {
+                                    ready.countDown();
+                                    start.await();
+                                    return createDirect(caller, target);
+                                }));
+            }
+            ready.await();
+            start.countDown();
+
+            Set<String> conversationIds = new HashSet<>();
+            for (Future<ResponseEntity<Map>> future : futures) {
+                ResponseEntity<Map> response = future.get(30, TimeUnit.SECONDS);
+                assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+                conversationIds.add(conversationIdOf(response).toString());
+            }
+
+            assertThat(conversationIds).hasSize(1);
+            assertThat(conversationCount()).isEqualTo(1);
+            assertThat(activeParticipantIds(UUID.fromString(conversationIds.iterator().next())))
+                    .containsExactlyInAnyOrder(alice.id(), bob.id());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
     void createDirectConversation_blockedTarget_returnsForbidden() {
         TestUser alice = registerUser("block_alice");
         TestUser bob = registerUser("block_bob");
@@ -181,9 +230,24 @@ class MessageControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         UUID conversationId = UUID.fromString((String) data.get("id"));
+        assertThat(data.get("isGroup")).isEqualTo(true);
         assertThat(isAdmin(conversationId, owner.id())).isTrue();
         assertThat(isAdmin(conversationId, member1.id())).isFalse();
         assertThat(isAdmin(conversationId, member2.id())).isFalse();
+
+        ResponseEntity<Map> detail = getWithAuth("/api/v1/conversations/" + conversationId, owner);
+        Map<?, ?> detailData = (Map<?, ?>) detail.getBody().get("data");
+        assertThat(detailData.get("isGroup")).isEqualTo(true);
+
+        ResponseEntity<Map> list = getWithAuth("/api/v1/conversations", owner);
+        List<Map<?, ?>> listContent =
+                (List<Map<?, ?>>) ((Map<?, ?>) list.getBody().get("data")).get("content");
+        Map<?, ?> listEntry =
+                listContent.stream()
+                        .filter(entry -> conversationId.toString().equals(entry.get("id")))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(listEntry.get("isGroup")).isEqualTo(true);
     }
 
     @Test
@@ -199,6 +263,38 @@ class MessageControllerIT {
         List<Map<?, ?>> content = (List<Map<?, ?>>) data.get("content");
         assertThat(content).hasSize(1);
         assertThat(content.get(0).get("unreadCount")).isEqualTo(0);
+    }
+
+    @Test
+    void listMyConversations_cursorAcrossNullLastMessageAtRows_paginatesWithoutError() {
+        TestUser alice = registerUser("nullcursor_alice");
+        TestUser bob = registerUser("nullcursor_bob");
+        TestUser carol = registerUser("nullcursor_carol");
+        UUID conv1 = conversationIdOf(createDirect(alice, bob.id()));
+        UUID conv2 = conversationIdOf(createDirect(alice, carol.id()));
+
+        ResponseEntity<Map> firstPage = getWithAuth("/api/v1/conversations?limit=1", alice);
+
+        assertThat(firstPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> firstData = (Map<?, ?>) firstPage.getBody().get("data");
+        List<Map<?, ?>> firstContent = (List<Map<?, ?>>) firstData.get("content");
+        assertThat(firstContent).hasSize(1);
+        Map<?, ?> firstPageInfo = (Map<?, ?>) firstData.get("pageInfo");
+        String endCursor = (String) firstPageInfo.get("endCursor");
+        assertThat(endCursor).isNotBlank();
+
+        ResponseEntity<Map> secondPage =
+                getWithAuth("/api/v1/conversations?limit=1&cursor=" + endCursor, alice);
+
+        assertThat(secondPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> secondData = (Map<?, ?>) secondPage.getBody().get("data");
+        List<Map<?, ?>> secondContent = (List<Map<?, ?>>) secondData.get("content");
+        assertThat(secondContent).hasSize(1);
+        Set<String> seenIds =
+                Set.of(
+                        (String) firstContent.get(0).get("id"),
+                        (String) secondContent.get(0).get("id"));
+        assertThat(seenIds).containsExactlyInAnyOrder(conv1.toString(), conv2.toString());
     }
 
     @Test

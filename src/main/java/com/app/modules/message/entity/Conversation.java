@@ -53,6 +53,14 @@ public class Conversation {
     @Column(name = "created_by", updatable = false)
     private UUID createdBy;
 
+    /**
+     * Canonical {@code minUserId:maxUserId} key for a 1-1 conversation, null for group
+     * conversations. Computed by the database (never by application code) so it always agrees with
+     * the {@code LEAST}/{@code GREATEST} ordering the uniqueness backstop relies on.
+     */
+    @Column(name = "direct_pair_key", updatable = false)
+    private String directPairKey;
+
     /** Maintained exclusively by Postgres trigger {@code trg_conversation_last_message} (V16). */
     @Column(name = "last_message_at", insertable = false, updatable = false)
     private OffsetDateTime lastMessageAt;

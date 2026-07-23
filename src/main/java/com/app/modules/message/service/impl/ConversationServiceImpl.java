@@ -101,6 +101,13 @@ public class ConversationServiceImpl implements ConversationService {
         assertNotBlocked(actorId, targetId);
         assertMessageRequestAllowed(actorId, targetId);
 
+        // Serializes concurrent createDirectConversation calls for this pair so the
+        // check-then-create
+        // below cannot race into two conversations; the lock is released automatically at
+        // transaction
+        // end, and the returned key is reused on insert as a database-level uniqueness backstop.
+        String pairKey = conversationRepository.lockDirectConversationPair(actorId, targetId);
+
         Optional<Conversation> existing =
                 conversationRepository.findDirectConversationBetween(actorId, targetId);
         Conversation conversation;
@@ -118,7 +125,12 @@ public class ConversationServiceImpl implements ConversationService {
                 participantRepository.save(actorParticipant);
             }
         } else {
-            conversation = Conversation.builder().isGroup(false).createdBy(actorId).build();
+            conversation =
+                    Conversation.builder()
+                            .isGroup(false)
+                            .createdBy(actorId)
+                            .directPairKey(pairKey)
+                            .build();
             conversationRepository.saveAndFlush(conversation);
             participantRepository.save(newParticipant(conversation.getId(), actorId, false));
             participantRepository.save(newParticipant(conversation.getId(), targetId, false));
@@ -304,8 +316,15 @@ public class ConversationServiceImpl implements ConversationService {
                         .findByIdConversationIdAndIdUserId(conversationId, targetUserId)
                         .filter(p -> p.getLeftAt() == null)
                         .orElseThrow(() -> new AppException(ApiErrorCode.PARTICIPANT_NOT_FOUND));
+        boolean removedAdmin = target.isAdmin();
         target.setLeftAt(OffsetDateTime.now(ZoneOffset.UTC));
         participantRepository.save(target);
+
+        // Mirrors leaveConversation: removing the last active admin (including self-removal
+        // through this endpoint) must not leave the group permanently unmanageable.
+        if (removedAdmin) {
+            promoteReplacementAdminIfNeeded(conversationId);
+        }
     }
 
     @Override
@@ -463,13 +482,13 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private String encodeCursor(Conversation conversation) {
-        // A conversation with no message yet sorts last (NULLS LAST); encoding it against the
-        // earliest possible instant keeps the cursor well-formed even though, per the repository
-        // query's documented trade-off, such a row is only guaranteed to appear on the first page.
-        OffsetDateTime sortKey =
+        // A null lastMessageAt is preserved as-is (empty segment), never substituted with a
+        // sentinel instant: OffsetDateTime.MIN falls far outside PostgreSQL's timestamptz range
+        // and previously caused a bind-time "date/time field value out of range" 500 on decode.
+        String sortKey =
                 conversation.getLastMessageAt() != null
-                        ? conversation.getLastMessageAt()
-                        : OffsetDateTime.MIN;
+                        ? conversation.getLastMessageAt().toString()
+                        : "";
         String raw = sortKey + "|" + conversation.getId();
         return Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
@@ -484,16 +503,19 @@ public class ConversationServiceImpl implements ConversationService {
             if (parts.length != 2) {
                 throw new IllegalArgumentException("Cursor must contain lastMessageAt and id");
             }
-            return new ConversationCursor(
-                    OffsetDateTime.parse(parts[0]), UUID.fromString(parts[1]));
+            OffsetDateTime lastMessageAt =
+                    parts[0].isEmpty() ? null : OffsetDateTime.parse(parts[0]);
+            return new ConversationCursor(lastMessageAt, UUID.fromString(parts[1]));
         } catch (RuntimeException e) {
             throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
         }
     }
 
     private record ConversationCursor(OffsetDateTime lastMessageAt, UUID conversationId) {
+        // A decoded cursor always carries a conversationId, even when lastMessageAt is null
+        // (continuation within the null group) - so conversationId alone signals "no cursor".
         boolean isEmpty() {
-            return lastMessageAt == null || conversationId == null;
+            return conversationId == null;
         }
     }
 }

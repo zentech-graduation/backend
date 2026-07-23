@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -231,6 +232,37 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void createDirectConversation_newConversation_locksPairAndPersistsPairKey() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        String pairKey = actorId + ":" + targetId;
+        when(userRepository.findByIdAndDeletedAtIsNull(targetId))
+                .thenReturn(Optional.of(user(targetId)));
+        when(conversationRepository.lockDirectConversationPair(actorId, targetId))
+                .thenReturn(pairKey);
+        when(conversationRepository.findDirectConversationBetween(actorId, targetId))
+                .thenReturn(Optional.empty());
+        when(conversationRepository.saveAndFlush(any(Conversation.class)))
+                .thenAnswer(
+                        inv -> {
+                            Conversation c = inv.getArgument(0);
+                            c.setId(conversationId);
+                            return c;
+                        });
+        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
+                .thenReturn(List.of());
+
+        service.createDirectConversation(actorId, new CreateDirectConversationRequest(targetId));
+
+        // The lock must be acquired before the check-then-create so a concurrent call for the same
+        // pair serializes behind it instead of racing into a duplicate conversation.
+        verify(conversationRepository).lockDirectConversationPair(actorId, targetId);
+        verify(conversationRepository)
+                .saveAndFlush(argThat(c -> pairKey.equals(c.getDirectPairKey())));
+    }
+
+    @Test
     void createDirectConversation_existingConversationWithLeftActor_reactivatesAndReuses() {
         UUID actorId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
@@ -412,6 +444,48 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void removeParticipant_soleAdminRemovesSelf_promotesReplacementAdmin() {
+        UUID conversationId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
+        ConversationParticipant admin = participant(conversationId, adminId, true, null);
+        ConversationParticipant other = participant(conversationId, otherId, false, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, adminId))
+                .thenReturn(Optional.of(admin));
+        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
+                .thenReturn(List.of(admin, other));
+
+        service.removeParticipant(adminId, conversationId, adminId);
+
+        assertThat(admin.getLeftAt()).isNotNull();
+        assertThat(other.isAdmin()).isTrue();
+        verify(participantRepository).save(admin);
+        verify(participantRepository).save(other);
+    }
+
+    @Test
+    void removeParticipant_nonAdminTargetRemoved_doesNotPromoteAnyone() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
+        ConversationParticipant admin = participant(conversationId, actorId, true, null);
+        ConversationParticipant target = participant(conversationId, targetId, false, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(admin));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, targetId))
+                .thenReturn(Optional.of(target));
+
+        service.removeParticipant(actorId, conversationId, targetId);
+
+        assertThat(target.getLeftAt()).isNotNull();
+        verify(participantRepository, never()).findByIdConversationIdOrderByJoinedAtAsc(any());
+    }
+
+    @Test
     void leaveConversation_lastActiveAdminLeaves_promotesOldestRemainingMember() {
         UUID conversationId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
@@ -546,6 +620,46 @@ class ConversationServiceImplTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getPageInfo().isHasPreviousPage()).isTrue();
+    }
+
+    @Test
+    void listMyConversations_cursorFromNullLastMessageAtRow_decodesToNullCursorTime() {
+        UUID actorId = UUID.randomUUID();
+        UUID conv1Id = UUID.randomUUID();
+        Conversation conv1 =
+                Conversation.builder().id(conv1Id).isGroup(false).lastMessageAt(null).build();
+        when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
+                .thenReturn(List.of(conv1));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(conv1Id)))
+                .thenReturn(List.of());
+        when(messageRepository.countUnreadPerConversation(eq(actorId), eq(List.of(conv1Id))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> firstPage =
+                service.listMyConversations(actorId, null, 20);
+        String endCursor = firstPage.getPageInfo().getEndCursor();
+        assertThat(endCursor).isNotBlank();
+
+        UUID conv2Id = UUID.randomUUID();
+        Conversation conv2 =
+                Conversation.builder().id(conv2Id).isGroup(false).lastMessageAt(null).build();
+        // Previously this cursor decoded to OffsetDateTime.MIN (a sentinel for "no message yet"),
+        // which is outside PostgreSQL's timestamptz range and caused a bind-time 500; it must now
+        // decode back to a genuine null so the repository receives real SQL NULL, not a sentinel.
+        when(conversationRepository.findMyConversationsBefore(
+                        eq(actorId), isNull(), eq(conv1Id), any(Pageable.class)))
+                .thenReturn(List.of(conv2));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(conv2Id)))
+                .thenReturn(List.of());
+        when(messageRepository.countUnreadPerConversation(eq(actorId), eq(List.of(conv2Id))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> secondPage =
+                service.listMyConversations(actorId, endCursor, 20);
+
+        assertThat(secondPage.getContent()).hasSize(1);
+        verify(conversationRepository)
+                .findMyConversationsBefore(eq(actorId), isNull(), eq(conv1Id), any(Pageable.class));
     }
 
     private static User user(UUID id) {
