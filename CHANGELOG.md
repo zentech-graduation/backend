@@ -14,7 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
+### Fixed
+- A banned or suspended account can no longer complete the comment WebSocket handshake; a still-valid token now authenticates only when the account's status is active, matching the guarantee already enforced on REST requests. An already-open connection from before the status change is not affected; it remains open until its token naturally expires.
+
 ### Tests
+- Regression coverage asserting a banned or suspended account's otherwise-valid token no longer establishes a comment WebSocket session.
 - Regression coverage proving the comment WebSocket handshake rejects a missing, malformed, wrong-secret, expired, or blacklisted token, and rejects an unauthenticated caller on the SockJS HTTP fallback transport as well as the native transport.
 - Integration tests that start a Redis container now pin an explicit blank password so a developer's local `REDIS_PASSWORD` environment variable can no longer leak into the test context and cause unrelated authentication failures.
 - End-to-end coverage connecting a real STOMP client through the full security filter chain and asserting a live comment event is received.

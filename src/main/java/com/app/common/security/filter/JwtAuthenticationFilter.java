@@ -1,6 +1,7 @@
 package com.app.common.security.filter;
 
 import java.io.IOException;
+import java.util.Optional;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -14,49 +15,29 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.app.common.enums.ApiErrorCode;
-import com.app.common.exception.AppException;
-import com.app.common.security.jwt.JwtClaims;
-import com.app.common.security.jwt.JwtTokenProvider;
-import com.app.common.security.service.TokenBlacklistService;
-import com.app.common.security.user.SecurityMapper;
+import com.app.common.security.service.TokenPrincipalResolver;
 import com.app.common.security.user.UserPrincipal;
-import com.app.modules.users.enums.UserStatus;
-import com.app.modules.users.repository.UserRepository;
-import com.app.modules.users.repository.UserSecurityProjection;
-
-import lombok.extern.slf4j.Slf4j;
 
 /**
- * Authenticates requests by extracting a Bearer JWT, verifying its signature, and resolving the
- * persisted user (via a slim security projection) so that account-level state (status, soft-delete)
- * is enforced on every call. The raw token is stored as the {@link
- * UsernamePasswordAuthenticationToken} credentials so that downstream handlers (logout) can recover
- * the {@code jti} and remaining lifetime without re-reading the {@code Authorization} header.
+ * Authenticates requests by extracting a Bearer JWT and resolving it to an authenticated principal
+ * via {@link TokenPrincipalResolver}, which enforces signature validity, expiry, blacklist status,
+ * and account status (banned/suspended/deactivated accounts never authenticate). The raw token is
+ * stored as the {@link UsernamePasswordAuthenticationToken} credentials so that downstream handlers
+ * (logout) can recover the {@code jti} and remaining lifetime without re-reading the {@code
+ * Authorization} header.
  *
  * <p>The filter never writes the response on failure: it clears the context and lets downstream
  * handlers (Spring Security's {@code AuthenticationEntryPoint}) decide how to respond.
  */
-@Slf4j
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
-    private final JwtTokenProvider jwtTokenProvider;
-    private final UserRepository userRepository;
-    private final SecurityMapper securityMapper;
-    private final TokenBlacklistService tokenBlacklistService;
+    private final TokenPrincipalResolver tokenPrincipalResolver;
 
-    public JwtAuthenticationFilter(
-            JwtTokenProvider jwtTokenProvider,
-            UserRepository userRepository,
-            SecurityMapper securityMapper,
-            TokenBlacklistService tokenBlacklistService) {
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.userRepository = userRepository;
-        this.securityMapper = securityMapper;
-        this.tokenBlacklistService = tokenBlacklistService;
+    public JwtAuthenticationFilter(TokenPrincipalResolver tokenPrincipalResolver) {
+        this.tokenPrincipalResolver = tokenPrincipalResolver;
     }
 
     @Override
@@ -70,42 +51,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        try {
-            String token = header.substring(BEARER_PREFIX.length());
-            JwtClaims claims = jwtTokenProvider.validateAndParse(token);
-
-            if (tokenBlacklistService.isBlacklisted(claims.jti())) {
-                SecurityContextHolder.clearContext();
-                chain.doFilter(req, res);
-                return;
-            }
-
-            UserSecurityProjection user =
-                    userRepository
-                            .findProjectedByIdAndDeletedAtIsNull(claims.userId())
-                            .orElseThrow(() -> new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
-
-            // We bypass DaoAuthenticationProvider here (token-based path), so
-            // UserDetails.isEnabled()/isAccountNonLocked() on UserPrincipal are never
-            // consulted by Spring Security. Enforce account status explicitly.
-            if (user.getStatus() != UserStatus.ACTIVE) {
-                SecurityContextHolder.clearContext();
-                chain.doFilter(req, res);
-                return;
-            }
-
-            UserPrincipal principal = securityMapper.toUserPrincipal(user);
-
+        String token = header.substring(BEARER_PREFIX.length());
+        Optional<UserPrincipal> principal = tokenPrincipalResolver.resolve(token);
+        if (principal.isPresent()) {
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(
-                            principal, token, principal.getAuthorities());
+                            principal.get(), token, principal.get().getAuthorities());
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
             SecurityContextHolder.getContext().setAuthentication(auth);
-
-        } catch (AppException ex) {
-            // Every JWT failure (expired, invalid signature, blacklisted lookup) was previously
-            // indistinguishable in logs -- this is the only visibility into why auth failed.
-            log.debug("JWT authentication rejected: {}", ex.getErrorCode());
+        } else {
             SecurityContextHolder.clearContext();
         }
 
