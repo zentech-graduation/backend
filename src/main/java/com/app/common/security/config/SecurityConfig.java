@@ -75,7 +75,6 @@ public class SecurityConfig {
 
     private static final String[] AUTHENTICATED_POST_AUTH_PATHS = {
         ApiConstants.Auth.ROOT + ApiConstants.Auth.LOGOUT,
-        ApiConstants.Auth.ROOT + ApiConstants.Auth.CHANGE_PASSWORD,
     };
 
     private static final String[] PUBLIC_INFRA_PATHS = {
