@@ -78,6 +78,7 @@ class HashtagIndexSyncConsumerIT {
     static void register(DynamicPropertyRegistry r) {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        r.add("spring.data.redis.password", () -> "");
         r.add("spring.rabbitmq.host", rabbit::getHost);
         r.add("spring.rabbitmq.port", () -> rabbit.getMappedPort(5672));
         r.add("spring.rabbitmq.username", () -> "guest");
