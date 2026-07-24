@@ -126,7 +126,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/ws/comments/**"))
                 .sessionManagement(
                         sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -139,6 +139,7 @@ public class SecurityConfig {
                             configureRoleBasedEndpoints(auth);
                             configurePublicUsersEndpoints(auth);
                             configurePublicHashtagEndpoints(auth);
+                            configureCommentWebSocketEndpoints(auth);
                             auth.anyRequest().authenticated();
                         })
                 .addFilterBefore(
@@ -233,6 +234,15 @@ public class SecurityConfig {
                         ApiConstants.Hashtags.ROOT + ApiConstants.Hashtags.SEARCH,
                         ApiConstants.Hashtags.ROOT + ApiConstants.Hashtags.TRENDING)
                 .permitAll();
+    }
+
+    // A browser cannot set an Authorization header on a native WebSocket handshake, so the JWT
+    // rides as a query parameter instead; CommentWebSocketJwtHandshakeInterceptor is the sole
+    // authentication gate for this path, matching the query-parameter token it validates.
+    private void configureCommentWebSocketEndpoints(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+                    auth) {
+        auth.requestMatchers("/ws/comments/**").permitAll();
     }
 
     @Bean
