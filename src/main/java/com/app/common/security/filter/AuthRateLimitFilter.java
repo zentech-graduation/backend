@@ -31,9 +31,9 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Rejects abusive traffic on configured endpoints before it reaches downstream filters or
- * controllers. The bucket key is namespaced per-client: per-IP for the login path (with email
- * appended so a single-account brute force cannot hide behind a rotating IP counter); per {@code
- * method:path:ip} for all other endpoints.
+ * controllers. The bucket key is namespaced per-client: per-IP for the login path (with the login
+ * identifier appended so a single-account brute force cannot hide behind a rotating IP counter);
+ * per {@code method:path:ip} for all other endpoints.
  *
  * <p>Rule resolution uses an exact-match fast path first, then falls back to {@link AntPathMatcher}
  * so path-variable routes (e.g. {@code /posts/{id}/likes}) can be configured without requiring
@@ -105,8 +105,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                 return;
             }
             delivered = cached;
-            String email = extractEmail(cached.getCachedBody());
-            key = path + ":" + ip + (email != null ? ":" + email : "");
+            String identifier = extractIdentifier(cached.getCachedBody());
+            key = path + ":" + ip + (identifier != null ? ":" + identifier : "");
         } else {
             key = method + ":" + path + ":" + ip;
         }
@@ -152,14 +152,14 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     }
 
     @SuppressWarnings("unchecked")
-    private String extractEmail(byte[] body) {
+    private String extractIdentifier(byte[] body) {
         if (body == null || body.length == 0) {
             return null;
         }
         try {
             Map<String, Object> parsed = objectMapper.readValue(body, Map.class);
-            Object email = parsed.get("email");
-            if (email instanceof String s && StringUtils.hasText(s)) {
+            Object identifier = parsed.get("identifier");
+            if (identifier instanceof String s && StringUtils.hasText(s)) {
                 return s.trim().toLowerCase();
             }
         } catch (RuntimeException ex) {
