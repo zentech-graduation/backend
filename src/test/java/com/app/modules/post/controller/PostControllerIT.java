@@ -747,7 +747,8 @@ class PostControllerIT {
                 rest.exchange(
                         "/api/v1/auth/login",
                         HttpMethod.POST,
-                        new HttpEntity<>(Map.of("email", email, "password", password), headers),
+                        new HttpEntity<>(
+                                Map.of("identifier", email, "password", password), headers),
                         Map.class);
         assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
         Map<?, ?> data = (Map<?, ?>) login.getBody().get("data");
