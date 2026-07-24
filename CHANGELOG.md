@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- The social module's internal route constants now match the endpoints they describe; no endpoint path changed.
 - Removed unused internal path constants that described endpoints the application never served; no served endpoint changed.
 
 ### Added
@@ -14,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Tests
+- Regression coverage asserting the social module's route constants resolve to the paths it actually serves.
 - Regression coverage asserting the removed unused path constants no longer exist.
 - Regression coverage for concurrent attempts to start a 1-1 conversation with the same user, asserting exactly one conversation results.
 - Regression coverage for conversation-list pagination across conversations with no messages yet.
