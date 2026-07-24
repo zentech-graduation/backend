@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
+- Users can now log in with either their email address or their username, supplied through a single login identifier field.
+
+### Changed
+- The login endpoint now accepts a single identifier field containing an email address or a username in place of the previous email-only field; this is a breaking change to the login request contract.
 
 ### Tests
 - Regression coverage for concurrent attempts to start a 1-1 conversation with the same user, asserting exactly one conversation results.
@@ -16,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Regression coverage for group-admin handoff when the last admin is forcibly removed from a group.
 - Unit coverage for conversation creation and deduplication, participant and group-admin gating, group admin handoff on leave, and conversation-list cursor pagination.
 - End-to-end integration coverage for the new conversation endpoints, covering creation, deduplication, listing, group management, and membership changes.
+- Coverage for login by username and by email through the identifier field, including uppercase-username resolution and identical failure responses for an unknown identifier and a wrong password.
 
 ### Fixed
 - Conversation creation, detail, and list responses now correctly report whether a conversation is a group instead of always reporting false.
@@ -33,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Post search now bounds its page size, so an oversized request can no longer force a mass result hydration or exceed the search engine's result-window limit.
 - Post creation now bounds the number of media identifiers accepted, rejecting an oversized list at request validation.
 - Moderation action metadata is now bounded to a maximum number of entries, preventing unbounded growth of the moderation audit table.
+- Usernames are now stored and matched case-insensitively, and the login rate limit now keys on the submitted identifier so username-based attempts are throttled per account rather than falling back to an address-only bucket.
 
 ### Removed
 - Unused internal mail request type.
