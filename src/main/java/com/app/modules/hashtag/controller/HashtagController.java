@@ -1,11 +1,15 @@
 package com.app.modules.hashtag.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.app.common.ApiConstants;
@@ -56,7 +60,12 @@ public class HashtagController extends BaseController implements HashtagApi {
     @GetMapping(ApiConstants.Hashtags.TRENDING)
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<PageResponse<HashtagTrendingResponse>>> trending(
-            Pageable pageable) {
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        // Ordering is always rank ASC within the latest period (HashtagTrendingServiceImpl);
+        // an unsorted Pageable keeps a client-supplied sort field from reaching the repository
+        // query and failing with a PropertyReferenceException for fields HashtagTrending lacks.
+        Pageable pageable = PageRequest.of(page, size);
         PageResponse<HashtagTrendingResponse> result = hashtagTrendingService.getTrending(pageable);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, result));
     }
