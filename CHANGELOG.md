@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 - Regression coverage asserting a banned or suspended account's otherwise-valid token no longer establishes a comment WebSocket session.
+- Regression coverage proving the comment WebSocket handshake rejects a missing, malformed, wrong-secret, expired, or blacklisted token, and rejects an unauthenticated caller on the SockJS HTTP fallback transport as well as the native transport.
+- Integration tests that start a Redis container now pin an explicit blank password so a developer's local `REDIS_PASSWORD` environment variable can no longer leak into the test context and cause unrelated authentication failures.
 - End-to-end coverage connecting a real STOMP client through the full security filter chain and asserting a live comment event is received.
 - Regression coverage asserting the trending hashtags endpoint rejects an oversized page size and a negative page number.
 - Regression coverage asserting the social module's route constants resolve to the paths it actually serves.
