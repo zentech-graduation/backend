@@ -7,7 +7,6 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.stereotype.Component;
@@ -15,9 +14,6 @@ import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import com.app.common.security.jwt.JwtClaims;
-import com.app.common.security.jwt.JwtTokenProvider;
-import com.app.common.security.service.TokenBlacklistService;
 import com.app.common.security.service.TokenPrincipalResolver;
 import com.app.common.security.user.UserPrincipal;
 
@@ -40,16 +36,9 @@ public class CommentWebSocketJwtHandshakeInterceptor implements HandshakeInterce
             LoggerFactory.getLogger(CommentWebSocketJwtHandshakeInterceptor.class);
 
     private final TokenPrincipalResolver tokenPrincipalResolver;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final TokenBlacklistService tokenBlacklistService;
 
-    public CommentWebSocketJwtHandshakeInterceptor(
-            TokenPrincipalResolver tokenPrincipalResolver,
-            JwtTokenProvider jwtTokenProvider,
-            TokenBlacklistService tokenBlacklistService) {
+    public CommentWebSocketJwtHandshakeInterceptor(TokenPrincipalResolver tokenPrincipalResolver) {
         this.tokenPrincipalResolver = tokenPrincipalResolver;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
@@ -64,24 +53,10 @@ public class CommentWebSocketJwtHandshakeInterceptor implements HandshakeInterce
         }
         Optional<UserPrincipal> principal = tokenPrincipalResolver.resolve(token);
         if (principal.isEmpty()) {
-            if (isBlacklistedButOtherwiseValid(token)) {
-                response.setStatusCode(HttpStatus.UNAUTHORIZED);
-            }
             return false;
         }
         attributes.put(PRINCIPAL_ATTRIBUTE, principal.get());
         return true;
-    }
-
-    // Preserves the pre-existing 401-on-blacklist status: TokenPrincipalResolver deliberately does
-    // not expose which rejection reason applied, so the one caller that cares re-checks narrowly.
-    private boolean isBlacklistedButOtherwiseValid(String token) {
-        try {
-            JwtClaims claims = jwtTokenProvider.validateAndParse(token);
-            return tokenBlacklistService.isBlacklisted(claims.jti());
-        } catch (RuntimeException ex) {
-            return false;
-        }
     }
 
     @Override
