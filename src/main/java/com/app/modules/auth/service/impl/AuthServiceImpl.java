@@ -2,6 +2,7 @@ package com.app.modules.auth.service.impl;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -154,7 +155,9 @@ public class AuthServiceImpl implements AuthService {
 
                     User user =
                             User.builder()
-                                    .username(request.username())
+                                    // Usernames are stored lowercased so login can resolve them
+                                    // case-insensitively via the lower(username) unique index.
+                                    .username(request.username().toLowerCase())
                                     .email(request.email())
                                     .displayName(displayName)
                                     .role(UserRole.USER)
@@ -184,7 +187,17 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email()).orElse(null);
+        // Usernames cannot contain '@' (enforced by the registration pattern), so an '@' in the
+        // identifier unambiguously marks an email; anything else is looked up as a lowercased
+        // username against the case-insensitive lower(username) index.
+        String rawIdentifier = request.identifier().trim();
+        Optional<User> userOpt;
+        if (rawIdentifier.contains("@")) {
+            userOpt = userRepository.findByEmailAndDeletedAtIsNull(rawIdentifier);
+        } else {
+            userOpt = userRepository.findByUsernameAndDeletedAtIsNull(rawIdentifier.toLowerCase());
+        }
+        User user = userOpt.orElse(null);
         UserCredential credential =
                 user == null ? null : credentialRepository.findByUserId(user.getId()).orElse(null);
 
