@@ -210,6 +210,24 @@ class HashtagControllerIT {
                 .anyMatch(name -> name.contains("integ"));
     }
 
+    @Test
+    @Order(6)
+    void trending_oversizedSize_returnsBadRequest() {
+        ResponseEntity<Map> response =
+                rest.getForEntity("/api/v1/hashtags/trending?size=2000", Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @Order(7)
+    void trending_negativePage_returnsBadRequest() {
+        ResponseEntity<Map> response =
+                rest.getForEntity("/api/v1/hashtags/trending?page=-1", Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     private void ensureIndexExists() {
         IndexOperations ops = elasticsearchOperations.indexOps(HashtagDocument.class);
         if (!ops.exists()) {
