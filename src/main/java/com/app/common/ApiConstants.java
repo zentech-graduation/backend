@@ -80,13 +80,13 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/social";
         public static final String FOLLOW = "/follow/{targetUserId}";
-        public static final String UNFOLLOW = "/unfollow/{targetUserId}";
-        public static final String FOLLOWERS = "/{userId}/followers";
-        public static final String FOLLOWING = "/{userId}/following";
+        public static final String FOLLOWERS = "/users/{userId}/followers";
+        public static final String FOLLOWING = "/users/{userId}/following";
         public static final String FOLLOW_REQUESTS = "/follow-requests";
-        public static final String FOLLOW_REQUEST_RESPOND = "/follow-requests/{requesterId}";
+        public static final String FOLLOW_REQUEST_APPROVE =
+                "/follow-requests/{requesterId}/approve";
+        public static final String FOLLOW_REQUEST_REJECT = "/follow-requests/{requesterId}/reject";
         public static final String BLOCK = "/block/{targetUserId}";
-        public static final String UNBLOCK = "/unblock/{targetUserId}";
     }
 
     public static final class Messages {
