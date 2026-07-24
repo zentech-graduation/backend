@@ -59,7 +59,10 @@ public class UserServiceImpl implements UserService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
 
         if (request.username() != null) {
-            String newUsername = request.username();
+            // Usernames are stored lowercased so login resolves them case-insensitively via the
+            // lower(username) unique index; normalize before the uniqueness check so a case-only
+            // collision surfaces as a 409 rather than a raw database constraint violation.
+            String newUsername = request.username().toLowerCase();
             // The username UNIQUE constraint is table-wide and soft delete does not release a
             // username, so the availability check must span soft-deleted rows too. A partial check
             // would let a collision with a soft-deleted account fall through to a database error
