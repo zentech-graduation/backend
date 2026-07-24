@@ -5,7 +5,7 @@ spring:
       - classpath:resilience/ratelimiter/resilience4j-dev.yml
       - classpath:resilience/retry/resilience4j-dev.yml
   flyway:
-    locations: classpath:db/migration,classpath:db/dev-seed
+    locations: classpath:db/migration
   jpa:
     hibernate:
       ddl-auto: validate

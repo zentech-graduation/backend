@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+- The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
+
 ### Changed
 - The social module's internal route constants now match the endpoints they describe; no endpoint path changed.
 - Removed unused internal path constants that described endpoints the application never served; no served endpoint changed.

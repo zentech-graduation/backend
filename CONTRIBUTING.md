@@ -25,6 +25,26 @@ docker compose up -d
 
 The application starts with the `dev` profile. Swagger UI is available at `http://localhost:8080/swagger-ui`.
 
+### Troubleshooting: startup fails with a Flyway validation error mentioning version 99
+
+Flyway used to apply a dev-only seed script, `V99__seed_feed_test_data.sql`, from `classpath:db/dev-seed`.
+That script and its location entry have been removed.
+If your local database already recorded that migration as applied, Flyway's validation step will now find a schema history row with no matching migration file and refuse to start the application.
+
+Fix it by removing that one row from your local database, then start the application again:
+
+```bash
+docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DELETE FROM flyway_schema_history WHERE version = '99';"
+```
+
+The seed script only ever inserted disposable test rows, so no other cleanup is required.
+If you would rather start from a clean database, remove the `postgres` container instead — it has no named volume, so removing it discards its data and Flyway reapplies every migration from scratch on the next `docker compose up -d`:
+
+```bash
+docker compose rm -f -s postgres
+docker compose up -d postgres
+```
+
 ## Branch naming convention
 
 ```
