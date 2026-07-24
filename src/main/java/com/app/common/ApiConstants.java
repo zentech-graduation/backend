@@ -20,8 +20,6 @@ public final class ApiConstants {
         public static final String RESET_PASSWORD = "/reset-password";
         public static final String VERIFY_EMAIL = "/verify-email";
         public static final String RESEND_VERIFY = "/verify-email/resend";
-        public static final String CHANGE_PASSWORD = "/change-password";
-        public static final String OAUTH2_CALLBACK = "/oauth2/callback/{provider}";
         public static final String OAUTH2_EXCHANGE = "/oauth2/exchange";
     }
 
@@ -30,10 +28,7 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/users";
         public static final String ME = "/me";
-        public static final String ME_AVATAR = "/me/avatar";
         public static final String BY_ID = "/{userId}";
-        public static final String SEARCH = "/search";
-        public static final String SUGGESTIONS = "/suggestions";
         public static final String ME_SETTINGS = "/me/settings";
     }
 
@@ -50,9 +45,7 @@ public final class ApiConstants {
         public static final String SAVED = "/saved";
         public static final String SEARCH = "/search";
         public static final String COMMENTS = "/{postId}/comments";
-        public static final String MEDIA = "/{postId}/media";
         public static final String FEED = "/feed";
-        public static final String EXPLORE = "/explore";
         public static final String USER_POSTS = "/user/{userId}";
     }
 
@@ -95,13 +88,9 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/conversations";
         public static final String BY_ID = "/{conversationId}";
         public static final String GROUP = "/group";
-        public static final String CONVERSATION_MESSAGES = "/{conversationId}/messages";
-        public static final String MESSAGE_BY_ID = "/{conversationId}/messages/{messageId}";
         public static final String PARTICIPANTS = "/{conversationId}/participants";
         public static final String PARTICIPANT_BY_ID = "/{conversationId}/participants/{userId}";
         public static final String LEAVE = "/{conversationId}/leave";
-        public static final String READ = "/{conversationId}/read";
-        public static final String UNREAD_COUNT = "/unread-count";
     }
 
     public static final class Notifications {
@@ -117,8 +106,6 @@ public final class ApiConstants {
         private Hashtags() {}
 
         public static final String ROOT = API_V1 + "/hashtags";
-        public static final String BY_NAME = "/{name}";
-        public static final String POSTS = "/{name}/posts";
         public static final String TRENDING = "/trending";
         public static final String SEARCH = "/search";
     }
@@ -129,7 +116,6 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/media";
         public static final String UPLOAD = "/upload";
         public static final String UPLOAD_COMPLETE = "/upload-complete";
-        public static final String BY_ID = "/{mediaId}";
     }
 
     public static final class Reports {
