@@ -69,6 +69,7 @@ class HashtagControllerIT {
     static void register(DynamicPropertyRegistry r) {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        r.add("spring.data.redis.password", () -> "");
         r.add("app.elasticsearch.uris", () -> "http://" + elasticsearch.getHttpHostAddress());
         r.add("JWT_SECRET", () -> "hashtag-controller-it-secret-32-chars-min!!!!");
         r.add("JWT_ISSUER", () -> "https://hashtag.it.local");
