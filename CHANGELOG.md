@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Tests
+- Integration tests that start a Redis container now pin an explicit blank password so a developer's local `REDIS_PASSWORD` environment variable can no longer leak into the test context and cause unrelated authentication failures.
 - End-to-end coverage connecting a real STOMP client through the full security filter chain and asserting a live comment event is received.
 - Regression coverage asserting the trending hashtags endpoint rejects an oversized page size and a negative page number.
 - Regression coverage asserting the social module's route constants resolve to the paths it actually serves.
