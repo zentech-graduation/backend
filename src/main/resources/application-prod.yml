@@ -30,6 +30,12 @@ app:
   post:
     consumer:
       enabled: true
+  comment:
+    consumer:
+      enabled: true
+  story:
+    consumer:
+      enabled: true
   mail:
     consumer:
       enabled: true

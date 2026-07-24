@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - End-to-end integration coverage for the new conversation endpoints, covering creation, deduplication, listing, group management, and membership changes.
 
 ### Fixed
+- Comment and story activity (new comments, replies, mentions, comment likes, and story views) now generates notifications in production; these notification types were previously never created outside the development environment because their event consumers were not enabled.
 - Conversation creation, detail, and list responses now correctly report whether a conversation is a group instead of always reporting false.
 - Removing the last active admin from a group conversation (including the admin removing themselves) now automatically promotes a replacement admin, matching the existing behavior when an admin leaves voluntarily.
 - Paginating the conversation list past a conversation with no messages yet no longer returns a 500 error.
