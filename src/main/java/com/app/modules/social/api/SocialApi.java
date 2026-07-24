@@ -87,7 +87,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PostMapping("/follow/{targetUserId}")
+    @PostMapping(ApiConstants.Social.FOLLOW)
     @ResponseStatus(HttpStatus.CREATED)
     ResponseEntity<ApiResponse<FollowResponse>> follow(@PathVariable UUID targetUserId);
 
@@ -111,7 +111,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @DeleteMapping("/follow/{targetUserId}")
+    @DeleteMapping(ApiConstants.Social.FOLLOW)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     ResponseEntity<Void> unfollow(@PathVariable UUID targetUserId);
 
@@ -132,7 +132,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @GetMapping("/follow-requests")
+    @GetMapping(ApiConstants.Social.FOLLOW_REQUESTS)
     ResponseEntity<ApiResponse<List<FollowRequestResponse>>> getPendingFollowRequests();
 
     @Operation(summary = "Approve a pending follow request")
@@ -155,7 +155,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PatchMapping("/follow-requests/{requesterId}/approve")
+    @PatchMapping(ApiConstants.Social.FOLLOW_REQUEST_APPROVE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     ResponseEntity<Void> approveFollowRequest(@PathVariable UUID requesterId);
 
@@ -179,7 +179,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PatchMapping("/follow-requests/{requesterId}/reject")
+    @PatchMapping(ApiConstants.Social.FOLLOW_REQUEST_REJECT)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     ResponseEntity<Void> rejectFollowRequest(@PathVariable UUID requesterId);
 
@@ -210,7 +210,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @PostMapping("/block/{targetUserId}")
+    @PostMapping(ApiConstants.Social.BLOCK)
     @ResponseStatus(HttpStatus.CREATED)
     ResponseEntity<ApiResponse<Void>> block(@PathVariable UUID targetUserId);
 
@@ -234,7 +234,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @DeleteMapping("/block/{targetUserId}")
+    @DeleteMapping(ApiConstants.Social.BLOCK)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     ResponseEntity<Void> unblock(@PathVariable UUID targetUserId);
 
@@ -262,7 +262,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @GetMapping("/users/{userId}/followers")
+    @GetMapping(ApiConstants.Social.FOLLOWERS)
     ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowers(
             @PathVariable UUID userId,
             @RequestParam(required = false) @Size(max = 512) String cursor,
@@ -292,7 +292,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
-    @GetMapping("/users/{userId}/following")
+    @GetMapping(ApiConstants.Social.FOLLOWING)
     ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowing(
             @PathVariable UUID userId,
             @RequestParam(required = false) @Size(max = 512) String cursor,

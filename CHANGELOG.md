@@ -6,12 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- The social module's internal route constants now match the endpoints they describe; no endpoint path changed.
+- Removed unused internal path constants that described endpoints the application never served; no served endpoint changed.
+
 ### Added
 - Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Tests
 - End-to-end coverage connecting a real STOMP client through the full security filter chain and asserting a live comment event is received.
+- Regression coverage asserting the trending hashtags endpoint rejects an oversized page size and a negative page number.
+- Regression coverage asserting the social module's route constants resolve to the paths it actually serves.
+- Regression coverage asserting the removed unused path constants no longer exist.
 - Regression coverage for concurrent attempts to start a 1-1 conversation with the same user, asserting exactly one conversation results.
 - Regression coverage for conversation-list pagination across conversations with no messages yet.
 - Regression coverage for group-admin handoff when the last admin is forcibly removed from a group.
@@ -27,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 - The live comment WebSocket connection can now actually be established; it previously rejected every real client because the browser-only query-parameter authentication path was never permitted through the access control rules.
+- The trending hashtags endpoint now rejects a page size above 100 or a negative page number with 400 Bad Request instead of accepting an unbounded page size, and no longer accepts a client-supplied sort field.
 - Two concurrent requests to start a 1-1 conversation with the same user can no longer create duplicate conversations; the request is now serialized and backed by a database uniqueness constraint.
 - The follower and following list endpoints now reject an out-of-range limit or an oversized cursor with 400 instead of silently clamping the value.
 - The resend email verification endpoint now normalizes its response time to a floor, so a registered address can no longer be distinguished from an unregistered one by response latency.

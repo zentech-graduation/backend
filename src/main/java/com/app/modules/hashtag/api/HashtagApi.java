@@ -1,12 +1,14 @@
 package com.app.modules.hashtag.api;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
@@ -83,5 +85,13 @@ public interface HashtagApi {
     })
     @GetMapping(ApiConstants.Hashtags.TRENDING)
     ResponseEntity<ApiResponse<PageResponse<HashtagTrendingResponse>>> trending(
-            @Parameter(description = "Pagination: page (0-based), size, sort") Pageable pageable);
+            @Parameter(description = "Zero-based page index")
+                    @RequestParam(defaultValue = "0")
+                    @Min(0)
+                    int page,
+            @Parameter(description = "Page size; maximum 100")
+                    @RequestParam(defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
+                    int size);
 }
