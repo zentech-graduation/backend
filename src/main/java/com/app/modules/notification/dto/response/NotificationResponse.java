@@ -5,6 +5,8 @@ import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.app.modules.notification.entity.enums.NotificationType;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /** Single notification item returned to the client. */
@@ -17,7 +19,7 @@ public record NotificationResponse(
                                         + " was deleted")
                 UUID actorId,
         @Schema(description = "Notification type", example = "follow", requiredMode = REQUIRED)
-                String type,
+                NotificationType type,
         @Schema(
                         description =
                                 "Polymorphic entity type, e.g. 'post' or 'comment'; null for"
