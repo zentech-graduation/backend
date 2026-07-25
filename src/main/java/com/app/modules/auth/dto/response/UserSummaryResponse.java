@@ -2,6 +2,8 @@ package com.app.modules.auth.dto.response;
 
 import java.util.UUID;
 
+import com.app.modules.users.enums.UserRole;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /** Minimal user projection returned inside authentication responses. */
@@ -15,6 +17,6 @@ public record UserSummaryResponse(
         @Schema(description = "User's email address", example = "john@example.com") String email,
         @Schema(description = "Display name shown on the profile", example = "John Doe")
                 String displayName,
-        @Schema(description = "User's role in the system", example = "user") String role,
+        @Schema(description = "User's role in the system", example = "user") UserRole role,
         @Schema(description = "Whether the user has completed email verification", example = "true")
                 boolean emailVerified) {}
