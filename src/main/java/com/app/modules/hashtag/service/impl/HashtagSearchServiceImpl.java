@@ -123,7 +123,7 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
             List<HashtagResponse> content, int offset, int limit) {
         String start = content.isEmpty() ? null : encodeCursor(offset);
         String end = content.isEmpty() ? null : encodeCursor(offset + content.size());
-        return CursorPageResponse.of(content, limit, start, end, offset > 0);
+        return CursorPageResponse.of(content, content.size() == limit, start, end, offset > 0);
     }
 
     private static String encodeCursor(int offset) {

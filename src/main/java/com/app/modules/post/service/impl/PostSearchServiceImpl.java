@@ -135,8 +135,7 @@ public class PostSearchServiceImpl implements PostSearchService {
                 t.getClass().getSimpleName(),
                 t.getMessage(),
                 t);
-        int effectiveLimit = normalizeLimit(size);
-        return CursorPageResponse.of(List.of(), effectiveLimit, null, null, false);
+        return CursorPageResponse.of(List.of(), false, null, null, false);
     }
 
     // Clamp the page size so an oversized request cannot force a mass hydration or exceed the
@@ -183,7 +182,7 @@ public class PostSearchServiceImpl implements PostSearchService {
             List<PostResponse> content, int offset, int limit, int esHitCount) {
         String start = content.isEmpty() ? null : encodeCursor(offset);
         String end = content.isEmpty() ? null : encodeCursor(offset + esHitCount);
-        return CursorPageResponse.of(content, limit, start, end, offset > 0);
+        return CursorPageResponse.of(content, content.size() == limit, start, end, offset > 0);
     }
 
     private static String encodeCursor(int offset) {

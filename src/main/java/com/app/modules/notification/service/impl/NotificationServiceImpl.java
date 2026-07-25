@@ -121,11 +121,15 @@ public class NotificationServiceImpl implements NotificationService {
 
         List<Notification> rows =
                 notificationRepository.findByRecipientIdWithCursor(
-                        recipientId, resolvedCursor, cursorTime, PageRequest.of(0, limit));
+                        recipientId, resolvedCursor, cursorTime, PageRequest.of(0, limit + 1));
+        boolean hasNextPage = rows.size() > limit;
+        if (hasNextPage) {
+            rows = rows.subList(0, limit);
+        }
         List<NotificationResponse> content = notificationMapper.toResponseList(rows);
         String startCursor = rows.isEmpty() ? null : rows.get(0).getId().toString();
         String endCursor = rows.isEmpty() ? null : rows.get(rows.size() - 1).getId().toString();
-        return CursorPageResponse.of(content, limit, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     private boolean isTypeEnabled(NotificationType type, UserSettings settings) {

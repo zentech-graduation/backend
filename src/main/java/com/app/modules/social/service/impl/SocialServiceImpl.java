@@ -249,7 +249,8 @@ public class SocialServiceImpl implements SocialService {
         }
 
         if (follows.isEmpty()) {
-            return CursorPageResponse.of(Collections.emptyList(), size, null, null, cursor != null);
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> followerIds = follows.stream().map(f -> f.getId().getFollowerId()).toList();
@@ -268,7 +269,7 @@ public class SocialServiceImpl implements SocialService {
         String startCursor = encodeCursor(follows.get(0).getCreatedAt());
         String endCursor = encodeCursor(follows.get(follows.size() - 1).getCreatedAt());
 
-        return CursorPageResponse.of(content, size, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
@@ -300,7 +301,8 @@ public class SocialServiceImpl implements SocialService {
         }
 
         if (follows.isEmpty()) {
-            return CursorPageResponse.of(Collections.emptyList(), size, null, null, cursor != null);
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> followingIds = follows.stream().map(f -> f.getId().getFollowingId()).toList();
@@ -319,7 +321,7 @@ public class SocialServiceImpl implements SocialService {
         String startCursor = encodeCursor(follows.get(0).getCreatedAt());
         String endCursor = encodeCursor(follows.get(follows.size() - 1).getCreatedAt());
 
-        return CursorPageResponse.of(content, size, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override

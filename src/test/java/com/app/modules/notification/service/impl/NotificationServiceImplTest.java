@@ -228,10 +228,14 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void listNotifications_hasNextPage_whenFullPageReturned() {
+    void listNotifications_overFetchReturnsExtraRow_hasNextPage() {
         UUID recipientId = UUID.randomUUID();
         int limit = 2;
-        List<Notification> rows = List.of(mockNotification(), mockNotification());
+        // The service over-fetches limit + 1 rows; the extra row proves a further page exists and
+        // is
+        // trimmed off before the content is returned.
+        List<Notification> rows =
+                List.of(mockNotification(), mockNotification(), mockNotification());
         when(notificationRepository.findByRecipientIdWithCursor(
                         eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
                 .thenReturn(rows);
@@ -242,6 +246,7 @@ class NotificationServiceImplTest {
                 service.listNotifications(recipientId, null, limit);
 
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
+        assertThat(result.getContent()).hasSize(2);
     }
 
     @Test
@@ -325,7 +330,7 @@ class NotificationServiceImplTest {
         assertThat(result.getContent()).hasSize(1);
         // Cursor was provided but pivot was absent - result is still flagged as "past-cursor" page
         verify(notificationRepository)
-                .findByRecipientIdWithCursor(recipientId, null, null, PageRequest.of(0, 20));
+                .findByRecipientIdWithCursor(recipientId, null, null, PageRequest.of(0, 21));
     }
 
     @Test
@@ -353,7 +358,7 @@ class NotificationServiceImplTest {
         assertThat(result.getContent()).hasSize(1);
         verify(notificationRepository)
                 .findByRecipientIdWithCursor(
-                        recipientId, cursorId, pivotTime, PageRequest.of(0, 20));
+                        recipientId, cursorId, pivotTime, PageRequest.of(0, 21));
     }
 
     @Test

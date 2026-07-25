@@ -198,12 +198,13 @@ public class ConversationServiceImpl implements ConversationService {
                         ? conversationRepository.findFirstMyConversations(actorId, page)
                         : conversationRepository.findMyConversationsBefore(
                                 actorId, decoded.lastMessageAt(), decoded.conversationId(), page);
-        if (conversations.size() > pageSize) {
+        boolean hasNextPage = conversations.size() > pageSize;
+        if (hasNextPage) {
             conversations = conversations.subList(0, pageSize);
         }
         if (conversations.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> conversationIds = conversations.stream().map(Conversation::getId).toList();
@@ -228,7 +229,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .toList();
         String startCursor = encodeCursor(conversations.get(0));
         String endCursor = encodeCursor(conversations.get(conversations.size() - 1));
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override

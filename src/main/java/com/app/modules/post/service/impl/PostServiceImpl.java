@@ -318,17 +318,18 @@ public class PostServiceImpl implements PostService {
                                 targetUserId, PostStatus.PUBLISHED, page)
                         : postRepository.findUserPostsBefore(
                                 targetUserId, PostStatus.PUBLISHED, cursorTime, page);
-        if (posts.size() > pageSize) {
+        boolean hasNextPage = posts.size() > pageSize;
+        if (hasNextPage) {
             posts = posts.subList(0, pageSize);
         }
         if (posts.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<PostResponse> content = postResponseAssembler.assemble(posts);
         String startCursor = encodeCursor(posts.get(0).getCreatedAt());
         String endCursor = encodeCursor(posts.get(posts.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
@@ -338,7 +339,7 @@ public class PostServiceImpl implements PostService {
         int pageSize = normalizeLimit(size);
         if (authorIds.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         OffsetDateTime cursorTime = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
@@ -347,17 +348,18 @@ public class PostServiceImpl implements PostService {
                         ? postRepository.findFirstFeedPosts(authorIds, PostStatus.PUBLISHED, page)
                         : postRepository.findFeedPostsBefore(
                                 authorIds, PostStatus.PUBLISHED, cursorTime, page);
-        if (posts.size() > pageSize) {
+        boolean hasNextPage = posts.size() > pageSize;
+        if (hasNextPage) {
             posts = posts.subList(0, pageSize);
         }
         if (posts.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<FeedPostResponse> content = postResponseAssembler.assembleFeed(posts);
         String startCursor = encodeCursor(posts.get(0).getCreatedAt());
         String endCursor = encodeCursor(posts.get(posts.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
@@ -378,18 +380,19 @@ public class PostServiceImpl implements PostService {
                 cursorTime == null
                         ? postEditHistoryRepository.findFirstByPost(postId, page)
                         : postEditHistoryRepository.findByPostBefore(postId, cursorTime, page);
-        if (rows.size() > pageSize) {
+        boolean hasNextPage = rows.size() > pageSize;
+        if (hasNextPage) {
             rows = rows.subList(0, pageSize);
         }
         if (rows.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<PostEditHistoryResponse> content =
                 rows.stream().map(postMapper::toEditHistoryResponse).toList();
         String startCursor = encodeCursor(rows.get(0).getEditedAt());
         String endCursor = encodeCursor(rows.get(rows.size() - 1).getEditedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     // Soft delete keeps the row (GLOBAL_RULES soft delete policy): status flip + deleted_at; the

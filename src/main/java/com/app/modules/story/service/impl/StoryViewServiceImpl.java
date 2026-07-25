@@ -107,12 +107,13 @@ public class StoryViewServiceImpl implements StoryViewService {
                         ? storyViewRepository.findFirstViewers(storyId, page)
                         : storyViewRepository.findViewersBefore(
                                 storyId, decoded.viewedAt(), decoded.viewerId(), page);
-        if (views.size() > pageSize) {
+        boolean hasNextPage = views.size() > pageSize;
+        if (hasNextPage) {
             views = views.subList(0, pageSize);
         }
         if (views.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<UUID> viewerIds = views.stream().map(v -> v.getId().getViewerId()).toList();
         Map<UUID, User> users =
@@ -129,7 +130,7 @@ public class StoryViewServiceImpl implements StoryViewService {
                         .toList();
         String startCursor = encodeCursor(views.get(0));
         String endCursor = encodeCursor(views.get(views.size() - 1));
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     private Story fetchVisibleActiveStory(UUID viewerId, UUID storyId) {

@@ -116,12 +116,13 @@ public class PostSaveServiceImpl implements PostSaveService {
                 cursorTime == null
                         ? postSaveRepository.findFirstSaves(userId, page)
                         : postSaveRepository.findSavesBefore(userId, cursorTime, page);
-        if (saves.size() > pageSize) {
+        boolean hasNextPage = saves.size() > pageSize;
+        if (hasNextPage) {
             saves = saves.subList(0, pageSize);
         }
         if (saves.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<UUID> postIds = saves.stream().map(s -> s.getId().getPostId()).toList();
         // findAllById drops soft-deleted posts via the entity's @SQLRestriction filter.
@@ -144,7 +145,7 @@ public class PostSaveServiceImpl implements PostSaveService {
         }
         String startCursor = encodeCursor(saves.get(0).getCreatedAt());
         String endCursor = encodeCursor(saves.get(saves.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     private int normalizeLimit(int limit) {

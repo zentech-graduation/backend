@@ -117,12 +117,13 @@ public class PostLikeServiceImpl implements PostLikeService {
                 cursorTime == null
                         ? postLikeRepository.findFirstLikers(postId, page)
                         : postLikeRepository.findLikersBefore(postId, cursorTime, page);
-        if (likes.size() > pageSize) {
+        boolean hasNextPage = likes.size() > pageSize;
+        if (hasNextPage) {
             likes = likes.subList(0, pageSize);
         }
         if (likes.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<UUID> likerIds = likes.stream().map(l -> l.getId().getUserId()).toList();
         Map<UUID, User> users =
@@ -136,7 +137,7 @@ public class PostLikeServiceImpl implements PostLikeService {
                         .toList();
         String startCursor = encodeCursor(likes.get(0).getCreatedAt());
         String endCursor = encodeCursor(likes.get(likes.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     private Post fetchVisiblePublishedPost(UUID viewerId, UUID postId) {
