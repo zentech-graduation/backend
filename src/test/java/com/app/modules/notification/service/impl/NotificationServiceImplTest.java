@@ -386,7 +386,7 @@ class NotificationServiceImplTest {
         return new NotificationResponse(
                 UUID.randomUUID(),
                 null,
-                "follow",
+                NotificationType.FOLLOW,
                 null,
                 null,
                 false,
