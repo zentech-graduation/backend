@@ -112,7 +112,7 @@ class AuthServiceImplTest {
                                     u.getUsername(),
                                     u.getEmail(),
                                     u.getDisplayName(),
-                                    u.getRole() == null ? null : u.getRole().name(),
+                                    u.getRole(),
                                     ev);
                         });
         // Execute TransactionTemplate callbacks directly (no real PlatformTransactionManager).
