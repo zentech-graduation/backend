@@ -49,7 +49,7 @@ public class SocialEventServiceImpl implements SocialEventService {
                         "followingId",
                         followingId.toString(),
                         "status",
-                        follow.getStatus().name().toLowerCase()));
+                        follow.getStatus()));
     }
 
     private static String eventTypeFor(FollowStatus status) {

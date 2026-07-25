@@ -52,7 +52,7 @@ class SocialEventServiceImplTest {
                                 "followingId",
                                 followingId.toString(),
                                 "status",
-                                "accepted"));
+                                FollowStatus.ACCEPTED));
     }
 
     @Test
@@ -76,7 +76,7 @@ class SocialEventServiceImplTest {
         assertThat(dataCaptor.getValue())
                 .containsEntry("followerId", followerId.toString())
                 .containsEntry("followingId", followingId.toString())
-                .containsEntry("status", "pending");
+                .containsEntry("status", FollowStatus.PENDING);
     }
 
     private static Follow follow(UUID followerId, UUID followingId, FollowStatus status) {
