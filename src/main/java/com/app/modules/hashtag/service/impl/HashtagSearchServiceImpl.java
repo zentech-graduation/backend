@@ -15,6 +15,8 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.hashtag.dto.response.HashtagResponse;
 import com.app.modules.hashtag.mapper.HashtagMapper;
@@ -127,7 +129,8 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
     }
 
     private static String encodeCursor(int offset) {
-        return Base64.getEncoder()
+        return Base64.getUrlEncoder()
+                .withoutPadding()
                 .encodeToString(Integer.toString(offset).getBytes(StandardCharsets.UTF_8));
     }
 
@@ -138,17 +141,16 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
         try {
             int offset =
                     Integer.parseInt(
-                            new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-            // Clamp valid-but-out-of-range offsets to the first page so a forged cursor cannot
-            // drive
-            // a deep ES `from` / pg_trgm OFFSET that errors and trips the circuit breaker.
+                            new String(
+                                    Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8));
+            // Reject negative or excessively deep offsets so a forged cursor cannot drive a deep ES
+            // `from` / pg_trgm OFFSET that errors and trips the circuit breaker.
             if (offset < 0 || offset > MAX_SEARCH_OFFSET) {
-                return 0;
+                throw new NumberFormatException("offset out of range");
             }
             return offset;
-        } catch (IllegalArgumentException e) {
-            // Malformed cursor → start from the first page rather than failing the request.
-            return 0;
+        } catch (RuntimeException e) {
+            throw new AppException(ApiErrorCode.INVALID_CURSOR);
         }
     }
 
