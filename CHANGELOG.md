@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Local development containers now persist PostgreSQL and RabbitMQ data across container recreation, declare healthchecks and restart policies, and the RabbitMQ image now ships the management UI bound to loopback.
+
 ### Removed
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
 
