@@ -26,7 +26,9 @@ public interface PostEditHistoryRepository extends JpaRepository<PostEditHistory
      * @param pageable page size carrier
      * @return history rows ordered by {@code edited_at} descending
      */
-    @Query("SELECT h FROM PostEditHistory h WHERE h.postId = :postId ORDER BY h.editedAt DESC")
+    @Query(
+            "SELECT h FROM PostEditHistory h WHERE h.postId = :postId "
+                    + "ORDER BY h.editedAt DESC, h.id DESC")
     List<PostEditHistory> findFirstByPost(@Param("postId") UUID postId, Pageable pageable);
 
     /**
@@ -35,16 +37,20 @@ public interface PostEditHistoryRepository extends JpaRepository<PostEditHistory
      * <p>Served by {@code idx_post_edit_history_post_edited} (V22).
      *
      * @param postId edited post
-     * @param cursor exclusive upper bound on {@code edited_at}; never null
+     * @param cursorTime {@code edited_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code edited_at}; never null
      * @param pageable page size carrier
-     * @return history rows ordered by {@code edited_at} descending
+     * @return history rows ordered by the {@code (edited_at, id)} tuple descending
      */
     @Query(
-            "SELECT h FROM PostEditHistory h WHERE h.postId = :postId "
-                    + "AND h.editedAt < :cursor "
-                    + "ORDER BY h.editedAt DESC")
+            value =
+                    "SELECT * FROM post_edit_history WHERE post_id = :postId "
+                            + "AND (edited_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY edited_at DESC, id DESC",
+            nativeQuery = true)
     List<PostEditHistory> findByPostBefore(
             @Param("postId") UUID postId,
-            @Param("cursor") OffsetDateTime cursor,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
             Pageable pageable);
 }
