@@ -20,7 +20,6 @@ import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.inbox.service.ProcessedMessageService;
-import com.app.common.messaging.DeadLetterPublisher;
 import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.messaging.exception.PermanentMessageException;
@@ -38,7 +37,8 @@ import com.rabbitmq.client.Channel;
  * embedded in the event payload, excluding the sender. {@code NotificationService.create} already
  * suppresses self-notifications, blocked actors, and toggled-off preferences ({@code
  * notify_messages}), so those are defense-in-depth, not the primary gate. Uses manual
- * acknowledgement with bounded retry and dead-letter routing.
+ * acknowledgement with bounded retry; a permanent or retry-exhausted failure nacks without requeue
+ * so the broker routes the message to the dead-letter queue per the topology's declared policy.
  */
 @Component
 @ConditionalOnProperty(
@@ -58,21 +58,18 @@ public class MessageNotificationConsumer {
     private final ConversationParticipantRepository participantRepository;
     private final NotificationService notificationService;
     private final ConsumerRetryProperties retryProperties;
-    private final DeadLetterPublisher deadLetterPublisher;
 
     public MessageNotificationConsumer(
             DomainEventMessageParser parser,
             ProcessedMessageService processedMessageService,
             ConversationParticipantRepository participantRepository,
             NotificationService notificationService,
-            ConsumerRetryProperties retryProperties,
-            DeadLetterPublisher deadLetterPublisher) {
+            ConsumerRetryProperties retryProperties) {
         this.parser = parser;
         this.processedMessageService = processedMessageService;
         this.participantRepository = participantRepository;
         this.notificationService = notificationService;
         this.retryProperties = retryProperties;
-        this.deadLetterPublisher = deadLetterPublisher;
     }
 
     @RabbitListener(queues = RabbitMqTopologyConfig.MESSAGE_NOTIFICATION_QUEUE)
@@ -84,9 +81,15 @@ public class MessageNotificationConsumer {
             processWithRetry(event);
             channel.basicAck(deliveryTag, false);
         } catch (PermanentMessageException ex) {
-            routeToDlqOrRequeue(message, channel, deliveryTag, ex);
+            log.warn(
+                    "Message notification event permanently invalid, dead-lettering: {}",
+                    ex.getMessage());
+            channel.basicNack(deliveryTag, false, false);
         } catch (RuntimeException ex) {
-            routeToDlqOrRequeue(message, channel, deliveryTag, ex);
+            log.warn(
+                    "Message notification event failed after exhausting retries, dead-lettering: {}",
+                    ex.getMessage());
+            channel.basicNack(deliveryTag, false, false);
         }
     }
 
@@ -153,23 +156,6 @@ public class MessageNotificationConsumer {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted during message notification retry backoff", ex);
-        }
-    }
-
-    private void routeToDlqOrRequeue(
-            Message message, Channel channel, long deliveryTag, RuntimeException failure)
-            throws IOException {
-        try {
-            deadLetterPublisher.publish(
-                    message,
-                    RabbitMqTopologyConfig.MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY,
-                    failure.getMessage());
-            channel.basicAck(deliveryTag, false);
-        } catch (RuntimeException dlqFailure) {
-            log.warn(
-                    "Failed to publish message notification event to DLQ; requeueing: {}",
-                    dlqFailure.getMessage());
-            channel.basicNack(deliveryTag, false, true);
         }
     }
 

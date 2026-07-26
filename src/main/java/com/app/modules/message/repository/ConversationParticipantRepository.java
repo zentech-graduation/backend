@@ -36,9 +36,16 @@ public interface ConversationParticipantRepository
 
     int countByIdConversationIdAndLeftAtIsNull(UUID conversationId);
 
-    /** Active member user ids for one conversation, for notification fan-out recipient lookup. */
+    /**
+     * Active member user ids for one conversation whose account still exists (not soft-deleted),
+     * for notification fan-out recipient lookup.
+     */
     @Query(
-            "SELECT p.id.userId FROM ConversationParticipant p "
-                    + "WHERE p.id.conversationId = :conversationId AND p.leftAt IS NULL")
+            value =
+                    "SELECT p.user_id FROM conversation_participants p "
+                            + "JOIN users u ON u.id = p.user_id "
+                            + "WHERE p.conversation_id = :conversationId AND p.left_at IS NULL "
+                            + "AND u.deleted_at IS NULL",
+            nativeQuery = true)
     List<UUID> findActiveUserIdsByConversationId(@Param("conversationId") UUID conversationId);
 }

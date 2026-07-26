@@ -19,7 +19,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 - Unit coverage for the WebSocket connection handshake authentication and for the per-conversation subscription authorization guard, including rejection of a non-participant, a departed participant, and an unauthenticated connection.
+- Regression coverage confirming a deleted account is excluded from message notification fan-out.
 - Unit and end-to-end integration coverage for message notification fan-out, including suppression for a departed participant, a blocked recipient, and a recipient with message notifications disabled, and duplicate-event handling.
+- Regression coverage rejecting a spoofed media asset reference, a non-published shared post, and an expired or deleted shared story in a sent message.
 - Unit coverage for message send validation and gating, idempotent retry and conflict handling, history pagination, sender-only delete, and read-state tracking.
 - End-to-end integration coverage for sending each message type, idempotent replay, history pagination, delete, and read-state endpoints.
 - Regression coverage for concurrent attempts to start a 1-1 conversation with the same user, asserting exactly one conversation results.
@@ -29,6 +31,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - End-to-end integration coverage for the new conversation endpoints, covering creation, deduplication, listing, group management, and membership changes.
 
 ### Fixed
+- A message-notification event that permanently fails or exhausts its retries is now routed to the dead-letter queue by the broker instead of being acknowledged as successfully processed.
+- Sending a message no longer leaves the response's created-at timestamp null.
+- Sharing an expired or deleted story into a message is now rejected instead of creating a reference the recipient can no longer view.
+- Sharing a draft, removed, or already-deleted post into a message is now rejected instead of creating a reference the recipient cannot access.
+- The message-sent and message-deleted events now carry the timestamp of the action, which the notification and real-time delivery consumers require.
 - Conversation creation, detail, and list responses now correctly report whether a conversation is a group instead of always reporting false.
 - Removing the last active admin from a group conversation (including the admin removing themselves) now automatically promotes a replacement admin, matching the existing behavior when an admin leaves voluntarily.
 - Paginating the conversation list past a conversation with no messages yet no longer returns a 500 error.
@@ -37,6 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 - A WebSocket subscription to a conversation's live message feed is rejected unless the subscriber is an active participant of that conversation.
+- A deleted account no longer receives a message notification.
+- Referencing another user's media asset in an image or video message is now rejected instead of accepting any existing asset ID.
 - Two concurrent requests to start a 1-1 conversation with the same user can no longer create duplicate conversations; the request is now serialized and backed by a database uniqueness constraint.
 - The follower and following list endpoints now reject an out-of-range limit or an oversized cursor with 400 instead of silently clamping the value.
 - The resend email verification endpoint now normalizes its response time to a floor, so a registered address can no longer be distinguished from an unregistered one by response latency.
