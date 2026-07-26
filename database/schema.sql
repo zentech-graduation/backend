@@ -810,6 +810,10 @@ CREATE INDEX idx_comments_post_root     ON comments (post_id, created_at ASC)
     WHERE parent_id IS NULL AND deleted_at IS NULL;
 CREATE INDEX idx_comments_parent        ON comments (parent_id, created_at ASC)
     WHERE parent_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX idx_comments_post_root_id  ON comments (post_id, created_at DESC, id DESC)
+    WHERE parent_id IS NULL AND deleted_at IS NULL;
+CREATE INDEX idx_comments_parent_id     ON comments (parent_id, created_at DESC, id DESC)
+    WHERE parent_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX idx_comments_root          ON comments (root_id)
     WHERE root_id IS NOT NULL;
 CREATE INDEX idx_comments_user          ON comments (user_id);

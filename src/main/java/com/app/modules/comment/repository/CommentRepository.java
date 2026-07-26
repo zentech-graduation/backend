@@ -61,29 +61,40 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
      *
      * @param postId post whose comments are listed
      * @param pageable page size carrier (page number is always 0 for keyset paging)
-     * @return top-level approved comments ordered by {@code created_at} descending
+     * @return top-level approved comments ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT c FROM Comment c WHERE c.postId = :postId "
-                    + "AND c.parentId IS NULL AND c.moderationStatus = 'approved' "
-                    + "ORDER BY c.createdAt DESC")
+            value =
+                    "SELECT * FROM comments WHERE post_id = :postId AND parent_id IS NULL "
+                            + "AND moderation_status = 'approved' AND deleted_at IS NULL "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
     List<Comment> findFirstTopLevel(@Param("postId") UUID postId, Pageable pageable);
 
     /**
-     * Keyset page of approved top-level comments older than the cursor, newest first.
+     * Keyset page of approved top-level comments strictly after the cursor tuple, newest first.
+     *
+     * <p>The {@code (created_at, id)} row-value comparison seeks directly to the cursor position
+     * and never drops comments sharing a boundary {@code created_at}. Served exactly by {@code
+     * idx_comments_post_root_id} (V36).
      *
      * @param postId post whose comments are listed
-     * @param cursor exclusive upper bound on {@code created_at}; never null
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code created_at}; never null
      * @param pageable page size carrier
-     * @return top-level approved comments ordered by {@code created_at} descending
+     * @return top-level approved comments ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT c FROM Comment c WHERE c.postId = :postId "
-                    + "AND c.parentId IS NULL AND c.moderationStatus = 'approved' "
-                    + "AND c.createdAt < :cursor ORDER BY c.createdAt DESC")
+            value =
+                    "SELECT * FROM comments WHERE post_id = :postId AND parent_id IS NULL "
+                            + "AND moderation_status = 'approved' AND deleted_at IS NULL "
+                            + "AND (created_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
     List<Comment> findTopLevelBefore(
             @Param("postId") UUID postId,
-            @Param("cursor") OffsetDateTime cursor,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
             Pageable pageable);
 
     /**
@@ -91,29 +102,40 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
      *
      * @param parentId parent comment whose direct replies are listed
      * @param pageable page size carrier
-     * @return approved direct replies ordered by {@code created_at} descending
+     * @return approved direct replies ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT c FROM Comment c WHERE c.parentId = :parentId "
-                    + "AND c.moderationStatus = 'approved' "
-                    + "ORDER BY c.createdAt DESC")
+            value =
+                    "SELECT * FROM comments WHERE parent_id = :parentId "
+                            + "AND moderation_status = 'approved' AND deleted_at IS NULL "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
     List<Comment> findFirstReplies(@Param("parentId") UUID parentId, Pageable pageable);
 
     /**
-     * Keyset page of approved direct replies older than the cursor, newest first.
+     * Keyset page of approved direct replies strictly after the cursor tuple, newest first.
+     *
+     * <p>The {@code (created_at, id)} row-value comparison seeks directly to the cursor position
+     * and never drops replies sharing a boundary {@code created_at}. Served exactly by {@code
+     * idx_comments_parent_id} (V36).
      *
      * @param parentId parent comment whose direct replies are listed
-     * @param cursor exclusive upper bound on {@code created_at}; never null
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code created_at}; never null
      * @param pageable page size carrier
-     * @return approved direct replies ordered by {@code created_at} descending
+     * @return approved direct replies ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT c FROM Comment c WHERE c.parentId = :parentId "
-                    + "AND c.moderationStatus = 'approved' "
-                    + "AND c.createdAt < :cursor ORDER BY c.createdAt DESC")
+            value =
+                    "SELECT * FROM comments WHERE parent_id = :parentId "
+                            + "AND moderation_status = 'approved' AND deleted_at IS NULL "
+                            + "AND (created_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
     List<Comment> findRepliesBefore(
             @Param("parentId") UUID parentId,
-            @Param("cursor") OffsetDateTime cursor,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
             Pageable pageable);
 
     /**
