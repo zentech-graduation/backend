@@ -19,6 +19,8 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.entity.Post;
@@ -186,7 +188,8 @@ public class PostSearchServiceImpl implements PostSearchService {
     }
 
     private static String encodeCursor(int offset) {
-        return Base64.getEncoder()
+        return Base64.getUrlEncoder()
+                .withoutPadding()
                 .encodeToString(Integer.toString(offset).getBytes(StandardCharsets.UTF_8));
     }
 
@@ -195,11 +198,16 @@ public class PostSearchServiceImpl implements PostSearchService {
             return 0;
         }
         try {
-            return Integer.parseInt(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (IllegalArgumentException e) {
-            // Malformed cursor → start from the first page rather than failing the request.
-            return 0;
+            int offset =
+                    Integer.parseInt(
+                            new String(
+                                    Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8));
+            if (offset < 0) {
+                throw new NumberFormatException("negative offset");
+            }
+            return offset;
+        } catch (RuntimeException e) {
+            throw new AppException(ApiErrorCode.INVALID_CURSOR);
         }
     }
 
