@@ -16,15 +16,20 @@ import org.springframework.stereotype.Component;
 
 import com.app.common.security.user.UserPrincipal;
 import com.app.modules.message.repository.ConversationParticipantRepository;
+import com.app.modules.message.repository.MessageUserRepository;
+import com.app.modules.users.enums.UserStatus;
 
 /**
  * Enforces active-participant membership on every STOMP SUBSCRIBE to a conversation topic.
  *
  * <p>The destination encodes the conversation id ({@code
  * /topic/conversations.{conversationId}.messages}); the subscription is rejected unless the
- * handshake principal is an active (not left) participant of that conversation. This is the sole
- * authorization boundary for live message delivery - a rejected check must throw, never silently
- * pass the frame through.
+ * handshake principal is a currently-active account and an active (not left) participant of that
+ * conversation. The account is re-checked here, not only at handshake time, because a long-lived
+ * WebSocket connection can survive the account being banned, suspended, deactivated, or deleted
+ * after the connection was already established but before a later SUBSCRIBE on the same session.
+ * This is the sole authorization boundary for live message delivery - a rejected check must throw,
+ * never silently pass the frame through.
  */
 @Component
 @ConditionalOnProperty(prefix = "app.message.live", name = "enabled", havingValue = "true")
@@ -34,10 +39,13 @@ public class MessageWebSocketAuthInterceptor implements ChannelInterceptor {
             Pattern.compile("/topic/conversations\\.([0-9a-fA-F\\-]{36})\\.messages");
 
     private final ConversationParticipantRepository participantRepository;
+    private final MessageUserRepository userRepository;
 
     public MessageWebSocketAuthInterceptor(
-            ConversationParticipantRepository participantRepository) {
+            ConversationParticipantRepository participantRepository,
+            MessageUserRepository userRepository) {
         this.participantRepository = participantRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -57,6 +65,9 @@ public class MessageWebSocketAuthInterceptor implements ChannelInterceptor {
         UUID conversationId = UUID.fromString(matcher.group(1));
         UUID viewerId = resolveViewer(accessor);
         if (viewerId == null
+                || userRepository
+                        .findByIdAndDeletedAtIsNullAndStatus(viewerId, UserStatus.ACTIVE)
+                        .isEmpty()
                 || !participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, viewerId)) {
             throw new MessageDeliveryException(message, "Subscription not permitted");

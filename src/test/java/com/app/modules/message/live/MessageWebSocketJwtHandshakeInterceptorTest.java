@@ -10,6 +10,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -26,12 +27,16 @@ import com.app.common.exception.AppException;
 import com.app.common.security.jwt.JwtClaims;
 import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.common.security.service.TokenBlacklistService;
+import com.app.modules.message.repository.MessageUserRepository;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserStatus;
 
 @ExtendWith(MockitoExtension.class)
 class MessageWebSocketJwtHandshakeInterceptorTest {
 
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private TokenBlacklistService tokenBlacklistService;
+    @Mock private MessageUserRepository userRepository;
 
     private MessageWebSocketJwtHandshakeInterceptor interceptor;
 
@@ -42,14 +47,17 @@ class MessageWebSocketJwtHandshakeInterceptorTest {
     void setUp() {
         interceptor =
                 new MessageWebSocketJwtHandshakeInterceptor(
-                        jwtTokenProvider, tokenBlacklistService);
+                        jwtTokenProvider, tokenBlacklistService, userRepository);
     }
 
     @Test
     void handshake_validNonBlacklistedToken_returnsTrue() throws Exception {
-        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "user", JTI, Instant.now());
+        UUID userId = UUID.randomUUID();
+        JwtClaims claims = new JwtClaims(userId, "user", JTI, Instant.now());
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
+        when(userRepository.findByIdAndDeletedAtIsNullAndStatus(userId, UserStatus.ACTIVE))
+                .thenReturn(Optional.of(activeUser(userId)));
 
         ServerHttpRequest request = requestWithToken(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
@@ -66,6 +74,26 @@ class MessageWebSocketJwtHandshakeInterceptorTest {
         JwtClaims claims = new JwtClaims(UUID.randomUUID(), "user", JTI, Instant.now());
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(true);
+
+        ServerHttpRequest request = requestWithToken(TOKEN);
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+
+        boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
+
+        assertThat(result).isFalse();
+        verify(response).setStatusCode(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void handshake_bannedOrDeletedAccount_returnsFalse() throws Exception {
+        UUID userId = UUID.randomUUID();
+        JwtClaims claims = new JwtClaims(userId, "user", JTI, Instant.now());
+        when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
+        when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
+        // A previously-issued, still-unexpired, non-blacklisted token must not be enough on its
+        // own once the account is no longer active or no longer exists.
+        when(userRepository.findByIdAndDeletedAtIsNullAndStatus(userId, UserStatus.ACTIVE))
+                .thenReturn(Optional.empty());
 
         ServerHttpRequest request = requestWithToken(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
@@ -104,5 +132,9 @@ class MessageWebSocketJwtHandshakeInterceptorTest {
         ServerHttpRequest request = mock(ServerHttpRequest.class);
         when(request.getURI()).thenReturn(URI.create("ws://localhost/ws/messages?token=" + token));
         return request;
+    }
+
+    private static User activeUser(UUID id) {
+        return User.builder().id(id).status(UserStatus.ACTIVE).build();
     }
 }

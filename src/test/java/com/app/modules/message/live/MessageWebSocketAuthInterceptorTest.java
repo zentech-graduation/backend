@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -25,24 +26,29 @@ import org.springframework.messaging.support.MessageBuilder;
 
 import com.app.common.security.user.UserPrincipal;
 import com.app.modules.message.repository.ConversationParticipantRepository;
+import com.app.modules.message.repository.MessageUserRepository;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserStatus;
 
 @ExtendWith(MockitoExtension.class)
 class MessageWebSocketAuthInterceptorTest {
 
     @Mock private ConversationParticipantRepository participantRepository;
+    @Mock private MessageUserRepository userRepository;
     @Mock private MessageChannel channel;
 
     private MessageWebSocketAuthInterceptor interceptor;
 
     @BeforeEach
     void setUp() {
-        interceptor = new MessageWebSocketAuthInterceptor(participantRepository);
+        interceptor = new MessageWebSocketAuthInterceptor(participantRepository, userRepository);
     }
 
     @Test
     void preSend_activeParticipantSubscribing_passesThroughUnchanged() {
         UUID conversationId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
+        stubActiveAccount(userId);
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, userId))
                 .thenReturn(true);
@@ -57,6 +63,7 @@ class MessageWebSocketAuthInterceptorTest {
     void preSend_nonParticipantSubscribing_throwsMessageDeliveryException() {
         UUID conversationId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
+        stubActiveAccount(userId);
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, userId))
                 .thenReturn(false);
@@ -70,6 +77,7 @@ class MessageWebSocketAuthInterceptorTest {
     void preSend_leftParticipantSubscribing_throwsMessageDeliveryException() {
         UUID conversationId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
+        stubActiveAccount(userId);
         // A participant who left is not "active"; the existence check (which filters on
         // left_at IS NULL) correctly returns false for them, same as a stranger.
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
@@ -79,6 +87,23 @@ class MessageWebSocketAuthInterceptorTest {
 
         assertThatThrownBy(() -> interceptor.preSend(message, channel))
                 .isInstanceOf(MessageDeliveryException.class);
+    }
+
+    @Test
+    void preSend_softDeletedOrBannedAccountSubscribing_throwsMessageDeliveryException() {
+        UUID conversationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        // The account no longer being active/live must reject the SUBSCRIBE even though the
+        // participant row itself is still active - this is the gap a stale but still-open
+        // WebSocket session (from before the account was banned/deleted) would otherwise exploit.
+        when(userRepository.findByIdAndDeletedAtIsNullAndStatus(userId, UserStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+        Message<?> message = subscribeMessage(conversationId, userId);
+
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        verify(participantRepository, never())
+                .existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(any(), any());
     }
 
     @Test
@@ -94,6 +119,7 @@ class MessageWebSocketAuthInterceptorTest {
         assertThat(result).isSameAs(message);
         verify(participantRepository, never())
                 .existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(any(), any());
+        verify(userRepository, never()).findByIdAndDeletedAtIsNullAndStatus(any(), any());
     }
 
     @Test
@@ -109,6 +135,7 @@ class MessageWebSocketAuthInterceptorTest {
         assertThat(result).isSameAs(message);
         verify(participantRepository, never())
                 .existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(any(), any());
+        verify(userRepository, never()).findByIdAndDeletedAtIsNullAndStatus(any(), any());
     }
 
     @Test
@@ -124,6 +151,13 @@ class MessageWebSocketAuthInterceptorTest {
                 .isInstanceOf(MessageDeliveryException.class);
         verify(participantRepository, never())
                 .existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(any(), any());
+        verify(userRepository, never()).findByIdAndDeletedAtIsNullAndStatus(any(), any());
+    }
+
+    private void stubActiveAccount(UUID userId) {
+        when(userRepository.findByIdAndDeletedAtIsNullAndStatus(userId, UserStatus.ACTIVE))
+                .thenReturn(
+                        Optional.of(User.builder().id(userId).status(UserStatus.ACTIVE).build()));
     }
 
     private static Message<?> subscribeMessage(UUID conversationId, UUID userId) {
