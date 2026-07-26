@@ -108,6 +108,20 @@ class TokenPrincipalResolverImplTest {
     }
 
     @Test
+    void resolve_deactivatedUser_returnsEmpty() {
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
+        UserSecurityProjection projection = buildProjection(UserStatus.DEACTIVATED);
+        when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
+        when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(projection));
+
+        Optional<UserPrincipal> result = resolver.resolve(TOKEN);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void resolve_userNotFoundOrSoftDeleted_returnsEmpty() {
         JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
