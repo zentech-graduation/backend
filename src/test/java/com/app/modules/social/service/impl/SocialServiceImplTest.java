@@ -417,7 +417,7 @@ class SocialServiceImplTest {
     }
 
     @Test
-    void getFollowers_invalidCursor_throwsBadRequest() {
+    void getFollowers_invalidCursor_throwsInvalidCursor() {
         UUID viewer = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
@@ -427,7 +427,7 @@ class SocialServiceImplTest {
         assertThatThrownBy(() -> service.getFollowers(target, viewer, "!!!not-base64!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test
@@ -437,8 +437,7 @@ class SocialServiceImplTest {
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
                 .thenReturn(Optional.of(user(target, false)));
         when(blockRepository.existsById(any())).thenReturn(false);
-        when(followRepository.findFollowersWithCursor(any(), any(), any(), any(), any()))
-                .thenReturn(List.of());
+        when(followRepository.findFirstFollowers(any(), any(), any())).thenReturn(List.of());
 
         CursorPageResponse<SocialUserSummaryResponse> page =
                 service.getFollowers(target, viewer, null, 20);
@@ -455,8 +454,7 @@ class SocialServiceImplTest {
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
                 .thenReturn(Optional.of(user(target, false)));
         when(blockRepository.existsById(any())).thenReturn(false);
-        when(followRepository.findFollowersWithCursor(any(), any(), any(), any(), any()))
-                .thenReturn(List.of(follow));
+        when(followRepository.findFirstFollowers(any(), any(), any())).thenReturn(List.of(follow));
         when(socialUserRepository.findAllByIdInAndDeletedAtIsNull(List.of(followerId)))
                 .thenReturn(List.of(user(followerId, false)));
 

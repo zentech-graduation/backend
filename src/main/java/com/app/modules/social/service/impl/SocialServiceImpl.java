@@ -2,8 +2,6 @@ package com.app.modules.social.service.impl;
 
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -20,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
@@ -234,13 +235,19 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Follow> follows =
-                followRepository.findFollowersWithCursor(
-                        targetUserId, currentUserId, FollowStatus.ACCEPTED, cursorTime, pageable);
+                decoded == null
+                        ? followRepository.findFirstFollowers(targetUserId, currentUserId, pageable)
+                        : followRepository.findFollowersBefore(
+                                targetUserId,
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
 
         boolean hasNextPage = follows.size() > size;
 
@@ -266,8 +273,12 @@ public class SocialServiceImpl implements SocialService {
                         .map(this::toSocialUserSummaryResponse)
                         .toList();
 
-        String startCursor = encodeCursor(follows.get(0).getCreatedAt());
-        String endCursor = encodeCursor(follows.get(follows.size() - 1).getCreatedAt());
+        Follow firstFollow = follows.get(0);
+        Follow lastFollow = follows.get(follows.size() - 1);
+        String startCursor =
+                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowerId());
+        String endCursor =
+                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowerId());
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -286,13 +297,19 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Follow> follows =
-                followRepository.findFollowingWithCursor(
-                        targetUserId, currentUserId, FollowStatus.ACCEPTED, cursorTime, pageable);
+                decoded == null
+                        ? followRepository.findFirstFollowing(targetUserId, currentUserId, pageable)
+                        : followRepository.findFollowingBefore(
+                                targetUserId,
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
 
         boolean hasNextPage = follows.size() > size;
 
@@ -318,8 +335,12 @@ public class SocialServiceImpl implements SocialService {
                         .map(this::toSocialUserSummaryResponse)
                         .toList();
 
-        String startCursor = encodeCursor(follows.get(0).getCreatedAt());
-        String endCursor = encodeCursor(follows.get(follows.size() - 1).getCreatedAt());
+        Follow firstFollow = follows.get(0);
+        Follow lastFollow = follows.get(follows.size() - 1);
+        String startCursor =
+                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowingId());
+        String endCursor =
+                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowingId());
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -428,26 +449,14 @@ public class SocialServiceImpl implements SocialService {
         return limit > 100 ? 100 : (limit < 1 ? 20 : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID tiebreaker) {
+        if (time == null || tiebreaker == null) {
             return null;
         }
-
-        return Base64.getEncoder().encodeToString(time.toString().getBytes());
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker));
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            // Return a sentinel far in the future so the query condition `createdAt < :cursor`
-            // matches all rows on the first page without passing an untyped null to JDBC.
-            return OffsetDateTime.now(ZoneOffset.UTC).plusYears(100);
-        }
-
-        try {
-            String decoded = new String(Base64.getDecoder().decode(cursor));
-            return OffsetDateTime.parse(decoded);
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 }

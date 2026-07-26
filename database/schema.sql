@@ -768,6 +768,10 @@ CREATE INDEX idx_users_fts              ON users USING gin (
 -- follows
 CREATE INDEX idx_follows_following      ON follows (following_id, status, created_at DESC);
 CREATE INDEX idx_follows_follower       ON follows (follower_id, status, created_at DESC);
+CREATE INDEX idx_follows_following_created_follower
+    ON follows (following_id, status, created_at DESC, follower_id DESC);
+CREATE INDEX idx_follows_follower_created_following
+    ON follows (follower_id, status, created_at DESC, following_id DESC);
 
 -- blocks
 CREATE INDEX idx_blocks_blocker         ON blocks (blocker_id);
