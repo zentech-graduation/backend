@@ -19,7 +19,6 @@ import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.inbox.service.ProcessedMessageService;
-import com.app.common.messaging.DeadLetterPublisher;
 import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.messaging.exception.PermanentMessageException;
@@ -36,7 +35,9 @@ import com.rabbitmq.client.Channel;
  * from the event {@code data} payload, not from the aggregate id. {@code
  * NotificationService.create} already suppresses self-notifications, blocked actors, and
  * toggled-off preferences (though {@code STORY_VIEW} has no toggle), so no extra guards are applied
- * here. Uses manual acknowledgement with bounded retry and dead-letter routing.
+ * here. Uses manual acknowledgement with bounded retry; a permanent or retry-exhausted failure
+ * nacks without requeue so the broker routes the message to the dead-letter queue per the
+ * topology's declared policy.
  */
 @Component
 @ConditionalOnProperty(
@@ -55,19 +56,16 @@ public class StoryNotificationConsumer {
     private final ProcessedMessageService processedMessageService;
     private final NotificationService notificationService;
     private final ConsumerRetryProperties retryProperties;
-    private final DeadLetterPublisher deadLetterPublisher;
 
     public StoryNotificationConsumer(
             DomainEventMessageParser parser,
             ProcessedMessageService processedMessageService,
             NotificationService notificationService,
-            ConsumerRetryProperties retryProperties,
-            DeadLetterPublisher deadLetterPublisher) {
+            ConsumerRetryProperties retryProperties) {
         this.parser = parser;
         this.processedMessageService = processedMessageService;
         this.notificationService = notificationService;
         this.retryProperties = retryProperties;
-        this.deadLetterPublisher = deadLetterPublisher;
     }
 
     @RabbitListener(queues = RabbitMqTopologyConfig.STORY_NOTIFICATION_QUEUE)
@@ -79,9 +77,15 @@ public class StoryNotificationConsumer {
             processWithRetry(event);
             channel.basicAck(deliveryTag, false);
         } catch (PermanentMessageException ex) {
-            routeToDlqOrRequeue(message, channel, deliveryTag, ex);
+            log.warn(
+                    "Story notification event permanently invalid, dead-lettering: {}",
+                    ex.getMessage());
+            channel.basicNack(deliveryTag, false, false);
         } catch (RuntimeException ex) {
-            routeToDlqOrRequeue(message, channel, deliveryTag, ex);
+            log.warn(
+                    "Story notification event failed after exhausting retries, dead-lettering: {}",
+                    ex.getMessage());
+            channel.basicNack(deliveryTag, false, false);
         }
     }
 
@@ -142,23 +146,6 @@ public class StoryNotificationConsumer {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted during story notification retry backoff", ex);
-        }
-    }
-
-    private void routeToDlqOrRequeue(
-            Message message, Channel channel, long deliveryTag, RuntimeException failure)
-            throws IOException {
-        try {
-            deadLetterPublisher.publish(
-                    message,
-                    RabbitMqTopologyConfig.STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY,
-                    failure.getMessage());
-            channel.basicAck(deliveryTag, false);
-        } catch (RuntimeException dlqFailure) {
-            log.warn(
-                    "Failed to publish story notification event to DLQ; requeueing: {}",
-                    dlqFailure.getMessage());
-            channel.basicNack(deliveryTag, false, true);
         }
     }
 

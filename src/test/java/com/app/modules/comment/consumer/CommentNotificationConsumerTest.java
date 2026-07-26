@@ -1,4 +1,4 @@
-package com.app.modules.story.consumer;
+package com.app.modules.comment.consumer;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -30,24 +30,25 @@ import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
+import com.app.modules.comment.messaging.CommentEventTypes;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.service.NotificationService;
-import com.app.modules.story.messaging.StoryEventTypes;
 import com.rabbitmq.client.Channel;
 
 @ExtendWith(MockitoExtension.class)
-class StoryNotificationConsumerTest {
+class CommentNotificationConsumerTest {
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID VIEWER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID OWNER_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
-    private static final UUID STORY_ID = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    private static final UUID ACTOR_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID POST_OWNER_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000003");
+    private static final UUID COMMENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000004");
 
     @Mock private ProcessedMessageService processedMessageService;
     @Mock private NotificationService notificationService;
     @Mock private Channel channel;
 
-    private StoryNotificationConsumer consumer;
+    private CommentNotificationConsumer consumer;
 
     @BeforeEach
     void setUp() {
@@ -57,7 +58,7 @@ class StoryNotificationConsumerTest {
         retryProperties.setMaxAttempts(1);
         retryProperties.setRetryBackoffs(List.of(Duration.ZERO));
         consumer =
-                new StoryNotificationConsumer(
+                new CommentNotificationConsumer(
                         new DomainEventMessageParser(),
                         processedMessageService,
                         notificationService,
@@ -65,7 +66,7 @@ class StoryNotificationConsumerTest {
     }
 
     @Test
-    void consume_storyViewed_createsStoryViewNotification() throws Exception {
+    void consume_topLevelCommentCreated_createsCommentPostNotification() throws Exception {
         Message message = message(envelope());
         when(processedMessageService.processOnce(any(), any(), any(), any()))
                 .thenAnswer(
@@ -77,7 +78,12 @@ class StoryNotificationConsumerTest {
         consumer.consume(message, channel);
 
         verify(notificationService)
-                .create(VIEWER_ID, OWNER_ID, NotificationType.STORY_VIEW, "story", STORY_ID);
+                .create(
+                        ACTOR_ID,
+                        POST_OWNER_ID,
+                        NotificationType.COMMENT_POST,
+                        "comment",
+                        COMMENT_ID);
         verify(channel).basicAck(1L, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
@@ -95,17 +101,17 @@ class StoryNotificationConsumerTest {
     }
 
     @Test
-    void consume_missingStoryId_nacksWithoutRequeue() throws Exception {
+    void consume_missingCommentId_nacksWithoutRequeue() throws Exception {
         Message message =
                 message(
                         new DomainEventEnvelope(
                                 EVENT_ID,
-                                StoryEventTypes.STORY_VIEWED_V1,
+                                CommentEventTypes.COMMENT_CREATED_V1,
                                 OffsetDateTime.now(ZoneOffset.UTC),
-                                VIEWER_ID,
-                                "story",
-                                STORY_ID,
-                                Map.of("ownerId", OWNER_ID.toString())));
+                                ACTOR_ID,
+                                "comment",
+                                COMMENT_ID,
+                                Map.of("postOwnerId", POST_OWNER_ID.toString(), "depth", 0)));
 
         consumer.consume(message, channel);
 
@@ -114,25 +120,6 @@ class StoryNotificationConsumerTest {
         verify(channel).basicNack(1L, false, false);
         verify(channel, never()).basicAck(1L, false);
         verify(notificationService, never()).create(any(), any(), any(), any(), any());
-    }
-
-    @Test
-    void consume_missingOwnerId_nacksWithoutRequeue() throws Exception {
-        Message message =
-                message(
-                        new DomainEventEnvelope(
-                                EVENT_ID,
-                                StoryEventTypes.STORY_VIEWED_V1,
-                                OffsetDateTime.now(ZoneOffset.UTC),
-                                VIEWER_ID,
-                                "story",
-                                STORY_ID,
-                                Map.of("storyId", STORY_ID.toString())));
-
-        consumer.consume(message, channel);
-
-        verify(channel).basicNack(1L, false, false);
-        verify(channel, never()).basicAck(1L, false);
     }
 
     @Test
@@ -157,11 +144,17 @@ class StoryNotificationConsumerTest {
     private DomainEventEnvelope envelope() {
         return new DomainEventEnvelope(
                 EVENT_ID,
-                StoryEventTypes.STORY_VIEWED_V1,
+                CommentEventTypes.COMMENT_CREATED_V1,
                 OffsetDateTime.now(ZoneOffset.UTC),
-                VIEWER_ID,
-                "story",
-                STORY_ID,
-                Map.of("storyId", STORY_ID.toString(), "ownerId", OWNER_ID.toString()));
+                ACTOR_ID,
+                "comment",
+                COMMENT_ID,
+                Map.of(
+                        "commentId",
+                        COMMENT_ID.toString(),
+                        "postOwnerId",
+                        POST_OWNER_ID.toString(),
+                        "depth",
+                        0));
     }
 }
