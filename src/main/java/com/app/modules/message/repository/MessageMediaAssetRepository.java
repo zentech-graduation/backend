@@ -15,4 +15,8 @@ import com.app.modules.media.entity.MediaAsset;
  * validate that an image/video message's referenced asset exists.
  */
 @Repository
-public interface MessageMediaAssetRepository extends JpaRepository<MediaAsset, UUID> {}
+public interface MessageMediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
+
+    /** True only for an asset that exists and belongs to the given owner. */
+    boolean existsByIdAndUserId(UUID id, UUID userId);
+}

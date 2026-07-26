@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -46,6 +47,7 @@ import com.app.modules.message.repository.MessageMediaAssetRepository;
 import com.app.modules.message.repository.MessagePostRepository;
 import com.app.modules.message.repository.MessageRepository;
 import com.app.modules.message.repository.MessageStoryRepository;
+import com.app.modules.post.enums.PostStatus;
 import com.app.modules.social.service.SocialService;
 
 import tools.jackson.databind.ObjectMapper;
@@ -204,7 +206,7 @@ class MessageServiceImplTest {
         UUID conversationId = UUID.randomUUID();
         UUID mediaAssetId = UUID.randomUUID();
         stubActiveGroupParticipant(conversationId, actorId);
-        when(mediaAssetRepository.existsById(mediaAssetId)).thenReturn(false);
+        when(mediaAssetRepository.existsByIdAndUserId(mediaAssetId, actorId)).thenReturn(false);
         SendMessageRequest request =
                 new SendMessageRequest(MessageType.IMAGE, null, mediaAssetId, null, null, null);
 
@@ -220,7 +222,8 @@ class MessageServiceImplTest {
         UUID conversationId = UUID.randomUUID();
         UUID postId = UUID.randomUUID();
         stubActiveGroupParticipant(conversationId, actorId);
-        when(postRepository.existsById(postId)).thenReturn(false);
+        when(postRepository.existsByIdAndDeletedAtIsNullAndStatus(postId, PostStatus.PUBLISHED))
+                .thenReturn(false);
         SendMessageRequest request =
                 new SendMessageRequest(MessageType.POST_SHARE, null, null, postId, null, null);
 
@@ -228,6 +231,7 @@ class MessageServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.MESSAGE_INVALID_PAYLOAD);
+        verify(postRepository).existsByIdAndDeletedAtIsNullAndStatus(postId, PostStatus.PUBLISHED);
     }
 
     @Test
@@ -236,7 +240,8 @@ class MessageServiceImplTest {
         UUID conversationId = UUID.randomUUID();
         UUID storyId = UUID.randomUUID();
         stubActiveGroupParticipant(conversationId, actorId);
-        when(storyRepository.existsById(storyId)).thenReturn(false);
+        when(storyRepository.existsByIdAndDeletedAtIsNullAndExpiresAtAfter(eq(storyId), any()))
+                .thenReturn(false);
         SendMessageRequest request =
                 new SendMessageRequest(MessageType.STORY_SHARE, null, null, null, storyId, null);
 
@@ -268,6 +273,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
+        OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
         stubActiveGroupParticipant(conversationId, actorId);
         Message saved =
                 Message.builder()
@@ -276,14 +282,17 @@ class MessageServiceImplTest {
                         .senderId(actorId)
                         .messageType(MessageType.TEXT)
                         .content("hello")
+                        .createdAt(createdAt)
                         .build();
-        when(messageRepository.save(any())).thenReturn(saved);
+        when(messageRepository.saveAndFlush(any())).thenReturn(saved);
 
         MessageResponse response =
                 service.sendMessage(actorId, conversationId, textRequest("hello"), null);
 
         assertThat(response).isNotNull();
         assertThat(response.id()).isEqualTo(messageId);
+        // sentAt must be present: the PR#115 consumer reads it to timestamp the notification it
+        // creates from this event.
         verify(outboxService)
                 .enqueue(
                         eq(MessageEventTypes.MESSAGE_SENT_V1),
@@ -291,7 +300,7 @@ class MessageServiceImplTest {
                         eq("message"),
                         eq(messageId),
                         eq(actorId),
-                        anyMap());
+                        argThat(data -> createdAt.toString().equals(data.get("sentAt"))));
         verify(idempotencyRepository, never()).insertIfAbsent(any(), any(), any());
     }
 
@@ -422,6 +431,8 @@ class MessageServiceImplTest {
         assertThat(message.getDeletedAt()).isNotNull();
         assertThat(message.getContent()).isNull();
         verify(messageRepository).save(message);
+        // deletedAt must be present: the PR#116 consumer reads it to timestamp the real-time
+        // WebSocket delete event it pushes to clients.
         verify(outboxService)
                 .enqueue(
                         eq(MessageEventTypes.MESSAGE_DELETED_V1),
@@ -429,7 +440,11 @@ class MessageServiceImplTest {
                         eq("message"),
                         eq(messageId),
                         eq(actorId),
-                        anyMap());
+                        argThat(
+                                data ->
+                                        message.getDeletedAt()
+                                                .toString()
+                                                .equals(data.get("deletedAt"))));
     }
 
     @Test

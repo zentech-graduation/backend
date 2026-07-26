@@ -1,5 +1,6 @@
 package com.app.modules.message.repository;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,4 +16,8 @@ import com.app.modules.story.entity.Story;
  * validate that a story-share message's referenced story exists.
  */
 @Repository
-public interface MessageStoryRepository extends JpaRepository<Story, UUID> {}
+public interface MessageStoryRepository extends JpaRepository<Story, UUID> {
+
+    /** True only for a story that exists, is not soft-deleted, and has not yet expired. */
+    boolean existsByIdAndDeletedAtIsNullAndExpiresAtAfter(UUID id, OffsetDateTime now);
+}
