@@ -779,6 +779,8 @@ CREATE INDEX idx_media_assets_user      ON media_assets (user_id, created_at DES
 -- posts
 CREATE INDEX idx_posts_user_feed        ON posts (user_id, created_at DESC)
     WHERE status = 'published' AND deleted_at IS NULL;
+CREATE INDEX idx_posts_user_created_id  ON posts (user_id, created_at DESC, id DESC)
+    WHERE status = 'published' AND deleted_at IS NULL;
 CREATE INDEX idx_posts_created_at       ON posts (created_at DESC)
     WHERE status = 'published' AND deleted_at IS NULL;
 CREATE INDEX idx_posts_status           ON posts (status) WHERE deleted_at IS NULL;
@@ -796,6 +798,8 @@ CREATE INDEX idx_post_saves_user        ON post_saves (user_id, created_at DESC)
 -- post_edit_history
 CREATE INDEX idx_post_edit_history_post_edited
     ON post_edit_history (post_id, edited_at DESC);
+CREATE INDEX idx_post_edit_history_post_edited_id
+    ON post_edit_history (post_id, edited_at DESC, id DESC);
 
 -- comments
 CREATE INDEX idx_comments_post_root     ON comments (post_id, created_at ASC)
