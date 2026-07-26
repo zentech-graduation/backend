@@ -1,9 +1,7 @@
 package com.app.modules.story.service.impl;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.response.StoryViewActionResponse;
 import com.app.modules.story.dto.response.StoryViewerResponse;
@@ -100,13 +101,16 @@ public class StoryViewServiceImpl implements StoryViewService {
             throw new AppException(ApiErrorCode.STORY_FORBIDDEN);
         }
         int pageSize = normalizeLimit(limit);
-        ViewerCursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<StoryView> views =
-                decoded.isEmpty()
+                decoded == null
                         ? storyViewRepository.findFirstViewers(storyId, page)
                         : storyViewRepository.findViewersBefore(
-                                storyId, decoded.viewedAt(), decoded.viewerId(), page);
+                                storyId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
         boolean hasNextPage = views.size() > pageSize;
         if (hasNextPage) {
             views = views.subList(0, pageSize);
@@ -150,29 +154,11 @@ public class StoryViewServiceImpl implements StoryViewService {
     }
 
     private String encodeCursor(StoryView view) {
-        String raw = view.getViewedAt() + "|" + view.getId().getViewerId();
-        return Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(view.getViewedAt()), view.getId().getViewerId()));
     }
 
-    private ViewerCursor decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return new ViewerCursor(null, null);
-        }
-        try {
-            String raw = new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8);
-            String[] parts = raw.split("\\|", 2);
-            if (parts.length != 2) {
-                throw new IllegalArgumentException("Cursor must contain viewedAt and viewerId");
-            }
-            return new ViewerCursor(OffsetDateTime.parse(parts[0]), UUID.fromString(parts[1]));
-        } catch (RuntimeException e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
-    }
-
-    private record ViewerCursor(OffsetDateTime viewedAt, UUID viewerId) {
-        boolean isEmpty() {
-            return viewedAt == null || viewerId == null;
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 }

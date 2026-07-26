@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.app.modules.story.entity.StoryView;
@@ -42,12 +43,21 @@ public interface StoryViewRepository extends JpaRepository<StoryView, StoryViewI
                     + " ORDER BY sv.viewedAt DESC, sv.id.viewerId DESC")
     List<StoryView> findFirstViewers(UUID storyId, Pageable pageable);
 
-    /** Keyset continuation of the viewer list after the {@code (viewedAt, viewerId)} cursor. */
+    /**
+     * Keyset continuation of the viewer list after the {@code (viewed_at, viewer_id)} cursor.
+     *
+     * <p>Native so the row-value tuple comparison seeks directly to the cursor position; served
+     * exactly by {@code idx_story_views_story_viewed_viewer} (V38).
+     */
     @Query(
-            "SELECT sv FROM StoryView sv WHERE sv.id.storyId = :storyId"
-                    + " AND (sv.viewedAt < :cursorTime"
-                    + " OR (sv.viewedAt = :cursorTime AND sv.id.viewerId < :cursorId))"
-                    + " ORDER BY sv.viewedAt DESC, sv.id.viewerId DESC")
+            value =
+                    "SELECT * FROM story_views WHERE story_id = :storyId"
+                            + " AND (viewed_at, viewer_id) < (:cursorTime, :cursorId)"
+                            + " ORDER BY viewed_at DESC, viewer_id DESC",
+            nativeQuery = true)
     List<StoryView> findViewersBefore(
-            UUID storyId, OffsetDateTime cursorTime, UUID cursorId, Pageable pageable);
+            @Param("storyId") UUID storyId,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
+            Pageable pageable);
 }

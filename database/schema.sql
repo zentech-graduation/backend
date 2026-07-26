@@ -843,6 +843,10 @@ CREATE INDEX idx_stories_user           ON stories (user_id, created_at DESC)
 CREATE INDEX idx_stories_expires        ON stories (expires_at)
     WHERE deleted_at IS NULL;  -- used by cleanup job
 
+-- story_views
+CREATE INDEX idx_story_views_story_viewed_viewer
+    ON story_views (story_id, viewed_at DESC, viewer_id DESC);
+
 -- notifications
 CREATE INDEX idx_notifications_recipient ON notifications (recipient_id, created_at DESC);
 CREATE INDEX idx_notifications_unread    ON notifications (recipient_id, created_at DESC)
