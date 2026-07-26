@@ -110,6 +110,13 @@ public final class ApiConstants {
         public static final String SEARCH = "/search";
     }
 
+    public static final class Recommendations {
+        private Recommendations() {}
+
+        public static final String ROOT = API_V1 + "/recommendations";
+        public static final String FEED = "/feed";
+    }
+
     public static final class Media {
         private Media() {}
 

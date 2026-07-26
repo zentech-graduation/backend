@@ -39,7 +39,36 @@ public record FeedPostResponse(
         @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt,
         @Schema(
                         description =
-                                "Reserved for a future ranking score; always null in the current"
-                                        + " chronological implementation. Present to keep the"
-                                        + " contract forward-compatible with ranked ordering.")
-                Double rankingScore) {}
+                                "Ranking score assigned by the recommendation feed; null in the"
+                                        + " chronological following feed.")
+                Double rankingScore) {
+
+    /**
+     * Returns a copy of this response carrying the given ranking score.
+     *
+     * @param score ranking score assigned by the recommendation pipeline; may be null
+     * @return a new instance identical to this one except for {@code rankingScore}
+     */
+    public FeedPostResponse withRankingScore(Double score) {
+        return new FeedPostResponse(
+                id,
+                userId,
+                username,
+                userDisplayName,
+                userAvatarUrl,
+                caption,
+                postType,
+                status,
+                likeCount,
+                commentCount,
+                saveCount,
+                viewCount,
+                locationName,
+                latitude,
+                longitude,
+                media,
+                createdAt,
+                updatedAt,
+                score);
+    }
+}
