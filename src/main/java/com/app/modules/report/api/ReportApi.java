@@ -117,7 +117,7 @@ public interface ReportApi {
             @RequestParam(required = false) ReportStatus status,
             @RequestParam(required = false) ReportType reportType,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Lists pending reports in FIFO order for moderator and administrator triage. */
     @Operation(
@@ -151,7 +151,7 @@ public interface ReportApi {
     @GetMapping(ApiConstants.Reports.PENDING)
     ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getPendingReports(
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Returns one report for moderator or administrator review. */
     @Operation(
