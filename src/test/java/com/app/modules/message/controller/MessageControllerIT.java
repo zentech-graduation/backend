@@ -531,6 +531,67 @@ class MessageControllerIT {
     }
 
     @Test
+    void sendMessage_image_withAnotherUsersMediaAsset_returnsUnprocessableEntity() {
+        TestUser alice = registerUser("send_image_owner_alice");
+        TestUser bob = registerUser("send_image_spoof_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID aliceMediaAssetId = insertMediaAsset(alice.id(), "image");
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        bob,
+                        conversationId,
+                        Map.of(
+                                "messageType",
+                                "image",
+                                "mediaAssetId",
+                                aliceMediaAssetId.toString()),
+                        null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
+    }
+
+    @Test
+    void sendMessage_postShare_withDraftPost_returnsUnprocessableEntity() {
+        TestUser alice = registerUser("send_draft_post_alice");
+        TestUser bob = registerUser("send_draft_post_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID postId = insertPostWithStatus(alice.id(), "draft");
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "post_share", "sharedPostId", postId.toString()),
+                        null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
+    }
+
+    @Test
+    void sendMessage_storyShare_withExpiredStory_returnsUnprocessableEntity() {
+        TestUser alice = registerUser("send_expired_story_alice");
+        TestUser bob = registerUser("send_expired_story_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID mediaAssetId = insertMediaAsset(alice.id(), "image");
+        UUID storyId = insertStory(alice.id(), mediaAssetId);
+        jdbcTemplate.update(
+                "UPDATE stories SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = ?", storyId);
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "story_share", "sharedStoryId", storyId.toString()),
+                        null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
+    }
+
+    @Test
     void sendMessage_textWithoutContent_returnsUnprocessableEntity() {
         TestUser alice = registerUser("send_invalid_alice");
         TestUser bob = registerUser("send_invalid_bob");
@@ -704,12 +765,17 @@ class MessageControllerIT {
     }
 
     private UUID insertPost(UUID ownerId) {
+        return insertPostWithStatus(ownerId, "published");
+    }
+
+    private UUID insertPostWithStatus(UUID ownerId, String status) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
                 "INSERT INTO posts (id, user_id, caption, post_type, status) "
-                        + "VALUES (?, ?, 'Shared post', 'text', 'published')",
+                        + "VALUES (?, ?, 'Shared post', 'text', CAST(? AS post_status))",
                 id,
-                ownerId);
+                ownerId,
+                status);
         return id;
     }
 

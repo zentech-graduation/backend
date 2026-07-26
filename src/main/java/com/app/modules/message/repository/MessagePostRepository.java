@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import com.app.modules.post.entity.Post;
+import com.app.modules.post.enums.PostStatus;
 
 /**
  * Module-local read-only repository over the post module's {@link Post} entity.
@@ -15,4 +16,8 @@ import com.app.modules.post.entity.Post;
  * validate that a post-share message's referenced post exists.
  */
 @Repository
-public interface MessagePostRepository extends JpaRepository<Post, UUID> {}
+public interface MessagePostRepository extends JpaRepository<Post, UUID> {
+
+    /** True only for a post that exists, is not soft-deleted, and is in the given status. */
+    boolean existsByIdAndDeletedAtIsNullAndStatus(UUID id, PostStatus status);
+}

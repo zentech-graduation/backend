@@ -35,6 +35,7 @@ import com.app.modules.message.repository.MessagePostRepository;
 import com.app.modules.message.repository.MessageRepository;
 import com.app.modules.message.repository.MessageStoryRepository;
 import com.app.modules.message.service.MessageService;
+import com.app.modules.post.enums.PostStatus;
 import com.app.modules.social.service.SocialService;
 
 import tools.jackson.databind.ObjectMapper;
@@ -90,7 +91,7 @@ public class MessageServiceImpl implements MessageService {
         Conversation conversation = fetchConversation(conversationId);
         requireActiveParticipant(conversationId, actorId);
         assertNotBlockedForDirectMessage(conversation, actorId);
-        validatePayload(conversationId, request);
+        validatePayload(actorId, conversationId, request);
 
         // Reserve the idempotency key in the same transaction via ON CONFLICT DO NOTHING. A
         // duplicate key returns a clean replay/conflict instead of poisoning the transaction with a
@@ -114,8 +115,11 @@ public class MessageServiceImpl implements MessageService {
             return replayOrConflict(actorId, idempotencyKey, requestHash);
         }
 
+        // saveAndFlush forces the INSERT to execute now, so the @CreationTimestamp-generated
+        // createdAt is populated on the returned entity instead of staying null until some later
+        // flush - both the response body and the outbox payload below read it immediately.
         Message saved =
-                messageRepository.save(
+                messageRepository.saveAndFlush(
                         Message.builder()
                                 .conversationId(conversationId)
                                 .senderId(actorId)
@@ -172,6 +176,7 @@ public class MessageServiceImpl implements MessageService {
         Map<String, Object> data = new HashMap<>();
         data.put("conversationId", conversationId.toString());
         data.put("messageId", messageId.toString());
+        data.put("deletedAt", message.getDeletedAt().toString());
         outboxService.enqueue(
                 MessageEventTypes.MESSAGE_DELETED_V1,
                 MessageEventTypes.MESSAGE_DELETED_V1,
@@ -200,7 +205,7 @@ public class MessageServiceImpl implements MessageService {
         return messageRepository.countTotalUnreadForUser(actorId);
     }
 
-    private void validatePayload(UUID conversationId, SendMessageRequest request) {
+    private void validatePayload(UUID actorId, UUID conversationId, SendMessageRequest request) {
         boolean hasMedia = request.mediaAssetId() != null;
         boolean hasPost = request.sharedPostId() != null;
         boolean hasStory = request.sharedStoryId() != null;
@@ -220,7 +225,7 @@ public class MessageServiceImpl implements MessageService {
                 if (hasPost || hasStory) {
                     throw invalidPayload("Media message must not reference shared content");
                 }
-                if (!mediaAssetRepository.existsById(request.mediaAssetId())) {
+                if (!mediaAssetRepository.existsByIdAndUserId(request.mediaAssetId(), actorId)) {
                     throw invalidPayload("Media asset not found");
                 }
             }
@@ -231,7 +236,8 @@ public class MessageServiceImpl implements MessageService {
                 if (hasMedia || hasStory) {
                     throw invalidPayload("Post share must not reference media or a shared story");
                 }
-                if (!postRepository.existsById(request.sharedPostId())) {
+                if (!postRepository.existsByIdAndDeletedAtIsNullAndStatus(
+                        request.sharedPostId(), PostStatus.PUBLISHED)) {
                     throw invalidPayload("Shared post not found");
                 }
             }
@@ -242,7 +248,8 @@ public class MessageServiceImpl implements MessageService {
                 if (hasMedia || hasPost) {
                     throw invalidPayload("Story share must not reference media or a shared post");
                 }
-                if (!storyRepository.existsById(request.sharedStoryId())) {
+                if (!storyRepository.existsByIdAndDeletedAtIsNullAndExpiresAtAfter(
+                        request.sharedStoryId(), OffsetDateTime.now(ZoneOffset.UTC))) {
                     throw invalidPayload("Shared story not found");
                 }
             }
@@ -321,6 +328,7 @@ public class MessageServiceImpl implements MessageService {
         data.put("messageId", saved.getId().toString());
         data.put("senderId", actorId.toString());
         data.put("messageType", saved.getMessageType().toJson());
+        data.put("sentAt", saved.getCreatedAt().toString());
         data.put("message", response);
         outboxService.enqueue(
                 MessageEventTypes.MESSAGE_SENT_V1,
