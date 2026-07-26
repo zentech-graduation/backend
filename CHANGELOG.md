@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- A deterministic synthetic seed tool generates demo users, text posts, a follow graph, and interaction history for the recommendation demo, and can push or rebuild the Gorse dataset from the same source.
 - The Gorse recommender (v0.5.11) now runs as a dedicated service through a compose overlay, storing data in its own PostgreSQL database, secured by an API key and a loopback-bound authenticated dashboard.
 
 ### Changed
