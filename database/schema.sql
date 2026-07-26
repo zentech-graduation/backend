@@ -849,6 +849,8 @@ CREATE INDEX idx_story_views_story_viewed_viewer
 
 -- notifications
 CREATE INDEX idx_notifications_recipient ON notifications (recipient_id, created_at DESC);
+CREATE INDEX idx_notifications_recipient_created_id
+    ON notifications (recipient_id, created_at DESC, id DESC);
 CREATE INDEX idx_notifications_unread    ON notifications (recipient_id, created_at DESC)
     WHERE is_read = FALSE;
 

@@ -58,8 +58,8 @@ public interface NotificationApi {
     })
     @GetMapping
     ResponseEntity<ApiResponse<CursorPageResponse<NotificationResponse>>> listNotifications(
-            @RequestParam(required = false) UUID cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit);
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Marks one notification as read; 403 if not owned by the caller; requires a bearer JWT. */
     @Operation(summary = "Mark a notification as read")

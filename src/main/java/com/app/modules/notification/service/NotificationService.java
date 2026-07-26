@@ -62,10 +62,10 @@ public interface NotificationService {
      * descending.
      *
      * @param recipientId authenticated user's id
-     * @param cursor id of the last notification on the previous page; null for first page
-     * @param limit maximum number of items to return (max 50)
+     * @param cursor opaque cursor of the last item on the previous page; null for first page
+     * @param limit maximum number of items to return (max 100)
      * @return cursor page response containing notification items
      */
     CursorPageResponse<NotificationResponse> listNotifications(
-            UUID recipientId, UUID cursor, int limit);
+            UUID recipientId, String cursor, int limit);
 }
