@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
 
 ### Changed
+- Pagination cursors are now opaque and share a single format across every list endpoint; cursors issued by a previous version are no longer accepted.
+- The report and admin listing endpoints now name their page-size parameter `limit`, matching every other paginated endpoint.
+- The notifications endpoint maximum page size is raised from 50 to 100.
+- A malformed pagination cursor now returns a 400 error with a typed code instead of silently returning the first page.
 - A comment WebSocket handshake rejected because of a blacklisted (logged-out) token now returns the same response as every other rejection reason, with no distinguishing status code.
 - The social module's internal route constants now match the endpoints they describe; no endpoint path changed.
 - Removed unused internal path constants that described endpoints the application never served; no served endpoint changed.
@@ -19,9 +23,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Fixed
+- Cursor-paginated lists no longer drop items that share an exact creation timestamp when paging across the boundary; feeds, profile posts, likes, saves, comments, replies, followers, and following now return every item exactly once.
+- An exactly-full final page of any cursor-paginated list now correctly reports that no further page exists rather than advertising a next page that is empty.
 - A banned or suspended account can no longer complete the comment WebSocket handshake; a still-valid token now authenticates only when the account's status is active, matching the guarantee already enforced on REST requests. An already-open connection from before the status change is not affected; it remains open until its token naturally expires.
 
 ### Tests
+- Regression coverage reproducing keyset row loss on a group of rows sharing one creation timestamp and proving the tuple-cursor fix returns every row exactly once.
 - Regression coverage asserting a banned or suspended account's otherwise-valid token no longer establishes a comment WebSocket session.
 - Regression coverage proving the comment WebSocket handshake rejects a missing, malformed, wrong-secret, expired, or blacklisted token, and rejects an unauthenticated caller on the SockJS HTTP fallback transport as well as the native transport.
 - Integration tests that start a Redis container now pin an explicit blank password so a developer's local `REDIS_PASSWORD` environment variable can no longer leak into the test context and cause unrelated authentication failures.
