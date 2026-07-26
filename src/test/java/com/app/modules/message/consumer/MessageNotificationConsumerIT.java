@@ -159,6 +159,22 @@ class MessageNotificationConsumerIT {
     }
 
     @Test
+    void handle_messageSent_softDeletedRecipient_isNotNotified() throws Exception {
+        Channel channel = mock(Channel.class);
+        UUID conversationId =
+                insertGroupConversation(sender.getId(), recipient1.getId(), recipient2.getId());
+        jdbcTemplate.update("UPDATE users SET deleted_at = NOW() WHERE id = ?", recipient2.getId());
+        UUID messageId = UUID.randomUUID();
+
+        consumer.consume(
+                message(UUID.randomUUID(), sender.getId(), conversationId, messageId), channel);
+
+        List<Notification> rows = notificationRepository.findAll();
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getRecipientId()).isEqualTo(recipient1.getId());
+    }
+
+    @Test
     void handle_messageSent_blockedRecipient_isSuppressed() throws Exception {
         Channel channel = mock(Channel.class);
         UUID conversationId =

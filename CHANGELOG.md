@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Tests
+- Regression coverage confirming a deleted account is excluded from message notification fan-out.
 - Unit and end-to-end integration coverage for message notification fan-out, including suppression for a departed participant, a blocked recipient, and a recipient with message notifications disabled, and duplicate-event handling.
 - Regression coverage rejecting a spoofed media asset reference, a non-published shared post, and an expired or deleted shared story in a sent message.
 - Unit coverage for message send validation and gating, idempotent retry and conflict handling, history pagination, sender-only delete, and read-state tracking.
@@ -28,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - End-to-end integration coverage for the new conversation endpoints, covering creation, deduplication, listing, group management, and membership changes.
 
 ### Fixed
+- A message-notification event that permanently fails or exhausts its retries is now routed to the dead-letter queue by the broker instead of being acknowledged as successfully processed.
 - Sending a message no longer leaves the response's created-at timestamp null.
 - Sharing an expired or deleted story into a message is now rejected instead of creating a reference the recipient can no longer view.
 - Sharing a draft, removed, or already-deleted post into a message is now rejected instead of creating a reference the recipient cannot access.
@@ -39,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.
 
 ### Security
+- A deleted account no longer receives a message notification.
 - Referencing another user's media asset in an image or video message is now rejected instead of accepting any existing asset ID.
 - Two concurrent requests to start a 1-1 conversation with the same user can no longer create duplicate conversations; the request is now serialized and backed by a database uniqueness constraint.
 - The follower and following list endpoints now reject an out-of-range limit or an oversized cursor with 400 instead of silently clamping the value.
