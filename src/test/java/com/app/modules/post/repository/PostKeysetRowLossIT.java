@@ -22,6 +22,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.app.modules.post.entity.Post;
+import com.app.modules.post.entity.PostLike;
 
 /**
  * Reproduces and guards against keyset row loss when multiple posts share a boundary {@code
@@ -44,10 +45,15 @@ class PostKeysetRowLossIT {
             OffsetDateTime.of(2026, 1, 1, 12, 0, 0, 0, ZoneOffset.UTC);
 
     private final PostRepository postRepository;
+    private final PostLikeRepository postLikeRepository;
     private final JdbcClient jdbcClient;
 
-    PostKeysetRowLossIT(PostRepository postRepository, JdbcClient jdbcClient) {
+    PostKeysetRowLossIT(
+            PostRepository postRepository,
+            PostLikeRepository postLikeRepository,
+            JdbcClient jdbcClient) {
         this.postRepository = postRepository;
+        this.postLikeRepository = postLikeRepository;
         this.jdbcClient = jdbcClient;
     }
 
@@ -67,6 +73,32 @@ class PostKeysetRowLossIT {
         }
 
         Set<UUID> seen = pageAllUserPosts(author, 2);
+
+        assertThat(seen).hasSize(5);
+    }
+
+    @Test
+    void likes_tieGroupOnCreatedAt_pagesEveryRowExactlyOnce() {
+        UUID postOwner = insertUser("like_post_owner");
+        UUID postId = insertPostReturningId(postOwner);
+        // Five likers at one shared created_at instant; the composite-key tiebreaker is user_id.
+        for (int i = 0; i < 5; i++) {
+            insertLike(postId, insertUser("liker_" + i), SHARED_INSTANT);
+        }
+
+        Set<UUID> seen = new LinkedHashSet<>();
+        List<PostLike> page = postLikeRepository.findFirstLikers(postId, PageRequest.of(0, 2));
+        int guard = 0;
+        while (!page.isEmpty() && guard++ < 100) {
+            page.forEach(l -> seen.add(l.getId().getUserId()));
+            PostLike last = page.get(page.size() - 1);
+            page =
+                    postLikeRepository.findLikersBefore(
+                            postId,
+                            last.getCreatedAt(),
+                            last.getId().getUserId(),
+                            PageRequest.of(0, 2));
+        }
 
         assertThat(seen).hasSize(5);
     }
@@ -98,6 +130,27 @@ class PostKeysetRowLossIT {
                 .param("displayName", username)
                 .query(UUID.class)
                 .single();
+    }
+
+    private UUID insertPostReturningId(UUID userId) {
+        return jdbcClient
+                .sql(
+                        "INSERT INTO posts(user_id, post_type, status)"
+                                + " VALUES (:userId, 'image', 'published') RETURNING id")
+                .param("userId", userId)
+                .query(UUID.class)
+                .single();
+    }
+
+    private void insertLike(UUID postId, UUID userId, OffsetDateTime createdAt) {
+        jdbcClient
+                .sql(
+                        "INSERT INTO post_likes(post_id, user_id, created_at)"
+                                + " VALUES (:postId, :userId, :createdAt)")
+                .param("postId", postId)
+                .param("userId", userId)
+                .param("createdAt", createdAt)
+                .update();
     }
 
     private void insertPost(UUID userId, OffsetDateTime createdAt) {

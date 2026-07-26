@@ -237,11 +237,11 @@ class PostSaveServiceImplTest {
     }
 
     @Test
-    void listSavedPosts_invalidCursor_throwsBadRequest() {
+    void listSavedPosts_invalidCursor_throwsInvalidCursor() {
         assertThatThrownBy(() -> service.listSavedPosts(userId, "!!!invalid-cursor!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test

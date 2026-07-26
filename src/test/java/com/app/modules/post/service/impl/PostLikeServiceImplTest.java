@@ -216,10 +216,10 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void listLikers_invalidCursor_throwsBadRequest() {
+    void listLikers_invalidCursor_throwsInvalidCursor() {
         assertThatThrownBy(() -> service.listLikers(userId, postId, "!!!not-valid-base64!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 }

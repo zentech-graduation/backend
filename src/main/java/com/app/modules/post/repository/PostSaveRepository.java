@@ -20,29 +20,44 @@ public interface PostSaveRepository extends JpaRepository<PostSave, PostSaveId> 
      * First keyset page of a user's saves, newest first.
      *
      * <p>Paired with {@link #findSavesBefore}; the no-cursor variant avoids binding an untyped null
-     * timestamp, which PostgreSQL cannot type-infer.
+     * cursor. Native so the sibling can use a row-value tuple comparison for an exact index seek,
+     * which JPQL cannot express. The tiebreaker is {@code post_id}, the unique save key within a
+     * user.
      *
      * @param userId saving user
      * @param pageable page size carrier
-     * @return saves ordered by {@code created_at} descending
+     * @return saves ordered by the {@code (created_at, post_id)} tuple descending
      */
-    @Query("SELECT ps FROM PostSave ps WHERE ps.id.userId = :userId ORDER BY ps.createdAt DESC")
+    @Query(
+            value =
+                    "SELECT * FROM post_saves WHERE user_id = :userId "
+                            + "ORDER BY created_at DESC, post_id DESC",
+            nativeQuery = true)
     List<PostSave> findFirstSaves(@Param("userId") UUID userId, Pageable pageable);
 
     /**
-     * Keyset page of a user's saves older than the cursor, newest first.
+     * Keyset page of a user's saves strictly after the cursor tuple, newest first.
+     *
+     * <p>The {@code (created_at, post_id)} row-value comparison seeks directly to the cursor
+     * position and never drops saves sharing a boundary {@code created_at}. Served exactly by
+     * {@code idx_post_saves_user_created_post} (V35).
      *
      * @param userId saving user
-     * @param cursor exclusive upper bound on {@code created_at}; never null
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorPostId saved-post id of the cursor row, breaking ties on equal {@code
+     *     created_at}
      * @param pageable page size carrier
-     * @return saves ordered by {@code created_at} descending
+     * @return saves ordered by the {@code (created_at, post_id)} tuple descending
      */
     @Query(
-            "SELECT ps FROM PostSave ps WHERE ps.id.userId = :userId "
-                    + "AND ps.createdAt < :cursor "
-                    + "ORDER BY ps.createdAt DESC")
+            value =
+                    "SELECT * FROM post_saves WHERE user_id = :userId "
+                            + "AND (created_at, post_id) < (:cursorTime, :cursorPostId) "
+                            + "ORDER BY created_at DESC, post_id DESC",
+            nativeQuery = true)
     List<PostSave> findSavesBefore(
             @Param("userId") UUID userId,
-            @Param("cursor") OffsetDateTime cursor,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorPostId") UUID cursorPostId,
             Pageable pageable);
 }
