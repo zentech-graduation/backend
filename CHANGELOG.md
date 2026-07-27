@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Removed unused internal path constants that described endpoints the application never served; no served endpoint changed.
 
 ### Added
+- A shared public user summary object - user id, username, display name, avatar URL, and verified flag - is now available for embedding an author or actor inline in API responses; a soft-deleted or unknown user resolves to a placeholder rather than a missing value.
 - Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
