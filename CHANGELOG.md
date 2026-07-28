@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
 
 ### Changed
+- Comment responses now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of a bare author id; the previous top-level `userId` field is removed, and a comment by a deleted author returns a placeholder author rather than a dangling id. The same author object arrives over the live comment WebSocket feed, so a live-rendered comment shows the same author as one fetched over REST.
 - Pagination cursors are now opaque and share a single format across every list endpoint; cursors issued by a previous version are no longer accepted.
 - The report and admin listing endpoints now name their page-size parameter `limit`, matching every other paginated endpoint.
 - The notifications endpoint maximum page size is raised from 50 to 100.

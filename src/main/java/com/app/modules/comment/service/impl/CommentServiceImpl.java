@@ -29,6 +29,7 @@ import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.comment.config.CommentProperties;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
@@ -53,6 +54,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.users.service.UserSummaryService;
 
 import io.micrometer.core.instrument.Timer;
 import tools.jackson.databind.ObjectMapper;
@@ -82,6 +84,7 @@ public class CommentServiceImpl implements CommentService {
     private final CommentCacheService cacheService;
     private final CommentMetrics metrics;
     private final PostVisibilityService postVisibilityService;
+    private final UserSummaryService userSummaryService;
 
     public CommentServiceImpl(
             CommentRepository commentRepository,
@@ -98,7 +101,8 @@ public class CommentServiceImpl implements CommentService {
             ObjectMapper objectMapper,
             CommentCacheService cacheService,
             CommentMetrics metrics,
-            PostVisibilityService postVisibilityService) {
+            PostVisibilityService postVisibilityService,
+            UserSummaryService userSummaryService) {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.idempotencyRepository = idempotencyRepository;
@@ -114,6 +118,7 @@ public class CommentServiceImpl implements CommentService {
         this.cacheService = cacheService;
         this.metrics = metrics;
         this.postVisibilityService = postVisibilityService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -197,7 +202,7 @@ public class CommentServiceImpl implements CommentService {
                                 .build());
         MDC.put("commentId", saved.getId().toString());
 
-        CommentResponse response = mapper.toResponse(saved);
+        CommentResponse response = mapper.toResponse(saved, loadAuthor(saved.getUserId()));
 
         if (idempotencyKey != null) {
             idempotencyRepository.updateResponseBody(
@@ -234,7 +239,7 @@ public class CommentServiceImpl implements CommentService {
             }
             comment.setContent(content);
             Comment saved = commentRepository.save(comment);
-            CommentResponse response = mapper.toResponse(saved);
+            CommentResponse response = mapper.toResponse(saved, loadAuthor(saved.getUserId()));
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", saved.getPostId().toString());
@@ -435,7 +440,10 @@ public class CommentServiceImpl implements CommentService {
             List<Comment> rows, int pageSize, String cursor) {
         boolean hasNextPage = rows.size() > pageSize;
         List<Comment> page = hasNextPage ? rows.subList(0, pageSize) : rows;
-        List<CommentResponse> content = page.stream().map(mapper::toResponse).toList();
+        Map<UUID, UserSummaryResponse> authors =
+                userSummaryService.loadSummaries(page.stream().map(Comment::getUserId).toList());
+        List<CommentResponse> content =
+                page.stream().map(c -> mapper.toResponse(c, authors.get(c.getUserId()))).toList();
         Comment first = page.isEmpty() ? null : page.get(0);
         Comment last = page.isEmpty() ? null : page.get(page.size() - 1);
         String startCursor =
@@ -451,6 +459,12 @@ public class CommentServiceImpl implements CommentService {
                                 .endCursor(endCursor)
                                 .build())
                 .build();
+    }
+
+    // Resolves a single author's public summary; the create and edit paths return exactly one
+    // comment, so the batch loader is called with a singleton id.
+    private UserSummaryResponse loadAuthor(UUID userId) {
+        return userSummaryService.loadSummaries(List.of(userId)).get(userId);
     }
 
     // Re-reads the existing idempotency row to replay the cached response or reject a key reuse
