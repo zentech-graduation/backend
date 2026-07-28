@@ -23,6 +23,7 @@ import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.common.settings.service.SystemSettingService;
 import com.app.modules.hashtag.service.HashtagService;
@@ -49,6 +50,7 @@ import com.app.modules.post.service.PostService;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.service.UserSummaryService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -73,6 +75,7 @@ public class PostServiceImpl implements PostService {
     private final PostMapper postMapper;
     private final SocialService socialService;
     private final OutboxService outboxService;
+    private final UserSummaryService userSummaryService;
 
     public PostServiceImpl(
             PostRepository postRepository,
@@ -85,7 +88,8 @@ public class PostServiceImpl implements PostService {
             PostResponseAssembler postResponseAssembler,
             PostMapper postMapper,
             SocialService socialService,
-            OutboxService outboxService) {
+            OutboxService outboxService,
+            UserSummaryService userSummaryService) {
         this.postRepository = postRepository;
         this.postEditHistoryRepository = postEditHistoryRepository;
         this.postUserRepository = postUserRepository;
@@ -97,6 +101,7 @@ public class PostServiceImpl implements PostService {
         this.postMapper = postMapper;
         this.socialService = socialService;
         this.outboxService = outboxService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -402,8 +407,13 @@ public class PostServiceImpl implements PostService {
             return CursorPageResponse.of(
                     Collections.emptyList(), false, null, null, cursor != null);
         }
+        Map<UUID, UserSummaryResponse> editors =
+                userSummaryService.loadSummaries(
+                        rows.stream().map(PostEditHistory::getEditorId).toList());
         List<PostEditHistoryResponse> content =
-                rows.stream().map(postMapper::toEditHistoryResponse).toList();
+                rows.stream()
+                        .map(h -> postMapper.toEditHistoryResponse(h, editors.get(h.getEditorId())))
+                        .toList();
         PostEditHistory first = rows.get(0);
         PostEditHistory last = rows.get(rows.size() - 1);
         String startCursor = encodeCursor(first.getEditedAt(), first.getId());

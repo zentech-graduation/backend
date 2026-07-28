@@ -3,8 +3,8 @@ package com.app.modules.post.service;
 import java.util.UUID;
 
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
-import com.app.modules.post.dto.response.LikerResponse;
 
 /** Domain API for post like actions and liker listings. */
 public interface PostLikeService {
@@ -46,6 +46,6 @@ public interface PostLikeService {
      * @param size requested page size, normalized to 1–100 with a default of 20
      * @return cursor page of liker summaries
      */
-    CursorPageResponse<LikerResponse> listLikers(
+    CursorPageResponse<UserSummaryResponse> listLikers(
             UUID viewerId, UUID postId, String cursor, int size);
 }

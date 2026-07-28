@@ -37,6 +37,7 @@ import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.settings.service.SystemSettingService;
 import com.app.modules.hashtag.service.HashtagService;
@@ -57,6 +58,7 @@ import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.social.service.SocialService;
+import com.app.modules.users.service.UserSummaryService;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -77,6 +79,7 @@ class PostServiceImplTest {
     @Mock private PostMapper postMapper;
     @Mock private SocialService socialService;
     @Mock private OutboxService outboxService;
+    @Mock private UserSummaryService userSummaryService;
 
     private PostServiceImpl service;
 
@@ -98,7 +101,8 @@ class PostServiceImplTest {
                         postResponseAssembler,
                         postMapper,
                         socialService,
-                        outboxService);
+                        outboxService,
+                        userSummaryService);
         lenient()
                 .when(systemSettingService.getRequiredLong("max_post_media_items"))
                 .thenReturn(10L);
@@ -760,10 +764,7 @@ class PostServiceImplTest {
     private FeedPostResponse feedResponse() {
         return new FeedPostResponse(
                 UUID.randomUUID(),
-                authorId,
-                null,
-                null,
-                null,
+                new UserSummaryResponse(authorId, "author", "Author", null, false),
                 null,
                 PostType.IMAGE,
                 PostStatus.PUBLISHED,
