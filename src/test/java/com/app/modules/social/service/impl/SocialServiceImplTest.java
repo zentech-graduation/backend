@@ -24,9 +24,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 import com.app.modules.social.entity.Block;
 import com.app.modules.social.entity.BlockId;
 import com.app.modules.social.entity.Follow;
@@ -439,7 +439,7 @@ class SocialServiceImplTest {
         when(blockRepository.existsById(any())).thenReturn(false);
         when(followRepository.findFirstFollowers(any(), any(), any())).thenReturn(List.of());
 
-        CursorPageResponse<SocialUserSummaryResponse> page =
+        CursorPageResponse<UserSummaryResponse> page =
                 service.getFollowers(target, viewer, null, 20);
 
         assertThat(page.getContent()).isEmpty();
@@ -458,7 +458,7 @@ class SocialServiceImplTest {
         when(socialUserRepository.findAllByIdInAndDeletedAtIsNull(List.of(followerId)))
                 .thenReturn(List.of(user(followerId, false)));
 
-        CursorPageResponse<SocialUserSummaryResponse> page =
+        CursorPageResponse<UserSummaryResponse> page =
                 service.getFollowers(target, viewer, null, 20);
 
         assertThat(page.getContent()).hasSize(1);

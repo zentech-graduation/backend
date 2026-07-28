@@ -4,9 +4,9 @@ import java.util.List;
 import java.util.UUID;
 
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 
 public interface SocialService {
 
@@ -20,10 +20,10 @@ public interface SocialService {
 
     void unblockUser(UUID currentUserId, UUID targetUserId);
 
-    CursorPageResponse<SocialUserSummaryResponse> getFollowers(
+    CursorPageResponse<UserSummaryResponse> getFollowers(
             UUID targetUserId, UUID currentUserId, String cursor, int limit);
 
-    CursorPageResponse<SocialUserSummaryResponse> getFollowing(
+    CursorPageResponse<UserSummaryResponse> getFollowing(
             UUID targetUserId, UUID currentUserId, String cursor, int limit);
 
     List<FollowRequestResponse> getPendingFollowRequests(UUID currentUserId);

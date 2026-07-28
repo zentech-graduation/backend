@@ -11,11 +11,11 @@ import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.social.api.SocialApi;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 import com.app.modules.social.service.SocialService;
 
 import lombok.RequiredArgsConstructor;
@@ -82,18 +82,18 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowers(
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowers(
             UUID userId, String cursor, int limit) {
-        CursorPageResponse<SocialUserSummaryResponse> body =
+        CursorPageResponse<UserSummaryResponse> body =
                 socialService.getFollowers(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
     @Override
-    public ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowing(
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowing(
             UUID userId, String cursor, int limit) {
-        CursorPageResponse<SocialUserSummaryResponse> body =
+        CursorPageResponse<UserSummaryResponse> body =
                 socialService.getFollowing(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));

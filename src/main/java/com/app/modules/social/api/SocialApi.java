@@ -21,9 +21,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -263,7 +263,7 @@ public interface SocialApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Social.FOLLOWERS)
-    ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowers(
+    ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowers(
             @PathVariable UUID userId,
             @RequestParam(required = false) @Size(max = 512) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
@@ -293,7 +293,7 @@ public interface SocialApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Social.FOLLOWING)
-    ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowing(
+    ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowing(
             @PathVariable UUID userId,
             @RequestParam(required = false) @Size(max = 512) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
