@@ -69,11 +69,11 @@ class PostSaveServiceImplTest {
         lenient().when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(true);
         // Mirror the assembler contract: one response per input post, order preserved.
         lenient()
-                .when(postResponseAssembler.assemble(anyList()))
+                .when(postResponseAssembler.assemble(eq(userId), anyList()))
                 .thenAnswer(
                         invocation ->
                                 Collections.nCopies(
-                                        ((List<?>) invocation.getArgument(0)).size(),
+                                        ((List<?>) invocation.getArgument(1)).size(),
                                         (PostResponse) null));
     }
 

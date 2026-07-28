@@ -161,7 +161,7 @@ public class PostSearchServiceImpl implements PostSearchService {
                         .collect(Collectors.toMap(Post::getId, Function.identity()));
         // Preserve Elasticsearch relevance ordering.
         List<Post> ordered = ids.stream().map(byId::get).filter(p -> p != null).toList();
-        return postResponseAssembler.assemble(ordered);
+        return postResponseAssembler.assemble(viewerId, ordered);
     }
 
     // Spring Data Elasticsearch translates transport/connection failures to

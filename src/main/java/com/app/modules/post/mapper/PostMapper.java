@@ -21,13 +21,17 @@ import com.app.modules.post.search.PostDocument;
 public interface PostMapper {
 
     /**
-     * Builds the post response from the entity, the separately hydrated media items, and the post's
-     * author.
+     * Builds the post response from the entity, the separately hydrated media items, the post's
+     * author, and the viewer's like/save state.
      *
      * @param post the source post; media ordering comes from the entity collection {@code @OrderBy}
      * @param media media responses already joined with their {@code media_assets} rows
      * @param author the post author's public summary, batch-resolved by the service
-     * @return the post response with media and the embedded author
+     * @param isLiked whether the requesting viewer has liked this post, batch-resolved by the
+     *     service
+     * @param isSaved whether the requesting viewer has saved this post, batch-resolved by the
+     *     service
+     * @return the post response with media, the embedded author, and viewer state
      */
     @Mapping(source = "post.id", target = "id")
     @Mapping(source = "post.status", target = "status")
@@ -35,18 +39,29 @@ public interface PostMapper {
     @Mapping(source = "post.updatedAt", target = "updatedAt")
     @Mapping(source = "media", target = "media")
     @Mapping(source = "author", target = "author")
-    PostResponse toResponse(Post post, List<PostMediaResponse> media, UserSummaryResponse author);
+    @Mapping(source = "isLiked", target = "isLiked")
+    @Mapping(source = "isSaved", target = "isSaved")
+    PostResponse toResponse(
+            Post post,
+            List<PostMediaResponse> media,
+            UserSummaryResponse author,
+            boolean isLiked,
+            boolean isSaved);
 
     /**
      * Builds the feed-specific post response from the entity, the separately hydrated media items,
-     * and the post's author, with {@code rankingScore} always null for the current chronological
-     * implementation.
+     * the post's author, and the viewer's like/save state, with {@code rankingScore} always null
+     * for the current chronological implementation.
      *
      * @param post the source post; media ordering comes from the entity collection {@code @OrderBy}
      * @param media media responses already joined with their {@code media_assets} rows
      * @param author the post author's public summary, batch-resolved by the service
-     * @return the feed post response with media and the embedded author, ranking score reserved as
-     *     null
+     * @param isLiked whether the requesting viewer has liked this post, batch-resolved by the
+     *     service
+     * @param isSaved whether the requesting viewer has saved this post, batch-resolved by the
+     *     service
+     * @return the feed post response with media, the embedded author, viewer state, and ranking
+     *     score reserved as null
      */
     @Mapping(source = "post.id", target = "id")
     @Mapping(source = "post.status", target = "status")
@@ -54,9 +69,15 @@ public interface PostMapper {
     @Mapping(source = "post.updatedAt", target = "updatedAt")
     @Mapping(source = "media", target = "media")
     @Mapping(source = "author", target = "author")
+    @Mapping(source = "isLiked", target = "isLiked")
+    @Mapping(source = "isSaved", target = "isSaved")
     @Mapping(target = "rankingScore", ignore = true)
     FeedPostResponse toFeedResponse(
-            Post post, List<PostMediaResponse> media, UserSummaryResponse author);
+            Post post,
+            List<PostMediaResponse> media,
+            UserSummaryResponse author,
+            boolean isLiked,
+            boolean isSaved);
 
     /**
      * Combines a post media row with its referenced media asset for rendering.

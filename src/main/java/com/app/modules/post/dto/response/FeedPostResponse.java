@@ -27,6 +27,8 @@ public record FeedPostResponse(
         @Schema(description = "Number of likes; trigger-maintained.") int likeCount,
         @Schema(description = "Number of comments; trigger-maintained.") int commentCount,
         @Schema(description = "Number of saves; trigger-maintained.") int saveCount,
+        @Schema(description = "Whether the viewer has liked this post.") boolean isLiked,
+        @Schema(description = "Whether the viewer has saved this post.") boolean isSaved,
         @Schema(description = "Number of views; updated by a background job and may lag.")
                 int viewCount,
         @Schema(description = "Free-form location label.") String locationName,

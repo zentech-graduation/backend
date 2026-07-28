@@ -1,6 +1,7 @@
 package com.app.modules.post.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,6 +16,19 @@ import com.app.modules.post.entity.PostLikeId;
 
 @Repository
 public interface PostLikeRepository extends JpaRepository<PostLike, PostLikeId> {
+
+    /**
+     * Post ids among {@code postIds} that the viewer has liked, for batched {@code isLiked} flags.
+     *
+     * @param viewerId the requesting viewer
+     * @param postIds candidate post ids on the current page
+     * @return the subset the viewer has liked
+     */
+    @Query(
+            "SELECT pl.id.postId FROM PostLike pl"
+                    + " WHERE pl.id.userId = :viewerId AND pl.id.postId IN :postIds")
+    List<UUID> findLikedPostIds(
+            @Param("viewerId") UUID viewerId, @Param("postIds") Collection<UUID> postIds);
 
     /**
      * First keyset page of likes for a post, newest first.
