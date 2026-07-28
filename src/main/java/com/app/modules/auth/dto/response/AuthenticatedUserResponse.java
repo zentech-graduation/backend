@@ -6,9 +6,9 @@ import com.app.modules.users.enums.UserRole;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** Minimal user projection returned inside authentication responses. */
+/** Authenticated user identity returned inside authentication responses. */
 @Schema(description = "Minimal user information included in authentication responses")
-public record UserSummaryResponse(
+public record AuthenticatedUserResponse(
         @Schema(
                         description = "Unique user identifier",
                         example = "550e8400-e29b-41d4-a716-446655440000")

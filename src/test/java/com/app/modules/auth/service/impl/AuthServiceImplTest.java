@@ -49,7 +49,7 @@ import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
-import com.app.modules.auth.dto.response.UserSummaryResponse;
+import com.app.modules.auth.dto.response.AuthenticatedUserResponse;
 import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
@@ -102,12 +102,12 @@ class AuthServiceImplTest {
                 new JwtProperties("test-secret-32-chars-test-secret-", "iss", "App", 900, 3600);
         lenient().when(ipExtractor.extract(any(HttpServletRequest.class))).thenReturn("4.5.6.7");
         lenient()
-                .when(authMapper.toUserSummaryResponse(any(User.class), anyBoolean()))
+                .when(authMapper.toAuthenticatedUserResponse(any(User.class), anyBoolean()))
                 .thenAnswer(
                         inv -> {
                             User u = inv.getArgument(0);
                             boolean ev = inv.getArgument(1);
-                            return new UserSummaryResponse(
+                            return new AuthenticatedUserResponse(
                                     u.getId(),
                                     u.getUsername(),
                                     u.getEmail(),
