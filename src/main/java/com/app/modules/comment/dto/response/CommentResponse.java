@@ -20,6 +20,7 @@ public record CommentResponse(
         @Schema(description = "Nesting depth, 0 for top-level.") short depth,
         @Schema(description = "Comment body.") String content,
         @Schema(description = "Trigger-maintained like count.") int likeCount,
+        @Schema(description = "Whether the viewer has liked this comment.") boolean isLiked,
         @Schema(description = "Trigger-maintained direct reply count.") int replyCount,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
         @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt) {}

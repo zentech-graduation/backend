@@ -50,6 +50,7 @@ import com.app.modules.comment.service.CommentAccessPolicyService;
 import com.app.modules.comment.service.CommentCacheService;
 import com.app.modules.comment.service.CommentModerationService;
 import com.app.modules.comment.service.CommentService;
+import com.app.modules.comment.service.CommentViewerStateService;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
@@ -85,6 +86,7 @@ public class CommentServiceImpl implements CommentService {
     private final CommentMetrics metrics;
     private final PostVisibilityService postVisibilityService;
     private final UserSummaryService userSummaryService;
+    private final CommentViewerStateService commentViewerStateService;
 
     public CommentServiceImpl(
             CommentRepository commentRepository,
@@ -102,7 +104,8 @@ public class CommentServiceImpl implements CommentService {
             CommentCacheService cacheService,
             CommentMetrics metrics,
             PostVisibilityService postVisibilityService,
-            UserSummaryService userSummaryService) {
+            UserSummaryService userSummaryService,
+            CommentViewerStateService commentViewerStateService) {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.idempotencyRepository = idempotencyRepository;
@@ -119,6 +122,7 @@ public class CommentServiceImpl implements CommentService {
         this.metrics = metrics;
         this.postVisibilityService = postVisibilityService;
         this.userSummaryService = userSummaryService;
+        this.commentViewerStateService = commentViewerStateService;
     }
 
     @Override
@@ -202,7 +206,9 @@ public class CommentServiceImpl implements CommentService {
                                 .build());
         MDC.put("commentId", saved.getId().toString());
 
-        CommentResponse response = mapper.toResponse(saved, loadAuthor(saved.getUserId()));
+        CommentResponse response =
+                mapper.toResponse(
+                        saved, loadAuthor(saved.getUserId()), loadIsLiked(actorId, saved.getId()));
 
         if (idempotencyKey != null) {
             idempotencyRepository.updateResponseBody(
@@ -239,7 +245,11 @@ public class CommentServiceImpl implements CommentService {
             }
             comment.setContent(content);
             Comment saved = commentRepository.save(comment);
-            CommentResponse response = mapper.toResponse(saved, loadAuthor(saved.getUserId()));
+            CommentResponse response =
+                    mapper.toResponse(
+                            saved,
+                            loadAuthor(saved.getUserId()),
+                            loadIsLiked(actorId, saved.getId()));
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", saved.getPostId().toString());
@@ -395,7 +405,7 @@ public class CommentServiceImpl implements CommentService {
                                 TimeCursors.fromMicros(decoded.sortValueMicros()),
                                 decoded.id(),
                                 page);
-        return toPage(comments, pageSize, cursor);
+        return toPage(viewerId, comments, pageSize, cursor);
     }
 
     @Override
@@ -422,7 +432,7 @@ public class CommentServiceImpl implements CommentService {
                                 TimeCursors.fromMicros(decoded.sortValueMicros()),
                                 decoded.id(),
                                 page);
-        return toPage(replies, pageSize, cursor);
+        return toPage(viewerId, replies, pageSize, cursor);
     }
 
     // Visibility gate shared by the read, like, and unlike paths, consistent with the create path
@@ -437,13 +447,23 @@ public class CommentServiceImpl implements CommentService {
     // Keyset pagination over limit+1 rows: hasNextPage is decided by the pre-trim size, then the
     // extra probe row is dropped.
     private CursorPageResponse<CommentResponse> toPage(
-            List<Comment> rows, int pageSize, String cursor) {
+            UUID viewerId, List<Comment> rows, int pageSize, String cursor) {
         boolean hasNextPage = rows.size() > pageSize;
         List<Comment> page = hasNextPage ? rows.subList(0, pageSize) : rows;
         Map<UUID, UserSummaryResponse> authors =
                 userSummaryService.loadSummaries(page.stream().map(Comment::getUserId).toList());
+        Set<UUID> likedCommentIds =
+                commentViewerStateService.loadLikedCommentIds(
+                        viewerId, page.stream().map(Comment::getId).toList());
         List<CommentResponse> content =
-                page.stream().map(c -> mapper.toResponse(c, authors.get(c.getUserId()))).toList();
+                page.stream()
+                        .map(
+                                c ->
+                                        mapper.toResponse(
+                                                c,
+                                                authors.get(c.getUserId()),
+                                                likedCommentIds.contains(c.getId())))
+                        .toList();
         Comment first = page.isEmpty() ? null : page.get(0);
         Comment last = page.isEmpty() ? null : page.get(page.size() - 1);
         String startCursor =
@@ -465,6 +485,14 @@ public class CommentServiceImpl implements CommentService {
     // comment, so the batch loader is called with a singleton id.
     private UserSummaryResponse loadAuthor(UUID userId) {
         return userSummaryService.loadSummaries(List.of(userId)).get(userId);
+    }
+
+    // Resolves a single comment's viewer-like state; the create and edit paths return exactly one
+    // comment, so the batch loader is called with a singleton id.
+    private boolean loadIsLiked(UUID viewerId, UUID commentId) {
+        return commentViewerStateService
+                .loadLikedCommentIds(viewerId, List.of(commentId))
+                .contains(commentId);
     }
 
     // Re-reads the existing idempotency row to replay the cached response or reject a key reuse
