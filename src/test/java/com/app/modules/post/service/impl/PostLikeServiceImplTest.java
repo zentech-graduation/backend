@@ -26,20 +26,18 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
-import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
-import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
 class PostLikeServiceImplTest {
 
     @Mock private PostRepository postRepository;
     @Mock private PostLikeRepository postLikeRepository;
-    @Mock private PostUserRepository postUserRepository;
     @Mock private PostVisibilityService postVisibilityService;
-    @Mock private PostMapper postMapper;
+    @Mock private UserSummaryService userSummaryService;
 
     private PostLikeServiceImpl service;
 
@@ -56,9 +54,8 @@ class PostLikeServiceImplTest {
                 new PostLikeServiceImpl(
                         postRepository,
                         postLikeRepository,
-                        postUserRepository,
                         postVisibilityService,
-                        postMapper);
+                        userSummaryService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
         lenient()

@@ -264,7 +264,7 @@ public class AuthServiceImpl implements AuthService {
                 rotation.newRawToken(),
                 jwtProperties.accessTokenTtl(),
                 AuthResponse.BEARER,
-                authMapper.toUserSummaryResponse(user, emailVerified));
+                authMapper.toAuthenticatedUserResponse(user, emailVerified));
     }
 
     @Override
@@ -435,6 +435,6 @@ public class AuthServiceImpl implements AuthService {
                 refreshToken,
                 jwtProperties.accessTokenTtl(),
                 AuthResponse.BEARER,
-                authMapper.toUserSummaryResponse(user, emailVerified));
+                authMapper.toAuthenticatedUserResponse(user, emailVerified));
     }
 }

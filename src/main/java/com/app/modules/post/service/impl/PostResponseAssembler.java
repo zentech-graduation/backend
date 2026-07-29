@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostMediaResponse;
@@ -17,8 +18,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostMedia;
 import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.repository.PostMediaAssetRepository;
-import com.app.modules.users.entity.User;
-import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 /**
  * Assembles {@link PostResponse} DTOs by joining posts with their {@code media_assets} rows and
@@ -30,15 +30,15 @@ import com.app.modules.users.repository.UserRepository;
 public class PostResponseAssembler {
 
     private final PostMediaAssetRepository postMediaAssetRepository;
-    private final UserRepository userRepository;
+    private final UserSummaryService userSummaryService;
     private final PostMapper postMapper;
 
     public PostResponseAssembler(
             PostMediaAssetRepository postMediaAssetRepository,
-            UserRepository userRepository,
+            UserSummaryService userSummaryService,
             PostMapper postMapper) {
         this.postMediaAssetRepository = postMediaAssetRepository;
-        this.userRepository = userRepository;
+        this.userSummaryService = userSummaryService;
         this.postMapper = postMapper;
     }
 
@@ -58,7 +58,7 @@ public class PostResponseAssembler {
                         ? Map.of()
                         : postMediaAssetRepository.findAllById(assetIds).stream()
                                 .collect(Collectors.toMap(MediaAsset::getId, a -> a));
-        Map<UUID, User> authors = batchFetchAuthors(posts);
+        Map<UUID, UserSummaryResponse> authors = batchFetchAuthors(posts);
         List<PostResponse> result = new ArrayList<>(posts.size());
         for (Post post : posts) {
             List<PostMediaResponse> media =
@@ -93,7 +93,7 @@ public class PostResponseAssembler {
                         ? Map.of()
                         : postMediaAssetRepository.findAllById(assetIds).stream()
                                 .collect(Collectors.toMap(MediaAsset::getId, a -> a));
-        Map<UUID, User> authors = batchFetchAuthors(posts);
+        Map<UUID, UserSummaryResponse> authors = batchFetchAuthors(posts);
         List<FeedPostResponse> result = new ArrayList<>(posts.size());
         for (Post post : posts) {
             List<PostMediaResponse> media =
@@ -108,11 +108,9 @@ public class PostResponseAssembler {
         return result;
     }
 
-    private Map<UUID, User> batchFetchAuthors(List<Post> posts) {
-        Set<UUID> authorIds = posts.stream().map(Post::getUserId).collect(Collectors.toSet());
-        return authorIds.isEmpty()
-                ? Map.of()
-                : userRepository.findAllById(authorIds).stream()
-                        .collect(Collectors.toMap(User::getId, u -> u));
+    // One batched summary lookup for every author on the page; a soft-deleted author resolves to a
+    // placeholder so a post never renders without an author object.
+    private Map<UUID, UserSummaryResponse> batchFetchAuthors(List<Post> posts) {
+        return userSummaryService.loadSummaries(posts.stream().map(Post::getUserId).toList());
     }
 }

@@ -5,8 +5,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
@@ -19,19 +17,17 @@ import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
-import com.app.modules.post.dto.response.LikerResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
-import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
-import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostLikeService;
 import com.app.modules.post.service.PostVisibilityService;
-import com.app.modules.users.entity.User;
+import com.app.modules.users.service.UserSummaryService;
 
 @Service
 public class PostLikeServiceImpl implements PostLikeService {
@@ -41,21 +37,18 @@ public class PostLikeServiceImpl implements PostLikeService {
 
     private final PostRepository postRepository;
     private final PostLikeRepository postLikeRepository;
-    private final PostUserRepository postUserRepository;
     private final PostVisibilityService postVisibilityService;
-    private final PostMapper postMapper;
+    private final UserSummaryService userSummaryService;
 
     public PostLikeServiceImpl(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
-            PostUserRepository postUserRepository,
             PostVisibilityService postVisibilityService,
-            PostMapper postMapper) {
+            UserSummaryService userSummaryService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
-        this.postUserRepository = postUserRepository;
         this.postVisibilityService = postVisibilityService;
-        this.postMapper = postMapper;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -108,7 +101,7 @@ public class PostLikeServiceImpl implements PostLikeService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<LikerResponse> listLikers(
+    public CursorPageResponse<UserSummaryResponse> listLikers(
             UUID viewerId, UUID postId, String cursor, int size) {
         fetchVisiblePublishedPost(viewerId, postId);
         int pageSize = normalizeLimit(size);
@@ -131,15 +124,10 @@ public class PostLikeServiceImpl implements PostLikeService {
                     Collections.emptyList(), false, null, null, cursor != null);
         }
         List<UUID> likerIds = likes.stream().map(l -> l.getId().getUserId()).toList();
-        Map<UUID, User> users =
-                postUserRepository.findAllByIdInAndDeletedAtIsNull(likerIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
-        List<LikerResponse> content =
-                likes.stream()
-                        .map(l -> users.get(l.getId().getUserId()))
-                        .filter(user -> user != null)
-                        .map(postMapper::toLikerResponse)
-                        .toList();
+        // Batch-resolve every liker; a soft-deleted liker resolves to a placeholder rather than
+        // being dropped, so the page size stays consistent with the like count.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(likerIds);
+        List<UserSummaryResponse> content = likerIds.stream().map(summaries::get).toList();
         PostLike first = likes.get(0);
         PostLike last = likes.get(likes.size() - 1);
         String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getUserId());

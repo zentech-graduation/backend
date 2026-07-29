@@ -17,6 +17,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -109,6 +110,9 @@ public class Post {
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
+    // Batches the lazy media-collection initialization across a page of posts into one IN query,
+    // so a list endpoint issues a single media load instead of one per post.
+    @BatchSize(size = 100)
     @Builder.Default
     private List<PostMedia> media = new ArrayList<>();
 }

@@ -3,6 +3,7 @@ package com.app.modules.comment.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -31,6 +32,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.user.UserPrincipal;
 import com.app.modules.comment.config.CommentProperties;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
@@ -53,6 +55,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.users.service.UserSummaryService;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import tools.jackson.databind.ObjectMapper;
@@ -74,6 +77,7 @@ class CommentServiceImplTest {
     @Mock private CommentCacheService cacheService;
     @Mock private CommentMetrics metrics;
     @Mock private PostVisibilityService postVisibilityService;
+    @Mock private UserSummaryService userSummaryService;
 
     private CommentServiceImpl service;
 
@@ -99,10 +103,14 @@ class CommentServiceImplTest {
                         objectMapper,
                         cacheService,
                         metrics,
-                        postVisibilityService);
+                        postVisibilityService,
+                        userSummaryService);
         lenient()
                 .when(metrics.createLatency())
                 .thenReturn(new SimpleMeterRegistry().timer("comment.create.latency"));
+        lenient()
+                .when(userSummaryService.loadSummaries(anyCollection()))
+                .thenReturn(new java.util.HashMap<>());
     }
 
     @AfterEach
@@ -194,7 +202,7 @@ class CommentServiceImplTest {
                         .depth((short) 0)
                         .build();
         when(commentRepository.save(any())).thenReturn(saved);
-        when(mapper.toResponse(saved)).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(saved), any())).thenReturn(sampleResponse());
 
         CommentResponse response = service.createComment(actorId, createRequest(null), null);
 
@@ -281,7 +289,7 @@ class CommentServiceImplTest {
                 .thenReturn(Optional.of(comment));
         when(moderationService.check(any())).thenReturn(ModerationResult.approved());
         when(commentRepository.save(any())).thenReturn(comment);
-        when(mapper.toResponse(comment)).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(comment), any())).thenReturn(sampleResponse());
 
         service.editComment(actorId, commentId, new EditCommentRequest("updated"));
 
@@ -501,7 +509,7 @@ class CommentServiceImplTest {
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build());
         when(commentRepository.findFirstTopLevel(eq(postId), any())).thenReturn(rows);
-        when(mapper.toResponse(any())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, null, limit);
@@ -522,7 +530,7 @@ class CommentServiceImplTest {
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build());
         when(commentRepository.findFirstTopLevel(eq(postId), any())).thenReturn(rows);
-        when(mapper.toResponse(any())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, null, limit);
@@ -532,8 +540,10 @@ class CommentServiceImplTest {
     }
 
     private CommentResponse sampleResponse() {
+        UserSummaryResponse author =
+                new UserSummaryResponse(actorId, "actor", "Actor", null, false);
         return new CommentResponse(
-                commentId, postId, actorId, null, null, (short) 0, "hello world", 0, 0, null, null);
+                commentId, postId, author, null, null, (short) 0, "hello world", 0, 0, null, null);
     }
 
     // Mirrors CommentServiceImpl's request-hash formula so the replay test can match the stored

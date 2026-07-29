@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.enums.PostType;
 
@@ -19,10 +20,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
                 "Post entry in the following feed, with engagement counters and a reserved ranking field")
 public record FeedPostResponse(
         @Schema(description = "Post identifier.") UUID id,
-        @Schema(description = "Author user identifier.") UUID userId,
-        @Schema(description = "Author username.") String username,
-        @Schema(description = "Author display name.") String userDisplayName,
-        @Schema(description = "Author avatar CDN URL.") String userAvatarUrl,
+        @Schema(description = "Post author.") UserSummaryResponse author,
         @Schema(description = "Post caption.") String caption,
         @Schema(description = "Post type.") PostType postType,
         @Schema(description = "Lifecycle status.") PostStatus status,

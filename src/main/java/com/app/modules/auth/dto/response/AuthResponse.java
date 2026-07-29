@@ -22,7 +22,7 @@ public record AuthResponse(
                 long accessTokenExpiresIn,
         @Schema(description = "Token scheme; always \"Bearer\"", example = "Bearer")
                 String tokenType,
-        @Schema(description = "Summary of the authenticated user") UserSummaryResponse user) {
+        @Schema(description = "Summary of the authenticated user") AuthenticatedUserResponse user) {
 
     public static final String BEARER = "Bearer";
 }

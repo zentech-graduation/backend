@@ -3,6 +3,7 @@ package com.app.modules.comment.service.impl;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -11,11 +12,13 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.entity.Comment;
 import com.app.modules.comment.mapper.CommentMapper;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.comment.service.CommentCacheService;
+import com.app.modules.users.service.UserSummaryService;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -25,22 +28,27 @@ public class CommentCacheServiceImpl implements CommentCacheService {
     private static final Logger log = LoggerFactory.getLogger(CommentCacheServiceImpl.class);
     private static final int MAX_CACHED = 50;
     private static final Duration TTL = Duration.ofSeconds(300);
-    private static final String KEY_PREFIX = "comment:recent:";
+    // v2: the cached CommentResponse shape gained an embedded author object; the version segment
+    // stops a pre-upgrade entry with the old flat shape from ever being read back.
+    private static final String KEY_PREFIX = "comment:recent:v2:";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final CommentRepository commentRepository;
     private final CommentMapper mapper;
+    private final UserSummaryService userSummaryService;
 
     public CommentCacheServiceImpl(
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
             CommentRepository commentRepository,
-            CommentMapper mapper) {
+            CommentMapper mapper,
+            UserSummaryService userSummaryService) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.commentRepository = commentRepository;
         this.mapper = mapper;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -91,7 +99,10 @@ public class CommentCacheServiceImpl implements CommentCacheService {
     private List<CommentResponse> rebuild(UUID postId) {
         List<Comment> recent =
                 commentRepository.findFirstTopLevel(postId, PageRequest.of(0, MAX_CACHED));
-        List<CommentResponse> responses = recent.stream().map(mapper::toResponse).toList();
+        Map<UUID, UserSummaryResponse> authors =
+                userSummaryService.loadSummaries(recent.stream().map(Comment::getUserId).toList());
+        List<CommentResponse> responses =
+                recent.stream().map(c -> mapper.toResponse(c, authors.get(c.getUserId()))).toList();
         try {
             String key = key(postId);
             // Query is newest-first; right-pushing in order keeps index 0 as the newest entry.

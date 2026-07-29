@@ -22,9 +22,9 @@ import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 import com.app.modules.social.entity.Block;
 import com.app.modules.social.entity.BlockId;
 import com.app.modules.social.entity.Follow;
@@ -223,7 +223,7 @@ public class SocialServiceImpl implements SocialService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<SocialUserSummaryResponse> getFollowers(
+    public CursorPageResponse<UserSummaryResponse> getFollowers(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
         User targetUser =
@@ -266,11 +266,11 @@ public class SocialServiceImpl implements SocialService {
                 socialUserRepository.findAllByIdInAndDeletedAtIsNull(followerIds).stream()
                         .collect(Collectors.toMap(User::getId, user -> user));
 
-        List<SocialUserSummaryResponse> content =
+        List<UserSummaryResponse> content =
                 follows.stream()
                         .map(f -> userMap.get(f.getId().getFollowerId()))
                         .filter(user -> user != null)
-                        .map(this::toSocialUserSummaryResponse)
+                        .map(this::toUserSummaryResponse)
                         .toList();
 
         Follow firstFollow = follows.get(0);
@@ -285,7 +285,7 @@ public class SocialServiceImpl implements SocialService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<SocialUserSummaryResponse> getFollowing(
+    public CursorPageResponse<UserSummaryResponse> getFollowing(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
         User targetUser =
@@ -328,11 +328,11 @@ public class SocialServiceImpl implements SocialService {
                 socialUserRepository.findAllByIdInAndDeletedAtIsNull(followingIds).stream()
                         .collect(Collectors.toMap(User::getId, user -> user));
 
-        List<SocialUserSummaryResponse> content =
+        List<UserSummaryResponse> content =
                 follows.stream()
                         .map(f -> userMap.get(f.getId().getFollowingId()))
                         .filter(user -> user != null)
-                        .map(this::toSocialUserSummaryResponse)
+                        .map(this::toUserSummaryResponse)
                         .toList();
 
         Follow firstFollow = follows.get(0);
@@ -372,8 +372,7 @@ public class SocialServiceImpl implements SocialService {
                                 return null;
                             }
 
-                            SocialUserSummaryResponse followerSummary =
-                                    toSocialUserSummaryResponse(user);
+                            UserSummaryResponse followerSummary = toUserSummaryResponse(user);
 
                             return new FollowRequestResponse(
                                     user.getId(),
@@ -436,8 +435,8 @@ public class SocialServiceImpl implements SocialService {
         }
     }
 
-    private SocialUserSummaryResponse toSocialUserSummaryResponse(User user) {
-        return new SocialUserSummaryResponse(
+    private UserSummaryResponse toUserSummaryResponse(User user) {
+        return new UserSummaryResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getDisplayName(),

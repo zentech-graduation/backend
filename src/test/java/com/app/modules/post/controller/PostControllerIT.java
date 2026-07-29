@@ -276,7 +276,8 @@ class PostControllerIT {
         List<Map<?, ?>> content = contentOf(history);
         assertThat(content).hasSize(1);
         assertThat(content.get(0).get("previousCaption")).isEqualTo("first caption");
-        assertThat(content.get(0).get("editorId")).isEqualTo(author.id().toString());
+        Map<?, ?> editor = (Map<?, ?>) content.get(0).get("editor");
+        assertThat(editor.get("id")).isEqualTo(author.id().toString());
     }
 
     @Test
