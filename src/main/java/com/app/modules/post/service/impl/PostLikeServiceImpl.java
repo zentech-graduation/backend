@@ -17,7 +17,9 @@ import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
@@ -27,6 +29,7 @@ import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostLikeService;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.social.service.SocialService;
 import com.app.modules.users.service.UserSummaryService;
 
 @Service
@@ -39,16 +42,19 @@ public class PostLikeServiceImpl implements PostLikeService {
     private final PostLikeRepository postLikeRepository;
     private final PostVisibilityService postVisibilityService;
     private final UserSummaryService userSummaryService;
+    private final SocialService socialService;
 
     public PostLikeServiceImpl(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
             PostVisibilityService postVisibilityService,
-            UserSummaryService userSummaryService) {
+            UserSummaryService userSummaryService,
+            SocialService socialService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
         this.postVisibilityService = postVisibilityService;
         this.userSummaryService = userSummaryService;
+        this.socialService = socialService;
     }
 
     @Override
@@ -101,7 +107,7 @@ public class PostLikeServiceImpl implements PostLikeService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<UserSummaryResponse> listLikers(
+    public CursorPageResponse<UserListItemResponse> listLikers(
             UUID viewerId, UUID postId, String cursor, int size) {
         fetchVisiblePublishedPost(viewerId, postId);
         int pageSize = normalizeLimit(size);
@@ -127,7 +133,17 @@ public class PostLikeServiceImpl implements PostLikeService {
         // Batch-resolve every liker; a soft-deleted liker resolves to a placeholder rather than
         // being dropped, so the page size stays consistent with the like count.
         Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(likerIds);
-        List<UserSummaryResponse> content = likerIds.stream().map(summaries::get).toList();
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                socialService.loadRelationships(viewerId, likerIds);
+        List<UserListItemResponse> content =
+                likerIds.stream()
+                        .map(
+                                id ->
+                                        new UserListItemResponse(
+                                                summaries.get(id),
+                                                relationships.getOrDefault(
+                                                        id, ViewerRelationshipResponse.NONE)))
+                        .toList();
         PostLike first = likes.get(0);
         PostLike last = likes.get(likes.size() - 1);
         String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getUserId());

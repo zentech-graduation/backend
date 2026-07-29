@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.modules.mail.service.MailService;
 import com.app.modules.post.dto.response.FeedPostResponse;
@@ -148,11 +149,11 @@ class PostAuthorEmbeddingIT {
         UUID post = insertPublishedPost(owner);
         like(post, ghost);
 
-        CursorPageResponse<UserSummaryResponse> page =
+        CursorPageResponse<UserListItemResponse> page =
                 postLikeService.listLikers(owner, post, null, 10);
 
         assertThat(page.getContent()).hasSize(1);
-        UserSummaryResponse liker = page.getContent().get(0);
+        UserSummaryResponse liker = page.getContent().get(0).user();
         assertThat(liker.id()).isEqualTo(ghost);
         assertThat(liker.username()).isNull();
         assertThat(liker.displayName()).isEqualTo(UserSummaryServiceImpl.DELETED_DISPLAY_NAME);

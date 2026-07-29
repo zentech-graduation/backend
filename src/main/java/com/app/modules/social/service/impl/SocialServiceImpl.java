@@ -2,8 +2,11 @@ package com.app.modules.social.service.impl;
 
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,7 +25,9 @@ import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 import com.app.modules.social.entity.Block;
@@ -30,7 +35,9 @@ import com.app.modules.social.entity.BlockId;
 import com.app.modules.social.entity.Follow;
 import com.app.modules.social.entity.FollowId;
 import com.app.modules.social.enums.FollowStatus;
+import com.app.modules.social.repository.BlockEdgeProjection;
 import com.app.modules.social.repository.BlockRepository;
+import com.app.modules.social.repository.FollowEdgeProjection;
 import com.app.modules.social.repository.FollowRepository;
 import com.app.modules.social.repository.SocialUserRepository;
 import com.app.modules.social.service.SocialEventService;
@@ -223,7 +230,7 @@ public class SocialServiceImpl implements SocialService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<UserSummaryResponse> getFollowers(
+    public CursorPageResponse<UserListItemResponse> getFollowers(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
         User targetUser =
@@ -265,12 +272,14 @@ public class SocialServiceImpl implements SocialService {
         Map<UUID, User> userMap =
                 socialUserRepository.findAllByIdInAndDeletedAtIsNull(followerIds).stream()
                         .collect(Collectors.toMap(User::getId, user -> user));
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, followerIds);
 
-        List<UserSummaryResponse> content =
+        List<UserListItemResponse> content =
                 follows.stream()
                         .map(f -> userMap.get(f.getId().getFollowerId()))
                         .filter(user -> user != null)
-                        .map(this::toUserSummaryResponse)
+                        .map(user -> toUserListItemResponse(user, relationships))
                         .toList();
 
         Follow firstFollow = follows.get(0);
@@ -285,7 +294,7 @@ public class SocialServiceImpl implements SocialService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<UserSummaryResponse> getFollowing(
+    public CursorPageResponse<UserListItemResponse> getFollowing(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
         User targetUser =
@@ -327,12 +336,14 @@ public class SocialServiceImpl implements SocialService {
         Map<UUID, User> userMap =
                 socialUserRepository.findAllByIdInAndDeletedAtIsNull(followingIds).stream()
                         .collect(Collectors.toMap(User::getId, user -> user));
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, followingIds);
 
-        List<UserSummaryResponse> content =
+        List<UserListItemResponse> content =
                 follows.stream()
                         .map(f -> userMap.get(f.getId().getFollowingId()))
                         .filter(user -> user != null)
-                        .map(this::toUserSummaryResponse)
+                        .map(user -> toUserListItemResponse(user, relationships))
                         .toList();
 
         Follow firstFollow = follows.get(0);
@@ -362,6 +373,8 @@ public class SocialServiceImpl implements SocialService {
         Map<UUID, User> userMap =
                 socialUserRepository.findAllByIdInAndDeletedAtIsNull(requesterIds).stream()
                         .collect(Collectors.toMap(User::getId, user -> user));
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, requesterIds);
 
         return pendingFollows.stream()
                 .map(
@@ -378,7 +391,9 @@ public class SocialServiceImpl implements SocialService {
                                     user.getId(),
                                     followerSummary,
                                     follow.getStatus(),
-                                    follow.getCreatedAt());
+                                    follow.getCreatedAt(),
+                                    relationships.getOrDefault(
+                                            user.getId(), ViewerRelationshipResponse.NONE));
                         })
                 .filter(response -> response != null)
                 .toList();
@@ -418,6 +433,50 @@ public class SocialServiceImpl implements SocialService {
         return blockRepository.existsBetween(userIdA, userIdB);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, ViewerRelationshipResponse> loadRelationships(
+            UUID viewerId, Collection<UUID> userIds) {
+        if (viewerId == null || userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> distinct = new LinkedHashSet<>(userIds);
+        Map<UUID, Boolean> following = new HashMap<>();
+        Map<UUID, Boolean> requested = new HashMap<>();
+        Map<UUID, Boolean> followedBy = new HashMap<>();
+        for (FollowEdgeProjection edge :
+                followRepository.findRelationshipEdges(viewerId, distinct)) {
+            boolean accepted = FollowStatus.ACCEPTED.toJson().equalsIgnoreCase(edge.getStatus());
+            if (edge.getOutgoing()) {
+                following.put(edge.getOtherId(), accepted);
+                requested.put(edge.getOtherId(), !accepted);
+            } else {
+                followedBy.put(edge.getOtherId(), accepted);
+            }
+        }
+        Map<UUID, Boolean> blocking = new HashMap<>();
+        Map<UUID, Boolean> blockedBy = new HashMap<>();
+        for (BlockEdgeProjection edge : blockRepository.findRelationshipEdges(viewerId, distinct)) {
+            if (edge.getOutgoing()) {
+                blocking.put(edge.getOtherId(), true);
+            } else {
+                blockedBy.put(edge.getOtherId(), true);
+            }
+        }
+        Map<UUID, ViewerRelationshipResponse> result = new HashMap<>(distinct.size());
+        for (UUID id : distinct) {
+            result.put(
+                    id,
+                    new ViewerRelationshipResponse(
+                            following.getOrDefault(id, false),
+                            requested.getOrDefault(id, false),
+                            followedBy.getOrDefault(id, false),
+                            blocking.getOrDefault(id, false),
+                            blockedBy.getOrDefault(id, false)));
+        }
+        return result;
+    }
+
     private void checkCanViewSocialGraph(UUID currentUserId, UUID targetUserId, User targetUser) {
         if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
                 || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
@@ -442,6 +501,13 @@ public class SocialServiceImpl implements SocialService {
                 user.getDisplayName(),
                 user.getAvatarUrl(),
                 user.isVerified());
+    }
+
+    private UserListItemResponse toUserListItemResponse(
+            User user, Map<UUID, ViewerRelationshipResponse> relationships) {
+        return new UserListItemResponse(
+                toUserSummaryResponse(user),
+                relationships.getOrDefault(user.getId(), ViewerRelationshipResponse.NONE));
     }
 
     private int normalizeLimit(int limit) {

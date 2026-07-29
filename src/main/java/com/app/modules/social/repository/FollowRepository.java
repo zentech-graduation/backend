@@ -1,6 +1,7 @@
 package com.app.modules.social.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -166,4 +167,28 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
             @Param("cursorTime") OffsetDateTime cursorTime,
             @Param("cursorFollowingId") UUID cursorFollowingId,
             Pageable pageable);
+
+    /**
+     * Every follow edge between the viewer and any of {@code userIds}, in either direction, in one
+     * round trip.
+     *
+     * <p>Compiles to two independent index scans against {@code
+     * idx_follows_follower_created_following} and {@code idx_follows_following_created_follower}
+     * appended in a single statement, one for each direction.
+     *
+     * @param viewerId the requesting viewer
+     * @param userIds candidate user ids on the current page
+     * @return directed edges with their status; a user absent from the result has no follow
+     *     relationship with the viewer in either direction
+     */
+    @Query(
+            value =
+                    "SELECT following_id AS other_id, status, true AS outgoing FROM follows"
+                            + " WHERE follower_id = :viewerId AND following_id IN (:userIds)"
+                            + " UNION ALL "
+                            + "SELECT follower_id AS other_id, status, false AS outgoing FROM follows"
+                            + " WHERE following_id = :viewerId AND follower_id IN (:userIds)",
+            nativeQuery = true)
+    List<FollowEdgeProjection> findRelationshipEdges(
+            @Param("viewerId") UUID viewerId, @Param("userIds") Collection<UUID> userIds);
 }
