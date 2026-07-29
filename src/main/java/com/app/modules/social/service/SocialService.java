@@ -29,7 +29,19 @@ public interface SocialService {
     CursorPageResponse<UserListItemResponse> getFollowing(
             UUID targetUserId, UUID currentUserId, String cursor, int limit);
 
-    List<FollowRequestResponse> getPendingFollowRequests(UUID currentUserId);
+    /**
+     * Cursor-paginated pending follow requests targeting the current user, newest first.
+     *
+     * <p>A request from a soft-deleted or unknown account resolves to a placeholder rather than
+     * being dropped, so the page size stays consistent with the row count.
+     *
+     * @param currentUserId authenticated user whose pending requests are listed
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param limit requested page size, normalized to 1–100 with a default of 20
+     * @return cursor page of pending follow requests
+     */
+    CursorPageResponse<FollowRequestResponse> getPendingFollowRequests(
+            UUID currentUserId, String cursor, int limit);
 
     /**
      * Returns the IDs of users the viewer currently follows with accepted status, excluding any

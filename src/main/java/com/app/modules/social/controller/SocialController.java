@@ -1,6 +1,5 @@
 package com.app.modules.social.controller;
 
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -43,9 +42,11 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<List<FollowRequestResponse>>> getPendingFollowRequests() {
-        List<FollowRequestResponse> body =
-                socialService.getPendingFollowRequests(SecurityUtils.getCurrentUserId());
+    public ResponseEntity<ApiResponse<CursorPageResponse<FollowRequestResponse>>>
+            getPendingFollowRequests(String cursor, int limit) {
+        CursorPageResponse<FollowRequestResponse> body =
+                socialService.getPendingFollowRequests(
+                        SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }

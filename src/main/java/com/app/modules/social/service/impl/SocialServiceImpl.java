@@ -43,6 +43,7 @@ import com.app.modules.social.repository.SocialUserRepository;
 import com.app.modules.social.service.SocialEventService;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.service.UserSummaryService;
 
 @Service
 public class SocialServiceImpl implements SocialService {
@@ -53,16 +54,19 @@ public class SocialServiceImpl implements SocialService {
     private final BlockRepository blockRepository;
     private final SocialUserRepository socialUserRepository;
     private final SocialEventService socialEventService;
+    private final UserSummaryService userSummaryService;
 
     public SocialServiceImpl(
             FollowRepository followRepository,
             BlockRepository blockRepository,
             SocialUserRepository socialUserRepository,
-            SocialEventService socialEventService) {
+            SocialEventService socialEventService,
+            UserSummaryService userSummaryService) {
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.socialUserRepository = socialUserRepository;
         this.socialEventService = socialEventService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -358,45 +362,62 @@ public class SocialServiceImpl implements SocialService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<FollowRequestResponse> getPendingFollowRequests(UUID currentUserId) {
+    public CursorPageResponse<FollowRequestResponse> getPendingFollowRequests(
+            UUID currentUserId, String cursor, int limit) {
+        int size = normalizeLimit(limit);
+        Cursor decoded = decodeCursor(cursor);
+        Pageable pageable = PageRequest.of(0, size + 1);
+
         List<Follow> pendingFollows =
-                followRepository.findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
-                        currentUserId, FollowStatus.PENDING);
+                decoded == null
+                        ? followRepository.findFirstPendingRequests(currentUserId, pageable)
+                        : followRepository.findPendingRequestsBefore(
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
+
+        boolean hasNextPage = pendingFollows.size() > size;
+        if (hasNextPage) {
+            pendingFollows = pendingFollows.subList(0, size);
+        }
 
         if (pendingFollows.isEmpty()) {
-            return Collections.emptyList();
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> requesterIds =
                 pendingFollows.stream().map(f -> f.getId().getFollowerId()).toList();
 
-        Map<UUID, User> userMap =
-                socialUserRepository.findAllByIdInAndDeletedAtIsNull(requesterIds).stream()
-                        .collect(Collectors.toMap(User::getId, user -> user));
+        // Batch-resolve every requester; a soft-deleted or unknown requester resolves to a
+        // placeholder rather than being dropped, so the page size stays consistent with the row
+        // count.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(requesterIds);
         Map<UUID, ViewerRelationshipResponse> relationships =
                 loadRelationships(currentUserId, requesterIds);
 
-        return pendingFollows.stream()
-                .map(
-                        follow -> {
-                            User user = userMap.get(follow.getId().getFollowerId());
+        List<FollowRequestResponse> content =
+                pendingFollows.stream()
+                        .map(
+                                follow -> {
+                                    UUID requesterId = follow.getId().getFollowerId();
+                                    return new FollowRequestResponse(
+                                            requesterId,
+                                            summaries.get(requesterId),
+                                            follow.getStatus(),
+                                            follow.getCreatedAt(),
+                                            relationships.getOrDefault(
+                                                    requesterId, ViewerRelationshipResponse.NONE));
+                                })
+                        .toList();
 
-                            if (user == null) {
-                                return null;
-                            }
+        Follow first = pendingFollows.get(0);
+        Follow last = pendingFollows.get(pendingFollows.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getFollowerId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getFollowerId());
 
-                            UserSummaryResponse followerSummary = toUserSummaryResponse(user);
-
-                            return new FollowRequestResponse(
-                                    user.getId(),
-                                    followerSummary,
-                                    follow.getStatus(),
-                                    follow.getCreatedAt(),
-                                    relationships.getOrDefault(
-                                            user.getId(), ViewerRelationshipResponse.NONE));
-                        })
-                .filter(response -> response != null)
-                .toList();
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
