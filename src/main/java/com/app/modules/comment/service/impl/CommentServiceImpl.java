@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,6 +25,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.comment.config.CommentProperties;
@@ -378,12 +380,16 @@ public class CommentServiceImpl implements CommentService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
         int pageSize = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Comment> comments =
-                cursorTime == null
+                decoded == null
                         ? commentRepository.findFirstTopLevel(postId, page)
-                        : commentRepository.findTopLevelBefore(postId, cursorTime, page);
+                        : commentRepository.findTopLevelBefore(
+                                postId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
         return toPage(comments, pageSize, cursor);
     }
 
@@ -401,12 +407,16 @@ public class CommentServiceImpl implements CommentService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
         int pageSize = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Comment> replies =
-                cursorTime == null
+                decoded == null
                         ? commentRepository.findFirstReplies(commentId, page)
-                        : commentRepository.findRepliesBefore(commentId, cursorTime, page);
+                        : commentRepository.findRepliesBefore(
+                                commentId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
         return toPage(replies, pageSize, cursor);
     }
 
@@ -426,9 +436,11 @@ public class CommentServiceImpl implements CommentService {
         boolean hasNextPage = rows.size() > pageSize;
         List<Comment> page = hasNextPage ? rows.subList(0, pageSize) : rows;
         List<CommentResponse> content = page.stream().map(mapper::toResponse).toList();
-        String startCursor = page.isEmpty() ? null : encodeCursor(page.get(0).getCreatedAt());
-        String endCursor =
-                page.isEmpty() ? null : encodeCursor(page.get(page.size() - 1).getCreatedAt());
+        Comment first = page.isEmpty() ? null : page.get(0);
+        Comment last = page.isEmpty() ? null : page.get(page.size() - 1);
+        String startCursor =
+                first == null ? null : encodeCursor(first.getCreatedAt(), first.getId());
+        String endCursor = last == null ? null : encodeCursor(last.getCreatedAt(), last.getId());
         return CursorPageResponse.<CommentResponse>builder()
                 .content(content)
                 .pageInfo(
@@ -571,23 +583,15 @@ public class CommentServiceImpl implements CommentService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID id) {
+        if (time == null || id == null) {
             return null;
         }
-        return Base64.getEncoder().encodeToString(time.toString().getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), id));
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 
     private static String sha256(String input) {

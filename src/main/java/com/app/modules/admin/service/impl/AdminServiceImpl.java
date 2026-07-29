@@ -1,8 +1,6 @@
 package com.app.modules.admin.service.impl;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
@@ -41,7 +42,6 @@ public class AdminServiceImpl implements AdminService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
-    private static final String CURSOR_SEPARATOR = "|";
 
     private final AdminActionRepository adminActionRepository;
     private final UserRepository userRepository;
@@ -365,24 +365,16 @@ public class AdminServiceImpl implements AdminService {
     }
 
     private String encodeCursor(AdminAction action) {
-        String raw = action.getCreatedAt() + CURSOR_SEPARATOR + action.getId();
-        return Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(action.getCreatedAt()), action.getId()));
     }
 
     private ActionCursor decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
+        Cursor decoded = CursorCodec.decode(cursor);
+        if (decoded == null) {
             return new ActionCursor(null, null);
         }
-        try {
-            String raw = new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8);
-            String[] parts = raw.split("\\|", 2);
-            if (parts.length != 2) {
-                throw new IllegalArgumentException("Cursor must contain createdAt and id");
-            }
-            return new ActionCursor(OffsetDateTime.parse(parts[0]), UUID.fromString(parts[1]));
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+        return new ActionCursor(TimeCursors.fromMicros(decoded.sortValueMicros()), decoded.id());
     }
 
     private record ActionCursor(OffsetDateTime createdAt, UUID id) {

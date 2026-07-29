@@ -19,6 +19,8 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.entity.Post;
@@ -135,8 +137,7 @@ public class PostSearchServiceImpl implements PostSearchService {
                 t.getClass().getSimpleName(),
                 t.getMessage(),
                 t);
-        int effectiveLimit = normalizeLimit(size);
-        return CursorPageResponse.of(List.of(), effectiveLimit, null, null, false);
+        return CursorPageResponse.of(List.of(), false, null, null, false);
     }
 
     // Clamp the page size so an oversized request cannot force a mass hydration or exceed the
@@ -183,11 +184,12 @@ public class PostSearchServiceImpl implements PostSearchService {
             List<PostResponse> content, int offset, int limit, int esHitCount) {
         String start = content.isEmpty() ? null : encodeCursor(offset);
         String end = content.isEmpty() ? null : encodeCursor(offset + esHitCount);
-        return CursorPageResponse.of(content, limit, start, end, offset > 0);
+        return CursorPageResponse.of(content, content.size() == limit, start, end, offset > 0);
     }
 
     private static String encodeCursor(int offset) {
-        return Base64.getEncoder()
+        return Base64.getUrlEncoder()
+                .withoutPadding()
                 .encodeToString(Integer.toString(offset).getBytes(StandardCharsets.UTF_8));
     }
 
@@ -196,11 +198,16 @@ public class PostSearchServiceImpl implements PostSearchService {
             return 0;
         }
         try {
-            return Integer.parseInt(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (IllegalArgumentException e) {
-            // Malformed cursor → start from the first page rather than failing the request.
-            return 0;
+            int offset =
+                    Integer.parseInt(
+                            new String(
+                                    Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8));
+            if (offset < 0) {
+                throw new NumberFormatException("negative offset");
+            }
+            return offset;
+        } catch (RuntimeException e) {
+            throw new AppException(ApiErrorCode.INVALID_CURSOR);
         }
     }
 

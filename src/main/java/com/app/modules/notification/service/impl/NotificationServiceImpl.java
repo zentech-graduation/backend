@@ -3,7 +3,6 @@ package com.app.modules.notification.service.impl;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.domain.PageRequest;
@@ -12,6 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
@@ -103,29 +105,37 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<NotificationResponse> listNotifications(
-            UUID recipientId, UUID cursor, int limit) {
-        UUID resolvedCursor = null;
-        OffsetDateTime cursorTime = null;
-        if (cursor != null) {
-            // Scoping the pivot to the caller keeps a foreign notification UUID from acting as an
-            // existence/timestamp oracle, matching the ownership check in markAsRead.
-            Optional<Notification> pivot =
-                    notificationRepository.findByIdAndRecipientId(cursor, recipientId);
-            if (pivot.isPresent()) {
-                resolvedCursor = cursor;
-                cursorTime = pivot.get().getCreatedAt();
-            }
-            // Pivot absent means the cursor notification was deleted or is not the caller's own;
-            // fall back to the first page.
-        }
-
+            UUID recipientId, String cursor, int limit) {
+        Cursor decoded = decodeCursor(cursor);
         List<Notification> rows =
-                notificationRepository.findByRecipientIdWithCursor(
-                        recipientId, resolvedCursor, cursorTime, PageRequest.of(0, limit));
+                decoded == null
+                        ? notificationRepository.findFirstByRecipient(
+                                recipientId, PageRequest.of(0, limit + 1))
+                        : notificationRepository.findByRecipientBefore(
+                                recipientId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                PageRequest.of(0, limit + 1));
+        boolean hasNextPage = rows.size() > limit;
+        if (hasNextPage) {
+            rows = rows.subList(0, limit);
+        }
         List<NotificationResponse> content = notificationMapper.toResponseList(rows);
-        String startCursor = rows.isEmpty() ? null : rows.get(0).getId().toString();
-        String endCursor = rows.isEmpty() ? null : rows.get(rows.size() - 1).getId().toString();
-        return CursorPageResponse.of(content, limit, startCursor, endCursor, cursor != null);
+        Notification first = rows.isEmpty() ? null : rows.get(0);
+        Notification last = rows.isEmpty() ? null : rows.get(rows.size() - 1);
+        String startCursor = first == null ? null : encodeCursor(first);
+        String endCursor = last == null ? null : encodeCursor(last);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
+    }
+
+    private String encodeCursor(Notification notification) {
+        return CursorCodec.encode(
+                new Cursor(
+                        TimeCursors.toMicros(notification.getCreatedAt()), notification.getId()));
+    }
+
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 
     private boolean isTypeEnabled(NotificationType type, UserSettings settings) {

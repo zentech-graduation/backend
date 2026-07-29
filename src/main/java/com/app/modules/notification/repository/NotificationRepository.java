@@ -18,18 +18,46 @@ import com.app.modules.notification.entity.Notification;
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
 
     /**
-     * Fetches a cursor-paginated list of notifications for the recipient, ordered by creation time
-     * descending. Pass {@code cursor = null} to start from the first page.
+     * First keyset page of a recipient's notifications, newest first.
+     *
+     * <p>Paired with {@link #findByRecipientBefore}; the no-cursor variant avoids binding a null
+     * cursor tuple.
+     *
+     * @param recipientId notification recipient
+     * @param pageable page size carrier
+     * @return notifications ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT n FROM Notification n WHERE n.recipientId = :recipientId "
-                    + "AND (:cursor IS NULL OR n.createdAt < :cursorTime "
-                    + "  OR (n.createdAt = :cursorTime AND n.id < :cursor)) "
-                    + "ORDER BY n.createdAt DESC, n.id DESC")
-    List<Notification> findByRecipientIdWithCursor(
+            value =
+                    "SELECT * FROM notifications WHERE recipient_id = :recipientId "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Notification> findFirstByRecipient(
+            @Param("recipientId") UUID recipientId, Pageable pageable);
+
+    /**
+     * Keyset page of a recipient's notifications strictly after the cursor tuple, newest first.
+     *
+     * <p>The {@code (created_at, id)} row-value comparison seeks directly to the cursor position
+     * and never drops notifications sharing a boundary {@code created_at}. Served exactly by {@code
+     * idx_notifications_recipient_created_id} (V39).
+     *
+     * @param recipientId notification recipient
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code created_at}; never null
+     * @param pageable page size carrier
+     * @return notifications ordered by the {@code (created_at, id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM notifications WHERE recipient_id = :recipientId "
+                            + "AND (created_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Notification> findByRecipientBefore(
             @Param("recipientId") UUID recipientId,
-            @Param("cursor") UUID cursor,
             @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
             Pageable pageable);
 
     /**

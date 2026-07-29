@@ -50,31 +50,120 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
     List<Follow> findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
             UUID followingId, FollowStatus status);
 
+    /**
+     * First keyset page of a user's accepted followers, excluding block relationships, newest
+     * first.
+     *
+     * <p>Native so the paired {@code before} query can use a row-value tuple comparison for an
+     * exact index seek. The tiebreaker is {@code follower_id}, the unique follower key within a
+     * followee.
+     *
+     * @param userId followee whose followers are listed
+     * @param currentUserId viewer, whose block relationships filter the result
+     * @param pageable page size carrier
+     * @return accepted followers ordered by the {@code (created_at, follower_id)} tuple descending
+     */
     @Query(
-            "SELECT f FROM Follow f WHERE f.id.followingId = :userId "
-                    + "AND f.status = :status "
-                    + "AND f.createdAt < :cursor "
-                    + "AND f.id.followerId NOT IN (SELECT b.id.blockedId FROM Block b WHERE b.id.blockerId = :currentUserId) "
-                    + "AND f.id.followerId NOT IN (SELECT b.id.blockerId FROM Block b WHERE b.id.blockedId = :currentUserId) "
-                    + "ORDER BY f.createdAt DESC")
-    List<Follow> findFollowersWithCursor(
+            value =
+                    "SELECT * FROM follows WHERE following_id = :userId AND status = 'accepted' "
+                            + "AND follower_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id ="
+                            + " :currentUserId) "
+                            + "AND follower_id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id ="
+                            + " :currentUserId) "
+                            + "ORDER BY created_at DESC, follower_id DESC",
+            nativeQuery = true)
+    List<Follow> findFirstFollowers(
             @Param("userId") UUID userId,
             @Param("currentUserId") UUID currentUserId,
-            @Param("status") FollowStatus status,
-            @Param("cursor") OffsetDateTime cursor,
             Pageable pageable);
 
+    /**
+     * Keyset page of a user's accepted followers strictly after the cursor tuple, newest first.
+     *
+     * <p>The {@code (created_at, follower_id)} row-value comparison seeks directly to the cursor
+     * position and never drops followers sharing a boundary {@code created_at}. Served exactly by
+     * {@code idx_follows_following_created_follower} (V37).
+     *
+     * @param userId followee whose followers are listed
+     * @param currentUserId viewer, whose block relationships filter the result
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorFollowerId follower id of the cursor row, breaking ties on equal {@code
+     *     created_at}
+     * @param pageable page size carrier
+     * @return accepted followers ordered by the {@code (created_at, follower_id)} tuple descending
+     */
     @Query(
-            "SELECT f FROM Follow f WHERE f.id.followerId = :userId "
-                    + "AND f.status = :status "
-                    + "AND f.createdAt < :cursor "
-                    + "AND f.id.followingId NOT IN (SELECT b.id.blockedId FROM Block b WHERE b.id.blockerId = :currentUserId) "
-                    + "AND f.id.followingId NOT IN (SELECT b.id.blockerId FROM Block b WHERE b.id.blockedId = :currentUserId) "
-                    + "ORDER BY f.createdAt DESC")
-    List<Follow> findFollowingWithCursor(
+            value =
+                    "SELECT * FROM follows WHERE following_id = :userId AND status = 'accepted' "
+                            + "AND (created_at, follower_id) < (:cursorTime, :cursorFollowerId) "
+                            + "AND follower_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id ="
+                            + " :currentUserId) "
+                            + "AND follower_id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id ="
+                            + " :currentUserId) "
+                            + "ORDER BY created_at DESC, follower_id DESC",
+            nativeQuery = true)
+    List<Follow> findFollowersBefore(
             @Param("userId") UUID userId,
             @Param("currentUserId") UUID currentUserId,
-            @Param("status") FollowStatus status,
-            @Param("cursor") OffsetDateTime cursor,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorFollowerId") UUID cursorFollowerId,
+            Pageable pageable);
+
+    /**
+     * First keyset page of the users a user follows, excluding block relationships, newest first.
+     *
+     * <p>Native so the paired {@code before} query can use a row-value tuple comparison for an
+     * exact index seek. The tiebreaker is {@code following_id}, the unique followee key within a
+     * follower.
+     *
+     * @param userId follower whose followees are listed
+     * @param currentUserId viewer, whose block relationships filter the result
+     * @param pageable page size carrier
+     * @return accepted followees ordered by the {@code (created_at, following_id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM follows WHERE follower_id = :userId AND status = 'accepted' "
+                            + "AND following_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id ="
+                            + " :currentUserId) "
+                            + "AND following_id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id ="
+                            + " :currentUserId) "
+                            + "ORDER BY created_at DESC, following_id DESC",
+            nativeQuery = true)
+    List<Follow> findFirstFollowing(
+            @Param("userId") UUID userId,
+            @Param("currentUserId") UUID currentUserId,
+            Pageable pageable);
+
+    /**
+     * Keyset page of the users a user follows strictly after the cursor tuple, newest first.
+     *
+     * <p>The {@code (created_at, following_id)} row-value comparison seeks directly to the cursor
+     * position and never drops followees sharing a boundary {@code created_at}. Served exactly by
+     * {@code idx_follows_follower_created_following} (V37).
+     *
+     * @param userId follower whose followees are listed
+     * @param currentUserId viewer, whose block relationships filter the result
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorFollowingId followee id of the cursor row, breaking ties on equal {@code
+     *     created_at}
+     * @param pageable page size carrier
+     * @return accepted followees ordered by the {@code (created_at, following_id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM follows WHERE follower_id = :userId AND status = 'accepted' "
+                            + "AND (created_at, following_id) < (:cursorTime, :cursorFollowingId) "
+                            + "AND following_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id ="
+                            + " :currentUserId) "
+                            + "AND following_id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id ="
+                            + " :currentUserId) "
+                            + "ORDER BY created_at DESC, following_id DESC",
+            nativeQuery = true)
+    List<Follow> findFollowingBefore(
+            @Param("userId") UUID userId,
+            @Param("currentUserId") UUID currentUserId,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorFollowingId") UUID cursorFollowingId,
             Pageable pageable);
 }

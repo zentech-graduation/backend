@@ -65,11 +65,11 @@ public class ReportController extends BaseController implements ReportApi {
             @RequestParam(required = false) ReportStatus status,
             @RequestParam(required = false) ReportType reportType,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
         return ResponseEntity.ok(
                 ApiResponse.success(
                         ApiSuccessCode.OK,
-                        reportService.listReports(status, reportType, cursor, size)));
+                        reportService.listReports(status, reportType, cursor, limit)));
     }
 
     /** Returns pending reports in FIFO order to authenticated moderators and administrators. */
@@ -79,10 +79,10 @@ public class ReportController extends BaseController implements ReportApi {
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getPendingReports(
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
         return ResponseEntity.ok(
                 ApiResponse.success(
-                        ApiSuccessCode.OK, reportService.getPendingReports(cursor, size)));
+                        ApiSuccessCode.OK, reportService.getPendingReports(cursor, limit)));
     }
 
     /** Returns one report to an authenticated moderator or administrator. */

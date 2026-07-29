@@ -14,7 +14,11 @@ description: Load when writing, running, or reviewing any test class. Contains t
 | Integration | `@SpringBootTest(webEnvironment = RANDOM_PORT)` + Testcontainers | Full context, real PostgreSQL + Redis | Slow | Critical user flows end-to-end |
 | Smoke | `@SpringBootTest` (no `webEnvironment`) | ApplicationContext loads | Medium | `ApplicationTests.java` — one per app |
 
-No `@WebMvcTest` or `@DataJpaTest` slices are used in this codebase. Add them only when confirmed needed.
+`@WebMvcTest` slices are not used.
+`@DataJpaTest` slices, backed by Testcontainers PostgreSQL via `@Container @ServiceConnection`, are the established pattern for repository integration tests that exercise only repository queries and the SQL they emit.
+Every `*RepositoryIT` uses this slice: `FollowRepositoryIT`, `OutboxEventRepositoryIT`, `MediaAssetRepositoryIT`, `ReportRepositoryIT`, and `PostKeysetRowLossIT`.
+The slice is sound for these because a native `@Query` emits identical SQL whether its repository is loaded in the slice or the full context, and native queries bypass `@SQLRestriction` in both, so the repository behaviour under test is the same either way.
+Use a full `@SpringBootTest` for any test that spans more than the repository layer.
 
 ## 2. Naming Conventions
 

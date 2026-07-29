@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -135,7 +136,12 @@ class ReportServiceImplTest {
 
     @Test
     void listReports_filteredCursor_mapsSummaryContent() {
-        Report report = Report.builder().status(ReportStatus.PENDING).build();
+        Report report =
+                Report.builder()
+                        .id(UUID.randomUUID())
+                        .status(ReportStatus.PENDING)
+                        .createdAt(OffsetDateTime.now())
+                        .build();
         ReportSummaryResponse mapped = summary(ReportStatus.PENDING);
         when(reportRepository.findFirstReportsByStatusAndReportType(
                         ReportStatus.PENDING, ReportType.POST, 21))
@@ -150,7 +156,12 @@ class ReportServiceImplTest {
 
     @Test
     void getPendingReports_firstPage_queriesPendingQueueInFifoOrder() {
-        Report report = Report.builder().status(ReportStatus.PENDING).build();
+        Report report =
+                Report.builder()
+                        .id(UUID.randomUUID())
+                        .status(ReportStatus.PENDING)
+                        .createdAt(OffsetDateTime.now())
+                        .build();
         ReportSummaryResponse mapped = summary(ReportStatus.PENDING);
         when(reportRepository.findFirstReportsByStatusOldestFirst(ReportStatus.PENDING, 21))
                 .thenReturn(List.of(report));

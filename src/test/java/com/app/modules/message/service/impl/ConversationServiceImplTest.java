@@ -595,7 +595,8 @@ class ConversationServiceImplTest {
         OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
         UUID cursorConvId = UUID.randomUUID();
         String cursor =
-                Base64.getEncoder()
+                Base64.getUrlEncoder()
+                        .withoutPadding()
                         .encodeToString(
                                 (cursorTime + "|" + cursorConvId).getBytes(StandardCharsets.UTF_8));
         Conversation conv1 =
