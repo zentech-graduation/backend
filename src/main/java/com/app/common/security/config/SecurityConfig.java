@@ -187,6 +187,12 @@ public class SecurityConfig {
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
         auth.requestMatchers(HttpMethod.POST, AUTHENTICATED_POST_AUTH_PATHS).authenticated();
+        // Must be registered before the users permitAll block: the `/{userId}` template matches any
+        // single segment, "search" included, and the first matching rule wins. Without this the
+        // search endpoint would silently become anonymous, which is the one property its
+        // enumeration bound depends on.
+        auth.requestMatchers(HttpMethod.GET, ApiConstants.Users.ROOT + ApiConstants.Users.SEARCH)
+                .authenticated();
     }
 
     /**
@@ -220,7 +226,10 @@ public class SecurityConfig {
     private void configurePublicUsersEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
-        auth.requestMatchers(HttpMethod.GET, ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID)
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID,
+                        ApiConstants.Users.ROOT + ApiConstants.Users.BY_USERNAME)
                 .permitAll();
     }
 

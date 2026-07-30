@@ -29,6 +29,8 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/users";
         public static final String ME = "/me";
         public static final String BY_ID = "/{userId}";
+        public static final String BY_USERNAME = "/by-username/{username}";
+        public static final String SEARCH = "/search";
         public static final String ME_SETTINGS = "/me/settings";
     }
 
@@ -80,6 +82,7 @@ public final class ApiConstants {
                 "/follow-requests/{requesterId}/approve";
         public static final String FOLLOW_REQUEST_REJECT = "/follow-requests/{requesterId}/reject";
         public static final String BLOCK = "/block/{targetUserId}";
+        public static final String BLOCKED = "/blocked";
     }
 
     public static final class Messages {

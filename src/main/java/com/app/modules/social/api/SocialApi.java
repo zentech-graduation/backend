@@ -298,4 +298,48 @@ public interface SocialApi {
             @PathVariable UUID userId,
             @RequestParam(required = false) @Size(max = 512) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
+
+    @Operation(
+            summary = "Get the authenticated user's blocked list with cursor pagination",
+            description =
+                    "Returns the users the caller has blocked, newest block first. Outgoing blocks"
+                            + " only - users who blocked the caller are not listed and no endpoint"
+                            + " exposes them. isBlocking is true on every row by construction. A"
+                            + " blocked account since soft-deleted is returned as a placeholder"
+                            + " rather than dropped.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Blocked list returned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = CursorPageResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Malformed pagination cursor, or limit outside 1-100",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Social.BLOCKED)
+    ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getBlockedUsers(
+            @RequestParam(required = false) @Size(max = 512) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 }

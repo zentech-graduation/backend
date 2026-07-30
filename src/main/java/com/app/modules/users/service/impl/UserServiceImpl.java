@@ -108,6 +108,25 @@ public class UserServiceImpl implements UserService {
                 userRepository
                         .findByIdAndDeletedAtIsNull(targetUserId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
+        return assemblePublicProfile(viewerId, user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicUserProfileResponse getUserProfileByUsername(UUID viewerId, String username) {
+        // Case-sensitive by necessity: users.username carries a plain UNIQUE on the raw column, so
+        // a case-insensitive match could resolve to more than one legal account.
+        User user =
+                userRepository
+                        .findByUsernameAndDeletedAtIsNull(username)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
+        return assemblePublicProfile(viewerId, user);
+    }
+
+    // Single gating and assembly path for both lookups, so the id and username endpoints cannot
+    // drift apart on block handling, counter masking, or viewer state.
+    private PublicUserProfileResponse assemblePublicProfile(UUID viewerId, User user) {
+        UUID targetUserId = user.getId();
 
         boolean isOwner = viewerId != null && viewerId.equals(targetUserId);
 
