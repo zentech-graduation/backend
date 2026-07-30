@@ -95,6 +95,7 @@ app/
 | `common/config/rabbit/` | `RabbitMqPublisherConfig`, `RabbitMqTopologyConfig` |
 | `common/config/redis/` | `RedisConfig`, `RateLimitProperties` |
 | `common/config/security/` | `SecurityProperties` |
+| `common/config/websocket/` | `WebSocketBrokerConfig` |
 | `common/enums/` | `ApiErrorCode`, `ApiSuccessCode` |
 | `common/exception/` | `ApiException`, `AppException`, `GlobalExceptionHandler` |
 | `common/inbox/entity/` | `ProcessedMessage` |
@@ -121,6 +122,7 @@ app/
 | `common/security/service/impl/` | `RateLimiterServiceImpl`, `RefreshTokenServiceImpl`, `TokenBlacklistServiceImpl` |
 | `common/security/user/` | `SecurityMapper`, `UserPrincipal` |
 | `common/security/util/` | `CachedBodyHttpServletRequest`, `IpExtractor`, `SecurityUtils` |
+| `common/security/websocket/` | `JwtHandshakeInterceptor`, `WebSocketSessionRegistry`, `SessionTrackingWebSocketHandlerDecoratorFactory`, `WebSocketRevocationSweepService` |
 | `common/settings/repository/` | `SystemSettingRepository` |
 | `common/settings/service/` | `SystemSettingService` |
 | `common/settings/service/impl/` | `SystemSettingServiceImpl` |
@@ -162,7 +164,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
 | `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, mapper, messaging, repository, runner, search, service/impl |
 | `hashtag` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, event, mapper, messaging, repository, runner, search, service/impl |
-| `notification` | **Implemented** | api, controller, dto/response, entity, entity/converter, entity/enums, mapper, messaging, repository, service/impl |
+| `notification` | **Implemented** | api, config, controller, dto/response, entity, entity/converter, entity/enums, live, mapper, messaging, repository, service/impl |
 | `comment` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, live, mapper, messaging, observability, repository, service/impl, util |
 | `story` | **Implemented** | api, consumer, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
 | `message` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
@@ -358,6 +360,7 @@ PostgreSQL enum types:
 | `social.events` | Topic | yes | Primary event bus for all domain events |
 | `social.events.dlx` | Topic | yes | Dead-letter exchange for failed messages |
 | `comment.live.events` | Fanout | yes | Live comment fanout tier; receives all `comment.*` events via exchange-to-exchange binding from `social.events` |
+| `notification.live.events` | Fanout | yes | Live notification fanout tier; receives all `notification.*` events via exchange-to-exchange binding from `social.events` |
 
 **Queues and DLQs (all durable):**
 
@@ -368,6 +371,7 @@ PostgreSQL enum types:
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
 | `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
+| `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
 
 **Bindings (queue → `social.events`):**
 
@@ -384,7 +388,9 @@ PostgreSQL enum types:
 | `post.index.sync` | `post.index.#` (wildcard) | `PostRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
+| `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
+| `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 
 **RabbitMQ configuration (application.yaml):**
 - `publisher-confirm-type: correlated` — broker confirms wired to outbox acknowledge logic

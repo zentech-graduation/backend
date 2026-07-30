@@ -1,6 +1,6 @@
 # Notification Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Implemented. Service, controller, repository, mapper, and messaging (RabbitMQ consumer and live-push) Java files exist for this module.
 
 ---
 
@@ -19,7 +19,7 @@ This table cannot be rebuilt from any other source if lost.
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
 | Unread notification count | Computed at query time | `COUNT(*)` from `notifications` where `recipient_id = ?` and `is_read = FALSE` | Query-time (partial index `idx_notifications_unread` accelerates this) |
-| Notification delivery state | Redis / push service | Cannot be rebuilt — delivery is fire-and-forget | Push delivery event |
+| Live push delivery | Per-user STOMP topic (`/topic/notifications.{userId}`), fed via the transactional outbox and a RabbitMQ fanout exchange | Cannot be rebuilt — delivery is best-effort and fire-and-forget; the `notifications` row remains authoritative and a missed push is recovered on the next `GET /notifications` | Row insert in `NotificationServiceImpl.create` |
 
 ---
 
@@ -40,13 +40,13 @@ This table cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| A notification must not be created if the recipient has disabled the relevant notification type in `user_settings` (e.g., `notify_likes = FALSE`) | `[NOT YET IMPLEMENTED]` |
-| A notification must not be created if the actor is blocked by the recipient | `[NOT YET IMPLEMENTED]` |
-| A user must not receive a notification for their own actions (e.g., liking their own post) | `[NOT YET IMPLEMENTED]` |
-| Marking a notification as read sets `is_read = TRUE` and `read_at = NOW()` | `[NOT YET IMPLEMENTED]` |
-| Bulk "mark all as read" updates all unread notifications for the recipient | `[NOT YET IMPLEMENTED]` |
-| Push delivery uses `push_tokens` from the users module; token failures must not block the notification write to PostgreSQL | `[NOT YET IMPLEMENTED]` |
-| Notification dispatch is done asynchronously via RabbitMQ to avoid blocking the source event transaction | `[NOT YET IMPLEMENTED]` |
+| A notification must not be created if the recipient has disabled the relevant notification type in `user_settings` (e.g., `notify_likes = FALSE`) | `NotificationServiceImpl.create` |
+| A notification must not be created if the actor is blocked by the recipient | `NotificationServiceImpl.create` |
+| A user must not receive a notification for their own actions (e.g., liking their own post) | `NotificationServiceImpl.create` |
+| Marking a notification as read sets `is_read = TRUE` and `read_at = NOW()` | `NotificationServiceImpl.markAsRead` |
+| Bulk "mark all as read" updates all unread notifications for the recipient | `NotificationServiceImpl.markAllAsRead` |
+| Push delivery uses `push_tokens` from the users module; token failures must not block the notification write to PostgreSQL | `[NOT YET IMPLEMENTED]` — mobile push via `push_tokens` is a distinct, unbuilt feature from the in-app WebSocket live push below |
+| Notification creation is dispatched asynchronously via RabbitMQ from the source event (follow, comment, story view); the row write itself is synchronous within that consumer's transaction | `SocialNotificationConsumer`, `CommentNotificationConsumer`, `StoryNotificationConsumer` |
 | Stale notifications (e.g., for a deleted post) must be handled gracefully on read — `entity_id` may reference a soft-deleted or hard-deleted entity | `[NOT YET IMPLEMENTED]` |
 
 **Failure Mode** `[KNOWN GAP — no retry/DLQ implemented]`:
@@ -56,7 +56,7 @@ This table cannot be rebuilt from any other source if lost.
 
 ### C. Scope Simplifications
 
-- No real-time WebSocket push in v1. Clients must poll `GET /notifications` to surface new notifications.
+- Live push is best-effort over `/topic/notifications.{userId}`; the REST list stays authoritative and a client must still poll `GET /notifications` on load and after any reconnect, since a missed push is not replayed.
 - No notification grouping (e.g., "Alice and 5 others liked your post"); each event creates one row.
 - No TTL or auto-expiry for notifications; they accumulate indefinitely unless explicitly deleted.
 - No `deleted_at` column; notification cleanup, if needed, requires hard deletes.

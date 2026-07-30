@@ -121,7 +121,8 @@ Flow:
 
 | Area | Simplification | Accepted Degradation |
 |------|---------------|----------------------|
-| Notifications | No real-time WebSocket delivery in v1 | Clients must poll for new notifications |
+| Notifications | Real-time delivery is best-effort over a per-user STOMP topic; the REST list remains authoritative | A missed push is recovered on the next `GET /notifications`. Delivery latency is bounded by the outbox publisher's polling interval, not by the socket |
+| Realtime transport | In-memory STOMP broker on a single application instance; the RabbitMQ fanout tier in front of it is multi-instance-safe, the broker itself shares nothing | A second instance delivers correctly but has no shared session state; nothing beyond delivery has been designed or tested for it |
 | Feed / Explore ranking | `post_interaction_scores` updated by a background scheduler, not in real-time | Feed ranking may lag behind actual activity by minutes |
 | Hashtag trending | `hashtag_trending` populated by a scheduled background job | Trending data is a periodic snapshot, not live |
 | Email verification / password reset tokens | Stored in Redis, not PostgreSQL | Tokens are lost on full Redis flush; user must re-request |
