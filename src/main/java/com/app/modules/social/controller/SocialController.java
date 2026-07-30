@@ -17,6 +17,7 @@ import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 import com.app.modules.social.service.SocialService;
 
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -80,6 +81,16 @@ public class SocialController extends BaseController implements SocialApi {
         socialService.unblockUser(SecurityUtils.getCurrentUserId(), targetUserId);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getBlockedUsers(
+            String cursor, int limit) {
+        CursorPageResponse<UserListItemResponse> body =
+                socialService.getBlockedUsers(SecurityUtils.getCurrentUserId(), cursor, limit);
+
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
     @Override

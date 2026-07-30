@@ -362,6 +362,59 @@ public class SocialServiceImpl implements SocialService {
 
     @Override
     @Transactional(readOnly = true)
+    public CursorPageResponse<UserListItemResponse> getBlockedUsers(
+            UUID currentUserId, String cursor, int limit) {
+        int size = normalizeLimit(limit);
+        Cursor decoded = decodeCursor(cursor);
+        Pageable pageable = PageRequest.of(0, size + 1);
+
+        List<Block> blocks =
+                decoded == null
+                        ? blockRepository.findFirstBlocked(currentUserId, pageable)
+                        : blockRepository.findBlockedBefore(
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
+
+        boolean hasNextPage = blocks.size() > size;
+        if (hasNextPage) {
+            blocks = blocks.subList(0, size);
+        }
+
+        if (blocks.isEmpty()) {
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
+        }
+
+        List<UUID> blockedIds = blocks.stream().map(b -> b.getId().getBlockedId()).toList();
+
+        // Placeholder rather than drop, so the page length matches the row count even when a
+        // blocked account has since been soft-deleted.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(blockedIds);
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, blockedIds);
+
+        List<UserListItemResponse> content =
+                blockedIds.stream()
+                        .map(
+                                id ->
+                                        new UserListItemResponse(
+                                                summaries.get(id),
+                                                relationships.getOrDefault(
+                                                        id, ViewerRelationshipResponse.NONE)))
+                        .toList();
+
+        Block first = blocks.get(0);
+        Block last = blocks.get(blocks.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getBlockedId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getBlockedId());
+
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public CursorPageResponse<FollowRequestResponse> getPendingFollowRequests(
             UUID currentUserId, String cursor, int limit) {
         int size = normalizeLimit(limit);

@@ -30,6 +30,26 @@ public interface SocialService {
             UUID targetUserId, UUID currentUserId, String cursor, int limit);
 
     /**
+     * Cursor-paginated list of the users the current user has blocked, newest block first.
+     *
+     * <p>Self-scoped: it lists only the viewer's <em>outgoing</em> blocks, so there is no target
+     * whose privacy could be at stake and no visibility gate applies. Users who blocked the viewer
+     * are not included; no endpoint exposes incoming blocks.
+     *
+     * <p>A blocked account that has since been soft-deleted resolves to a placeholder rather than
+     * being dropped, so the page length stays consistent with the row count. {@code isBlocking} is
+     * tautologically true on every row and is emitted anyway, so a client never has to branch on
+     * which endpoint produced the row.
+     *
+     * @param currentUserId authenticated user whose outgoing blocks are listed
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param limit requested page size, normalized to 1-100 with a default of 20
+     * @return cursor page of blocked users with viewer relationship state
+     */
+    CursorPageResponse<UserListItemResponse> getBlockedUsers(
+            UUID currentUserId, String cursor, int limit);
+
+    /**
      * Cursor-paginated pending follow requests targeting the current user, newest first.
      *
      * <p>A request from a soft-deleted or unknown account resolves to a placeholder rather than

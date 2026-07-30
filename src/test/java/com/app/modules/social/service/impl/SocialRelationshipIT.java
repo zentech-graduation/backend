@@ -191,6 +191,36 @@ class SocialRelationshipIT {
     }
 
     @Test
+    void getBlockedUsers_relationshipQueryCountIsConstantAcrossThreePageSizes() {
+        UUID viewer = insertUser("viewer");
+        for (int i = 0; i < 12; i++) {
+            UUID blocked = insertUser("blocked" + i);
+            block(viewer, blocked);
+            if (i % 2 == 0) {
+                block(blocked, viewer);
+            }
+        }
+
+        Statistics stats = statistics();
+        socialService.getBlockedUsers(viewer, null, 2);
+
+        stats.clear();
+        socialService.getBlockedUsers(viewer, null, 2);
+        long size2 = stats.getPrepareStatementCount();
+
+        stats.clear();
+        socialService.getBlockedUsers(viewer, null, 6);
+        long size6 = stats.getPrepareStatementCount();
+
+        stats.clear();
+        socialService.getBlockedUsers(viewer, null, 12);
+        long size12 = stats.getPrepareStatementCount();
+
+        assertThat(size6).isEqualTo(size2);
+        assertThat(size12).isEqualTo(size2);
+    }
+
+    @Test
     void getFollowers_pendingVersusAccepted_flagsDistinctly() {
         UUID target = insertUser("target");
         UUID viewer = insertUser("viewer");
