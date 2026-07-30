@@ -30,6 +30,7 @@ public final class ApiConstants {
         public static final String ME = "/me";
         public static final String BY_ID = "/{userId}";
         public static final String BY_USERNAME = "/by-username/{username}";
+        public static final String SEARCH = "/search";
         public static final String ME_SETTINGS = "/me/settings";
     }
 

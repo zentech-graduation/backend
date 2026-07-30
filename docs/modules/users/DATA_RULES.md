@@ -63,6 +63,11 @@ Queries using them must filter soft-deleted rows themselves.
 | `username` must match `^[a-zA-Z0-9_.]+$` and be 3–30 characters | `UpdateProfileRequest` bean validation |
 | An empty string clears `bio`, `avatarUrl`, `websiteUrl`; `null` leaves the field untouched | `UserServiceImpl.updateMyProfile` |
 | A block in either direction hides the target profile entirely | `UserServiceImpl.getUserProfile` — returns `NOT_FOUND` so a blocked caller cannot confirm the account exists |
+| User search matches `username` case-insensitively via `ILIKE '%q%'` on `idx_users_username_trgm`, never the `%` similarity operator | `UserRepository.searchByUsername` — the similarity operator returned all 200,000 rows and discarded 174,846 on recheck in measurement |
+| User search requires authentication, excludes the viewer, and excludes non-`active` and soft-deleted accounts | `UserSearchServiceImpl.searchUsers`; the `authenticated()` matcher must precede the `/{userId}` `permitAll` matcher in `SecurityConfig`, since that template also matches `/users/search` |
+| User search does **not** filter blocked users; it ships accurate `isBlocking` and `isBlockedBy` instead | Omitting them would disclose the block set by omission |
+| User search rejects a query shorter than 2 characters and caps reachable offset at 10,000 | `UserSearchServiceImpl` and `OffsetCursorCodec.MAX_OFFSET` |
+| User search has no circuit breaker; database availability failures propagate rather than becoming an empty page | An empty page would be indistinguishable from "no such user" |
 | Username lookup is **case-sensitive** and shares the id lookup's gating path | `UserServiceImpl.getUserProfileByUsername` — resolves via `findByUsernameAndDeletedAtIsNull`, then the same `assemblePublicProfile` used by the id lookup, so the two cannot drift on block handling or counter masking |
 | Absent, soft-deleted, and block-hidden accounts are indistinguishable on lookup | All three yield `NOT_FOUND` with an identical response body apart from the timestamp |
 | Social counts are relationship-gated | `UserServiceImpl.getUserProfile` — owner always sees them; a private account reveals them only to accepted followers; a public account reveals them to any authenticated caller; everyone else receives `null` |
