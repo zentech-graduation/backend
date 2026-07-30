@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V29 SQL migrations
+│   │       ├── db/migration/       # Flyway V01–V39 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -262,7 +262,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 29 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: true`); 39 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -295,6 +295,16 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V27 | create_comment_write_idempotency |
 | V28 | add_user_events_upcoming_partitions |
 | V29 | preserve_admin_action_audit_history |
+| V30 | add_reports_duplicate_unique_index |
+| V31 | create_message_write_idempotency |
+| V32 | preserve_message_sender_history |
+| V33 | add_direct_conversation_pair_key |
+| V34 | add_keyset_tiebreaker_indexes |
+| V35 | add_like_save_keyset_indexes |
+| V36 | add_comment_keyset_indexes |
+| V37 | add_follow_keyset_indexes |
+| V38 | add_story_view_keyset_index |
+| V39 | add_notification_keyset_index |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
