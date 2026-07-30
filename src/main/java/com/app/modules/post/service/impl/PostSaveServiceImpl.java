@@ -142,7 +142,7 @@ public class PostSaveServiceImpl implements PostSaveService {
                 saves.stream().filter(s -> posts.containsKey(s.getId().getPostId())).toList();
         List<Post> orderedPosts =
                 visibleSaves.stream().map(s -> posts.get(s.getId().getPostId())).toList();
-        List<PostResponse> responses = postResponseAssembler.assemble(orderedPosts);
+        List<PostResponse> responses = postResponseAssembler.assemble(userId, orderedPosts);
         List<SavedPostResponse> content = new ArrayList<>(visibleSaves.size());
         for (int i = 0; i < visibleSaves.size(); i++) {
             content.add(

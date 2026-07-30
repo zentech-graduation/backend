@@ -3,6 +3,7 @@ package com.app.modules.users.mapper;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.users.dto.response.PublicUserProfileResponse;
 import com.app.modules.users.dto.response.UserProfileResponse;
 import com.app.modules.users.dto.response.UserSettingsResponse;
@@ -30,6 +31,7 @@ public interface UserMapper {
      * @param followerCount follower count to include, or {@code null} when unauthenticated
      * @param followingCount following count to include, or {@code null} when unauthenticated
      * @param postCount post count to include, or {@code null} when unauthenticated
+     * @param viewerState the viewer's relationship to this user, batch-resolved by the service
      * @return public profile DTO excluding email and role
      */
     @Mapping(target = "isPrivate", source = "user.private")
@@ -37,8 +39,13 @@ public interface UserMapper {
     @Mapping(target = "followerCount", source = "followerCount")
     @Mapping(target = "followingCount", source = "followingCount")
     @Mapping(target = "postCount", source = "postCount")
+    @Mapping(target = "viewerState", source = "viewerState")
     PublicUserProfileResponse toPublicProfileResponse(
-            User user, Integer followerCount, Integer followingCount, Integer postCount);
+            User user,
+            Integer followerCount,
+            Integer followingCount,
+            Integer postCount,
+            ViewerRelationshipResponse viewerState);
 
     /**
      * Maps a {@link UserSettings} to the settings response.

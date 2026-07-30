@@ -1,5 +1,7 @@
 package com.app.modules.users.service.impl;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -8,6 +10,7 @@ import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
@@ -132,7 +135,15 @@ public class UserServiceImpl implements UserService {
         Integer followingCount = detailed ? user.getFollowingCount() : null;
         Integer postCount = detailed ? user.getPostCount() : null;
 
-        return userMapper.toPublicProfileResponse(user, followerCount, followingCount, postCount);
+        // A null viewer short-circuits to NONE without querying; a self-view naturally resolves
+        // to NONE too, since a follow or block row against oneself cannot exist.
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                socialService.loadRelationships(viewerId, List.of(targetUserId));
+        ViewerRelationshipResponse viewerState =
+                relationships.getOrDefault(targetUserId, ViewerRelationshipResponse.NONE);
+
+        return userMapper.toPublicProfileResponse(
+                user, followerCount, followingCount, postCount, viewerState);
     }
 
     @Override

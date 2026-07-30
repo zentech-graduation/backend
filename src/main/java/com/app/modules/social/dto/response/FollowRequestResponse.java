@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.social.enums.FollowStatus;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -14,4 +15,6 @@ public record FollowRequestResponse(
         @Schema(description = "Details of the follower requesting to follow")
                 UserSummaryResponse follower,
         @Schema(description = "Status of the follow request") FollowStatus status,
-        @Schema(description = "When the follow request was created") OffsetDateTime createdAt) {}
+        @Schema(description = "When the follow request was created") OffsetDateTime createdAt,
+        @Schema(description = "The viewer's relationship to the requester.")
+                ViewerRelationshipResponse viewerState) {}

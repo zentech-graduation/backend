@@ -3,6 +3,8 @@ package com.app.modules.users.dto.response;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.app.common.response.ViewerRelationshipResponse;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -41,4 +43,10 @@ public record PublicUserProfileResponse(
                                 "Number of published posts; null when caller is unauthenticated",
                         example = "15")
                 Integer postCount,
-        @Schema(description = "Account creation timestamp") OffsetDateTime createdAt) {}
+        @Schema(description = "Account creation timestamp") OffsetDateTime createdAt,
+        @Schema(
+                        description =
+                                "The viewer's relationship to this user; always false for an"
+                                        + " anonymous caller or the owner viewing their own"
+                                        + " profile.")
+                ViewerRelationshipResponse viewerState) {}

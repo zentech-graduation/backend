@@ -639,7 +639,8 @@ class PostServiceImplTest {
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
         when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(List.of(post));
-        when(postResponseAssembler.assembleFeed(any())).thenReturn(List.of(feedResponse));
+        when(postResponseAssembler.assembleFeed(eq(viewer), any()))
+                .thenReturn(List.of(feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
 
@@ -658,7 +659,8 @@ class PostServiceImplTest {
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
         when(postRepository.findFeedPostsBefore(any(), any(), any(), any()))
                 .thenReturn(List.of(post));
-        when(postResponseAssembler.assembleFeed(any())).thenReturn(List.of(feedResponse));
+        when(postResponseAssembler.assembleFeed(eq(viewer), any()))
+                .thenReturn(List.of(feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, cursor, 20);
 
@@ -719,7 +721,7 @@ class PostServiceImplTest {
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
         when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(posts);
-        when(postResponseAssembler.assembleFeed(any()))
+        when(postResponseAssembler.assembleFeed(eq(viewer), any()))
                 .thenReturn(Collections.nCopies(20, feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
@@ -736,7 +738,7 @@ class PostServiceImplTest {
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
         when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(posts);
-        when(postResponseAssembler.assembleFeed(posts))
+        when(postResponseAssembler.assembleFeed(eq(viewer), eq(posts)))
                 .thenReturn(Collections.nCopies(5, feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
@@ -771,6 +773,8 @@ class PostServiceImplTest {
                 0,
                 0,
                 0,
+                false,
+                false,
                 0,
                 null,
                 null,

@@ -1,6 +1,7 @@
 package com.app.modules.social.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -49,6 +50,53 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
 
     List<Follow> findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
             UUID followingId, FollowStatus status);
+
+    /**
+     * First keyset page of a user's pending follow requests, newest first.
+     *
+     * <p>Native so the paired {@code before} query can use a row-value tuple comparison for an
+     * exact index seek. The tiebreaker is {@code follower_id}, the unique requester key within a
+     * followee. Served by {@code idx_follows_following_created_follower} (V37): {@code
+     * following_id} and {@code status} are equality-matched, leaving {@code (created_at,
+     * follower_id)} as a pure index range scan.
+     *
+     * @param userId followee whose pending requests are listed
+     * @param pageable page size carrier
+     * @return pending requests ordered by the {@code (created_at, follower_id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM follows WHERE following_id = :userId AND status = 'pending' "
+                            + "ORDER BY created_at DESC, follower_id DESC",
+            nativeQuery = true)
+    List<Follow> findFirstPendingRequests(@Param("userId") UUID userId, Pageable pageable);
+
+    /**
+     * Keyset page of a user's pending follow requests strictly after the cursor tuple, newest
+     * first.
+     *
+     * <p>The {@code (created_at, follower_id)} row-value comparison seeks directly to the cursor
+     * position and never drops requests sharing a boundary {@code created_at}. Served exactly by
+     * {@code idx_follows_following_created_follower} (V37).
+     *
+     * @param userId followee whose pending requests are listed
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorFollowerId requester id of the cursor row, breaking ties on equal {@code
+     *     created_at}
+     * @param pageable page size carrier
+     * @return pending requests ordered by the {@code (created_at, follower_id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM follows WHERE following_id = :userId AND status = 'pending' "
+                            + "AND (created_at, follower_id) < (:cursorTime, :cursorFollowerId) "
+                            + "ORDER BY created_at DESC, follower_id DESC",
+            nativeQuery = true)
+    List<Follow> findPendingRequestsBefore(
+            @Param("userId") UUID userId,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorFollowerId") UUID cursorFollowerId,
+            Pageable pageable);
 
     /**
      * First keyset page of a user's accepted followers, excluding block relationships, newest
@@ -166,4 +214,28 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
             @Param("cursorTime") OffsetDateTime cursorTime,
             @Param("cursorFollowingId") UUID cursorFollowingId,
             Pageable pageable);
+
+    /**
+     * Every follow edge between the viewer and any of {@code userIds}, in either direction, in one
+     * round trip.
+     *
+     * <p>Compiles to two independent index scans against {@code
+     * idx_follows_follower_created_following} and {@code idx_follows_following_created_follower}
+     * appended in a single statement, one for each direction.
+     *
+     * @param viewerId the requesting viewer
+     * @param userIds candidate user ids on the current page
+     * @return directed edges with their status; a user absent from the result has no follow
+     *     relationship with the viewer in either direction
+     */
+    @Query(
+            value =
+                    "SELECT following_id AS other_id, status, true AS outgoing FROM follows"
+                            + " WHERE follower_id = :viewerId AND following_id IN (:userIds)"
+                            + " UNION ALL "
+                            + "SELECT follower_id AS other_id, status, false AS outgoing FROM follows"
+                            + " WHERE following_id = :viewerId AND follower_id IN (:userIds)",
+            nativeQuery = true)
+    List<FollowEdgeProjection> findRelationshipEdges(
+            @Param("viewerId") UUID viewerId, @Param("userIds") Collection<UUID> userIds);
 }

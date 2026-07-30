@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
-import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -138,7 +138,7 @@ public interface PostLikeApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Posts.LIKES)
-    ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> listLikers(
+    ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> listLikers(
             @PathVariable("postId") UUID postId,
             @Parameter(description = "Opaque cursor from the previous page")
                     @RequestParam(value = "cursor", required = false)

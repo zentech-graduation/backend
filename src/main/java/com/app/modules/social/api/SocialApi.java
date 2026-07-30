@@ -1,6 +1,5 @@
 package com.app.modules.social.api;
 
-import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.constraints.Max;
@@ -21,7 +20,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
-import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 
@@ -115,7 +114,7 @@ public interface SocialApi {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     ResponseEntity<Void> unfollow(@PathVariable UUID targetUserId);
 
-    @Operation(summary = "Get pending follow requests for current user")
+    @Operation(summary = "Get pending follow requests for current user, with cursor pagination")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -123,7 +122,7 @@ public interface SocialApi {
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                                schema = @Schema(implementation = CursorPageResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -133,7 +132,9 @@ public interface SocialApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Social.FOLLOW_REQUESTS)
-    ResponseEntity<ApiResponse<List<FollowRequestResponse>>> getPendingFollowRequests();
+    ResponseEntity<ApiResponse<CursorPageResponse<FollowRequestResponse>>> getPendingFollowRequests(
+            @RequestParam(required = false) @Size(max = 512) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     @Operation(summary = "Approve a pending follow request")
     @ApiResponses({
@@ -263,7 +264,7 @@ public interface SocialApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Social.FOLLOWERS)
-    ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowers(
+    ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowers(
             @PathVariable UUID userId,
             @RequestParam(required = false) @Size(max = 512) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
@@ -293,7 +294,7 @@ public interface SocialApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping(ApiConstants.Social.FOLLOWING)
-    ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowing(
+    ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowing(
             @PathVariable UUID userId,
             @RequestParam(required = false) @Size(max = 512) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);

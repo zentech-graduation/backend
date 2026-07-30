@@ -139,7 +139,7 @@ public class PostServiceImpl implements PostService {
                 enqueuePostIndexUpsert(post);
             }
             log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
-            return postResponseAssembler.assemble(post);
+            return postResponseAssembler.assemble(authorId, post);
         }
         List<UUID> mediaIds = request.mediaIds();
         if (mediaIds == null || mediaIds.isEmpty()) {
@@ -190,7 +190,7 @@ public class PostServiceImpl implements PostService {
             enqueuePostIndexUpsert(post);
         }
         log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(authorId, post);
     }
 
     @Override
@@ -208,7 +208,7 @@ public class PostServiceImpl implements PostService {
         if (!postVisibilityService.isVisibleTo(viewerId, post)) {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(viewerId, post);
     }
 
     @Override
@@ -236,7 +236,7 @@ public class PostServiceImpl implements PostService {
             upsertCaptionHashtags(post.getId(), post.getCaption());
             enqueuePostIndexUpsert(post);
         }
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(requesterId, post);
     }
 
     @Override
@@ -254,7 +254,7 @@ public class PostServiceImpl implements PostService {
                 throw new AppException(ApiErrorCode.POST_FORBIDDEN);
             }
             softDelete(post);
-            return postResponseAssembler.assemble(post);
+            return postResponseAssembler.assemble(requesterId, post);
         }
         if (!isOwner) {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
@@ -281,7 +281,7 @@ public class PostServiceImpl implements PostService {
                 post.getId(),
                 current,
                 target);
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(requesterId, post);
     }
 
     @Override
@@ -334,7 +334,7 @@ public class PostServiceImpl implements PostService {
             return CursorPageResponse.of(
                     Collections.emptyList(), false, null, null, cursor != null);
         }
-        List<PostResponse> content = postResponseAssembler.assemble(posts);
+        List<PostResponse> content = postResponseAssembler.assemble(viewerId, posts);
         Post first = posts.get(0);
         Post last = posts.get(posts.size() - 1);
         String startCursor = encodeCursor(first.getCreatedAt(), first.getId());
@@ -369,7 +369,7 @@ public class PostServiceImpl implements PostService {
             return CursorPageResponse.of(
                     Collections.emptyList(), false, null, null, cursor != null);
         }
-        List<FeedPostResponse> content = postResponseAssembler.assembleFeed(posts);
+        List<FeedPostResponse> content = postResponseAssembler.assembleFeed(viewerId, posts);
         Post first = posts.get(0);
         Post last = posts.get(posts.size() - 1);
         String startCursor = encodeCursor(first.getCreatedAt(), first.getId());

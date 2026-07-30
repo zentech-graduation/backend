@@ -28,9 +28,13 @@ public class CommentCacheServiceImpl implements CommentCacheService {
     private static final Logger log = LoggerFactory.getLogger(CommentCacheServiceImpl.class);
     private static final int MAX_CACHED = 50;
     private static final Duration TTL = Duration.ofSeconds(300);
-    // v2: the cached CommentResponse shape gained an embedded author object; the version segment
-    // stops a pre-upgrade entry with the old flat shape from ever being read back.
-    private static final String KEY_PREFIX = "comment:recent:v2:";
+    // v3: the cached CommentResponse shape gained an isLiked field, always false in this cache and
+    // in the live broadcast - viewer state cannot be resolved for a blob shared across every
+    // subscriber. The version segment stops a pre-upgrade entry with the old shape from ever being
+    // read back. A client must treat isLiked from this cache or from a comment.* WebSocket event as
+    // non-authoritative and re-derive it from a REST call, exactly as it already must for the
+    // likeCount frozen at push time.
+    private static final String KEY_PREFIX = "comment:recent:v3:";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -101,8 +105,12 @@ public class CommentCacheServiceImpl implements CommentCacheService {
                 commentRepository.findFirstTopLevel(postId, PageRequest.of(0, MAX_CACHED));
         Map<UUID, UserSummaryResponse> authors =
                 userSummaryService.loadSummaries(recent.stream().map(Comment::getUserId).toList());
+        // isLiked is always false here - see the KEY_PREFIX comment on why viewer state cannot be
+        // resolved for a blob cached and broadcast to every subscriber.
         List<CommentResponse> responses =
-                recent.stream().map(c -> mapper.toResponse(c, authors.get(c.getUserId()))).toList();
+                recent.stream()
+                        .map(c -> mapper.toResponse(c, authors.get(c.getUserId()), false))
+                        .toList();
         try {
             String key = key(postId);
             // Query is newest-first; right-pushing in order keeps index 0 as the newest entry.

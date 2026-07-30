@@ -1,6 +1,7 @@
 package com.app.modules.post.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,6 +16,19 @@ import com.app.modules.post.entity.PostSaveId;
 
 @Repository
 public interface PostSaveRepository extends JpaRepository<PostSave, PostSaveId> {
+
+    /**
+     * Post ids among {@code postIds} that the viewer has saved, for batched {@code isSaved} flags.
+     *
+     * @param viewerId the requesting viewer
+     * @param postIds candidate post ids on the current page
+     * @return the subset the viewer has saved
+     */
+    @Query(
+            "SELECT ps.id.postId FROM PostSave ps"
+                    + " WHERE ps.id.userId = :viewerId AND ps.id.postId IN :postIds")
+    List<UUID> findSavedPostIds(
+            @Param("viewerId") UUID viewerId, @Param("postIds") Collection<UUID> postIds);
 
     /**
      * First keyset page of a user's saves, newest first.

@@ -1,6 +1,5 @@
 package com.app.modules.social.controller;
 
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -11,7 +10,7 @@ import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
-import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.social.api.SocialApi;
 import com.app.modules.social.dto.response.FollowRequestResponse;
@@ -43,9 +42,11 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<List<FollowRequestResponse>>> getPendingFollowRequests() {
-        List<FollowRequestResponse> body =
-                socialService.getPendingFollowRequests(SecurityUtils.getCurrentUserId());
+    public ResponseEntity<ApiResponse<CursorPageResponse<FollowRequestResponse>>>
+            getPendingFollowRequests(String cursor, int limit) {
+        CursorPageResponse<FollowRequestResponse> body =
+                socialService.getPendingFollowRequests(
+                        SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
@@ -82,18 +83,18 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowers(
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowers(
             UUID userId, String cursor, int limit) {
-        CursorPageResponse<UserSummaryResponse> body =
+        CursorPageResponse<UserListItemResponse> body =
                 socialService.getFollowers(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
     @Override
-    public ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> getFollowing(
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowing(
             UUID userId, String cursor, int limit) {
-        CursorPageResponse<UserSummaryResponse> body =
+        CursorPageResponse<UserListItemResponse> body =
                 socialService.getFollowing(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));

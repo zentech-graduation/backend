@@ -3,6 +3,7 @@ package com.app.modules.social.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,6 +26,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
@@ -37,6 +40,7 @@ import com.app.modules.social.repository.FollowRepository;
 import com.app.modules.social.repository.SocialUserRepository;
 import com.app.modules.social.service.SocialEventService;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
 class SocialServiceImplTest {
@@ -45,6 +49,7 @@ class SocialServiceImplTest {
     @Mock private BlockRepository blockRepository;
     @Mock private SocialUserRepository socialUserRepository;
     @Mock private SocialEventService socialEventService;
+    @Mock private UserSummaryService userSummaryService;
 
     private SocialServiceImpl service;
 
@@ -55,7 +60,8 @@ class SocialServiceImplTest {
                         followRepository,
                         blockRepository,
                         socialUserRepository,
-                        socialEventService);
+                        socialEventService,
+                        userSummaryService);
     }
 
     @Test
@@ -439,7 +445,7 @@ class SocialServiceImplTest {
         when(blockRepository.existsById(any())).thenReturn(false);
         when(followRepository.findFirstFollowers(any(), any(), any())).thenReturn(List.of());
 
-        CursorPageResponse<UserSummaryResponse> page =
+        CursorPageResponse<UserListItemResponse> page =
                 service.getFollowers(target, viewer, null, 20);
 
         assertThat(page.getContent()).isEmpty();
@@ -458,23 +464,22 @@ class SocialServiceImplTest {
         when(socialUserRepository.findAllByIdInAndDeletedAtIsNull(List.of(followerId)))
                 .thenReturn(List.of(user(followerId, false)));
 
-        CursorPageResponse<UserSummaryResponse> page =
+        CursorPageResponse<UserListItemResponse> page =
                 service.getFollowers(target, viewer, null, 20);
 
         assertThat(page.getContent()).hasSize(1);
-        assertThat(page.getContent().get(0).id()).isEqualTo(followerId);
+        assertThat(page.getContent().get(0).user().id()).isEqualTo(followerId);
     }
 
     @Test
-    void getPendingFollowRequests_empty_returnsEmptyList() {
+    void getPendingFollowRequests_empty_returnsEmptyPage() {
         UUID current = UUID.randomUUID();
-        when(followRepository.findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
-                        current, FollowStatus.PENDING))
-                .thenReturn(List.of());
+        when(followRepository.findFirstPendingRequests(eq(current), any())).thenReturn(List.of());
 
-        List<FollowRequestResponse> result = service.getPendingFollowRequests(current);
+        CursorPageResponse<FollowRequestResponse> result =
+                service.getPendingFollowRequests(current, null, 20);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
     }
 
     @Test
@@ -482,16 +487,41 @@ class SocialServiceImplTest {
         UUID current = UUID.randomUUID();
         UUID requester = UUID.randomUUID();
         Follow pending = follow(requester, current, FollowStatus.PENDING);
-        when(followRepository.findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
-                        current, FollowStatus.PENDING))
+        when(followRepository.findFirstPendingRequests(eq(current), any()))
                 .thenReturn(List.of(pending));
-        when(socialUserRepository.findAllByIdInAndDeletedAtIsNull(List.of(requester)))
-                .thenReturn(List.of(user(requester, false)));
+        when(userSummaryService.loadSummaries(List.of(requester)))
+                .thenReturn(
+                        Map.of(
+                                requester,
+                                new UserSummaryResponse(
+                                        requester, "requester", "Requester", null, false)));
 
-        List<FollowRequestResponse> result = service.getPendingFollowRequests(current);
+        CursorPageResponse<FollowRequestResponse> result =
+                service.getPendingFollowRequests(current, null, 20);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).id()).isEqualTo(requester);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).id()).isEqualTo(requester);
+    }
+
+    @Test
+    void getPendingFollowRequests_deletedRequester_returnsPlaceholderNotDropped() {
+        UUID current = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        Follow pending = follow(requester, current, FollowStatus.PENDING);
+        when(followRepository.findFirstPendingRequests(eq(current), any()))
+                .thenReturn(List.of(pending));
+        when(userSummaryService.loadSummaries(List.of(requester)))
+                .thenReturn(
+                        Map.of(
+                                requester,
+                                new UserSummaryResponse(
+                                        requester, null, "Deleted user", null, false)));
+
+        CursorPageResponse<FollowRequestResponse> result =
+                service.getPendingFollowRequests(current, null, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).follower().username()).isNull();
     }
 
     @Test

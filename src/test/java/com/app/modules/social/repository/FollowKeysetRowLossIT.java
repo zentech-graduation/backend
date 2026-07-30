@@ -115,6 +115,30 @@ class FollowKeysetRowLossIT {
         assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
     }
 
+    @Test
+    void pendingRequests_tieGroupOnCreatedAt_pagesEveryRowExactlyOnce() {
+        UUID target = insertUser("target");
+        List<UUID> expected = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            UUID requester = insertUser("requester_" + i);
+            insertPendingFollow(requester, target, SHARED_INSTANT);
+            expected.add(requester);
+        }
+
+        List<UUID> seen = new ArrayList<>();
+        List<Follow> page = followRepository.findFirstPendingRequests(target, page());
+        int guard = 0;
+        while (!page.isEmpty() && guard++ < 100) {
+            page.forEach(f -> seen.add(f.getId().getFollowerId()));
+            Follow last = page.get(page.size() - 1);
+            page =
+                    followRepository.findPendingRequestsBefore(
+                            target, last.getCreatedAt(), last.getId().getFollowerId(), page());
+        }
+
+        assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
     private static PageRequest page() {
         return PageRequest.of(0, PAGE_SIZE);
     }
@@ -139,6 +163,17 @@ class FollowKeysetRowLossIT {
                 .sql(
                         "INSERT INTO follows(follower_id, following_id, status, created_at)"
                                 + " VALUES (:followerId, :followingId, 'accepted', :createdAt)")
+                .param("followerId", followerId)
+                .param("followingId", followingId)
+                .param("createdAt", createdAt)
+                .update();
+    }
+
+    private void insertPendingFollow(UUID followerId, UUID followingId, OffsetDateTime createdAt) {
+        jdbcClient
+                .sql(
+                        "INSERT INTO follows(follower_id, following_id, status, created_at)"
+                                + " VALUES (:followerId, :followingId, 'pending', :createdAt)")
                 .param("followerId", followerId)
                 .param("followingId", followingId)
                 .param("createdAt", createdAt)

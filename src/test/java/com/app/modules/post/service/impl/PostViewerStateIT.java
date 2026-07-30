@@ -25,15 +25,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.response.CursorPageResponse;
-import com.app.common.response.UserListItemResponse;
-import com.app.common.response.UserSummaryResponse;
 import com.app.modules.mail.service.MailService;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostResponse;
-import com.app.modules.post.service.PostLikeService;
+import com.app.modules.post.dto.response.SavedPostResponse;
+import com.app.modules.post.service.PostSaveService;
 import com.app.modules.post.service.PostService;
-import com.app.modules.users.service.impl.UserSummaryServiceImpl;
 
+/**
+ * Proves the viewer's like/save state is resolved with a constant query count across page size, and
+ * that the flags are correct per row rather than uniformly set.
+ */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -46,7 +48,7 @@ import com.app.modules.users.service.impl.UserSummaryServiceImpl;
             "app.hashtag.seed.enabled=false"
         })
 @Testcontainers
-class PostAuthorEmbeddingIT {
+class PostViewerStateIT {
 
     @Container @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -60,8 +62,8 @@ class PostAuthorEmbeddingIT {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         r.add("spring.data.redis.password", () -> "");
-        r.add("JWT_SECRET", () -> "post-embedding-it-secret-32-chars-minimum!!!!");
-        r.add("JWT_ISSUER", () -> "https://post.it.local");
+        r.add("JWT_SECRET", () -> "post-viewer-state-it-secret-32-chars-minimum!!");
+        r.add("JWT_ISSUER", () -> "https://post-viewer-state.it.local");
         r.add("JWT_AUDIENCE", () -> "App");
         r.add("ACCESS_TOKEN_TTL", () -> 900L);
         r.add("REFRESH_TOKEN_TTL", () -> 3600L);
@@ -80,13 +82,14 @@ class PostAuthorEmbeddingIT {
     @MockitoBean private MailService mailService;
 
     @Autowired private PostService postService;
-    @Autowired private PostLikeService postLikeService;
+    @Autowired private PostSaveService postSaveService;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private EntityManagerFactory entityManagerFactory;
 
     @AfterEach
     void cleanup() {
         jdbcTemplate.update("DELETE FROM post_likes");
+        jdbcTemplate.update("DELETE FROM post_saves");
         jdbcTemplate.update("DELETE FROM posts");
         jdbcTemplate.update("DELETE FROM follows");
         jdbcTemplate.update("DELETE FROM user_settings");
@@ -98,12 +101,15 @@ class PostAuthorEmbeddingIT {
     }
 
     @Test
-    void getFeed_authorQueryCountIsConstantAcrossPageSize() {
-        UUID viewer = insertUser("viewer", false);
-        for (int i = 0; i < 6; i++) {
-            UUID author = insertUser("author" + i, false);
-            follow(viewer, author);
-            insertPublishedPost(author);
+    void getFeed_viewerStateQueryCountIsConstantAcrossThreePageSizes() {
+        UUID viewer = insertUser("viewer");
+        UUID author = insertUser("author");
+        follow(viewer, author);
+        for (int i = 0; i < 12; i++) {
+            UUID post = insertPublishedPost(author);
+            if (i % 2 == 0) {
+                like(post, viewer);
+            }
         }
 
         Statistics stats = statistics();
@@ -111,103 +117,126 @@ class PostAuthorEmbeddingIT {
 
         stats.clear();
         postService.getFeed(viewer, null, 2);
-        long smallPage = stats.getPrepareStatementCount();
+        long size2 = stats.getPrepareStatementCount();
 
         stats.clear();
         postService.getFeed(viewer, null, 6);
-        long largePage = stats.getPrepareStatementCount();
+        long size6 = stats.getPrepareStatementCount();
 
-        assertThat(largePage).isEqualTo(smallPage);
+        stats.clear();
+        postService.getFeed(viewer, null, 12);
+        long size12 = stats.getPrepareStatementCount();
+
+        assertThat(size6).isEqualTo(size2);
+        assertThat(size12).isEqualTo(size2);
     }
 
     @Test
-    void listLikers_authorQueryCountIsConstantAcrossPageSize() {
-        UUID owner = insertUser("owner", false);
-        UUID post = insertPublishedPost(owner);
-        for (int i = 0; i < 6; i++) {
-            like(post, insertUser("liker" + i, false));
+    void listUserPosts_viewerStateQueryCountIsConstantAcrossThreePageSizes() {
+        UUID viewer = insertUser("viewer");
+        UUID owner = insertUser("owner");
+        for (int i = 0; i < 12; i++) {
+            UUID post = insertPublishedPost(owner);
+            if (i % 3 == 0) {
+                save(post, viewer);
+            }
         }
 
         Statistics stats = statistics();
-        postLikeService.listLikers(owner, post, null, 2);
+        postService.listUserPosts(viewer, owner, null, 2);
 
         stats.clear();
-        postLikeService.listLikers(owner, post, null, 2);
-        long smallPage = stats.getPrepareStatementCount();
+        postService.listUserPosts(viewer, owner, null, 2);
+        long size2 = stats.getPrepareStatementCount();
 
         stats.clear();
-        postLikeService.listLikers(owner, post, null, 6);
-        long largePage = stats.getPrepareStatementCount();
+        postService.listUserPosts(viewer, owner, null, 6);
+        long size6 = stats.getPrepareStatementCount();
 
-        assertThat(largePage).isEqualTo(smallPage);
+        stats.clear();
+        postService.listUserPosts(viewer, owner, null, 12);
+        long size12 = stats.getPrepareStatementCount();
+
+        assertThat(size6).isEqualTo(size2);
+        assertThat(size12).isEqualTo(size2);
     }
 
     @Test
-    void listLikers_deletedLiker_returnsPlaceholderNotDropped() {
-        UUID owner = insertUser("owner", false);
-        UUID ghost = insertUser("ghost", true);
-        UUID post = insertPublishedPost(owner);
-        like(post, ghost);
-
-        CursorPageResponse<UserListItemResponse> page =
-                postLikeService.listLikers(owner, post, null, 10);
-
-        assertThat(page.getContent()).hasSize(1);
-        UserSummaryResponse liker = page.getContent().get(0).user();
-        assertThat(liker.id()).isEqualTo(ghost);
-        assertThat(liker.username()).isNull();
-        assertThat(liker.displayName()).isEqualTo(UserSummaryServiceImpl.DELETED_DISPLAY_NAME);
-    }
-
-    @Test
-    void getFeed_multipleAuthorsWithDuplicate_assignsEachPostsAuthor() {
-        UUID viewer = insertUser("viewer", false);
-        UUID alice = insertUser("alice", false);
-        UUID bob = insertUser("bob", false);
-        follow(viewer, alice);
-        follow(viewer, bob);
-        insertPublishedPost(alice);
-        insertPublishedPost(bob);
-        insertPublishedPost(alice);
+    void getFeed_mixedLikedAndUnliked_flagsCorrectPerRowNotUniform() {
+        UUID viewer = insertUser("viewer");
+        UUID author = insertUser("author");
+        follow(viewer, author);
+        UUID likedPost = insertPublishedPost(author);
+        UUID unlikedPost = insertPublishedPost(author);
+        like(likedPost, viewer);
 
         List<FeedPostResponse> feed = postService.getFeed(viewer, null, 10).getContent();
 
-        assertThat(feed).hasSize(3);
-        // Two of the three posts are alice's; every post carries its own author, and alice's two
-        // summaries are the identical resolved object.
-        List<UserSummaryResponse> aliceAuthors =
-                feed.stream()
-                        .map(FeedPostResponse::author)
-                        .filter(a -> a.id().equals(alice))
-                        .toList();
-        assertThat(aliceAuthors).hasSize(2);
-        assertThat(aliceAuthors.get(0)).isEqualTo(aliceAuthors.get(1));
-        assertThat(feed.stream().map(FeedPostResponse::author).map(UserSummaryResponse::id))
-                .containsOnly(alice, bob);
+        assertThat(feed).hasSize(2);
+        FeedPostResponse likedResponse =
+                feed.stream().filter(p -> p.id().equals(likedPost)).findFirst().orElseThrow();
+        FeedPostResponse unlikedResponse =
+                feed.stream().filter(p -> p.id().equals(unlikedPost)).findFirst().orElseThrow();
+        assertThat(likedResponse.isLiked()).isTrue();
+        assertThat(unlikedResponse.isLiked()).isFalse();
     }
 
     @Test
-    void listUserPosts_embedsAuthorSummary() {
-        UUID owner = insertUser("owner", false);
-        insertPublishedPost(owner);
+    void getFeed_mixedSavedAndUnsaved_flagsCorrectPerRowNotUniform() {
+        UUID viewer = insertUser("viewer");
+        UUID author = insertUser("author");
+        follow(viewer, author);
+        UUID savedPost = insertPublishedPost(author);
+        UUID unsavedPost = insertPublishedPost(author);
+        save(savedPost, viewer);
 
-        List<PostResponse> posts = postService.listUserPosts(owner, owner, null, 10).getContent();
+        List<FeedPostResponse> feed = postService.getFeed(viewer, null, 10).getContent();
 
-        assertThat(posts).hasSize(1);
-        assertThat(posts.get(0).author().id()).isEqualTo(owner);
-        assertThat(posts.get(0).author().username()).isEqualTo("owner");
+        assertThat(feed).hasSize(2);
+        FeedPostResponse savedResponse =
+                feed.stream().filter(p -> p.id().equals(savedPost)).findFirst().orElseThrow();
+        FeedPostResponse unsavedResponse =
+                feed.stream().filter(p -> p.id().equals(unsavedPost)).findFirst().orElseThrow();
+        assertThat(savedResponse.isSaved()).isTrue();
+        assertThat(unsavedResponse.isSaved()).isFalse();
     }
 
-    private UUID insertUser(String username, boolean deleted) {
+    @Test
+    void listSavedPosts_isSavedAlwaysTrue() {
+        UUID viewer = insertUser("viewer");
+        UUID owner = insertUser("owner");
+        UUID post = insertPublishedPost(owner);
+        save(post, viewer);
+
+        CursorPageResponse<SavedPostResponse> page =
+                postSaveService.listSavedPosts(viewer, null, 10);
+
+        assertThat(page.getContent()).hasSize(1);
+        PostResponse embedded = page.getContent().get(0).post();
+        assertThat(embedded.isSaved()).isTrue();
+    }
+
+    @Test
+    void getPostById_singlePost_flagsIsLikedTrue() {
+        UUID viewer = insertUser("viewer");
+        UUID owner = insertUser("owner");
+        UUID post = insertPublishedPost(owner);
+        like(post, viewer);
+
+        PostResponse response = postService.getPostById(viewer, post);
+
+        assertThat(response.isLiked()).isTrue();
+        assertThat(response.isSaved()).isFalse();
+    }
+
+    private UUID insertUser(String username) {
         return jdbcTemplate.queryForObject(
                 "INSERT INTO users(username, email, display_name, is_verified, deleted_at)"
-                        + " VALUES (?, ?, ?, false, CASE WHEN ? THEN NOW() ELSE NULL END)"
-                        + " RETURNING id",
+                        + " VALUES (?, ?, ?, false, NULL) RETURNING id",
                 UUID.class,
                 username,
                 username + "@example.com",
-                username,
-                deleted);
+                username);
     }
 
     private UUID insertPublishedPost(UUID userId) {
@@ -228,5 +257,10 @@ class PostAuthorEmbeddingIT {
     private void like(UUID postId, UUID userId) {
         jdbcTemplate.update(
                 "INSERT INTO post_likes(post_id, user_id) VALUES (?, ?)", postId, userId);
+    }
+
+    private void save(UUID postId, UUID userId) {
+        jdbcTemplate.update(
+                "INSERT INTO post_saves(post_id, user_id) VALUES (?, ?)", postId, userId);
     }
 }

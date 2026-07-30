@@ -16,7 +16,7 @@ import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
-import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.post.api.PostLikeApi;
 import com.app.modules.post.dto.response.LikeActionResponse;
@@ -61,11 +61,11 @@ public class PostLikeController extends BaseController implements PostLikeApi {
     @Override
     @GetMapping(ApiConstants.Posts.LIKES)
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<CursorPageResponse<UserSummaryResponse>>> listLikers(
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> listLikers(
             @PathVariable("postId") UUID postId,
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "limit", defaultValue = "20") int limit) {
-        CursorPageResponse<UserSummaryResponse> body =
+        CursorPageResponse<UserListItemResponse> body =
                 postLikeService.listLikers(SecurityUtils.getCurrentUserId(), postId, cursor, limit);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
