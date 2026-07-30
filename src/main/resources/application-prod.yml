@@ -76,4 +76,7 @@ app:
       "[/api/v1/posts]":
         max-attempts: 30
         window-seconds: 60
+      "[/ws/**]":
+        max-attempts: 30
+        window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
