@@ -1,4 +1,4 @@
----
+﻿---
 trigger: model_decision
 description: Load when working on App (social network). Contains the authoritative project map.
 ---
@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V39 SQL migrations
+│   │       ├── db/migration/       # Flyway V01–V40 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -262,7 +262,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 39 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: true`); 40 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -305,6 +305,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V37 | add_follow_keyset_indexes |
 | V38 | add_story_view_keyset_index |
 | V39 | add_notification_keyset_index |
+| V40 | add_blocks_keyset_index |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)

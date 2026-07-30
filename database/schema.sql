@@ -776,6 +776,8 @@ CREATE INDEX idx_follows_follower_created_following
 -- blocks
 CREATE INDEX idx_blocks_blocker         ON blocks (blocker_id);
 CREATE INDEX idx_blocks_blocked         ON blocks (blocked_id);
+CREATE INDEX idx_blocks_blocker_created_blocked
+    ON blocks (blocker_id, created_at DESC, blocked_id DESC);
 
 -- media_assets
 CREATE INDEX idx_media_assets_user      ON media_assets (user_id, created_at DESC);
