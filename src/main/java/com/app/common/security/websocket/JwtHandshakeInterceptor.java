@@ -35,11 +35,17 @@ import com.app.common.security.util.IpExtractor;
  * missing_token} when no token was supplied at all, {@code rejected} for every case {@link
  * TokenPrincipalResolver} declines, since that resolver intentionally does not distinguish expired,
  * bad-signature, blacklisted, or non-{@code ACTIVE} outcomes from one another.
+ *
+ * <p>The raw token is also stored under {@code token} so a session-tracking decorator can register
+ * it for periodic revocation re-checks; the handshake check is otherwise point-in-time and a
+ * connection established just before a ban, suspension, or logout would otherwise survive until the
+ * token's natural expiry.
  */
 @Component
 public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
     public static final String PRINCIPAL_ATTRIBUTE = "principal";
+    public static final String TOKEN_ATTRIBUTE = "token";
 
     private static final Logger log = LoggerFactory.getLogger(JwtHandshakeInterceptor.class);
 
@@ -69,6 +75,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
         attributes.put(PRINCIPAL_ATTRIBUTE, principal.get());
+        attributes.put(TOKEN_ATTRIBUTE, token);
         return true;
     }
 

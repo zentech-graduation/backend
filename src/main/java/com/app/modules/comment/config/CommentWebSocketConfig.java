@@ -7,9 +7,11 @@ import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
 import com.app.common.security.config.CorsProperties;
 import com.app.common.security.websocket.JwtHandshakeInterceptor;
+import com.app.common.security.websocket.SessionTrackingWebSocketHandlerDecoratorFactory;
 import com.app.modules.comment.live.CommentWebSocketAuthInterceptor;
 
 /**
@@ -27,14 +29,17 @@ public class CommentWebSocketConfig implements WebSocketMessageBrokerConfigurer 
     private final JwtHandshakeInterceptor handshakeInterceptor;
     private final CommentWebSocketAuthInterceptor authInterceptor;
     private final CorsProperties corsProperties;
+    private final SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory;
 
     public CommentWebSocketConfig(
             JwtHandshakeInterceptor handshakeInterceptor,
             CommentWebSocketAuthInterceptor authInterceptor,
-            CorsProperties corsProperties) {
+            CorsProperties corsProperties,
+            SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory) {
         this.handshakeInterceptor = handshakeInterceptor;
         this.authInterceptor = authInterceptor;
         this.corsProperties = corsProperties;
+        this.sessionTrackingDecoratorFactory = sessionTrackingDecoratorFactory;
     }
 
     @Override
@@ -54,6 +59,11 @@ public class CommentWebSocketConfig implements WebSocketMessageBrokerConfigurer 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(authInterceptor);
+    }
+
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.addDecoratorFactory(sessionTrackingDecoratorFactory);
     }
 
     private String[] allowedOrigins() {

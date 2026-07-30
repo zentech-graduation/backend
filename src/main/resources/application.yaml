@@ -171,6 +171,9 @@ app:
     group-chat-enabled: ${MESSAGE_GROUP_CHAT_ENABLED:true}
     idempotency-ttl-hours: ${MESSAGE_IDEMPOTENCY_TTL_HOURS:24}
     max-group-participants: ${MESSAGE_MAX_GROUP_PARTICIPANTS:256}
+  websocket:
+    revocation:
+      interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
