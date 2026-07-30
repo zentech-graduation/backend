@@ -15,6 +15,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
 
 import com.app.common.security.user.UserPrincipal;
+import com.app.common.security.websocket.JwtHandshakeInterceptor;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostVisibilityService;
@@ -76,8 +77,7 @@ public class CommentWebSocketAuthInterceptor implements ChannelInterceptor {
         Object principal =
                 attributes == null
                         ? null
-                        : attributes.get(
-                                CommentWebSocketJwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE);
+                        : attributes.get(JwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE);
         if (principal instanceof UserPrincipal userPrincipal) {
             return userPrincipal.userId();
         }

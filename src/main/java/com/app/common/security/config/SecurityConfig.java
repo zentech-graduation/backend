@@ -245,8 +245,8 @@ public class SecurityConfig {
     }
 
     // A browser cannot set an Authorization header on a native WebSocket handshake, so the JWT
-    // rides as a query parameter instead; CommentWebSocketJwtHandshakeInterceptor is the sole
-    // authentication gate for this path, matching the query-parameter token it validates.
+    // rides as a query parameter instead; JwtHandshakeInterceptor is the sole authentication gate
+    // for this path, matching the query-parameter token it validates.
     private void configureCommentWebSocketEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {

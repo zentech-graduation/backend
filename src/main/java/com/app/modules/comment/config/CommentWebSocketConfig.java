@@ -9,8 +9,8 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 import com.app.common.security.config.CorsProperties;
+import com.app.common.security.websocket.JwtHandshakeInterceptor;
 import com.app.modules.comment.live.CommentWebSocketAuthInterceptor;
-import com.app.modules.comment.live.CommentWebSocketJwtHandshakeInterceptor;
 
 /**
  * STOMP/SockJS WebSocket configuration for real-time comment delivery.
@@ -24,12 +24,12 @@ import com.app.modules.comment.live.CommentWebSocketJwtHandshakeInterceptor;
 @ConditionalOnProperty(prefix = "app.comment.live", name = "enabled", havingValue = "true")
 public class CommentWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    private final CommentWebSocketJwtHandshakeInterceptor handshakeInterceptor;
+    private final JwtHandshakeInterceptor handshakeInterceptor;
     private final CommentWebSocketAuthInterceptor authInterceptor;
     private final CorsProperties corsProperties;
 
     public CommentWebSocketConfig(
-            CommentWebSocketJwtHandshakeInterceptor handshakeInterceptor,
+            JwtHandshakeInterceptor handshakeInterceptor,
             CommentWebSocketAuthInterceptor authInterceptor,
             CorsProperties corsProperties) {
         this.handshakeInterceptor = handshakeInterceptor;

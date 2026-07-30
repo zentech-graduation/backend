@@ -10,8 +10,8 @@ import com.app.common.security.user.UserPrincipal;
  * audience validity, expiry, blacklist status, and the account's current status.
  *
  * <p>Shared by {@link com.app.common.security.filter.JwtAuthenticationFilter} (REST) and {@link
- * com.app.modules.comment.live.CommentWebSocketJwtHandshakeInterceptor} (WebSocket) so the two
- * paths cannot drift apart on what counts as a valid, authenticated caller.
+ * com.app.common.security.websocket.JwtHandshakeInterceptor} (WebSocket) so the two paths cannot
+ * drift apart on what counts as a valid, authenticated caller.
  */
 public interface TokenPrincipalResolver {
 

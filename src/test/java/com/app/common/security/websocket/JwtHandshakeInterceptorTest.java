@@ -1,4 +1,4 @@
-package com.app.modules.comment.live;
+package com.app.common.security.websocket;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -22,17 +22,17 @@ import com.app.common.security.service.TokenPrincipalResolver;
 import com.app.common.security.user.UserPrincipal;
 
 @ExtendWith(MockitoExtension.class)
-class CommentWebSocketJwtHandshakeInterceptorTest {
+class JwtHandshakeInterceptorTest {
 
     @Mock private TokenPrincipalResolver tokenPrincipalResolver;
 
-    private CommentWebSocketJwtHandshakeInterceptor interceptor;
+    private JwtHandshakeInterceptor interceptor;
 
     private static final String TOKEN = "test-token";
 
     @BeforeEach
     void setUp() {
-        interceptor = new CommentWebSocketJwtHandshakeInterceptor(tokenPrincipalResolver);
+        interceptor = new JwtHandshakeInterceptor(tokenPrincipalResolver);
     }
 
     @Test
@@ -47,9 +47,7 @@ class CommentWebSocketJwtHandshakeInterceptorTest {
         boolean result = interceptor.beforeHandshake(request, response, null, attrs);
 
         assertThat(result).isTrue();
-        assertThat(attrs)
-                .containsEntry(
-                        CommentWebSocketJwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE, principal);
+        assertThat(attrs).containsEntry(JwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE, principal);
     }
 
     @Test

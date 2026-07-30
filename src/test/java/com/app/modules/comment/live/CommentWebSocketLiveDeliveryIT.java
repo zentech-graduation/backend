@@ -51,8 +51,8 @@ import com.app.modules.users.repository.UserRepository;
  * through the actual Spring Security filter chain, and that a comment created via the real REST
  * endpoint is delivered end to end through the outbox, RabbitMQ fanout, and STOMP broker.
  *
- * <p>Distinct from {@link CommentWebSocketJwtHandshakeInterceptorTest}, which invokes {@code
- * beforeHandshake} directly and never traverses the security filter chain.
+ * <p>Distinct from {@link com.app.common.security.websocket.JwtHandshakeInterceptorTest}, which
+ * invokes {@code beforeHandshake} directly and never traverses the security filter chain.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
