@@ -1,8 +1,6 @@
 package com.app.modules.post.service.impl;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -10,8 +8,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
@@ -19,8 +15,8 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.app.common.enums.ApiErrorCode;
-import com.app.common.exception.AppException;
+import com.app.common.pagination.OffsetCursorCodec;
+import com.app.common.pagination.OffsetPageable;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.entity.Post;
@@ -68,7 +64,7 @@ public class PostSearchServiceImpl implements PostSearchService {
     @CircuitBreaker(name = "elasticsearchSearch", fallbackMethod = "searchFallback")
     public CursorPageResponse<PostResponse> searchPosts(
             UUID viewerId, String query, String cursor, int size) {
-        int offset = decodeCursor(cursor);
+        int offset = OffsetCursorCodec.decode(cursor);
         int effectiveLimit = normalizeLimit(size);
         // Page the ES query by the exact cursor offset. PageRequest derives `from` as page * size,
         // which truncates any offset not divisible by the page size (e.g. when the client varies
@@ -182,82 +178,8 @@ public class PostSearchServiceImpl implements PostSearchService {
 
     private CursorPageResponse<PostResponse> toPage(
             List<PostResponse> content, int offset, int limit, int esHitCount) {
-        String start = content.isEmpty() ? null : encodeCursor(offset);
-        String end = content.isEmpty() ? null : encodeCursor(offset + esHitCount);
+        String start = content.isEmpty() ? null : OffsetCursorCodec.encode(offset);
+        String end = content.isEmpty() ? null : OffsetCursorCodec.encode(offset + esHitCount);
         return CursorPageResponse.of(content, content.size() == limit, start, end, offset > 0);
-    }
-
-    private static String encodeCursor(int offset) {
-        return Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(Integer.toString(offset).getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static int decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return 0;
-        }
-        try {
-            int offset =
-                    Integer.parseInt(
-                            new String(
-                                    Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8));
-            if (offset < 0) {
-                throw new NumberFormatException("negative offset");
-            }
-            return offset;
-        } catch (RuntimeException e) {
-            throw new AppException(ApiErrorCode.INVALID_CURSOR);
-        }
-    }
-
-    // Pageable whose `from` is the exact cursor offset, not page * size, so cursor paging stays
-    // correct when the offset is not a multiple of the page size.
-    private record OffsetPageable(int offset, int size) implements Pageable {
-
-        @Override
-        public int getPageNumber() {
-            return size > 0 ? offset / size : 0;
-        }
-
-        @Override
-        public int getPageSize() {
-            return size;
-        }
-
-        @Override
-        public long getOffset() {
-            return offset;
-        }
-
-        @Override
-        public Sort getSort() {
-            return Sort.unsorted();
-        }
-
-        @Override
-        public Pageable next() {
-            return new OffsetPageable(offset + size, size);
-        }
-
-        @Override
-        public Pageable previousOrFirst() {
-            return offset > 0 ? new OffsetPageable(Math.max(0, offset - size), size) : this;
-        }
-
-        @Override
-        public Pageable first() {
-            return new OffsetPageable(0, size);
-        }
-
-        @Override
-        public Pageable withPage(int pageNumber) {
-            return new OffsetPageable(pageNumber * size, size);
-        }
-
-        @Override
-        public boolean hasPrevious() {
-            return offset > 0;
-        }
     }
 }
