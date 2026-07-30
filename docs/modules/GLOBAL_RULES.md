@@ -10,7 +10,7 @@ Cross-cutting conventions that apply to all modules. Do not duplicate these in p
 |------|------------|------|---------------|
 | Source of Truth | PostgreSQL | Canonical, durable data | No — this IS the source |
 | Cache | Redis | Fast reads, session tokens, rate-limit state | Yes — rebuild from PostgreSQL |
-| Search Index | (future: Elasticsearch) | Full-text search | Yes — rebuild from PostgreSQL |
+| Search Index | Elasticsearch (`posts`, `hashtags` only) | Full-text search | Yes — rebuild from PostgreSQL |
 | Event Stream | RabbitMQ | Async event delivery | No persistence guarantee |
 
 **Conflict resolution rule**: If a data conflict exists between tiers, PostgreSQL is always correct.
@@ -125,7 +125,7 @@ Flow:
 | Feed / Explore ranking | `post_interaction_scores` updated by a background scheduler, not in real-time | Feed ranking may lag behind actual activity by minutes |
 | Hashtag trending | `hashtag_trending` populated by a scheduled background job | Trending data is a periodic snapshot, not live |
 | Email verification / password reset tokens | Stored in Redis, not PostgreSQL | Tokens are lost on full Redis flush; user must re-request |
-| Full-text search | No Elasticsearch in v1; username/hashtag search uses PostgreSQL `pg_trgm` GIN index | Search ranking is less sophisticated than a dedicated search engine |
+| Full-text search | Two tiers by domain. `posts` and `hashtags` are indexed in Elasticsearch and queried behind the `elasticsearchSearch` circuit breaker; hashtag search falls back to `pg_trgm`, post search falls back to an empty page. `users` has no Elasticsearch index and is not indexed; the PostgreSQL `pg_trgm` GIN index `idx_users_username_trgm` is the designated backend for username search | Ranking for the PostgreSQL-backed tier is popularity-ordered, not relevance-scored |
 | Recommendation | `user_similarity` and `post_interaction_scores` populated by external ML jobs | Recommendations may lag behind recent user behavior |
 | Story expiry | Expired stories remain in the database until a cleanup job removes them | `expires_at` must always be checked; do not rely on row absence alone |
 
