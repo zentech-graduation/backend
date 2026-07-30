@@ -241,7 +241,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | `modules/post/controller` | `PostControllerIT` |
 | `modules/post/service/impl` | `PostLikeServiceImplTest`, `PostSaveServiceImplTest`, `PostServiceImplTest`, `PostVisibilityServiceImplTest` |
 | `modules/social/repository` | `FollowRepositoryIT` |
-| `modules/social/service/impl` | `FollowServiceImplTest`, `SocialEventServiceImplTest` |
+| `modules/social/service/impl` | `SocialEventServiceImplTest` |
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
 | `modules/users/service/impl` | `UserServiceImplTest` |
