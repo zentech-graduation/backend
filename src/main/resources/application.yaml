@@ -116,6 +116,8 @@ app:
   notification:
     consumer:
       enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
+    live:
+      enabled: ${NOTIFICATION_LIVE_ENABLED:false}
   media:
     cdn-base-url: ${MEDIA_CDN_BASE_URL:}
     r2:

@@ -29,6 +29,8 @@ app:
   notification:
     consumer:
       enabled: true
+    live:
+      enabled: true
   hashtag:
     consumer:
       enabled: true

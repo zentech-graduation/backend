@@ -1,4 +1,4 @@
-package com.app.modules.comment.config;
+package com.app.modules.notification.config;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
@@ -9,23 +9,20 @@ import com.app.common.security.config.CorsProperties;
 import com.app.common.security.websocket.JwtHandshakeInterceptor;
 
 /**
- * Registers the {@code /ws/comments} STOMP endpoint. Active only when {@code
- * app.comment.live.enabled} is true.
+ * Registers the {@code /ws/notifications} STOMP endpoint. Active only when {@code
+ * app.notification.live.enabled} is true.
  *
- * <p>Broker-wide concerns (message broker, inbound channel interceptors, transport decorators) are
- * shared across every STOMP endpoint and live in {@link
- * com.app.common.config.websocket.WebSocketBrokerConfig} instead of here, since Spring aggregates
- * every {@link WebSocketMessageBrokerConfigurer} bean's callbacks onto the one broker and one
- * inbound channel the application has.
+ * <p>Broker-wide concerns are shared across every STOMP endpoint and live in {@link
+ * com.app.common.config.websocket.WebSocketBrokerConfig} instead of here; see that class for why.
  */
 @Configuration
-@ConditionalOnProperty(prefix = "app.comment.live", name = "enabled", havingValue = "true")
-public class CommentWebSocketConfig implements WebSocketMessageBrokerConfigurer {
+@ConditionalOnProperty(prefix = "app.notification.live", name = "enabled", havingValue = "true")
+public class NotificationWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtHandshakeInterceptor handshakeInterceptor;
     private final CorsProperties corsProperties;
 
-    public CommentWebSocketConfig(
+    public NotificationWebSocketConfig(
             JwtHandshakeInterceptor handshakeInterceptor, CorsProperties corsProperties) {
         this.handshakeInterceptor = handshakeInterceptor;
         this.corsProperties = corsProperties;
@@ -33,7 +30,7 @@ public class CommentWebSocketConfig implements WebSocketMessageBrokerConfigurer 
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws/comments")
+        registry.addEndpoint("/ws/notifications")
                 .addInterceptors(handshakeInterceptor)
                 .setAllowedOriginPatterns(allowedOrigins())
                 .withSockJS();
