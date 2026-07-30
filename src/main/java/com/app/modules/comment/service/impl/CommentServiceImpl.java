@@ -255,7 +255,10 @@ public class CommentServiceImpl implements CommentService {
             data.put("postId", saved.getPostId().toString());
             data.put("commentId", saved.getId().toString());
             data.put("depth", (int) saved.getDepth());
-            data.put("comment", response);
+            // Broadcast projection: this payload is fanned out to every subscriber of the post's
+            // live stream, so the editor's own isLiked state must not ride along as if it applied
+            // to every viewer.
+            data.put("comment", mapper.toBroadcastResponse(response));
             outboxService.enqueue(
                     CommentEventTypes.COMMENT_EDITED_V1,
                     CommentEventTypes.COMMENT_EDITED_V1,
@@ -548,7 +551,10 @@ public class CommentServiceImpl implements CommentService {
         data.put("userId", actorId.toString());
         data.put("depth", (int) saved.getDepth());
         data.put("mentionedUserIds", mentionedUserIds);
-        data.put("comment", response);
+        // Broadcast projection: this payload is fanned out to every subscriber of the post's live
+        // stream, so the creating actor's own isLiked state must not ride along as if it applied to
+        // every viewer.
+        data.put("comment", mapper.toBroadcastResponse(response));
         if (saved.getParentId() != null) {
             data.put("parentId", saved.getParentId().toString());
         }
