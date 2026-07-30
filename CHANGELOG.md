@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- User search by username is available to authenticated callers, matching case-insensitively on any part of the username and ordering results by follower count.
+- The users a caller has blocked can now be listed as a paginated page, newest block first.
+- A user's public profile can now be fetched by username as well as by id; the username match is case-sensitive.
+
 ### Removed
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
 
@@ -18,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The report and admin listing endpoints now name their page-size parameter `limit`, matching every other paginated endpoint.
 - The notifications endpoint maximum page size is raised from 50 to 100.
 - A malformed pagination cursor now returns a 400 error with a typed code instead of silently returning the first page.
+- Post search now rejects a cursor addressing a result offset beyond 10,000 with a 400 error, matching the bound hashtag search already applied; previously only a negative offset was rejected.
 - A comment WebSocket handshake rejected because of a blacklisted (logged-out) token now returns the same response as every other rejection reason, with no distinguishing status code.
 - The social module's internal route constants now match the endpoints they describe; no endpoint path changed.
 - Removed unused internal path constants that described endpoints the application never served; no served endpoint changed.
