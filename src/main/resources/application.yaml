@@ -82,7 +82,7 @@ app:
       confirm-timeout: ${OUTBOX_PUBLISHER_CONFIRM_TIMEOUT:PT10S}
       processing-timeout: ${OUTBOX_PUBLISHER_PROCESSING_TIMEOUT:PT2M}
       initial-delay: ${OUTBOX_PUBLISHER_INITIAL_DELAY:PT10S}
-      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT5S}
+      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT1S}
       retry-backoffs:
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_1:PT10S}
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_2:PT30S}
