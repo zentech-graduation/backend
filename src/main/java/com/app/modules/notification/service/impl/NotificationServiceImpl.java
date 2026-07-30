@@ -2,7 +2,9 @@ package com.app.modules.notification.service.impl;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.data.domain.PageRequest;
@@ -11,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
@@ -19,6 +22,7 @@ import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.mapper.NotificationMapper;
+import com.app.modules.notification.messaging.NotificationEventTypes;
 import com.app.modules.notification.repository.NotificationRepository;
 import com.app.modules.notification.service.NotificationService;
 import com.app.modules.social.repository.BlockRepository;
@@ -28,20 +32,25 @@ import com.app.modules.users.repository.UserSettingsRepository;
 @Service
 public class NotificationServiceImpl implements NotificationService {
 
+    private static final String AGGREGATE_TYPE = "notification";
+
     private final NotificationRepository notificationRepository;
     private final UserSettingsRepository userSettingsRepository;
     private final BlockRepository blockRepository;
     private final NotificationMapper notificationMapper;
+    private final OutboxService outboxService;
 
     public NotificationServiceImpl(
             NotificationRepository notificationRepository,
             UserSettingsRepository userSettingsRepository,
             BlockRepository blockRepository,
-            NotificationMapper notificationMapper) {
+            NotificationMapper notificationMapper,
+            OutboxService outboxService) {
         this.notificationRepository = notificationRepository;
         this.userSettingsRepository = userSettingsRepository;
         this.blockRepository = blockRepository;
         this.notificationMapper = notificationMapper;
+        this.outboxService = outboxService;
     }
 
     @Override
@@ -73,7 +82,20 @@ public class NotificationServiceImpl implements NotificationService {
                         .entityType(entityType)
                         .entityId(entityId)
                         .build();
-        notificationRepository.save(notification);
+        Notification saved = notificationRepository.save(notification);
+
+        // The live tier reads the row back at push time to get createdAt (database-defaulted, so
+        // still null on `saved` here) and the full response shape; the outbox payload therefore
+        // carries only the identifiers a listener needs to find it, not the entity itself.
+        Map<String, Object> data = new HashMap<>();
+        data.put("recipientId", recipientId.toString());
+        outboxService.enqueue(
+                NotificationEventTypes.NOTIFICATION_CREATED_V1,
+                NotificationEventTypes.NOTIFICATION_CREATED_V1,
+                AGGREGATE_TYPE,
+                saved.getId(),
+                actorId,
+                data);
     }
 
     @Override

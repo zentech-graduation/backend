@@ -3,6 +3,7 @@ package com.app.modules.notification.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -26,6 +27,7 @@ import org.springframework.data.domain.PageRequest;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.TimeCursors;
@@ -34,6 +36,7 @@ import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.mapper.NotificationMapper;
+import com.app.modules.notification.messaging.NotificationEventTypes;
 import com.app.modules.notification.repository.NotificationRepository;
 import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.entity.UserSettings;
@@ -46,6 +49,7 @@ class NotificationServiceImplTest {
     @Mock private UserSettingsRepository userSettingsRepository;
     @Mock private BlockRepository blockRepository;
     @Mock private NotificationMapper notificationMapper;
+    @Mock private OutboxService outboxService;
 
     private NotificationServiceImpl service;
 
@@ -56,9 +60,16 @@ class NotificationServiceImplTest {
                         notificationRepository,
                         userSettingsRepository,
                         blockRepository,
-                        notificationMapper);
+                        notificationMapper,
+                        outboxService);
         lenient().when(userSettingsRepository.findById(any())).thenReturn(Optional.empty());
         lenient().when(blockRepository.existsBetween(any(), any())).thenReturn(false);
+        // The live-push path reads the persisted row's generated id immediately after save(); a
+        // freshly built (unsaved) entity has none, so every create()-path test needs a saved
+        // return value with an id, exactly as JPA would assign one on a real insert.
+        lenient()
+                .when(notificationRepository.save(any()))
+                .thenReturn(Notification.builder().id(UUID.randomUUID()).build());
     }
 
     @Test
@@ -121,6 +132,33 @@ class NotificationServiceImplTest {
         assertThat(saved.getActorId()).isEqualTo(actorId);
         assertThat(saved.getRecipientId()).isEqualTo(recipientId);
         assertThat(saved.getType()).isEqualTo(NotificationType.LIKE_POST);
+    }
+
+    @Test
+    void create_allGuardsPass_enqueuesOutboxEvent() {
+        UUID actorId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UUID entityId = UUID.randomUUID();
+
+        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", entityId);
+
+        verify(outboxService)
+                .enqueue(
+                        eq(NotificationEventTypes.NOTIFICATION_CREATED_V1),
+                        eq(NotificationEventTypes.NOTIFICATION_CREATED_V1),
+                        eq("notification"),
+                        any(UUID.class),
+                        eq(actorId),
+                        argThat(data -> recipientId.toString().equals(data.get("recipientId"))));
+    }
+
+    @Test
+    void create_selfNotification_doesNotEnqueueOutboxEvent() {
+        UUID userId = UUID.randomUUID();
+
+        service.create(userId, userId, NotificationType.LIKE_POST, "post", UUID.randomUUID());
+
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
     }
 
     @Test
