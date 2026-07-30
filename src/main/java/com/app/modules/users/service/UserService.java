@@ -60,6 +60,25 @@ public interface UserService {
     PublicUserProfileResponse getUserProfile(UUID viewerId, UUID targetUserId);
 
     /**
+     * Returns the public-facing profile of the user holding the given username, applying exactly
+     * the same block and private-account gating as {@link #getUserProfile(UUID, UUID)}.
+     *
+     * <p>Matching is <strong>case-sensitive</strong>, because {@code users.username} is constrained
+     * by a plain {@code UNIQUE} on the raw column: {@code Alice} and {@code alice} are two distinct
+     * legal accounts, so a case-insensitive lookup could not resolve to a single row. A
+     * soft-deleted account, a non-existent username, and a username blocked with respect to the
+     * viewer are indistinguishable to the caller - all three yield {@code NOT_FOUND}.
+     *
+     * @param viewerId the authenticated caller's identifier, or {@code null} for an anonymous
+     *     caller
+     * @param username the exact, case-sensitive username to resolve
+     * @return public profile DTO
+     * @throws com.app.common.exception.AppException with {@code NOT_FOUND} if no live user holds
+     *     that username, or the resolved user is blocked with respect to the viewer
+     */
+    PublicUserProfileResponse getUserProfileByUsername(UUID viewerId, String username);
+
+    /**
      * Returns the notification and privacy settings for the authenticated user.
      *
      * @param userId authenticated user's identifier

@@ -72,6 +72,21 @@ public class UserController extends BaseController implements UserApi {
                         ApiSuccessCode.OK, userService.getUserProfile(viewerId, userId)));
     }
 
+    /**
+     * Returns the public profile of the user holding the given username, matched case-sensitively.
+     */
+    @Override
+    @GetMapping(ApiConstants.Users.BY_USERNAME)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<PublicUserProfileResponse>> getUserProfileByUsername(
+            @PathVariable String username, @AuthenticationPrincipal UserPrincipal principal) {
+        UUID viewerId = principal != null ? principal.userId() : null;
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        userService.getUserProfileByUsername(viewerId, username)));
+    }
+
     /** Returns the notification and privacy settings of the authenticated user. */
     @Override
     @GetMapping(ApiConstants.Users.ME_SETTINGS)

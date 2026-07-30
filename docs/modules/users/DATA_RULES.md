@@ -63,6 +63,8 @@ Queries using them must filter soft-deleted rows themselves.
 | `username` must match `^[a-zA-Z0-9_.]+$` and be 3–30 characters | `UpdateProfileRequest` bean validation |
 | An empty string clears `bio`, `avatarUrl`, `websiteUrl`; `null` leaves the field untouched | `UserServiceImpl.updateMyProfile` |
 | A block in either direction hides the target profile entirely | `UserServiceImpl.getUserProfile` — returns `NOT_FOUND` so a blocked caller cannot confirm the account exists |
+| Username lookup is **case-sensitive** and shares the id lookup's gating path | `UserServiceImpl.getUserProfileByUsername` — resolves via `findByUsernameAndDeletedAtIsNull`, then the same `assemblePublicProfile` used by the id lookup, so the two cannot drift on block handling or counter masking |
+| Absent, soft-deleted, and block-hidden accounts are indistinguishable on lookup | All three yield `NOT_FOUND` with an identical response body apart from the timestamp |
 | Social counts are relationship-gated | `UserServiceImpl.getUserProfile` — owner always sees them; a private account reveals them only to accepted followers; a public account reveals them to any authenticated caller; everyone else receives `null` |
 | Every user-referencing response carries the viewer's relationship state | `UserServiceImpl.getUserProfile` via `SocialService.loadRelationships` |
 | A soft-deleted or unknown user id resolves to a placeholder, not an error | `UserSummaryServiceImpl.loadSummaries` — `displayName` becomes `"Deleted user"`, `username` becomes `null` |

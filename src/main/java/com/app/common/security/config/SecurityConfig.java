@@ -220,7 +220,10 @@ public class SecurityConfig {
     private void configurePublicUsersEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
-        auth.requestMatchers(HttpMethod.GET, ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID)
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID,
+                        ApiConstants.Users.ROOT + ApiConstants.Users.BY_USERNAME)
                 .permitAll();
     }
 

@@ -29,6 +29,7 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/users";
         public static final String ME = "/me";
         public static final String BY_ID = "/{userId}";
+        public static final String BY_USERNAME = "/by-username/{username}";
         public static final String ME_SETTINGS = "/me/settings";
     }
 

@@ -3,6 +3,8 @@ package com.app.modules.users.api;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -150,6 +152,62 @@ public interface UserApi {
     @GetMapping(ApiConstants.Users.BY_ID)
     ResponseEntity<ApiResponse<PublicUserProfileResponse>> getUserProfile(
             @PathVariable UUID userId, @AuthenticationPrincipal UserPrincipal principal);
+
+    @Operation(
+            summary = "Get a user's public profile by username",
+            description =
+                    "Returns the public profile of the user holding the given username. Matching is"
+                            + " case-sensitive, because username uniqueness is enforced on the raw"
+                            + " column. A non-existent username, a soft-deleted account, and an"
+                            + " account blocked with respect to the caller all return 404"
+                            + " identically. Counter fields are omitted for unauthenticated"
+                            + " callers.",
+            security = {})
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Profile returned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema =
+                                        @Schema(implementation = PublicUserProfileResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "No live user holds that username, or the account is block-hidden",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "Username is outside 3-30 characters or contains illegal characters. Path"
+                                + " and query constraint violations return 400, unlike request-body"
+                                + " violations which return 422.",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Users.BY_USERNAME)
+    ResponseEntity<ApiResponse<PublicUserProfileResponse>> getUserProfileByUsername(
+            @PathVariable
+                    @Size(min = 3, max = 30)
+                    @Pattern(
+                            regexp = "^[a-zA-Z0-9_.]+$",
+                            message =
+                                    "Username may only contain letters, digits, underscores and"
+                                            + " dots")
+                    String username,
+            @AuthenticationPrincipal UserPrincipal principal);
 
     @Operation(
             summary = "Get my settings",
