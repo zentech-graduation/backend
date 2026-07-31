@@ -82,7 +82,7 @@ app:
       confirm-timeout: ${OUTBOX_PUBLISHER_CONFIRM_TIMEOUT:PT10S}
       processing-timeout: ${OUTBOX_PUBLISHER_PROCESSING_TIMEOUT:PT2M}
       initial-delay: ${OUTBOX_PUBLISHER_INITIAL_DELAY:PT10S}
-      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT5S}
+      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT1S}
       retry-backoffs:
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_1:PT10S}
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_2:PT30S}
@@ -116,6 +116,8 @@ app:
   notification:
     consumer:
       enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
+    live:
+      enabled: ${NOTIFICATION_LIVE_ENABLED:false}
   media:
     cdn-base-url: ${MEDIA_CDN_BASE_URL:}
     r2:
@@ -171,6 +173,9 @@ app:
     group-chat-enabled: ${MESSAGE_GROUP_CHAT_ENABLED:true}
     idempotency-ttl-hours: ${MESSAGE_IDEMPOTENCY_TTL_HOURS:24}
     max-group-participants: ${MESSAGE_MAX_GROUP_PARTICIPANTS:256}
+  websocket:
+    revocation:
+      interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
@@ -204,6 +209,9 @@ app:
         max-attempts: 60
         window-seconds: 60
       "[/api/v1/conversations]":
+        max-attempts: 30
+        window-seconds: 60
+      "[/ws/**]":
         max-attempts: 30
         window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.

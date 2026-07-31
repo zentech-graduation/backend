@@ -75,11 +75,12 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        RateLimitProperties.Rule rule = resolveRule(path, method);
-        if (rule == null) {
+        RuleMatch match = resolveRuleMatch(path, method);
+        if (match == null) {
             chain.doFilter(request, response);
             return;
         }
+        RateLimitProperties.Rule rule = match.rule();
 
         HttpServletRequest delivered = request;
         String ip = ipExtractor.extract(request);
@@ -108,7 +109,11 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             String email = extractEmail(cached.getCachedBody());
             key = path + ":" + ip + (email != null ? ":" + email : "");
         } else {
-            key = method + ":" + path + ":" + ip;
+            // Bucket on the matched rule key, not the concrete request path: a SockJS transport
+            // negotiation embeds a random server/session segment in the URL on every connection
+            // attempt, so keying on the concrete path would hand every attempt a fresh bucket.
+            // Exact-match rules are unaffected since their matched key equals the concrete path.
+            key = method + ":" + match.matchedKey() + ":" + ip;
         }
 
         if (!rateLimiterService.isAllowed(key, rule.maxAttempts(), rule.windowSeconds())) {
@@ -131,25 +136,45 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
      * </ol>
      */
     RateLimitProperties.Rule resolveRule(String path, String method) {
-        // Fast path: exact key lookup used for all literal paths (e.g. auth endpoints).
-        RateLimitProperties.Rule exact = properties.endpointRules().get(path);
-        if (exact != null) {
-            return exact;
-        }
-        // Pattern fallback: supports path-variable templates in endpointRules keys.
-        for (Map.Entry<String, RateLimitProperties.Rule> entry :
-                properties.endpointRules().entrySet()) {
-            if (pathMatcher.match(entry.getKey(), path)) {
-                return entry.getValue();
-            }
-        }
-        return null;
+        RuleMatch match = resolveRuleMatch(path, method);
+        return match == null ? null : match.rule();
     }
 
     /** Returns whether the given path + method combination is subject to rate limiting. */
     boolean isRateLimited(String path, String method) {
         return resolveRule(path, method) != null;
     }
+
+    /**
+     * Resolves both the applicable {@link RateLimitProperties.Rule} and the {@code endpointRules}
+     * key that matched, so the caller can bucket on the matched key rather than the concrete
+     * request path.
+     *
+     * <p>Resolution order:
+     *
+     * <ol>
+     *   <li>Exact match (O(1)) — covers all literal auth paths and any other exactly-specified
+     *       rules. The matched key equals the concrete path.
+     *   <li>Ant-pattern match — covers path-variable templates such as {@code /posts/{id}/likes}
+     *       and wildcard surfaces such as {@code /ws/**}. The matched key is the configured
+     *       pattern, not the concrete path.
+     * </ol>
+     */
+    private RuleMatch resolveRuleMatch(String path, String method) {
+        RateLimitProperties.Rule exact = properties.endpointRules().get(path);
+        if (exact != null) {
+            return new RuleMatch(path, exact);
+        }
+        for (Map.Entry<String, RateLimitProperties.Rule> entry :
+                properties.endpointRules().entrySet()) {
+            if (pathMatcher.match(entry.getKey(), path)) {
+                return new RuleMatch(entry.getKey(), entry.getValue());
+            }
+        }
+        return null;
+    }
+
+    private record RuleMatch(String matchedKey, RateLimitProperties.Rule rule) {}
 
     @SuppressWarnings("unchecked")
     private String extractEmail(byte[] body) {

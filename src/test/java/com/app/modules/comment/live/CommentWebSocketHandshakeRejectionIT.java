@@ -56,10 +56,11 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 /**
  * Proves every rejection path of the WebSocket handshake authentication gate, now that {@code
  * /ws/comments/**} is {@code permitAll()} at the Spring Security layer and {@link
- * CommentWebSocketJwtHandshakeInterceptor} is the sole authentication check.
+ * com.app.common.security.websocket.JwtHandshakeInterceptor} is the sole authentication check.
  *
- * <p>Distinct from {@link CommentWebSocketJwtHandshakeInterceptorTest}, which invokes {@code
- * beforeHandshake} directly and never traverses the security filter chain or a real HTTP upgrade.
+ * <p>Distinct from {@link com.app.common.security.websocket.JwtHandshakeInterceptorTest}, which
+ * invokes {@code beforeHandshake} directly and never traverses the security filter chain or a real
+ * HTTP upgrade.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,

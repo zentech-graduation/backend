@@ -13,6 +13,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.comment.dto.response.CommentBroadcastResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.entity.Comment;
 import com.app.modules.comment.mapper.CommentMapper;
@@ -28,13 +29,10 @@ public class CommentCacheServiceImpl implements CommentCacheService {
     private static final Logger log = LoggerFactory.getLogger(CommentCacheServiceImpl.class);
     private static final int MAX_CACHED = 50;
     private static final Duration TTL = Duration.ofSeconds(300);
-    // v3: the cached CommentResponse shape gained an isLiked field, always false in this cache and
-    // in the live broadcast - viewer state cannot be resolved for a blob shared across every
-    // subscriber. The version segment stops a pre-upgrade entry with the old shape from ever being
-    // read back. A client must treat isLiked from this cache or from a comment.* WebSocket event as
-    // non-authoritative and re-derive it from a REST call, exactly as it already must for the
-    // likeCount frozen at push time.
-    private static final String KEY_PREFIX = "comment:recent:v3:";
+    // v4: the cached shape is CommentBroadcastResponse, which has no isLiked field at all, rather
+    // than a CommentResponse with isLiked hardcoded false. The version segment stops a pre-upgrade
+    // entry in either older shape from ever being read back as the new type.
+    private static final String KEY_PREFIX = "comment:recent:v4:";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -56,15 +54,15 @@ public class CommentCacheServiceImpl implements CommentCacheService {
     }
 
     @Override
-    public List<CommentResponse> getRecent(UUID postId) {
+    public List<CommentBroadcastResponse> getRecent(UUID postId) {
         try {
             List<String> raw = redisTemplate.opsForList().range(key(postId), 0, -1);
             if (raw == null || raw.isEmpty()) {
                 return List.of();
             }
-            List<CommentResponse> result = new ArrayList<>(raw.size());
+            List<CommentBroadcastResponse> result = new ArrayList<>(raw.size());
             for (String json : raw) {
-                result.add(objectMapper.readValue(json, CommentResponse.class));
+                result.add(objectMapper.readValue(json, CommentBroadcastResponse.class));
             }
             return result;
         } catch (RuntimeException e) {
@@ -74,8 +72,8 @@ public class CommentCacheServiceImpl implements CommentCacheService {
     }
 
     @Override
-    public List<CommentResponse> getOrRebuild(UUID postId) {
-        List<CommentResponse> cached = getRecent(postId);
+    public List<CommentBroadcastResponse> getOrRebuild(UUID postId) {
+        List<CommentBroadcastResponse> cached = getRecent(postId);
         return cached.isEmpty() ? rebuild(postId) : cached;
     }
 
@@ -83,7 +81,8 @@ public class CommentCacheServiceImpl implements CommentCacheService {
     public void pushToFront(UUID postId, CommentResponse comment) {
         try {
             String key = key(postId);
-            redisTemplate.opsForList().leftPush(key, objectMapper.writeValueAsString(comment));
+            CommentBroadcastResponse broadcast = mapper.toBroadcastResponse(comment);
+            redisTemplate.opsForList().leftPush(key, objectMapper.writeValueAsString(broadcast));
             redisTemplate.opsForList().trim(key, 0, MAX_CACHED - 1);
             redisTemplate.expire(key, TTL);
         } catch (RuntimeException e) {
@@ -100,21 +99,23 @@ public class CommentCacheServiceImpl implements CommentCacheService {
         }
     }
 
-    private List<CommentResponse> rebuild(UUID postId) {
+    private List<CommentBroadcastResponse> rebuild(UUID postId) {
         List<Comment> recent =
                 commentRepository.findFirstTopLevel(postId, PageRequest.of(0, MAX_CACHED));
         Map<UUID, UserSummaryResponse> authors =
                 userSummaryService.loadSummaries(recent.stream().map(Comment::getUserId).toList());
-        // isLiked is always false here - see the KEY_PREFIX comment on why viewer state cannot be
-        // resolved for a blob cached and broadcast to every subscriber.
-        List<CommentResponse> responses =
+        List<CommentBroadcastResponse> responses =
                 recent.stream()
-                        .map(c -> mapper.toResponse(c, authors.get(c.getUserId()), false))
+                        .map(
+                                c ->
+                                        mapper.toBroadcastResponse(
+                                                mapper.toResponse(
+                                                        c, authors.get(c.getUserId()), false)))
                         .toList();
         try {
             String key = key(postId);
             // Query is newest-first; right-pushing in order keeps index 0 as the newest entry.
-            for (CommentResponse response : responses) {
+            for (CommentBroadcastResponse response : responses) {
                 redisTemplate
                         .opsForList()
                         .rightPush(key, objectMapper.writeValueAsString(response));

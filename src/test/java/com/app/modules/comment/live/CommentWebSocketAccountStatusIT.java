@@ -39,8 +39,9 @@ import com.app.modules.users.repository.UserRepository;
  *
  * <p>The token itself is otherwise valid: correctly signed, not expired, not blacklisted. Only the
  * account's status changed after issuance. As of writing, {@link
- * CommentWebSocketJwtHandshakeInterceptor} never resolves account status and hardcodes {@code
- * "ACTIVE"} on the resolved principal, so this class is expected to fail RED against current code.
+ * com.app.common.security.websocket.JwtHandshakeInterceptor} never resolves account status and
+ * hardcodes {@code "ACTIVE"} on the resolved principal, so this class is expected to fail RED
+ * against current code.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,

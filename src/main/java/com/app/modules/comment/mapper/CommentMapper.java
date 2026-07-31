@@ -4,6 +4,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.comment.dto.response.CommentBroadcastResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.entity.Comment;
 
@@ -25,4 +26,13 @@ public interface CommentMapper {
     @Mapping(source = "author", target = "author")
     @Mapping(source = "isLiked", target = "isLiked")
     CommentResponse toResponse(Comment comment, UserSummaryResponse author, boolean isLiked);
+
+    /**
+     * Projects a {@link CommentResponse} to its broadcast shape, dropping the viewer-dependent
+     * {@code isLiked} field that cannot be resolved for a blob shared across every subscriber.
+     *
+     * @param response the REST-shaped response to project
+     * @return the broadcast response, identical except for the omitted {@code isLiked} field
+     */
+    CommentBroadcastResponse toBroadcastResponse(CommentResponse response);
 }

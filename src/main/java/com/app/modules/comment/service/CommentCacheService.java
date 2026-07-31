@@ -3,6 +3,7 @@ package com.app.modules.comment.service;
 import java.util.List;
 import java.util.UUID;
 
+import com.app.modules.comment.dto.response.CommentBroadcastResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 
 /**
@@ -10,7 +11,9 @@ import com.app.modules.comment.dto.response.CommentResponse;
  *
  * <p>Backed by a capped Redis list with a short TTL. All operations fail open: on a Redis error the
  * cache degrades to empty or a no-op and never propagates the failure, since it is rebuildable from
- * PostgreSQL.
+ * PostgreSQL. Cached and returned as {@link CommentBroadcastResponse}, not {@link CommentResponse}:
+ * this cache backs the catch-up replay broadcast to every subscriber of a post's live stream, and
+ * {@code isLiked} cannot be resolved for a blob with no single viewer.
  */
 public interface CommentCacheService {
 
@@ -20,7 +23,7 @@ public interface CommentCacheService {
      * @param postId post whose recent comments are read
      * @return cached comments, possibly empty
      */
-    List<CommentResponse> getRecent(UUID postId);
+    List<CommentBroadcastResponse> getRecent(UUID postId);
 
     /**
      * Returns cached recent comments, rebuilding from PostgreSQL on a miss.
@@ -28,10 +31,11 @@ public interface CommentCacheService {
      * @param postId post whose recent comments are read
      * @return recent comments, newest first
      */
-    List<CommentResponse> getOrRebuild(UUID postId);
+    List<CommentBroadcastResponse> getOrRebuild(UUID postId);
 
     /**
-     * Prepends a newly created comment to the cache, capping and refreshing the TTL.
+     * Prepends a newly created comment to the cache, capping and refreshing the TTL. The viewer's
+     * {@code isLiked} state is stripped before caching.
      *
      * @param postId post the comment belongs to
      * @param comment the created comment
