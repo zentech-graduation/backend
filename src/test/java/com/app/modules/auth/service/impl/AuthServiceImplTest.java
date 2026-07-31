@@ -25,6 +25,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
@@ -427,6 +428,87 @@ class AuthServiceImplTest {
                                         && event.getFormattedMessage()
                                                 .contains(u.getId().toString()))
                 .noneMatch(event -> event.getFormattedMessage().contains(u.getEmail()));
+    }
+
+    @Test
+    void login_validUsername_success_returnsTokens() {
+        User u = activeUser();
+        UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
+        when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
+
+        AuthResponse resp = service.login(new LoginRequest("alice", "password1"), stubRequest());
+
+        assertThat(resp.accessToken()).isEqualTo("ACCESS");
+        assertThat(resp.refreshToken()).isEqualTo("REFRESH");
+        assertThat(resp.user().id()).isEqualTo(u.getId());
+        verify(userRepository).findByUsernameAndDeletedAtIsNull("alice");
+    }
+
+    @Test
+    void login_unknownUsername_throwsSameCodeAsWrongPassword() {
+        when(userRepository.findByUsernameAndDeletedAtIsNull("ghost")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () -> service.login(new LoginRequest("ghost", "password1"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                // Identical code to the wrong-password path so the two are indistinguishable.
+                .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_usernameWrongPassword_throwsInvalidCredentials() {
+        User u = activeUser();
+        when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        when(passwordEncoder.matches(eq("wrong"), eq("STORED-HASH"))).thenReturn(false);
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("alice", "wrong"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_usernameUpperCase_resolvesCorrectly() {
+        User u = activeUser();
+        UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
+        // User stored as "alice"; an uppercase submission must be lowercased before lookup.
+        when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
+
+        AuthResponse resp = service.login(new LoginRequest("ALICE", "password1"), stubRequest());
+
+        assertThat(resp.accessToken()).isEqualTo("ACCESS");
+        assertThat(resp.user().id()).isEqualTo(u.getId());
+        verify(userRepository).findByUsernameAndDeletedAtIsNull("alice");
+    }
+
+    @Test
+    void register_username_storedLowercase() {
+        UUID newId = UUID.randomUUID();
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        when(userRepository.save(any(User.class)))
+                .thenAnswer(
+                        inv -> {
+                            User u = inv.getArgument(0);
+                            u.setId(newId);
+                            return u;
+                        });
+        when(passwordEncoder.encode("password1")).thenReturn("HASH");
+
+        service.register(new RegisterRequest("MixedCase", "a@b.c", "password1", null));
+
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getUsername()).isEqualTo("mixedcase");
     }
 
     @Test

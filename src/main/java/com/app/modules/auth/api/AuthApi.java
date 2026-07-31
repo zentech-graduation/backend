@@ -77,7 +77,10 @@ public interface AuthApi {
     /** Authenticates an existing user and returns access + refresh tokens. */
     @Operation(
             summary = "Log in",
-            description = "Authenticates credentials and returns an access/refresh token pair.",
+            description =
+                    "Authenticates credentials by email or username and returns an access/refresh"
+                            + " token pair. The identifier field accepts either an email address or"
+                            + " a username.",
             security = {})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
