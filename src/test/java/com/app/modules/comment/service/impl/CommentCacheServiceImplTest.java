@@ -110,7 +110,8 @@ class CommentCacheServiceImplTest {
                 isLiked,
                 0,
                 OffsetDateTime.now(ZoneOffset.UTC),
-                OffsetDateTime.now(ZoneOffset.UTC));
+                OffsetDateTime.now(ZoneOffset.UTC),
+                false);
     }
 
     private static CommentBroadcastResponse mockBroadcastResponse() {

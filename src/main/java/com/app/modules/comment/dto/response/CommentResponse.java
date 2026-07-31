@@ -23,4 +23,34 @@ public record CommentResponse(
         @Schema(description = "Whether the viewer has liked this comment.") boolean isLiked,
         @Schema(description = "Trigger-maintained direct reply count.") int replyCount,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
-        @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt) {}
+        @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt,
+        @Schema(
+                        description =
+                                "Whether this comment was returned as part of the pinned"
+                                        + " top-comments block. Only ever true on the first page of a"
+                                        + " post's comment list; always false elsewhere, including on"
+                                        + " single-comment responses.")
+                boolean pinned) {
+
+    /**
+     * Returns a copy marked as part of the pinned top-comments block.
+     *
+     * @return the same comment with {@code pinned} set to true
+     */
+    public CommentResponse asPinned() {
+        return new CommentResponse(
+                id,
+                postId,
+                author,
+                parentId,
+                rootId,
+                depth,
+                content,
+                likeCount,
+                isLiked,
+                replyCount,
+                createdAt,
+                updatedAt,
+                true);
+    }
+}

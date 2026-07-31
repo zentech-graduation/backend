@@ -8,13 +8,17 @@ import com.app.common.response.UserSummaryResponse;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Broadcast projection of a comment: every {@link CommentResponse} field except {@code isLiked}.
+ * Broadcast projection of a comment: every {@link CommentResponse} field except {@code isLiked} and
+ * {@code pinned}.
  *
  * <p>One serialised blob is shared by every subscriber of a post's live comment stream, so a
  * viewer-dependent field cannot be resolved for it - the field is omitted entirely rather than
  * carrying a constant placeholder value, so a client reading a socket frame sees the key absent
  * instead of a value that looks correct but is not. {@code isLiked} is only ever correct on a
  * {@link CommentResponse} returned over REST.
+ *
+ * <p>{@code pinned} is omitted for a different reason: it describes a comment's position on a
+ * requested page, not the comment itself, and a broadcast frame belongs to no page.
  */
 @Schema(description = "A comment as broadcast to every live subscriber of a post's comment stream")
 public record CommentBroadcastResponse(
