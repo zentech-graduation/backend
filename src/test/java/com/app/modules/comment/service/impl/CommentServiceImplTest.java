@@ -14,6 +14,9 @@ import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,6 +36,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.user.UserPrincipal;
@@ -64,6 +70,14 @@ import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class CommentServiceImplTest {
+
+    private static final OffsetDateTime EPOCH =
+            OffsetDateTime.ofInstant(Instant.EPOCH, ZoneOffset.UTC);
+
+    // A literal cursor in the wire format issued before the pinned block existed. Hardcoded rather
+    // than round-tripped through the encoder so a format change cannot silently pass this test.
+    private static final String SECOND_PAGE_CURSOR =
+            "MTc2NzIyNTYwMDAwMDAwMDoxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTE";
 
     @Mock private CommentRepository commentRepository;
     @Mock private CommentLikeRepository commentLikeRepository;
@@ -515,7 +529,9 @@ class CommentServiceImplTest {
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build());
-        when(commentRepository.findFirstTopLevel(eq(postId), any())).thenReturn(rows);
+        when(commentRepository.findTopLikedTopLevel(eq(postId), any())).thenReturn(List.of());
+        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any()))
+                .thenReturn(rows);
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
@@ -536,7 +552,9 @@ class CommentServiceImplTest {
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build());
-        when(commentRepository.findFirstTopLevel(eq(postId), any())).thenReturn(rows);
+        when(commentRepository.findTopLikedTopLevel(eq(postId), any())).thenReturn(List.of());
+        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any()))
+                .thenReturn(rows);
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
@@ -544,6 +562,184 @@ class CommentServiceImplTest {
 
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
         assertThat(result.getContent()).hasSize(3);
+    }
+
+    @Test
+    void listTopLevelComments_threeEligible_pinsExactlyThreeAheadOfTheBody() {
+        List<Comment> pinned = comments(3);
+        List<Comment> body = comments(2);
+        stubFirstPage(pinned, body);
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, null, 5);
+
+        assertThat(result.getContent()).hasSize(5);
+        assertThat(result.getContent().subList(0, 3))
+                .allSatisfy(c -> assertThat(c.pinned()).isTrue());
+        assertThat(result.getContent().subList(3, 5))
+                .allSatisfy(c -> assertThat(c.pinned()).isFalse());
+    }
+
+    @Test
+    void listTopLevelComments_twoEligible_pinsTwo() {
+        stubFirstPage(comments(2), comments(4));
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, null, 5);
+
+        assertThat(result.getContent()).hasSize(6);
+        assertThat(result.getContent().stream().filter(CommentResponse::pinned)).hasSize(2);
+    }
+
+    @Test
+    void listTopLevelComments_oneEligible_pinsOne() {
+        stubFirstPage(comments(1), comments(4));
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, null, 5);
+
+        assertThat(result.getContent()).hasSize(5);
+        assertThat(result.getContent().stream().filter(CommentResponse::pinned)).hasSize(1);
+    }
+
+    @Test
+    void listTopLevelComments_noEligible_pinsNothingAndPageIsUnchanged() {
+        stubFirstPage(List.of(), comments(4));
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, null, 5);
+
+        assertThat(result.getContent()).hasSize(4);
+        assertThat(result.getContent()).noneMatch(CommentResponse::pinned);
+    }
+
+    @Test
+    void listTopLevelComments_pinnedIdsAreExcludedFromTheBodyQuery() {
+        List<Comment> pinned = comments(3);
+        stubFirstPage(pinned, comments(2));
+        ArgumentCaptor<UUID[]> excluded = ArgumentCaptor.forClass(UUID[].class);
+
+        service.listTopLevelComments(actorId, postId, null, 5);
+
+        verify(commentRepository).findFirstTopLevelExcluding(eq(postId), excluded.capture(), any());
+        assertThat(excluded.getValue())
+                .containsExactlyElementsOf(pinned.stream().map(Comment::getId).toList());
+    }
+
+    @Test
+    void listTopLevelComments_pinnedBlockIsAdditionalToTheRequestedLimit() {
+        stubFirstPage(comments(3), comments(6));
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, null, 5);
+
+        // Body is trimmed to the requested limit of 5; the three pinned rows sit on top of it.
+        assertThat(result.getContent()).hasSize(8);
+        assertThat(result.getPageInfo().isHasNextPage()).isTrue();
+    }
+
+    @Test
+    void listTopLevelComments_withCursor_queriesNeitherThePinnedNorTheExcludingStatement() {
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any()))
+                .thenReturn(comments(2));
+        when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
+
+        verify(commentRepository, never()).findTopLikedTopLevel(any(), any());
+        verify(commentRepository, never()).findFirstTopLevelExcluding(any(), any(), any());
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent()).noneMatch(CommentResponse::pinned);
+    }
+
+    @Test
+    void listTopLevelComments_cursorIssuedBeforePinningWasAdded_stillDecodes() {
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any()))
+                .thenReturn(List.of());
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any());
+    }
+
+    @Test
+    void listTopLevelComments_pinnedBlockDoesNotAppearTwiceOnTheFirstPage() {
+        List<Comment> pinned = comments(3);
+        // The repository applies the exclusion in SQL, so the body it returns already omits them.
+        stubFirstPage(pinned, comments(4));
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, null, 5);
+
+        assertThat(result.getContent()).extracting(CommentResponse::id).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void listTopLevelComments_cursorsAreDerivedFromTheBodyNotThePinnedBlock() {
+        List<Comment> body = comments(2);
+        stubFirstPage(comments(3), body);
+
+        CursorPageResponse<CommentResponse> result =
+                service.listTopLevelComments(actorId, postId, null, 5);
+
+        assertThat(result.getPageInfo().getStartCursor())
+                .isEqualTo(CursorCodec.encode(new Cursor(0L, body.get(0).getId())));
+        assertThat(result.getPageInfo().getEndCursor())
+                .isEqualTo(CursorCodec.encode(new Cursor(0L, body.get(1).getId())));
+    }
+
+    // Distinct ids per row so the mapper stub, which returns one shared response, cannot mask an
+    // ordering or duplication defect: assertions read ids off the entities, not the response.
+    private List<Comment> comments(int count) {
+        return java.util.stream.IntStream.range(0, count)
+                .mapToObj(
+                        i ->
+                                Comment.builder()
+                                        .id(UUID.randomUUID())
+                                        .postId(postId)
+                                        .createdAt(EPOCH)
+                                        .build())
+                .toList();
+    }
+
+    private void stubFirstPage(List<Comment> pinned, List<Comment> body) {
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
+        when(commentRepository.findTopLikedTopLevel(eq(postId), any())).thenReturn(pinned);
+        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any()))
+                .thenReturn(body);
+        when(mapper.toResponse(any(), any(), anyBoolean()))
+                .thenAnswer(
+                        invocation -> {
+                            Comment c = invocation.getArgument(0);
+                            return sampleResponseFor(c.getId());
+                        });
+    }
+
+    private CommentResponse sampleResponseFor(UUID id) {
+        UserSummaryResponse author =
+                new UserSummaryResponse(actorId, "actor", "Actor", null, false);
+        return new CommentResponse(
+                id,
+                postId,
+                author,
+                null,
+                null,
+                (short) 0,
+                "hello world",
+                0,
+                false,
+                0,
+                null,
+                null,
+                false);
     }
 
     private CommentResponse sampleResponse() {
@@ -561,7 +757,8 @@ class CommentServiceImplTest {
                 false,
                 0,
                 null,
-                null);
+                null,
+                false);
     }
 
     // Mirrors CommentServiceImpl's request-hash formula so the replay test can match the stored

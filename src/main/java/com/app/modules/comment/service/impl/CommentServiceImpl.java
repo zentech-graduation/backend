@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -68,6 +69,7 @@ public class CommentServiceImpl implements CommentService {
     private static final int MAX_DEPTH = 10;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int PINNED_COMMENT_COUNT = 3;
     private static final String AGGREGATE_TYPE = "comment";
 
     private final CommentRepository commentRepository;
@@ -400,15 +402,23 @@ public class CommentServiceImpl implements CommentService {
         int pageSize = normalizeLimit(limit);
         Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
+        // Page two onward is the unchanged pure keyset stream: no pinned block, no exclusion.
+        if (decoded != null) {
+            List<Comment> comments =
+                    commentRepository.findTopLevelBefore(
+                            postId,
+                            TimeCursors.fromMicros(decoded.sortValueMicros()),
+                            decoded.id(),
+                            page);
+            return toPage(viewerId, comments, pageSize, cursor);
+        }
+        List<Comment> pinned =
+                commentRepository.findTopLikedTopLevel(
+                        postId, PageRequest.of(0, PINNED_COMMENT_COUNT));
+        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         List<Comment> comments =
-                decoded == null
-                        ? commentRepository.findFirstTopLevel(postId, page)
-                        : commentRepository.findTopLevelBefore(
-                                postId,
-                                TimeCursors.fromMicros(decoded.sortValueMicros()),
-                                decoded.id(),
-                                page);
-        return toPage(viewerId, comments, pageSize, cursor);
+                commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, page);
+        return toPage(viewerId, pinned, comments, pageSize, cursor);
     }
 
     @Override
@@ -447,26 +457,33 @@ public class CommentServiceImpl implements CommentService {
         }
     }
 
-    // Keyset pagination over limit+1 rows: hasNextPage is decided by the pre-trim size, then the
-    // extra probe row is dropped.
     private CursorPageResponse<CommentResponse> toPage(
             UUID viewerId, List<Comment> rows, int pageSize, String cursor) {
+        return toPage(viewerId, List.of(), rows, pageSize, cursor);
+    }
+
+    // Keyset pagination over limit+1 rows: hasNextPage is decided by the pre-trim size, then the
+    // extra probe row is dropped. The pinned block is prepended and is additional to pageSize, so
+    // the body remains a full keyset page and the cursor advances by exactly pageSize.
+    private CursorPageResponse<CommentResponse> toPage(
+            UUID viewerId, List<Comment> pinned, List<Comment> rows, int pageSize, String cursor) {
         boolean hasNextPage = rows.size() > pageSize;
         List<Comment> page = hasNextPage ? rows.subList(0, pageSize) : rows;
+        List<Comment> all = new ArrayList<>(pinned.size() + page.size());
+        all.addAll(pinned);
+        all.addAll(page);
+        // Both batch loaders are called once over the pinned block and the body together, so the
+        // pinned block adds no query and the query count stays flat in page size.
         Map<UUID, UserSummaryResponse> authors =
-                userSummaryService.loadSummaries(page.stream().map(Comment::getUserId).toList());
+                userSummaryService.loadSummaries(all.stream().map(Comment::getUserId).toList());
         Set<UUID> likedCommentIds =
                 commentViewerStateService.loadLikedCommentIds(
-                        viewerId, page.stream().map(Comment::getId).toList());
-        List<CommentResponse> content =
-                page.stream()
-                        .map(
-                                c ->
-                                        mapper.toResponse(
-                                                c,
-                                                authors.get(c.getUserId()),
-                                                likedCommentIds.contains(c.getId())))
-                        .toList();
+                        viewerId, all.stream().map(Comment::getId).toList());
+        List<CommentResponse> content = new ArrayList<>(all.size());
+        pinned.forEach(c -> content.add(toResponse(c, authors, likedCommentIds).asPinned()));
+        page.forEach(c -> content.add(toResponse(c, authors, likedCommentIds)));
+        // Cursors describe the newest-first body only. Deriving them from the pinned block would
+        // seek the next page to an arbitrary position in the stream.
         Comment first = page.isEmpty() ? null : page.get(0);
         Comment last = page.isEmpty() ? null : page.get(page.size() - 1);
         String startCursor =
@@ -482,6 +499,14 @@ public class CommentServiceImpl implements CommentService {
                                 .endCursor(endCursor)
                                 .build())
                 .build();
+    }
+
+    private CommentResponse toResponse(
+            Comment comment, Map<UUID, UserSummaryResponse> authors, Set<UUID> likedCommentIds) {
+        return mapper.toResponse(
+                comment,
+                authors.get(comment.getUserId()),
+                likedCommentIds.contains(comment.getId()));
     }
 
     // Resolves a single author's public summary; the create and edit paths return exactly one

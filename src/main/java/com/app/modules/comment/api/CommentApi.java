@@ -101,9 +101,12 @@ public interface CommentApi {
     @Operation(
             summary = "List top-level comments for a post",
             description =
-                    "Cursor-paginated approved top-level comments, newest first. Requires"
-                            + " authentication; private posts are visible only to the owner and accepted"
-                            + " followers.")
+                    "Cursor-paginated approved top-level comments, newest first. The first page"
+                            + " only is preceded by up to three top comments ranked by like count,"
+                            + " each flagged with `pinned: true` and additional to the requested"
+                            + " page size; a pinned comment is not repeated in the same page's"
+                            + " newest-first body. Requires authentication; private posts are"
+                            + " visible only to the owner and accepted followers.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

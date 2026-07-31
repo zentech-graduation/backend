@@ -25,6 +25,7 @@ public interface CommentMapper {
     @Mapping(source = "comment.id", target = "id")
     @Mapping(source = "author", target = "author")
     @Mapping(source = "isLiked", target = "isLiked")
+    @Mapping(target = "pinned", constant = "false")
     CommentResponse toResponse(Comment comment, UserSummaryResponse author, boolean isLiked);
 
     /**

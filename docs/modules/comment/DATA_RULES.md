@@ -78,7 +78,29 @@ This is a deliberate departure from the enum-as-constraint-layer rule in `GLOBAL
 Notifications are delivered asynchronously through the transactional outbox, not written inline.
 `CommentServiceImpl` enqueues a `DomainEventEnvelope` in the same transaction as the comment write; `CommentNotificationConsumer` creates the notification rows after the broker delivers the event.
 
-### C. Scope Simplifications
+### C. Read Ordering and Pagination
+
+Both list endpoints paginate by keyset over the `(created_at, id)` tuple, newest first.
+The cursor is the opaque base64url encoding of that tuple and carries no other field.
+`created_at` alone is not unique, so `id` is part of the sort key and of the cursor; without it a tie group straddling a page boundary loses or repeats rows.
+
+| Rule | Enforced By |
+|------|-------------|
+| Replies are ordered newest-first by `(created_at, id)` on every page, with no pinned block | `CommentRepository.findFirstReplies`, `findRepliesBefore` |
+| Top-level comments are ordered newest-first by `(created_at, id)` on every page | `CommentRepository.findFirstTopLevelExcluding`, `findTopLevelBefore` |
+| The **first page only** of a post's top-level comments is preceded by up to three pinned comments, ordered by `(like_count, created_at, id)` descending | `CommentRepository.findTopLikedTopLevel`, capped by `CommentServiceImpl.PINNED_COMMENT_COUNT` |
+| A comment needs at least one like to be pinned | `like_count > 0` in `findTopLikedTopLevel` |
+| A pinned comment must be top-level, approved, and not soft-deleted | The eligibility predicate of `findTopLikedTopLevel`, matching the partial predicate of `idx_comments_post_top_liked` (V41) |
+| A pinned comment never also appears in the same page's newest-first body | `findFirstTopLevelExcluding` filters the pinned ids in SQL, so `LIMIT` still yields a full body page |
+| The pinned block is additional to the requested `limit`, not counted against it | `CommentServiceImpl.toPage` - the first page returns up to `limit + 3` items |
+| `startCursor` and `endCursor` are derived from the newest-first body only | `CommentServiceImpl.toPage` - deriving them from the pinned block would seek the next page to an arbitrary position |
+| `CommentResponse.pinned` marks membership of the pinned block; it is never true on page two or on a single-comment response | `CommentResponse.asPinned`, applied only to the pinned rows of the first page |
+
+`like_count` is deliberately absent from the cursor.
+It is mutable, so a keyset over it would let rows cross a page boundary between requests and be lost or repeated.
+Pinning a fixed-size block to the first page is what keeps the ranking visible without putting a mutable column in the sort key of the paginated stream.
+
+### D. Scope Simplifications
 
 - Comment depth is capped at 10.
   The cap is enforced both by the database `CHECK` constraint and at the service layer before the insert, so a rejected reply returns `COMMENT_DEPTH_EXCEEDED` rather than a constraint violation.
@@ -90,6 +112,9 @@ Notifications are delivered asynchronously through the transactional outbox, not
   There is no classifier, no review queue, and no appeal path; `moderation_status` exists to support one later without a schema change.
 - The Redis recent-comment cache is best-effort.
   A cache failure degrades to a database read; it never fails the request.
+- Top comments are pinned to the first page only, rather than the whole list being ranked by like count.
+  A full ranking would put a mutable column in the keyset sort key, which is the defect class the `(created_at, id)` cursor exists to prevent.
+  The accepted degradation is that a highly-liked comment is not surfaced anywhere on page two onward.
 
 ---
 
