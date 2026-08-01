@@ -168,7 +168,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `message` | Empty (`.gitkeep`) | — |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `admin` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
-| `recommendation` | Empty (`.gitkeep`) | — |
+| `recommendation` | **Implemented** | api, client/{dto,impl}, config, consumer, controller, messaging, repository, service/impl/feed |
 
 **Module responsibilities:**
 - **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
@@ -182,6 +182,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
 - **`admin`**: Immutable moderation audit log and atomic moderation actions; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
+- **`recommendation`**: Personalized ranked feed backed by the external Gorse recommender, reached over REST through `GorseClient`; `RecommendationFeedServiceImpl` runs a Source → Hydrator → Filter → Scorer → Selector pipeline with a `gorse` circuit breaker and degrades to the popularity ranking then the chronological feed; `RecommendationFeedbackConsumer` turns `post.liked.v1`, `post.saved.v1`, and `comment.created.v1` into append-only `user_events` rows plus Gorse feedback. See `docs/modules/recommendation/README.md`.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -357,6 +358,7 @@ PostgreSQL enum types:
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
 | `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
+| `recommendation.feedback.queue` | `recommendation.feedback.dlq` | `recommendation.feedback.dead-letter` |
 
 **Bindings (queue → `social.events`):**
 
@@ -373,6 +375,7 @@ PostgreSQL enum types:
 | `post.index.sync` | `post.index.#` (wildcard) | `PostRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
+| `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 
 **RabbitMQ configuration (application.yaml):**

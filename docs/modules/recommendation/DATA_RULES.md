@@ -1,6 +1,6 @@
 # Recommendation Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Partially implemented. The personalized feed (backed by the Gorse recommender) and the behavioral event ingestion path are built; see `README.md` in this folder. The category taxonomy (`categories`, `user_interests`, `post_categories`) and the derived score tables (`post_interaction_scores`, `user_similarity`) remain unimplemented.
 
 ---
 
@@ -49,8 +49,8 @@ These tables cannot be rebuilt if lost — `user_events` is the raw behavioral r
 
 | Rule | Service / Component |
 |------|---------------------|
-| `user_events` rows are append-only; existing events must never be updated or deleted | `[NOT YET IMPLEMENTED]` |
-| Event writes must be fire-and-forget (non-blocking to the user action that triggered them) | `[NOT YET IMPLEMENTED]` |
+| `user_events` rows are append-only; existing events must never be updated or deleted | `UserEventJdbcRepository` — exposes only `insertIgnoreDuplicate`; no update or delete statement exists |
+| Event writes must be fire-and-forget (non-blocking to the user action that triggered them) | `RecommendationFeedbackConsumer` — the user action only writes an outbox row inside its own transaction; the event is materialised later off the request thread |
 | `post_interaction_scores.engagement_score` is computed as: `likes + comments * 2 + saves * 3` | `[NOT YET IMPLEMENTED]` — defined in schema comment |
 | `post_interaction_scores.recency_score` applies a time-decay factor based on `posts.created_at` | `[NOT YET IMPLEMENTED]` |
 | `user_interests.score` is updated by an ML job; application code must not overwrite ML-derived scores directly | `[NOT YET IMPLEMENTED]` |

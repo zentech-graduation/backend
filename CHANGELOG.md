@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Removed
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
 
+### Documentation
+- A module guide for the recommendation feature covering its architecture, endpoint contract, configuration, operational runbook, degradation behavior, and known limitations.
+
 ### Tests
 - Regression coverage for the recommendation feedback consumer, covering successful processing of each supported engagement type, unknown event types, missing required fields, transient-versus-permanent recommender failures, and duplicate-delivery handling.
 - Regression coverage for the personalized feed pipeline, covering pagination, visibility and ownership filtering across multiple candidate rounds, ranking-score attachment, and fallback to the popularity ranking and then the chronological feed.
