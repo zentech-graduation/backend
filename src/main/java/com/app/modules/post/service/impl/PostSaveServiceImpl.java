@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.dto.response.SavedPostResponse;
@@ -25,6 +26,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostSave;
 import com.app.modules.post.entity.PostSaveId;
 import com.app.modules.post.enums.PostStatus;
+import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostSaveRepository;
 import com.app.modules.post.service.PostSaveService;
@@ -40,16 +42,19 @@ public class PostSaveServiceImpl implements PostSaveService {
     private final PostSaveRepository postSaveRepository;
     private final PostVisibilityService postVisibilityService;
     private final PostResponseAssembler postResponseAssembler;
+    private final OutboxService outboxService;
 
     public PostSaveServiceImpl(
             PostRepository postRepository,
             PostSaveRepository postSaveRepository,
             PostVisibilityService postVisibilityService,
-            PostResponseAssembler postResponseAssembler) {
+            PostResponseAssembler postResponseAssembler,
+            OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postSaveRepository = postSaveRepository;
         this.postVisibilityService = postVisibilityService;
         this.postResponseAssembler = postResponseAssembler;
+        this.outboxService = outboxService;
     }
 
     @Override
@@ -77,6 +82,16 @@ public class PostSaveServiceImpl implements PostSaveService {
             // already recorded the save, so surface the same clean conflict rather than a 500.
             throw new AppException(ApiErrorCode.POST_ALREADY_SAVED);
         }
+        outboxService.enqueue(
+                PostEventTypes.POST_SAVED_V1,
+                PostEventTypes.POST_SAVED_V1,
+                "post",
+                postId,
+                userId,
+                Map.of(
+                        "postId", postId.toString(),
+                        "postOwnerId", post.getUserId().toString(),
+                        "userId", userId.toString()));
     }
 
     @Override

@@ -49,6 +49,12 @@ public class RabbitMqTopologyConfig {
     public static final String STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
             "story.notification.dead-letter";
 
+    public static final String RECOMMENDATION_FEEDBACK_QUEUE = "recommendation.feedback.queue";
+    public static final String RECOMMENDATION_FEEDBACK_DEAD_LETTER_QUEUE =
+            "recommendation.feedback.dlq";
+    public static final String RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY =
+            "recommendation.feedback.dead-letter";
+
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
     public static final String SEARCH_INDEX_QUEUE = "search-index.queue";
@@ -196,5 +202,29 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(storyNotificationDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue recommendationFeedbackQueue() {
+        return QueueBuilder.durable(RECOMMENDATION_FEEDBACK_QUEUE)
+                .withArgument("x-dead-letter-exchange", SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE)
+                .withArgument(
+                        "x-dead-letter-routing-key",
+                        RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    Queue recommendationFeedbackDeadLetterQueue() {
+        return QueueBuilder.durable(RECOMMENDATION_FEEDBACK_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding recommendationFeedbackDeadLetterBinding(
+            Queue recommendationFeedbackDeadLetterQueue,
+            TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(recommendationFeedbackDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY);
     }
 }

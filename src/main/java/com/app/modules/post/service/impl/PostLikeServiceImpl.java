@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
 import com.app.modules.post.dto.response.LikerResponse;
@@ -25,6 +26,7 @@ import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.mapper.PostMapper;
+import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
@@ -43,24 +45,27 @@ public class PostLikeServiceImpl implements PostLikeService {
     private final PostUserRepository postUserRepository;
     private final PostVisibilityService postVisibilityService;
     private final PostMapper postMapper;
+    private final OutboxService outboxService;
 
     public PostLikeServiceImpl(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
             PostUserRepository postUserRepository,
             PostVisibilityService postVisibilityService,
-            PostMapper postMapper) {
+            PostMapper postMapper,
+            OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
         this.postUserRepository = postUserRepository;
         this.postVisibilityService = postVisibilityService;
         this.postMapper = postMapper;
+        this.outboxService = outboxService;
     }
 
     @Override
     @Transactional
     public LikeActionResponse likePost(UUID userId, UUID postId) {
-        fetchVisiblePublishedPost(userId, postId);
+        Post post = fetchVisiblePublishedPost(userId, postId);
         PostLikeId likeId = new PostLikeId(userId, postId);
         if (postLikeRepository.existsById(likeId)) {
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
@@ -74,6 +79,16 @@ public class PostLikeServiceImpl implements PostLikeService {
             // already recorded the like, so surface the same clean conflict rather than a 500.
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
         }
+        outboxService.enqueue(
+                PostEventTypes.POST_LIKED_V1,
+                PostEventTypes.POST_LIKED_V1,
+                "post",
+                postId,
+                userId,
+                Map.of(
+                        "postId", postId.toString(),
+                        "postOwnerId", post.getUserId().toString(),
+                        "userId", userId.toString()));
         return new LikeActionResponse(postId, true, postRepository.findLikeCount(postId));
     }
 
