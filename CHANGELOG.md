@@ -13,12 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A WebSocket handshake is now rate limited, and every rejected handshake is logged.
 - User search by username is available to authenticated callers, matching case-insensitively on any part of the username and ordering results by follower count.
 - The users a caller has blocked can now be listed as a paginated page, newest block first.
-- A user's public profile can now be fetched by username as well as by id; the username match is case-sensitive.
+- A user's public profile can now be fetched by username as well as by id; the username match is case-insensitive.
 
 ### Removed
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
 
 ### Changed
+- Usernames now identify an account case-insensitively while preserving the casing they were registered with. `Alice` and `alice` are the same person, so only one of them can exist, and logging in or looking up a profile works with any casing. The profile continues to display the casing the account was created with rather than a lowercased form.
+- Registering or renaming to a username that differs from an existing one only by case is now rejected with the same generic conflict returned for any other duplicate. Previously it slipped past the availability check and surfaced as a different, more specific error, which allowed a caller to distinguish a taken username from a taken email.
 - Notification push delivery latency is significantly reduced by polling for new events roughly five times more often.
 - A comment or story WebSocket session established before an account is banned, suspended, or logged out is no longer left open until its access token naturally expires; the session is now terminated shortly after the account status changes.
 - The user object returned by login, register, and refresh is renamed in the API schema from `UserSummaryResponse` to `AuthenticatedUserResponse` to distinguish the authenticated-self object (which carries email and role) from the shared public author summary; the emitted JSON fields are unchanged.

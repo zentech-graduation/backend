@@ -41,7 +41,8 @@ No `@Cacheable` annotation and no `users:*` Redis key exists anywhere in the tre
 | Rule | Enforced By |
 |------|-------------|
 | `username` max 30 characters, unique, not null | `VARCHAR(30) UNIQUE NOT NULL` (V02) |
-| `username` uniqueness is **case-sensitive** | Plain `UNIQUE` on the raw column — `Alice` and `alice` are two distinct legal accounts |
+| `username` identity is **case-insensitive**; `Alice` and `alice` are one account | `UNIQUE` functional index `idx_users_username_lower` on `lower(username)` (V42). The plain `UNIQUE` on the raw column from V02 is retained as a structural guard |
+| `username` storage is **case-preserving**; the column holds exactly what the caller submitted | No write path normalizes the value. `AuthServiceImpl.register` and `UserServiceImpl.updateMyProfile` store the raw input, and the V42 migration deliberately does not lowercase existing rows |
 | `email` max 255 characters, unique, not null | `VARCHAR(255) UNIQUE NOT NULL` (V02) |
 | `display_name` max 100 characters | `VARCHAR(100)` (V02) |
 | `is_private` defaults to `FALSE` | `DEFAULT FALSE NOT NULL` (V02) |
@@ -68,7 +69,7 @@ Queries using them must filter soft-deleted rows themselves.
 | User search does **not** filter blocked users; it ships accurate `isBlocking` and `isBlockedBy` instead | Omitting them would disclose the block set by omission |
 | User search rejects a query shorter than 2 characters and caps reachable offset at 10,000 | `UserSearchServiceImpl` and `OffsetCursorCodec.MAX_OFFSET` |
 | User search has no circuit breaker; database availability failures propagate rather than becoming an empty page | An empty page would be indistinguishable from "no such user" |
-| Username lookup is **case-sensitive** and shares the id lookup's gating path | `UserServiceImpl.getUserProfileByUsername` — resolves via `findByUsernameAndDeletedAtIsNull`, then the same `assemblePublicProfile` used by the id lookup, so the two cannot drift on block handling or counter masking |
+| Username lookup is **case-insensitive** and shares the id lookup's gating path | `UserServiceImpl.getUserProfileByUsername` — resolves via `findByUsernameAndDeletedAtIsNull`, which compares `lower(username)` on both sides, then the same `assemblePublicProfile` used by the id lookup, so the two cannot drift on block handling or counter masking. The response echoes the stored casing, not the casing that was queried |
 | Absent, soft-deleted, and block-hidden accounts are indistinguishable on lookup | All three yield `NOT_FOUND` with an identical response body apart from the timestamp |
 | Social counts are relationship-gated | `UserServiceImpl.getUserProfile` — owner always sees them; a private account reveals them only to accepted followers; a public account reveals them to any authenticated caller; everyone else receives `null` |
 | Every user-referencing response carries the viewer's relationship state | `UserServiceImpl.getUserProfile` via `SocialService.loadRelationships` |
@@ -99,8 +100,14 @@ These rules are stated in the schema's intent but have no application code behin
   This avoids enforcing deletion ordering but means avatar asset and profile are not referentially linked.
   The client supplies the CDN URL directly on profile update; the users module performs no `media_assets` lookup.
 - No account deactivation self-service flow; `status` changes are admin-only actions.
-- Username uniqueness is case-sensitive, so `Alice` and `alice` can coexist.
-  This is an impersonation vector and is tracked as a security finding; correcting it requires a collision audit and a rename policy before a unique functional index on `lower(username)` can be created.
+- Username identity is case-insensitive and storage is case-preserving: `Alice` and `alice` are one account, and whichever casing was submitted is what the profile renders.
+  The impersonation vector previously recorded here is closed by the `lower(username)` unique index added in V42.
+- The rename policy for accounts that already collided before V42 remains an open product decision.
+  The migration deliberately fails closed rather than auto-resolving: a database holding two accounts whose usernames differ only by case blocks deployment with `Username case collision detected` until an operator reconciles them.
+  Silently renaming or merging a live account is not a decision a migration should make.
+- Username availability is checked table-wide, including soft-deleted accounts, because soft delete does not release a username and no purge job exists.
+  See `GLOBAL_RULES.md` section 3.
+  `UserRepository.existsByUsername` is the single guard on every write path: registration, OAuth username generation, and profile update.
 
 ---
 
