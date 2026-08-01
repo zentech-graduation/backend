@@ -36,6 +36,9 @@ app:
   story:
     consumer:
       enabled: true
+  recommendation:
+    consumer:
+      enabled: true
   mail:
     consumer:
       enabled: true

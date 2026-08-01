@@ -1,0 +1,40 @@
+package com.app.modules.recommendation.messaging;
+
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.TopicExchange;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import com.app.modules.comment.messaging.CommentEventTypes;
+import com.app.modules.post.messaging.PostEventTypes;
+
+/** Binds engagement events consumed as recommender feedback to the recommendation queue. */
+@Configuration
+public class RecommendationRabbitBindingConfig {
+
+    @Bean
+    Binding recommendationPostLikedBinding(
+            Queue recommendationFeedbackQueue, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(recommendationFeedbackQueue)
+                .to(socialEventsExchange)
+                .with(PostEventTypes.POST_LIKED_V1);
+    }
+
+    @Bean
+    Binding recommendationPostSavedBinding(
+            Queue recommendationFeedbackQueue, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(recommendationFeedbackQueue)
+                .to(socialEventsExchange)
+                .with(PostEventTypes.POST_SAVED_V1);
+    }
+
+    @Bean
+    Binding recommendationCommentCreatedBinding(
+            Queue recommendationFeedbackQueue, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(recommendationFeedbackQueue)
+                .to(socialEventsExchange)
+                .with(CommentEventTypes.COMMENT_CREATED_V1);
+    }
+}

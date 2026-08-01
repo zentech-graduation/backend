@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Liking or saving a post now feeds the recommendation engine: each action is recorded as a behavioral event and forwarded to the recommender asynchronously, so the personalized feed reflects real engagement, not only the seeded interaction history.
 - A personalized "for you" post feed at GET /api/v1/recommendations/feed, ranked by the Gorse recommender with per-post ranking scores, degrading to the popularity ranking and then the chronological following feed whenever the recommender is unavailable.
 - A deterministic synthetic seed tool generates demo users, text posts, a follow graph, and interaction history for the recommendation demo, and can push or rebuild the Gorse dataset from the same source.
 - The Gorse recommender (v0.5.11) now runs as a dedicated service through a compose overlay, storing data in its own PostgreSQL database, secured by an API key and a loopback-bound authenticated dashboard.
