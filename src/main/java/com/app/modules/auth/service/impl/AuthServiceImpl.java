@@ -155,9 +155,11 @@ public class AuthServiceImpl implements AuthService {
 
                     User user =
                             User.builder()
-                                    // Usernames are stored lowercased so login can resolve them
-                                    // case-insensitively via the lower(username) unique index.
-                                    .username(request.username().toLowerCase())
+                                    // Stored exactly as submitted: identity is case-insensitive,
+                                    // display is case-preserving. Uniqueness is enforced by the
+                                    // lower(username) index and checked case-insensitively above,
+                                    // so nothing depends on the stored value being lowercase.
+                                    .username(request.username())
                                     .email(request.email())
                                     .displayName(displayName)
                                     .role(UserRole.USER)
@@ -188,14 +190,15 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         // Usernames cannot contain '@' (enforced by the registration pattern), so an '@' in the
-        // identifier unambiguously marks an email; anything else is looked up as a lowercased
-        // username against the case-insensitive lower(username) index.
+        // identifier unambiguously marks an email; anything else is a username. The username
+        // lookup normalizes both sides of the comparison itself, so the identifier is passed
+        // through as typed: case-insensitivity comes from the query, not from the stored casing.
         String rawIdentifier = request.identifier().trim();
         Optional<User> userOpt;
         if (rawIdentifier.contains("@")) {
             userOpt = userRepository.findByEmailAndDeletedAtIsNull(rawIdentifier);
         } else {
-            userOpt = userRepository.findByUsernameAndDeletedAtIsNull(rawIdentifier.toLowerCase());
+            userOpt = userRepository.findByUsernameAndDeletedAtIsNull(rawIdentifier);
         }
         User user = userOpt.orElse(null);
         UserCredential credential =

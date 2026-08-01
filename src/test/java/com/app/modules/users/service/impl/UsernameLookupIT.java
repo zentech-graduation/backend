@@ -16,7 +16,11 @@ import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -35,9 +39,9 @@ import com.app.modules.users.dto.response.PublicUserProfileResponse;
 import com.app.modules.users.service.UserService;
 
 /**
- * Proves username lookup is case-sensitive, that absence, soft deletion, and block-hiding are
- * indistinguishable to the caller, and that a UUID-shaped path segment cannot cross into the
- * id-keyed endpoint.
+ * Proves username identity is case-insensitive while stored casing is preserved for display, that
+ * absence, soft deletion, and block-hiding are indistinguishable to the caller, and that a
+ * UUID-shaped path segment cannot cross into the id-keyed endpoint.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -94,6 +98,9 @@ class UsernameLookupIT {
     void cleanup() {
         jdbcTemplate.update("DELETE FROM blocks");
         jdbcTemplate.update("DELETE FROM user_settings");
+        // Registration writes credentials and an outbox event; both must go before users.
+        jdbcTemplate.update("DELETE FROM user_credentials");
+        jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM users");
     }
 
@@ -108,26 +115,87 @@ class UsernameLookupIT {
     }
 
     @Test
-    void byUsername_caseVariation_returnsNotFound() {
-        insertUser("jane_doe", false, false);
+    void byUsername_caseVariation_resolvesToTheSameAccount() {
+        UUID id = insertUser("jane_doe", false, false);
 
-        // Pins the case-sensitive contract. users.username carries a plain UNIQUE on the raw
-        // column, so a case-insensitive lookup could resolve to two legal accounts. If this ever
-        // becomes case-insensitive it must be a conscious migration, not an accident.
-        assertThatThrownBy(() -> userService.getUserProfileByUsername(null, "Jane_Doe"))
-                .isInstanceOf(AppException.class)
-                .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.NOT_FOUND);
+        // Pins the case-insensitive identity contract established by idx_users_username_lower
+        // (V42). One account owns every casing of its name, so any casing resolves to it. The
+        // stored value is not normalized, so the response echoes the casing as registered rather
+        // than the casing that was queried.
+        PublicUserProfileResponse response = userService.getUserProfileByUsername(null, "Jane_Doe");
+
+        assertThat(response.id()).isEqualTo(id);
+        assertThat(response.username()).isEqualTo("jane_doe");
     }
 
     @Test
-    void byUsername_caseVariantAccountsBothExist_eachResolvesToItsOwnRow() {
-        UUID lower = insertUser("alice", false, false);
-        UUID upper = insertUser("Alice", false, false);
+    void insert_secondAccountDifferingOnlyByCase_isRejected() {
+        insertUser("alice", false, false);
 
-        assertThat(userService.getUserProfileByUsername(null, "alice").id()).isEqualTo(lower);
-        assertThat(userService.getUserProfileByUsername(null, "Alice").id()).isEqualTo(upper);
-        assertThat(lower).isNotEqualTo(upper);
+        // Deliberate inversion of a previously passing assertion. This test used to assert that
+        // "alice" and "Alice" were two separate accounts, which idx_users_username_lower (V42)
+        // now forbids by design: identity is case-insensitive, so they are one person.
+        assertThatThrownBy(() -> insertUser("Alice", false, false))
+                .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    @Test
+    void register_preservesSubmittedCasing() {
+        // Goes through the registration service rather than a raw insert: the point of this test
+        // is that the write path no longer lowercases, which a direct JDBC insert would not
+        // exercise at all.
+        assertThat(register("MixedCase", "mixed@example.com").getStatusCode())
+                .isEqualTo(HttpStatus.CREATED);
+
+        String stored =
+                jdbcTemplate.queryForObject(
+                        "SELECT username FROM users WHERE lower(username) = 'mixedcase'",
+                        String.class);
+
+        // Display is case-preserving: nothing on the write path lowercases the stored value.
+        assertThat(stored).isEqualTo("MixedCase");
+    }
+
+    @Test
+    void byUsername_anyCasingOfAMixedCaseAccount_resolvesToThatRow() {
+        UUID id = insertUser("MixedCase", false, false);
+
+        for (String casing : new String[] {"mixedcase", "MIXEDCASE", "MixedCase"}) {
+            PublicUserProfileResponse response = userService.getUserProfileByUsername(null, casing);
+            assertThat(response.id()).as("lookup by %s", casing).isEqualTo(id);
+            assertThat(response.username())
+                    .as("stored casing echoed for %s", casing)
+                    .isEqualTo("MixedCase");
+        }
+    }
+
+    @Test
+    void register_usernameTakenInDifferentCase_returnsUserAlreadyExists() {
+        assertThat(register("mixedcase", "first@example.com").getStatusCode())
+                .isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<String> conflict = register("MixedCase", "second@example.com");
+
+        // The uniqueness pre-check compares case-insensitively, so a case variant is caught in
+        // the service and reported as a normal conflict. Before that, it slipped past both the
+        // pre-check and the in-transaction re-check and surfaced as a raw constraint violation.
+        assertThat(conflict.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(conflict.getBody()).contains("USER_ALREADY_EXISTS");
+    }
+
+    @Test
+    void register_takenUsernameAndTakenEmail_areIndistinguishable() {
+        assertThat(register("mixedcase", "taken@example.com").getStatusCode())
+                .isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<String> usernameTaken = register("MixedCase", "fresh@example.com");
+        ResponseEntity<String> emailTaken = register("freshname", "taken@example.com");
+
+        // register() returns one generic conflict for both so the response cannot be used to
+        // enumerate which of the two was already registered. A case-variant username previously
+        // returned a different code and broke that property.
+        assertThat(usernameTaken.getStatusCode()).isEqualTo(emailTaken.getStatusCode());
+        assertThat(body(usernameTaken)).isEqualTo(body(emailTaken));
     }
 
     @Test
@@ -226,6 +294,24 @@ class UsernameLookupIT {
     private ResponseEntity<String> get(String username) {
         return restTemplate.getForEntity(
                 "/api/v1/users/by-username/{username}", String.class, username);
+    }
+
+    private ResponseEntity<String> register(String username, String email) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String payload =
+                """
+				{"username":"%s","email":"%s","password":"Passw0rd!234","displayName":"%s"}"""
+                        .formatted(username, email, username);
+        return restTemplate.postForEntity(
+                "/api/v1/auth/register", new HttpEntity<>(payload, headers), String.class);
+    }
+
+    /** Strips the timestamp so two conflict responses can be compared for equality. */
+    private static String body(ResponseEntity<String> response) {
+        return response.getBody() == null
+                ? null
+                : response.getBody().replaceAll("\"timestamp\":\"[^\"]*\"", "\"timestamp\":\"*\"");
     }
 
     private Statistics statistics() {
