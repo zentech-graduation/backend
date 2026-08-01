@@ -35,11 +35,7 @@ public interface MediaApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Upload URL created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = MediaUploadUrlResponse.class))),
+                description = "Upload URL created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid media upload request",
@@ -75,11 +71,7 @@ public interface MediaApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Media asset created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = MediaAssetResponse.class))),
+                description = "Media asset created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid media metadata",

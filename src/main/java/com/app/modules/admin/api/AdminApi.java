@@ -38,11 +38,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User banned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User banned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -81,11 +77,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User unbanned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User unbanned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -124,11 +116,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User suspended",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User suspended"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -167,11 +155,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User unsuspended",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User unsuspended"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -210,11 +194,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post removed",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Post removed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -253,11 +233,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post restored",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Post restored"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -296,11 +272,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment removed",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Comment removed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -340,11 +312,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment restored",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Comment restored"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -384,11 +352,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report resolved",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Report resolved"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -428,11 +392,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report dismissed",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Report dismissed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -472,11 +432,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Audit event page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Audit event page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -504,11 +460,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Audit event returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Audit event returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -540,11 +492,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User audit event page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "User audit event page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",

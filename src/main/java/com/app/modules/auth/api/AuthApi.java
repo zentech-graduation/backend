@@ -44,11 +44,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Account created — verification mail events recorded",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Account created — verification mail events recorded"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description = "Username or email already in use",
@@ -85,11 +81,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Authenticated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AuthResponse.class))),
+                description = "Authenticated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Invalid credentials",
@@ -126,11 +118,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Tokens rotated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AuthResponse.class))),
+                description = "Tokens rotated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Refresh token invalid or expired",
@@ -176,7 +164,7 @@ public interface AuthApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping(ApiConstants.Auth.LOGOUT)
-    ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshRequest request);
+    ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request);
 
     /** Verifies an email address using the token embedded in the verification link. */
     @Operation(
@@ -189,11 +177,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Email verified — access + refresh tokens returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AuthResponse.class))),
+                description = "Email verified — access + refresh tokens returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Token invalid or expired",
@@ -232,11 +216,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Email dispatched (or silently ignored if address unknown)",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Email dispatched (or silently ignored if address unknown)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
@@ -262,11 +242,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Reset email dispatched (or silently ignored if address unknown)",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Reset email dispatched (or silently ignored if address unknown)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
@@ -288,11 +264,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Password updated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Password updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Token invalid or expired",
@@ -330,11 +302,7 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Exchange successful — access + refresh tokens returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AuthResponse.class))),
+                description = "Exchange successful — access + refresh tokens returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Exchange code invalid or expired",

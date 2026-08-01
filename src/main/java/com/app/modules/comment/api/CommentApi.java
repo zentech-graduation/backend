@@ -44,11 +44,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Comment created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CommentResponse.class))),
+                description = "Comment created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure, path/body mismatch, or depth exceeded",
@@ -110,11 +106,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of comments",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
+                description = "Cursor page of comments")
     })
     @GetMapping(ApiConstants.Posts.ROOT + ApiConstants.Posts.COMMENTS)
     ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listTopLevelComments(
@@ -135,11 +127,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of replies",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of replies"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Parent comment not found",
@@ -164,11 +152,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Updated comment",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CommentResponse.class))),
+                description = "Updated comment"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is not the comment owner",
@@ -204,11 +188,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment soft-deleted",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Comment soft-deleted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is neither the owner nor an admin",
@@ -231,11 +211,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment liked",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Comment liked"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Cannot like your own comment",
@@ -267,11 +243,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment unliked",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Comment unliked"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Comment not found",

@@ -39,11 +39,7 @@ public interface HashtagApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Search results",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Search results"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure",
@@ -70,11 +66,7 @@ public interface HashtagApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Trending hashtag list",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Trending hashtag list"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",

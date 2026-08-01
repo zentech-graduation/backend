@@ -35,11 +35,7 @@ public interface PostSaveApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Post saved",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Post saved"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Post hidden by a block or a private account",
@@ -105,11 +101,7 @@ public interface PostSaveApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of saved posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of saved posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",

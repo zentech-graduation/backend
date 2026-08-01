@@ -47,11 +47,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Profile returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserProfileResponse.class))),
+                description = "Profile returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -79,11 +75,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Profile updated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserProfileResponse.class))),
+                description = "Profile updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -126,12 +118,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Profile returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema =
-                                        @Schema(implementation = PublicUserProfileResponse.class))),
+                description = "Profile returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Target account is private",
@@ -173,11 +160,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Search results returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Search results returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description =
@@ -221,12 +204,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Profile returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema =
-                                        @Schema(implementation = PublicUserProfileResponse.class))),
+                description = "Profile returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "No live user holds that username, or the account is block-hidden",
@@ -272,11 +250,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Settings returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserSettingsResponse.class))),
+                description = "Settings returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -304,11 +278,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Settings updated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserSettingsResponse.class))),
+                description = "Settings updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",

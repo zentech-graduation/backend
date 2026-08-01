@@ -17,6 +17,10 @@ spring:
         use_sql_comments: false
 
 springdoc:
+  # Success responses declare no explicit @Content, so springdoc resolves the schema from the
+  # method return type. Without this it keys those responses under */* instead of
+  # application/json, which some client generators ignore.
+  default-produces-media-type: application/json
   api-docs:
     path: /api-docs
     enabled: true

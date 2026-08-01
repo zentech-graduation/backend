@@ -45,11 +45,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Report submitted",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ReportResponse.class))),
+                description = "Report submitted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid payload or self-owned target",
@@ -92,11 +88,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Report page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -128,11 +120,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Pending report page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Pending report page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -160,11 +148,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ReportResponse.class))),
+                description = "Report returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -200,11 +184,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report status updated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ReportResponse.class))),
+                description = "Report status updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Terminal transition lacks a resolution note",

@@ -46,11 +46,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Post created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                description = "Post created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid payload, media cardinality, or initial status",
@@ -92,11 +88,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                description = "Post"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Post hidden by a block or a private account",
@@ -131,11 +123,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Updated post",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                description = "Updated post"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure",
@@ -179,11 +167,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post after the transition",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                description = "Post after the transition"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid status transition",
@@ -264,11 +248,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of feed posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of feed posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Malformed cursor",
@@ -301,11 +281,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Blocked or private account without an accepted follow",
@@ -344,11 +320,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of edit history entries",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = PostEditHistoryResponse.class))),
+                description = "Cursor page of edit history entries"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is not the post owner",
@@ -389,11 +361,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of matching posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of matching posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Missing query parameter",

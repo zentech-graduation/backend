@@ -45,11 +45,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Followed user or follow request created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = FollowResponse.class))),
+                description = "Followed user or follow request created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid follow action",
@@ -118,11 +114,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Pending follow requests returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Pending follow requests returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -243,11 +235,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Followers returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Followers returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -273,11 +261,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Following list returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Following list returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -311,11 +295,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Blocked list returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Blocked list returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Malformed pagination cursor, or limit outside 1-100",

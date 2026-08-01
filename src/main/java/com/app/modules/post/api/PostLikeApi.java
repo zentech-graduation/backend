@@ -36,11 +36,7 @@ public interface PostLikeApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Post liked",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = LikeActionResponse.class))),
+                description = "Post liked"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Post hidden by a block or a private account",
@@ -79,11 +75,7 @@ public interface PostLikeApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post unliked",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = LikeActionResponse.class))),
+                description = "Post unliked"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Post or like not found",
@@ -110,11 +102,7 @@ public interface PostLikeApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of likers",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of likers"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Post hidden by a block or a private account",

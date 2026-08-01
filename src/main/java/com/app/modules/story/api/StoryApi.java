@@ -42,11 +42,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Story created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = StoryResponse.class))),
+                description = "Story created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Media asset not owned by the caller",
@@ -76,11 +72,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Story feed tray; empty when nobody has active stories",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
+                description = "Story feed tray; empty when nobody has active stories")
     })
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.FEED)
     ResponseEntity<ApiResponse<List<StoryFeedItemResponse>>> getStoryFeed();
@@ -94,11 +86,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Active stories of the target user",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Active stories of the target user"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Blocked, or private account without an accepted follow",
@@ -127,11 +115,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "The story",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = StoryResponse.class))),
+                description = "The story"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Story not visible to the caller",
@@ -158,11 +142,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Story deleted",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Story deleted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Story owned by another user",
@@ -190,11 +170,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "View recorded (or already present)",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = StoryViewActionResponse.class))),
+                description = "View recorded (or already present)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Story missing, deleted, expired, or not visible to the caller",
@@ -215,11 +191,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of viewers",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of viewers"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Malformed cursor",
