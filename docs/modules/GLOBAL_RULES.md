@@ -46,13 +46,23 @@ All counter columns have `CHECK (column >= 0)` enforced at the database level. T
 
 Tables that use soft delete via a `deleted_at TIMESTAMPTZ` column:
 
-| Table | Module |
-|-------|--------|
-| `users` | auth / users |
-| `posts` | post |
-| `comments` | comment |
-| `stories` | story |
-| `messages` | message (uses `is_deleted BOOLEAN` + `deleted_at`, not pure soft-delete pattern) |
+| Table | Module | Status |
+|-------|--------|--------|
+| `users` | auth / users | **Column reserved, never written.** See the note below |
+| `posts` | post | Live |
+| `comments` | comment | Live |
+| `stories` | story | Live |
+| `messages` | message (uses `is_deleted BOOLEAN` + `deleted_at`, not pure soft-delete pattern) | Live |
+
+> **`users.deleted_at` is not written by anything in the application.**
+> The column exists and is indexed, but no service, repository, migration, or trigger sets it, and there is no self-service account deletion endpoint.
+> Account removal today is `status = 'deactivated'`, an admin-only action that leaves `deleted_at` null.
+> Every read path already filters `deleted_at IS NULL`, so those filters are correct and should stay; they simply never exclude anything at present.
+>
+> The retention rules in the subsection below are therefore a **specification for when a soft-delete path is added**, not a description of current behaviour.
+> They are correct and worth keeping, but no code exercises them today.
+> Do not reason about soft-deleted user rows as a state the running system can produce.
+> A soft-deleted user can only be created by direct SQL, which is how the one observed during the phase 3 audit came to exist.
 
 Rules:
 - All queries against soft-deleted tables must include `WHERE deleted_at IS NULL` unless explicitly retrieving deleted records.
@@ -64,8 +74,13 @@ Rules:
 
 **Rule**: Soft delete does NOT release a user's `username` or `email`.
 
+Forward-looking, per the note above: no path currently soft-deletes a user, so these rules bind the design of the eventual deletion flow rather than describing behaviour observable today.
+The enforcement they call for is already in place, so adding that flow will not require revisiting them.
+
 - The `UNIQUE` constraints on `users.username` and `users.email` remain enforced regardless of `deleted_at` value.
 - A soft-deleted account continues to hold its username and email.
+- Username identity is case-insensitive and enforced table-wide by the unique functional index `idx_users_username_lower` on `lower(username)` (V43), which deliberately has no `deleted_at` predicate so a soft-deleted account keeps its claim. Stored casing is preserved; see `users/DATA_RULES.md`.
+- Availability checks must therefore be table-wide. `UserRepository.existsByUsername` is the single guard on every write path and spans soft-deleted rows by design.
 - Username and email only become available after a hard delete (permanent row removal via a scheduled purge job).
 - No purge job currently exists. Until one is implemented, soft-deleted accounts hold their username and email permanently.
 - This mirrors the behavior of Instagram, which holds deleted account identifiers for a minimum grace period before releasing them.
