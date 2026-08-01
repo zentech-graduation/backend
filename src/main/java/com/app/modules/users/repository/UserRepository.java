@@ -76,9 +76,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * Resolves an active user by username, comparing case-insensitively.
      *
      * <p>Username identity is case-insensitive while stored casing is preserved for display, so the
-     * comparison must normalize both sides rather than assume the stored value is lowercase.
-     * Matches the {@code idx_users_username_lower} functional index (V42), which is partial on
-     * {@code deleted_at IS NULL} and therefore covers this predicate exactly.
+     * comparison must normalize both sides rather than assume the stored value is lowercase. Seeks
+     * on {@code idx_users_username_lower} (V43), a table-wide unique functional index, and applies
+     * {@code deleted_at IS NULL} as a filter. At most one row can share a lowercased username, so
+     * the filter never discards more than one row.
      *
      * @param username username in any casing
      * @return the matching active user, or empty when no active account holds that name
@@ -100,8 +101,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     /**
      * Reports whether an active account already holds this username, comparing case-insensitively.
      *
-     * <p>Served by {@code idx_users_username_lower} (V42), whose partial predicate matches the
-     * {@code deleted_at IS NULL} clause.
+     * <p>Served by {@code idx_users_username_lower} (V43).
+     *
+     * <p>Currently unused. Availability checks deliberately use the table-wide {@link
+     * #existsByUsername} instead, because soft delete does not release a username; see {@code
+     * GLOBAL_RULES.md} section 3.
      *
      * @param username username in any casing
      * @return true when an active account holds that name under case-insensitive comparison
@@ -125,10 +129,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * so a registration check that skipped soft-deleted rows would pass and then fail on the {@code
      * users_username_key} constraint.
      *
-     * <p>Not served by {@code idx_users_username_lower}, which is partial on {@code deleted_at IS
-     * NULL} and so cannot answer a query spanning deleted rows. Served instead by {@code
-     * idx_users_username_lower_all} (V42), a non-unique functional index over the whole table added
-     * for exactly this query.
+     * <p>Served by {@code idx_users_username_lower} (V43), which is table-wide and so answers a
+     * query spanning soft-deleted rows. V42's partial index could not, and needed a second
+     * non-unique index alongside it; V43 collapsed the two.
      *
      * @param username username in any casing
      * @return true when any account, live or soft-deleted, holds that name

@@ -170,6 +170,29 @@ class UsernameLookupIT {
     }
 
     @Test
+    void register_usernameHeldBySoftDeletedAccount_isRejected() {
+        insertUser("ghostname", false, true);
+
+        // GLOBAL_RULES section 3: soft delete does not release a username, and no purge job
+        // exists. existsByUsername is table-wide precisely so this is caught in the service.
+        ResponseEntity<String> conflict = register("GhostName", "new@example.com");
+
+        assertThat(conflict.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(conflict.getBody()).contains("USER_ALREADY_EXISTS");
+    }
+
+    @Test
+    void insert_usernameCollidingWithSoftDeletedAccount_isRejectedByConstraint() {
+        insertUser("ghostname", false, true);
+
+        // The database must enforce the same rule the service does, so a path that bypasses
+        // existsByUsername cannot create the state GLOBAL_RULES section 3 forbids. Before V43
+        // idx_users_username_lower was partial on deleted_at IS NULL and this insert succeeded.
+        assertThatThrownBy(() -> insertUser("GhostName", false, false))
+                .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    @Test
     void register_usernameTakenInDifferentCase_returnsUserAlreadyExists() {
         assertThat(register("mixedcase", "first@example.com").getStatusCode())
                 .isEqualTo(HttpStatus.CREATED);
