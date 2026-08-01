@@ -62,15 +62,20 @@ public class UserServiceImpl implements UserService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
 
         if (request.username() != null) {
-            // Usernames are stored lowercased so login resolves them case-insensitively via the
-            // lower(username) unique index; normalize before the uniqueness check so a case-only
-            // collision surfaces as a 409 rather than a raw database constraint violation.
-            String newUsername = request.username().toLowerCase();
+            // Stored exactly as submitted: identity is case-insensitive, display is
+            // case-preserving. The availability check below compares case-insensitively, so a
+            // case-only collision surfaces as a 409 rather than a raw constraint violation.
+            String newUsername = request.username();
             // The username UNIQUE constraint is table-wide and soft delete does not release a
             // username, so the availability check must span soft-deleted rows too. A partial check
             // would let a collision with a soft-deleted account fall through to a database error
             // whose response differs from the active-collision response and reveals account state.
-            if (!newUsername.equals(user.getUsername())
+            //
+            // The "unchanged" test ignores case because identity is case-insensitive: recasing
+            // your own name is a display change, not a claim on someone else's name. A
+            // case-sensitive test here would send that request into the availability check, where
+            // it would match the caller's own row and be rejected as already taken.
+            if (!newUsername.equalsIgnoreCase(user.getUsername())
                     && userRepository.existsByUsername(newUsername)) {
                 throw new AppException(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
             }

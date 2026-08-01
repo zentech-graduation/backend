@@ -478,8 +478,9 @@ class AuthServiceImplTest {
     void login_usernameUpperCase_resolvesCorrectly() {
         User u = activeUser();
         UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
-        // User stored as "alice"; an uppercase submission must be lowercased before lookup.
-        when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
+        // The identifier is passed through as typed. Case-insensitivity now lives in the query,
+        // which compares lower(username) on both sides, not in a toLowerCase() before the call.
+        when(userRepository.findByUsernameAndDeletedAtIsNull("ALICE")).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
@@ -489,11 +490,11 @@ class AuthServiceImplTest {
 
         assertThat(resp.accessToken()).isEqualTo("ACCESS");
         assertThat(resp.user().id()).isEqualTo(u.getId());
-        verify(userRepository).findByUsernameAndDeletedAtIsNull("alice");
+        verify(userRepository).findByUsernameAndDeletedAtIsNull("ALICE");
     }
 
     @Test
-    void register_username_storedLowercase() {
+    void register_username_storedAsSubmitted() {
         UUID newId = UUID.randomUUID();
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         when(userRepository.save(any(User.class)))
@@ -507,8 +508,11 @@ class AuthServiceImplTest {
 
         service.register(new RegisterRequest("MixedCase", "a@b.c", "password1", null));
 
+        // Deliberate inversion: this asserted the stored value was lowercased. Identity is
+        // case-insensitive via idx_users_username_lower, so the column no longer has to carry a
+        // normalized value, and display is case-preserving.
         verify(userRepository).save(userCaptor.capture());
-        assertThat(userCaptor.getValue().getUsername()).isEqualTo("mixedcase");
+        assertThat(userCaptor.getValue().getUsername()).isEqualTo("MixedCase");
     }
 
     @Test

@@ -33,3 +33,12 @@ END $$;
 CREATE UNIQUE INDEX idx_users_username_lower
   ON users (lower(username))
   WHERE deleted_at IS NULL;
+
+-- Registration and OAuth username generation check availability table-wide, because soft delete
+-- does not release a username and no purge job exists. The partial index above cannot answer a
+-- query that spans soft-deleted rows, so without this one every availability check degrades to a
+-- sequential scan of users. Non-unique deliberately: a table-wide unique index on lower(username)
+-- would be stricter than the existing users_username_key and could fail on data that is currently
+-- legal.
+CREATE INDEX idx_users_username_lower_all
+  ON users (lower(username));

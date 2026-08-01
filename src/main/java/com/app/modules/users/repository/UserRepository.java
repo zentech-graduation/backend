@@ -72,7 +72,20 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByEmailAndDeletedAtIsNull(String email);
 
-    Optional<User> findByUsernameAndDeletedAtIsNull(String username);
+    /**
+     * Resolves an active user by username, comparing case-insensitively.
+     *
+     * <p>Username identity is case-insensitive while stored casing is preserved for display, so the
+     * comparison must normalize both sides rather than assume the stored value is lowercase.
+     * Matches the {@code idx_users_username_lower} functional index (V42), which is partial on
+     * {@code deleted_at IS NULL} and therefore covers this predicate exactly.
+     *
+     * @param username username in any casing
+     * @return the matching active user, or empty when no active account holds that name
+     */
+    @Query(
+            "SELECT u FROM User u WHERE lower(u.username) = lower(:username) AND u.deletedAt IS NULL")
+    Optional<User> findByUsernameAndDeletedAtIsNull(@Param("username") String username);
 
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
 
@@ -84,7 +97,19 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmailAndDeletedAtIsNull(String email);
 
-    boolean existsByUsernameAndDeletedAtIsNull(String username);
+    /**
+     * Reports whether an active account already holds this username, comparing case-insensitively.
+     *
+     * <p>Served by {@code idx_users_username_lower} (V42), whose partial predicate matches the
+     * {@code deleted_at IS NULL} clause.
+     *
+     * @param username username in any casing
+     * @return true when an active account holds that name under case-insensitive comparison
+     */
+    @Query(
+            "SELECT COUNT(u) > 0 FROM User u "
+                    + "WHERE lower(u.username) = lower(:username) AND u.deletedAt IS NULL")
+    boolean existsByUsernameAndDeletedAtIsNull(@Param("username") String username);
 
     // Table-wide checks — used for uniqueness validation consistent with DB UNIQUE constraints
     // that have no partial index excluding soft-deleted rows.
@@ -92,5 +117,22 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmail(String email);
 
-    boolean existsByUsername(String username);
+    /**
+     * Reports whether any account, including a soft-deleted one, holds this username under
+     * case-insensitive comparison.
+     *
+     * <p>Deliberately table-wide: soft delete does not release a username and no purge job exists,
+     * so a registration check that skipped soft-deleted rows would pass and then fail on the {@code
+     * users_username_key} constraint.
+     *
+     * <p>Not served by {@code idx_users_username_lower}, which is partial on {@code deleted_at IS
+     * NULL} and so cannot answer a query spanning deleted rows. Served instead by {@code
+     * idx_users_username_lower_all} (V42), a non-unique functional index over the whole table added
+     * for exactly this query.
+     *
+     * @param username username in any casing
+     * @return true when any account, live or soft-deleted, holds that name
+     */
+    @Query("SELECT COUNT(u) > 0 FROM User u WHERE lower(u.username) = lower(:username)")
+    boolean existsByUsername(@Param("username") String username);
 }
