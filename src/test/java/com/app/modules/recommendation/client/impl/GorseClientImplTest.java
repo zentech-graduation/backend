@@ -78,7 +78,8 @@ class GorseClientImplTest {
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(
                         withSuccess(
-                                "[{\"Id\":\"item-3\",\"Score\":100.0}]", MediaType.APPLICATION_JSON));
+                                "[{\"Id\":\"item-3\",\"Score\":100.0}]",
+                                MediaType.APPLICATION_JSON));
 
         List<GorseScore> scores = client.popular(20, 0);
 

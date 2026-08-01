@@ -27,8 +27,8 @@ public class RecommendationController extends BaseController implements Recommen
     /**
      * Serves one page of the personalized feed for the authenticated user.
      *
-     * <p>Accepts an optional opaque cursor and page size, returns ranked published posts visible
-     * to the caller. Requires authentication.
+     * <p>Accepts an optional opaque cursor and page size, returns ranked published posts visible to
+     * the caller. Requires authentication.
      */
     @Override
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")

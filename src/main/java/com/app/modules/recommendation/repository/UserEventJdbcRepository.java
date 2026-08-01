@@ -30,8 +30,8 @@ public class UserEventJdbcRepository {
     /**
      * Inserts one behavioral event, silently skipping duplicates.
      *
-     * <p>Callers pass the domain event's id and occurrence time so the insert is deterministic
-     * and therefore idempotent across message redeliveries.
+     * <p>Callers pass the domain event's id and occurrence time so the insert is deterministic and
+     * therefore idempotent across message redeliveries.
      *
      * @param id domain event id, reused as the row id
      * @param userId acting user

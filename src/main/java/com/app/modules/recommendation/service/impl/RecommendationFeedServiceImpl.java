@@ -181,8 +181,7 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
 
         static String encode(char source, int offset) {
             return Base64.getEncoder()
-                    .encodeToString(
-                            (source + ":" + offset).getBytes(StandardCharsets.UTF_8));
+                    .encodeToString((source + ":" + offset).getBytes(StandardCharsets.UTF_8));
         }
 
         static FeedCursor decode(String cursor) {

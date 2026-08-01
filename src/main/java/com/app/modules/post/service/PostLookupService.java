@@ -10,8 +10,8 @@ import com.app.modules.post.entity.Post;
 /**
  * Read-only lookup and hydration port for other modules that rank or select posts by id.
  *
- * <p>Keeps cross-module access on the service-interface layer; callers must not reach into the
- * post module's repositories or assembler directly.
+ * <p>Keeps cross-module access on the service-interface layer; callers must not reach into the post
+ * module's repositories or assembler directly.
  */
 public interface PostLookupService {
 

@@ -12,10 +12,9 @@ public interface RecommendationFeedService {
      * Returns a page of the personalized feed for the viewer.
      *
      * <p>Candidates come from Gorse; unavailability degrades to the popularity ranking and then to
-     * the chronological following feed, so the endpoint keeps serving when the recommender is
-     * down. Every returned post is published and visible to the viewer. Ranking scores are
-     * populated on every entry served by the ranked sources and are null on chronological
-     * fallback pages.
+     * the chronological following feed, so the endpoint keeps serving when the recommender is down.
+     * Every returned post is published and visible to the viewer. Ranking scores are populated on
+     * every entry served by the ranked sources and are null on chronological fallback pages.
      *
      * @param viewerId authenticated user requesting the feed
      * @param cursor opaque cursor from a previous page; null for the first page

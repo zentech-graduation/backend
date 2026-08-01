@@ -108,9 +108,7 @@ class RecommendationFeedServiceImplTest {
         UUID postId = UUID.randomUUID();
         Post post = publishedPost(postId, UUID.randomUUID());
         when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0)))
-                .thenReturn(
-                        new SourceBatch(
-                                'g', List.of(new GorseScore(postId.toString(), 5.0))));
+                .thenReturn(new SourceBatch('g', List.of(new GorseScore(postId.toString(), 5.0))));
         when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
         when(postVisibilityService.isVisibleTo(viewerId, post)).thenReturn(true);
 
@@ -223,8 +221,7 @@ class RecommendationFeedServiceImplTest {
 
     @Test
     void getRecommendedFeed_previousPagePopularCursor_continuesFromPopularSource() {
-        String popularCursor =
-                Base64.getEncoder().encodeToString("p:7".getBytes());
+        String popularCursor = Base64.getEncoder().encodeToString("p:7".getBytes());
         when(recommendationSource.fetch(eq(viewerId), eq('p'), eq(10), eq(7)))
                 .thenReturn(new SourceBatch('p', List.of()));
 

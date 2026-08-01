@@ -20,8 +20,8 @@ import lombok.extern.slf4j.Slf4j;
  * Candidate source stage of the recommendation feed pipeline.
  *
  * <p>Serves personalized candidates from Gorse and degrades to the non-personalized popularity
- * ranking when Gorse recommend is unavailable or the circuit is open. A separate bean (rather
- * than a private method) so the resilience proxy applies.
+ * ranking when Gorse recommend is unavailable or the circuit is open. A separate bean (rather than
+ * a private method) so the resilience proxy applies.
  */
 @Slf4j
 @Component

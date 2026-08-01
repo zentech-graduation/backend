@@ -8,9 +8,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Binding for the {@code app.gorse} configuration namespace. Controls the Gorse REST endpoint,
- * API key, client timeouts, and the candidate over-fetch factor used by the feed pipeline.
- * The API key must only ever come from the environment - never from database-backed settings.
+ * Binding for the {@code app.gorse} configuration namespace. Controls the Gorse REST endpoint, API
+ * key, client timeouts, and the candidate over-fetch factor used by the feed pipeline. The API key
+ * must only ever come from the environment - never from database-backed settings.
  */
 @Getter
 @Setter

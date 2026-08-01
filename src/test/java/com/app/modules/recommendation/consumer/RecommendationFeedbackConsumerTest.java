@@ -27,8 +27,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.dao.QueryTimeoutException;
-import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 
 import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.inbox.enums.ProcessedMessageResult;
@@ -44,8 +45,6 @@ import com.app.modules.recommendation.client.GorseClient;
 import com.app.modules.recommendation.client.dto.GorseFeedback;
 import com.app.modules.recommendation.repository.UserEventJdbcRepository;
 import com.rabbitmq.client.Channel;
-
-import org.springframework.http.HttpStatus;
 
 @ExtendWith(MockitoExtension.class)
 class RecommendationFeedbackConsumerTest {
@@ -101,11 +100,7 @@ class RecommendationFeedbackConsumerTest {
         assertThat(
                         consumer.isTransient(
                                 HttpServerErrorException.create(
-                                        HttpStatus.SERVICE_UNAVAILABLE,
-                                        "down",
-                                        null,
-                                        null,
-                                        null)))
+                                        HttpStatus.SERVICE_UNAVAILABLE, "down", null, null, null)))
                 .isTrue();
     }
 
@@ -131,7 +126,8 @@ class RecommendationFeedbackConsumerTest {
         consumer.consume(message, channel);
 
         verify(userEventJdbcRepository)
-                .insertIgnoreDuplicate(EVENT_ID, USER_ID, "post_like", "post", POST_ID, OCCURRED_AT);
+                .insertIgnoreDuplicate(
+                        EVENT_ID, USER_ID, "post_like", "post", POST_ID, OCCURRED_AT);
         verifyFeedbackPushed("like");
         verify(channel).basicAck(1L, false);
     }
@@ -144,7 +140,8 @@ class RecommendationFeedbackConsumerTest {
         consumer.consume(message, channel);
 
         verify(userEventJdbcRepository)
-                .insertIgnoreDuplicate(EVENT_ID, USER_ID, "post_save", "post", POST_ID, OCCURRED_AT);
+                .insertIgnoreDuplicate(
+                        EVENT_ID, USER_ID, "post_save", "post", POST_ID, OCCURRED_AT);
         verifyFeedbackPushed("save");
         verify(channel).basicAck(1L, false);
     }

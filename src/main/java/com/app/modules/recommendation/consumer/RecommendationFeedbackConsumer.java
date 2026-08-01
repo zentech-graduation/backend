@@ -35,8 +35,8 @@ import com.rabbitmq.client.Channel;
  *
  * <p>Each event is recorded in the canonical append-only {@code user_events} store and then pushed
  * to Gorse. Both writes are idempotent (deterministic event id, Gorse feedback upsert), so
- * redeliveries and retries after a partial failure are safe; Gorse state remains re-derivable
- * from PostgreSQL alone.
+ * redeliveries and retries after a partial failure are safe; Gorse state remains re-derivable from
+ * PostgreSQL alone.
  *
  * <p>Uses manual acknowledgement: ack after idempotent duplicate detection or successful side
  * effect, route poison messages to DLQ, and nack with requeue if DLQ publishing itself fails.
@@ -145,7 +145,8 @@ public class RecommendationFeedbackConsumer {
         UUID postId = extractPostId(event);
         UUID actorId = event.actorId();
         if (actorId == null) {
-            throw new PermanentMessageException("Engagement event has no actor: " + event.eventId());
+            throw new PermanentMessageException(
+                    "Engagement event has no actor: " + event.eventId());
         }
         userEventJdbcRepository.insertIgnoreDuplicate(
                 event.eventId(),
@@ -176,7 +177,8 @@ public class RecommendationFeedbackConsumer {
     private static UUID extractPostId(DomainEventEnvelope event) {
         Object raw = event.data() == null ? null : event.data().get("postId");
         if (raw == null) {
-            throw new PermanentMessageException("Engagement event has no postId: " + event.eventId());
+            throw new PermanentMessageException(
+                    "Engagement event has no postId: " + event.eventId());
         }
         try {
             return UUID.fromString(raw.toString());
