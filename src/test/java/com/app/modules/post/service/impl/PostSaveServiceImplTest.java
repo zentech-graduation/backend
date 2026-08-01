@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +26,7 @@ import org.springframework.data.domain.Pageable;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.dto.response.SavedPostResponse;
@@ -32,6 +34,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostSave;
 import com.app.modules.post.entity.PostSaveId;
 import com.app.modules.post.enums.PostStatus;
+import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostSaveRepository;
 import com.app.modules.post.service.PostVisibilityService;
@@ -43,6 +46,7 @@ class PostSaveServiceImplTest {
     @Mock private PostSaveRepository postSaveRepository;
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private PostResponseAssembler postResponseAssembler;
+    @Mock private OutboxService outboxService;
 
     private PostSaveServiceImpl service;
 
@@ -60,7 +64,8 @@ class PostSaveServiceImplTest {
                         postRepository,
                         postSaveRepository,
                         postVisibilityService,
-                        postResponseAssembler);
+                        postResponseAssembler,
+                        outboxService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
         lenient()
@@ -90,6 +95,7 @@ class PostSaveServiceImplTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_ALREADY_SAVED);
         verify(postSaveRepository, never()).saveAndFlush(any());
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -102,7 +108,27 @@ class PostSaveServiceImplTest {
     }
 
     @Test
-    void savePost_concurrentDuplicateInsert_throwsAlreadySaved() {
+    void savePost_firstSave_enqueuesOutboxEventWithPostAndOwnerIds() {
+        when(postSaveRepository.existsById(saveId)).thenReturn(false);
+
+        service.savePost(userId, postId);
+
+        verify(outboxService)
+                .enqueue(
+                        eq(PostEventTypes.POST_SAVED_V1),
+                        eq(PostEventTypes.POST_SAVED_V1),
+                        eq("post"),
+                        eq(postId),
+                        eq(userId),
+                        eq(
+                                Map.of(
+                                        "postId", postId.toString(),
+                                        "postOwnerId", ownerId.toString(),
+                                        "userId", userId.toString())));
+    }
+
+    @Test
+    void savePost_concurrentDuplicateInsert_throwsAlreadySavedAndDoesNotEnqueue() {
         when(postSaveRepository.existsById(saveId)).thenReturn(false);
         when(postSaveRepository.saveAndFlush(any(PostSave.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -111,6 +137,7 @@ class PostSaveServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_ALREADY_SAVED);
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
     }
 
     @Test

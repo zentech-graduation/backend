@@ -18,6 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Removed
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
 
+### Tests
+- Regression coverage for the recommendation feedback consumer, covering successful processing of each supported engagement type, unknown event types, missing required fields, transient-versus-permanent recommender failures, and duplicate-delivery handling.
+- Regression coverage for the personalized feed pipeline, covering pagination, visibility and ownership filtering across multiple candidate rounds, ranking-score attachment, and fallback to the popularity ranking and then the chronological feed.
+- Regression coverage for the recommender REST client, covering request shape, authentication headers, and response parsing for every supported operation.
+- Regression coverage asserting that liking or saving a post enqueues the corresponding recommendation event with the correct payload, and that no event is enqueued on a conflicting or duplicate action.
+
 ### Changed
 - A comment WebSocket handshake rejected because of a blacklisted (logged-out) token now returns the same response as every other rejection reason, with no distinguishing status code.
 - The social module's internal route constants now match the endpoints they describe; no endpoint path changed.

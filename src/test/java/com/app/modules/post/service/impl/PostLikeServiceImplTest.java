@@ -3,12 +3,14 @@ package com.app.modules.post.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,12 +23,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.modules.post.dto.response.LikeActionResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.mapper.PostMapper;
+import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
@@ -40,6 +44,7 @@ class PostLikeServiceImplTest {
     @Mock private PostUserRepository postUserRepository;
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private PostMapper postMapper;
+    @Mock private OutboxService outboxService;
 
     private PostLikeServiceImpl service;
 
@@ -58,7 +63,8 @@ class PostLikeServiceImplTest {
                         postLikeRepository,
                         postUserRepository,
                         postVisibilityService,
-                        postMapper);
+                        postMapper,
+                        outboxService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
         lenient()
@@ -76,6 +82,7 @@ class PostLikeServiceImplTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_ALREADY_LIKED);
         verify(postLikeRepository, never()).saveAndFlush(any());
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -93,7 +100,30 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void likePost_concurrentDuplicateInsert_throwsAlreadyLiked() {
+    void likePost_firstLike_enqueuesOutboxEventWithPostAndOwnerIds() {
+        when(postLikeRepository.existsById(likeId)).thenReturn(false);
+        when(postLikeRepository.saveAndFlush(any(PostLike.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(postRepository.findLikeCount(postId)).thenReturn(1);
+
+        service.likePost(userId, postId);
+
+        verify(outboxService)
+                .enqueue(
+                        eq(PostEventTypes.POST_LIKED_V1),
+                        eq(PostEventTypes.POST_LIKED_V1),
+                        eq("post"),
+                        eq(postId),
+                        eq(userId),
+                        eq(
+                                Map.of(
+                                        "postId", postId.toString(),
+                                        "postOwnerId", ownerId.toString(),
+                                        "userId", userId.toString())));
+    }
+
+    @Test
+    void likePost_concurrentDuplicateInsert_throwsAlreadyLikedAndDoesNotEnqueue() {
         when(postLikeRepository.existsById(likeId)).thenReturn(false);
         when(postLikeRepository.saveAndFlush(any(PostLike.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -102,6 +132,7 @@ class PostLikeServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_ALREADY_LIKED);
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
     }
 
     @Test
