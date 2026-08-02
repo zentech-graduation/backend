@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Conversations now deliver new and deleted messages to active participants in real time over a WebSocket connection, in addition to the existing REST history endpoint.
 - Sending a message now notifies every other active participant in the conversation.
 - Sending a message (text, image, video, post share, or story share) into a conversation, with a reply reference, idempotent retries, and validation that the payload matches the declared message type.
 - Cursor-paginated message history for a conversation, including a placeholder for a deleted message.
@@ -17,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
 
 ### Tests
+- Regression coverage rejecting a WebSocket handshake and a live-feed subscription for a banned, suspended, deactivated, or deleted account.
+- Unit coverage for the WebSocket connection handshake authentication and for the per-conversation subscription authorization guard, including rejection of a non-participant, a departed participant, and an unauthenticated connection.
 - Regression coverage confirming a deleted account is excluded from message notification fan-out.
 - Unit and end-to-end integration coverage for message notification fan-out, including suppression for a departed participant, a blocked recipient, and a recipient with message notifications disabled, and duplicate-event handling.
 - Regression coverage rejecting a spoofed media asset reference, a non-published shared post, and an expired or deleted shared story in a sent message.
@@ -41,6 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.
 
 ### Security
+- A banned, suspended, deactivated, or deleted account can no longer open a message WebSocket connection or subscribe to a conversation's live feed using a still-valid token issued before the account's state changed.
+- A WebSocket subscription to a conversation's live message feed is rejected unless the subscriber is an active participant of that conversation.
 - A deleted account no longer receives a message notification.
 - Referencing another user's media asset in an image or video message is now rejected instead of accepting any existing asset ID.
 - Two concurrent requests to start a 1-1 conversation with the same user can no longer create duplicate conversations; the request is now serialized and backed by a database uniqueness constraint.
