@@ -1,8 +1,6 @@
 package com.app.modules.post.service.impl;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,7 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.common.settings.service.SystemSettingService;
 import com.app.modules.hashtag.service.HashtagService;
@@ -48,6 +50,7 @@ import com.app.modules.post.service.PostService;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.service.UserSummaryService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -72,6 +75,7 @@ public class PostServiceImpl implements PostService {
     private final PostMapper postMapper;
     private final SocialService socialService;
     private final OutboxService outboxService;
+    private final UserSummaryService userSummaryService;
 
     public PostServiceImpl(
             PostRepository postRepository,
@@ -84,7 +88,8 @@ public class PostServiceImpl implements PostService {
             PostResponseAssembler postResponseAssembler,
             PostMapper postMapper,
             SocialService socialService,
-            OutboxService outboxService) {
+            OutboxService outboxService,
+            UserSummaryService userSummaryService) {
         this.postRepository = postRepository;
         this.postEditHistoryRepository = postEditHistoryRepository;
         this.postUserRepository = postUserRepository;
@@ -96,6 +101,7 @@ public class PostServiceImpl implements PostService {
         this.postMapper = postMapper;
         this.socialService = socialService;
         this.outboxService = outboxService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -133,7 +139,7 @@ public class PostServiceImpl implements PostService {
                 enqueuePostIndexUpsert(post);
             }
             log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
-            return postResponseAssembler.assemble(post);
+            return postResponseAssembler.assemble(authorId, post);
         }
         List<UUID> mediaIds = request.mediaIds();
         if (mediaIds == null || mediaIds.isEmpty()) {
@@ -184,7 +190,7 @@ public class PostServiceImpl implements PostService {
             enqueuePostIndexUpsert(post);
         }
         log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(authorId, post);
     }
 
     @Override
@@ -202,7 +208,7 @@ public class PostServiceImpl implements PostService {
         if (!postVisibilityService.isVisibleTo(viewerId, post)) {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(viewerId, post);
     }
 
     @Override
@@ -230,7 +236,7 @@ public class PostServiceImpl implements PostService {
             upsertCaptionHashtags(post.getId(), post.getCaption());
             enqueuePostIndexUpsert(post);
         }
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(requesterId, post);
     }
 
     @Override
@@ -248,7 +254,7 @@ public class PostServiceImpl implements PostService {
                 throw new AppException(ApiErrorCode.POST_FORBIDDEN);
             }
             softDelete(post);
-            return postResponseAssembler.assemble(post);
+            return postResponseAssembler.assemble(requesterId, post);
         }
         if (!isOwner) {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
@@ -275,7 +281,7 @@ public class PostServiceImpl implements PostService {
                 post.getId(),
                 current,
                 target);
-        return postResponseAssembler.assemble(post);
+        return postResponseAssembler.assemble(requesterId, post);
     }
 
     @Override
@@ -310,25 +316,30 @@ public class PostServiceImpl implements PostService {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
         int pageSize = normalizeLimit(size);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Post> posts =
-                cursorTime == null
-                        ? postRepository.findFirstUserPosts(
-                                targetUserId, PostStatus.PUBLISHED, page)
+                decoded == null
+                        ? postRepository.findFirstUserPosts(targetUserId, page)
                         : postRepository.findUserPostsBefore(
-                                targetUserId, PostStatus.PUBLISHED, cursorTime, page);
-        if (posts.size() > pageSize) {
+                                targetUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        boolean hasNextPage = posts.size() > pageSize;
+        if (hasNextPage) {
             posts = posts.subList(0, pageSize);
         }
         if (posts.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
-        List<PostResponse> content = postResponseAssembler.assemble(posts);
-        String startCursor = encodeCursor(posts.get(0).getCreatedAt());
-        String endCursor = encodeCursor(posts.get(posts.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        List<PostResponse> content = postResponseAssembler.assemble(viewerId, posts);
+        Post first = posts.get(0);
+        Post last = posts.get(posts.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId());
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
@@ -338,26 +349,32 @@ public class PostServiceImpl implements PostService {
         int pageSize = normalizeLimit(size);
         if (authorIds.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Post> posts =
-                cursorTime == null
-                        ? postRepository.findFirstFeedPosts(authorIds, PostStatus.PUBLISHED, page)
+                decoded == null
+                        ? postRepository.findFirstFeedPosts(authorIds, page)
                         : postRepository.findFeedPostsBefore(
-                                authorIds, PostStatus.PUBLISHED, cursorTime, page);
-        if (posts.size() > pageSize) {
+                                authorIds,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        boolean hasNextPage = posts.size() > pageSize;
+        if (hasNextPage) {
             posts = posts.subList(0, pageSize);
         }
         if (posts.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
-        List<FeedPostResponse> content = postResponseAssembler.assembleFeed(posts);
-        String startCursor = encodeCursor(posts.get(0).getCreatedAt());
-        String endCursor = encodeCursor(posts.get(posts.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        List<FeedPostResponse> content = postResponseAssembler.assembleFeed(viewerId, posts);
+        Post first = posts.get(0);
+        Post last = posts.get(posts.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId());
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
@@ -372,24 +389,36 @@ public class PostServiceImpl implements PostService {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
         int pageSize = normalizeLimit(size);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostEditHistory> rows =
-                cursorTime == null
+                decoded == null
                         ? postEditHistoryRepository.findFirstByPost(postId, page)
-                        : postEditHistoryRepository.findByPostBefore(postId, cursorTime, page);
-        if (rows.size() > pageSize) {
+                        : postEditHistoryRepository.findByPostBefore(
+                                postId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        boolean hasNextPage = rows.size() > pageSize;
+        if (hasNextPage) {
             rows = rows.subList(0, pageSize);
         }
         if (rows.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
+        Map<UUID, UserSummaryResponse> editors =
+                userSummaryService.loadSummaries(
+                        rows.stream().map(PostEditHistory::getEditorId).toList());
         List<PostEditHistoryResponse> content =
-                rows.stream().map(postMapper::toEditHistoryResponse).toList();
-        String startCursor = encodeCursor(rows.get(0).getEditedAt());
-        String endCursor = encodeCursor(rows.get(rows.size() - 1).getEditedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+                rows.stream()
+                        .map(h -> postMapper.toEditHistoryResponse(h, editors.get(h.getEditorId())))
+                        .toList();
+        PostEditHistory first = rows.get(0);
+        PostEditHistory last = rows.get(rows.size() - 1);
+        String startCursor = encodeCursor(first.getEditedAt(), first.getId());
+        String endCursor = encodeCursor(last.getEditedAt(), last.getId());
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     // Soft delete keeps the row (GLOBAL_RULES soft delete policy): status flip + deleted_at; the
@@ -500,22 +529,14 @@ public class PostServiceImpl implements PostService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID id) {
+        if (time == null || id == null) {
             return null;
         }
-        return Base64.getEncoder().encodeToString(time.toString().getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), id));
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 }

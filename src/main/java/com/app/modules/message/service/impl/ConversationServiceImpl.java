@@ -198,12 +198,13 @@ public class ConversationServiceImpl implements ConversationService {
                         ? conversationRepository.findFirstMyConversations(actorId, page)
                         : conversationRepository.findMyConversationsBefore(
                                 actorId, decoded.lastMessageAt(), decoded.conversationId(), page);
-        if (conversations.size() > pageSize) {
+        boolean hasNextPage = conversations.size() > pageSize;
+        if (hasNextPage) {
             conversations = conversations.subList(0, pageSize);
         }
         if (conversations.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> conversationIds = conversations.stream().map(Conversation::getId).toList();
@@ -228,7 +229,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .toList();
         String startCursor = encodeCursor(conversations.get(0));
         String endCursor = encodeCursor(conversations.get(conversations.size() - 1));
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
@@ -473,6 +474,12 @@ public class ConversationServiceImpl implements ConversationService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
+    // The conversation list orders by last_message_at, a mutable key that advances whenever a new
+    // message arrives, so a conversation can shift across a page boundary and be seen twice or
+    // missed. That instability is intrinsic to any most-recently-active ordering and is accepted;
+    // the (last_message_at, id) tuple only breaks exact ties, not the moving key. The cursor stays
+    // bespoke rather than adopting the shared codec because it must encode a null last_message_at
+    // for the NULLS-LAST group, which the shared (epoch-micros, uuid) cursor cannot represent.
     private String encodeCursor(Conversation conversation) {
         // A null lastMessageAt is preserved as-is (empty segment), never substituted with a
         // sentinel instant: OffsetDateTime.MIN falls far outside PostgreSQL's timestamptz range
@@ -482,7 +489,9 @@ public class ConversationServiceImpl implements ConversationService {
                         ? conversation.getLastMessageAt().toString()
                         : "";
         String raw = sortKey + "|" + conversation.getId();
-        return Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
 
     private ConversationCursor decodeCursor(String cursor) {
@@ -490,7 +499,7 @@ public class ConversationServiceImpl implements ConversationService {
             return new ConversationCursor(null, null);
         }
         try {
-            String raw = new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8);
+            String raw = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
             String[] parts = raw.split("\\|", 2);
             if (parts.length != 2) {
                 throw new IllegalArgumentException("Cursor must contain lastMessageAt and id");
@@ -499,7 +508,7 @@ public class ConversationServiceImpl implements ConversationService {
                     parts[0].isEmpty() ? null : OffsetDateTime.parse(parts[0]);
             return new ConversationCursor(lastMessageAt, UUID.fromString(parts[1]));
         } catch (RuntimeException e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
+            throw new AppException(ApiErrorCode.INVALID_CURSOR);
         }
     }
 

@@ -3,7 +3,7 @@ package com.app.modules.auth.mapper;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.app.modules.auth.dto.response.UserSummaryResponse;
+import com.app.modules.auth.dto.response.AuthenticatedUserResponse;
 import com.app.modules.users.entity.User;
 
 /** Maps {@link User} entities to auth-layer DTOs. */
@@ -16,5 +16,5 @@ public interface AuthMapper {
     @Mapping(source = "user.displayName", target = "displayName")
     @Mapping(source = "user.role", target = "role")
     @Mapping(source = "emailVerified", target = "emailVerified")
-    UserSummaryResponse toUserSummaryResponse(User user, boolean emailVerified);
+    AuthenticatedUserResponse toAuthenticatedUserResponse(User user, boolean emailVerified);
 }

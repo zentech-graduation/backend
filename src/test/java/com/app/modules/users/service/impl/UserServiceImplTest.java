@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
@@ -175,12 +176,12 @@ class UserServiceImplTest {
         User user = publicUser(id, "bob");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
         when(socialService.isBlockedBetween(viewerId, id)).thenReturn(false);
-        when(userMapper.toPublicProfileResponse(user, 0, 0, 0))
+        when(userMapper.toPublicProfileResponse(user, 0, 0, 0, ViewerRelationshipResponse.NONE))
                 .thenReturn(publicProfileResponse(id, 0, 0, 0));
 
         service.getUserProfile(viewerId, id);
 
-        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0);
+        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0, ViewerRelationshipResponse.NONE);
     }
 
     @Test
@@ -188,12 +189,14 @@ class UserServiceImplTest {
         UUID id = UUID.randomUUID();
         User user = publicUser(id, "bob");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
-        when(userMapper.toPublicProfileResponse(user, null, null, null))
+        when(userMapper.toPublicProfileResponse(
+                        user, null, null, null, ViewerRelationshipResponse.NONE))
                 .thenReturn(publicProfileResponse(id, null, null, null));
 
         PublicUserProfileResponse result = service.getUserProfile(null, id);
 
-        verify(userMapper).toPublicProfileResponse(user, null, null, null);
+        verify(userMapper)
+                .toPublicProfileResponse(user, null, null, null, ViewerRelationshipResponse.NONE);
         assertThat(result.followerCount()).isNull();
         assertThat(result.followingCount()).isNull();
         assertThat(result.postCount()).isNull();
@@ -207,12 +210,14 @@ class UserServiceImplTest {
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
         when(socialService.isBlockedBetween(viewerId, id)).thenReturn(false);
         when(socialService.hasAcceptedFollow(viewerId, id)).thenReturn(false);
-        when(userMapper.toPublicProfileResponse(user, null, null, null))
+        when(userMapper.toPublicProfileResponse(
+                        user, null, null, null, ViewerRelationshipResponse.NONE))
                 .thenReturn(publicProfileResponse(id, null, null, null));
 
         PublicUserProfileResponse result = service.getUserProfile(viewerId, id);
 
-        verify(userMapper).toPublicProfileResponse(user, null, null, null);
+        verify(userMapper)
+                .toPublicProfileResponse(user, null, null, null, ViewerRelationshipResponse.NONE);
         assertThat(result.followerCount()).isNull();
         assertThat(result.followingCount()).isNull();
         assertThat(result.postCount()).isNull();
@@ -226,12 +231,12 @@ class UserServiceImplTest {
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
         when(socialService.isBlockedBetween(viewerId, id)).thenReturn(false);
         when(socialService.hasAcceptedFollow(viewerId, id)).thenReturn(true);
-        when(userMapper.toPublicProfileResponse(user, 0, 0, 0))
+        when(userMapper.toPublicProfileResponse(user, 0, 0, 0, ViewerRelationshipResponse.NONE))
                 .thenReturn(publicProfileResponse(id, 0, 0, 0));
 
         service.getUserProfile(viewerId, id);
 
-        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0);
+        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0, ViewerRelationshipResponse.NONE);
     }
 
     @Test
@@ -239,12 +244,14 @@ class UserServiceImplTest {
         UUID id = UUID.randomUUID();
         User user = privateUser(id, "carol");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
-        when(userMapper.toPublicProfileResponse(user, null, null, null))
+        when(userMapper.toPublicProfileResponse(
+                        user, null, null, null, ViewerRelationshipResponse.NONE))
                 .thenReturn(publicProfileResponse(id, null, null, null));
 
         PublicUserProfileResponse result = service.getUserProfile(null, id);
 
-        verify(userMapper).toPublicProfileResponse(user, null, null, null);
+        verify(userMapper)
+                .toPublicProfileResponse(user, null, null, null, ViewerRelationshipResponse.NONE);
         assertThat(result.followerCount()).isNull();
     }
 
@@ -267,12 +274,12 @@ class UserServiceImplTest {
         UUID id = UUID.randomUUID();
         User user = privateUser(id, "carol");
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
-        when(userMapper.toPublicProfileResponse(user, 0, 0, 0))
+        when(userMapper.toPublicProfileResponse(user, 0, 0, 0, ViewerRelationshipResponse.NONE))
                 .thenReturn(publicProfileResponse(id, 0, 0, 0));
 
         service.getUserProfile(id, id);
 
-        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0);
+        verify(userMapper).toPublicProfileResponse(user, 0, 0, 0, ViewerRelationshipResponse.NONE);
     }
 
     @Test
@@ -407,7 +414,19 @@ class UserServiceImplTest {
     private static PublicUserProfileResponse publicProfileResponse(
             UUID id, Integer follower, Integer following, Integer post) {
         return new PublicUserProfileResponse(
-                id, "bob", "Bob", null, null, null, false, false, follower, following, post, null);
+                id,
+                "bob",
+                "Bob",
+                null,
+                null,
+                null,
+                false,
+                false,
+                follower,
+                following,
+                post,
+                null,
+                ViewerRelationshipResponse.NONE);
     }
 
     private static UserSettingsResponse settingsResponse() {

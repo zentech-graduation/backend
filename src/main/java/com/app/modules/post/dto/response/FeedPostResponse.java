@@ -5,30 +5,30 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.enums.PostType;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * API response for a post in the following feed, including ordered media, trigger-maintained
- * counters, and a reserved ranking field for forward compatibility.
+ * API response for a post in a feed, including ordered media, trigger-maintained counters, and an
+ * optional ranking score populated by the recommendation feed.
  */
 @Schema(
         description =
-                "Post entry in the following feed, with engagement counters and a reserved ranking field")
+                "Post entry in a feed, with engagement counters and an optional ranking score")
 public record FeedPostResponse(
         @Schema(description = "Post identifier.") UUID id,
-        @Schema(description = "Author user identifier.") UUID userId,
-        @Schema(description = "Author username.") String username,
-        @Schema(description = "Author display name.") String userDisplayName,
-        @Schema(description = "Author avatar CDN URL.") String userAvatarUrl,
+        @Schema(description = "Post author.") UserSummaryResponse author,
         @Schema(description = "Post caption.") String caption,
         @Schema(description = "Post type.") PostType postType,
         @Schema(description = "Lifecycle status.") PostStatus status,
         @Schema(description = "Number of likes; trigger-maintained.") int likeCount,
         @Schema(description = "Number of comments; trigger-maintained.") int commentCount,
         @Schema(description = "Number of saves; trigger-maintained.") int saveCount,
+        @Schema(description = "Whether the viewer has liked this post.") boolean isLiked,
+        @Schema(description = "Whether the viewer has saved this post.") boolean isSaved,
         @Schema(description = "Number of views; updated by a background job and may lag.")
                 int viewCount,
         @Schema(description = "Free-form location label.") String locationName,
@@ -52,16 +52,15 @@ public record FeedPostResponse(
     public FeedPostResponse withRankingScore(Double score) {
         return new FeedPostResponse(
                 id,
-                userId,
-                username,
-                userDisplayName,
-                userAvatarUrl,
+                author,
                 caption,
                 postType,
                 status,
                 likeCount,
                 commentCount,
                 saveCount,
+                isLiked,
+                isSaved,
                 viewCount,
                 locationName,
                 latitude,

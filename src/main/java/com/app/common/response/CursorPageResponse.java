@@ -36,22 +36,25 @@ public class CursorPageResponse<T> {
     }
 
     /**
-     * Build a forward-paginated response. {@code hasNextPage} is inferred by comparing the size of
-     * {@code content} against the requested {@code limit}; callers must pass the unsliced result.
+     * Build a forward-paginated response from an explicit {@code hasNextPage} signal.
+     *
+     * <p>The caller determines whether a further page exists, typically by over-fetching one row
+     * beyond the page size and observing whether the extra row was returned. Inferring the flag
+     * from {@code content.size()} is not possible without that signal, because an exactly-full
+     * final page is indistinguishable from a full page that has a successor.
      *
      * @param content items returned for this page
-     * @param limit requested page size
+     * @param hasNextPage whether a further page exists, determined by the caller
      * @param startCursor opaque cursor for the first item; null when content is empty
      * @param endCursor opaque cursor for the last item; null when content is empty
      * @param hasPreviousPage whether a previous page exists relative to the caller's cursor
      */
     public static <T> CursorPageResponse<T> of(
             List<T> content,
-            int limit,
+            boolean hasNextPage,
             String startCursor,
             String endCursor,
             boolean hasPreviousPage) {
-        boolean hasNextPage = content.size() == limit;
         return CursorPageResponse.<T>builder()
                 .content(content)
                 .pageInfo(

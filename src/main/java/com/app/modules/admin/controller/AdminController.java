@@ -144,8 +144,8 @@ public class AdminController extends BaseController implements AdminApi {
             @RequestParam(required = false) UUID adminId,
             @RequestParam(required = false) AdminActionType actionType,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return page(adminService.getActions(adminId, actionType, cursor, size));
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
+        return page(adminService.getActions(adminId, actionType, cursor, limit));
     }
 
     /** Returns one audit event to an authenticated moderator or administrator. */
@@ -165,8 +165,8 @@ public class AdminController extends BaseController implements AdminApi {
             getActionsForUser(
                     @PathVariable("userId") UUID userId,
                     @RequestParam(required = false) String cursor,
-                    @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return page(adminService.getActionsForUser(userId, cursor, size));
+                    @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
+        return page(adminService.getActionsForUser(userId, cursor, limit));
     }
 
     private ResponseEntity<ApiResponse<AdminActionResponse>> ok(AdminActionResponse response) {

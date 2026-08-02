@@ -10,7 +10,7 @@ Cross-cutting conventions that apply to all modules. Do not duplicate these in p
 |------|------------|------|---------------|
 | Source of Truth | PostgreSQL | Canonical, durable data | No — this IS the source |
 | Cache | Redis | Fast reads, session tokens, rate-limit state | Yes — rebuild from PostgreSQL |
-| Search Index | (future: Elasticsearch) | Full-text search | Yes — rebuild from PostgreSQL |
+| Search Index | Elasticsearch (`posts`, `hashtags` only) | Full-text search | Yes — rebuild from PostgreSQL |
 | Event Stream | RabbitMQ | Async event delivery | No persistence guarantee |
 
 **Conflict resolution rule**: If a data conflict exists between tiers, PostgreSQL is always correct.
@@ -121,11 +121,12 @@ Flow:
 
 | Area | Simplification | Accepted Degradation |
 |------|---------------|----------------------|
-| Notifications | No real-time WebSocket delivery in v1 | Clients must poll for new notifications |
+| Notifications | Real-time delivery is best-effort over a per-user STOMP topic; the REST list remains authoritative | A missed push is recovered on the next `GET /notifications`. Delivery latency is bounded by the outbox publisher's polling interval, not by the socket |
+| Realtime transport | In-memory STOMP broker on a single application instance; the RabbitMQ fanout tier in front of it is multi-instance-safe, the broker itself shares nothing | A second instance delivers correctly but has no shared session state; nothing beyond delivery has been designed or tested for it |
 | Feed / Explore ranking | `post_interaction_scores` updated by a background scheduler, not in real-time | Feed ranking may lag behind actual activity by minutes |
 | Hashtag trending | `hashtag_trending` populated by a scheduled background job | Trending data is a periodic snapshot, not live |
 | Email verification / password reset tokens | Stored in Redis, not PostgreSQL | Tokens are lost on full Redis flush; user must re-request |
-| Full-text search | No Elasticsearch in v1; username/hashtag search uses PostgreSQL `pg_trgm` GIN index | Search ranking is less sophisticated than a dedicated search engine |
+| Full-text search | Two tiers by domain. `posts` and `hashtags` are indexed in Elasticsearch and queried behind the `elasticsearchSearch` circuit breaker; hashtag search falls back to `pg_trgm`, post search falls back to an empty page. `users` has no Elasticsearch index; username search queries the PostgreSQL `pg_trgm` GIN index `idx_users_username_trgm` directly via `ILIKE`, with **no** circuit breaker, because the backend is the source of truth and there is no lower tier to degrade to | User search ranking is popularity-ordered, not relevance-scored. A term matching a large fraction of the table degrades to a parallel sequential scan - measured at 56 ms against 200,000 rows - bounded by a 2-character minimum, a 10,000-row offset cap, a 100-row page cap, and required authentication |
 | Recommendation | `user_similarity` and `post_interaction_scores` populated by external ML jobs | Recommendations may lag behind recent user behavior |
 | Story expiry | Expired stories remain in the database until a cleanup job removes them | `expires_at` must always be checked; do not rely on row absence alone |
 

@@ -2,8 +2,9 @@ package com.app.modules.notification.service.impl;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.data.domain.PageRequest;
@@ -12,11 +13,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.mapper.NotificationMapper;
+import com.app.modules.notification.messaging.NotificationEventTypes;
 import com.app.modules.notification.repository.NotificationRepository;
 import com.app.modules.notification.service.NotificationService;
 import com.app.modules.social.repository.BlockRepository;
@@ -26,20 +32,25 @@ import com.app.modules.users.repository.UserSettingsRepository;
 @Service
 public class NotificationServiceImpl implements NotificationService {
 
+    private static final String AGGREGATE_TYPE = "notification";
+
     private final NotificationRepository notificationRepository;
     private final UserSettingsRepository userSettingsRepository;
     private final BlockRepository blockRepository;
     private final NotificationMapper notificationMapper;
+    private final OutboxService outboxService;
 
     public NotificationServiceImpl(
             NotificationRepository notificationRepository,
             UserSettingsRepository userSettingsRepository,
             BlockRepository blockRepository,
-            NotificationMapper notificationMapper) {
+            NotificationMapper notificationMapper,
+            OutboxService outboxService) {
         this.notificationRepository = notificationRepository;
         this.userSettingsRepository = userSettingsRepository;
         this.blockRepository = blockRepository;
         this.notificationMapper = notificationMapper;
+        this.outboxService = outboxService;
     }
 
     @Override
@@ -71,7 +82,20 @@ public class NotificationServiceImpl implements NotificationService {
                         .entityType(entityType)
                         .entityId(entityId)
                         .build();
-        notificationRepository.save(notification);
+        Notification saved = notificationRepository.save(notification);
+
+        // The live tier reads the row back at push time to get createdAt (database-defaulted, so
+        // still null on `saved` here) and the full response shape; the outbox payload therefore
+        // carries only the identifiers a listener needs to find it, not the entity itself.
+        Map<String, Object> data = new HashMap<>();
+        data.put("recipientId", recipientId.toString());
+        outboxService.enqueue(
+                NotificationEventTypes.NOTIFICATION_CREATED_V1,
+                NotificationEventTypes.NOTIFICATION_CREATED_V1,
+                AGGREGATE_TYPE,
+                saved.getId(),
+                actorId,
+                data);
     }
 
     @Override
@@ -103,29 +127,37 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<NotificationResponse> listNotifications(
-            UUID recipientId, UUID cursor, int limit) {
-        UUID resolvedCursor = null;
-        OffsetDateTime cursorTime = null;
-        if (cursor != null) {
-            // Scoping the pivot to the caller keeps a foreign notification UUID from acting as an
-            // existence/timestamp oracle, matching the ownership check in markAsRead.
-            Optional<Notification> pivot =
-                    notificationRepository.findByIdAndRecipientId(cursor, recipientId);
-            if (pivot.isPresent()) {
-                resolvedCursor = cursor;
-                cursorTime = pivot.get().getCreatedAt();
-            }
-            // Pivot absent means the cursor notification was deleted or is not the caller's own;
-            // fall back to the first page.
-        }
-
+            UUID recipientId, String cursor, int limit) {
+        Cursor decoded = decodeCursor(cursor);
         List<Notification> rows =
-                notificationRepository.findByRecipientIdWithCursor(
-                        recipientId, resolvedCursor, cursorTime, PageRequest.of(0, limit));
+                decoded == null
+                        ? notificationRepository.findFirstByRecipient(
+                                recipientId, PageRequest.of(0, limit + 1))
+                        : notificationRepository.findByRecipientBefore(
+                                recipientId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                PageRequest.of(0, limit + 1));
+        boolean hasNextPage = rows.size() > limit;
+        if (hasNextPage) {
+            rows = rows.subList(0, limit);
+        }
         List<NotificationResponse> content = notificationMapper.toResponseList(rows);
-        String startCursor = rows.isEmpty() ? null : rows.get(0).getId().toString();
-        String endCursor = rows.isEmpty() ? null : rows.get(rows.size() - 1).getId().toString();
-        return CursorPageResponse.of(content, limit, startCursor, endCursor, cursor != null);
+        Notification first = rows.isEmpty() ? null : rows.get(0);
+        Notification last = rows.isEmpty() ? null : rows.get(rows.size() - 1);
+        String startCursor = first == null ? null : encodeCursor(first);
+        String endCursor = last == null ? null : encodeCursor(last);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
+    }
+
+    private String encodeCursor(Notification notification) {
+        return CursorCodec.encode(
+                new Cursor(
+                        TimeCursors.toMicros(notification.getCreatedAt()), notification.getId()));
+    }
+
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 
     private boolean isTypeEnabled(NotificationType type, UserSettings settings) {

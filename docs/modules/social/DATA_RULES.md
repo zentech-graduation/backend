@@ -1,6 +1,7 @@
 # Social Module — Data Rules
 
-**Implementation status**: Follow-create path implemented. Follow approval, decline, unfollow, block management, follower/following lists, and notification consumers are not implemented yet.
+**Implementation status**: Follow create, approve, decline, and unfollow are implemented, as are block and unblock, follower and following listing, pending follow request listing, and the `user.followed.v1` / `user.follow-requested.v1` notification consumer.
+The only outstanding rule is transitioning pending follow requests to accepted when a private account switches to public; see Section 3B.
 
 ---
 
@@ -21,8 +22,7 @@ These tables cannot be rebuilt from any other source if lost.
 |------|----------|--------------|-----------------|
 | `users.follower_count` | `users` table | `COUNT(*)` from `follows` where `following_id = user.id` and `status = 'accepted'` | Trigger `trg_follow_counts` (V16) |
 | `users.following_count` | `users` table | `COUNT(*)` from `follows` where `follower_id = user.id` and `status = 'accepted'` | Trigger `trg_follow_counts` (V16) |
-| Pending follow requests view | `pending_follow_requests` (DB view, V17) | Built from `follows` where `status = 'pending'` | Query-time |
-| Follow state cache | Redis | Rebuild from `follows` table | Cache miss or TTL expiry |
+| Pending follow requests view | `pending_follow_requests` (DB view, V17) | Built from `follows` where `status = 'pending'` | Query-time; not currently queried by application code — `SocialServiceImpl.getPendingFollowRequests` reads `follows` directly via keyset-paginated repository methods |
 
 ---
 
@@ -45,15 +45,19 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| When target account has `is_private = TRUE`, a new follow row is created with `status = 'pending'` | `FollowServiceImpl` |
-| When target account has `is_private = FALSE`, a new follow row is created with `status = 'accepted'` | `FollowServiceImpl` |
-| Approving a follow request updates `follows.status` from `'pending'` to `'accepted'` | `[NOT YET IMPLEMENTED]` |
-| Declining a follow request deletes the `follows` row | `[NOT YET IMPLEMENTED]` |
-| Unfollowing deletes the `follows` row (triggers counter decrement) | `[NOT YET IMPLEMENTED]` |
-| Blocking a user must also delete any existing follow rows in both directions | `[NOT YET IMPLEMENTED]` |
-| A blocked user must be excluded from follower/following lists, search results, and all feed queries | `[NOT YET IMPLEMENTED]` |
+| The blocked list returns the viewer's **outgoing** blocks only, newest first; incoming blocks are not exposed by any endpoint | `SocialServiceImpl.getBlockedUsers` |
+| The blocked list keysets on the `(created_at, blocked_id)` row-value tuple, served by `idx_blocks_blocker_created_blocked` (V40) | `BlockRepository.findFirstBlocked` / `findBlockedBefore` |
+| A blocked account since soft-deleted stays in the list as a placeholder rather than being dropped | `SocialServiceImpl.getBlockedUsers` via `UserSummaryService.loadSummaries` |
+| When target account has `is_private = TRUE`, a new follow row is created with `status = 'pending'` | `SocialServiceImpl.followUser` |
+| When target account has `is_private = FALSE`, a new follow row is created with `status = 'accepted'` | `SocialServiceImpl.followUser` |
+| Approving a follow request updates `follows.status` from `'pending'` to `'accepted'` | `SocialServiceImpl.respondToFollowRequest` |
+| Declining a follow request deletes the `follows` row | `SocialServiceImpl.respondToFollowRequest` |
+| Unfollowing deletes the `follows` row (triggers counter decrement) | `SocialServiceImpl.unfollowUser` |
+| Blocking a user must also delete any existing follow rows in both directions | `SocialServiceImpl.blockUser` |
+| A blocked user must be excluded from follower/following lists and the accepted-following feed set | `FollowRepository` (block-exclusion subqueries on the followers/following keyset queries), `SocialServiceImpl.getAcceptedFollowingExcludingBlocks` |
 | A follow request records `user.follow-requested.v1`; an accepted follow records `user.followed.v1` in the transactional outbox | `SocialEventServiceImpl` |
-| When a private account is made public, all `'pending'` follow rows for that account must be transitioned to `'accepted'` | `[NOT YET IMPLEMENTED]` |
+| The `user.followed.v1` / `user.follow-requested.v1` events are consumed to create notifications | `SocialNotificationConsumer` (`notification` module) |
+| When a private account is made public, all `'pending'` follow rows for that account must be transitioned to `'accepted'` | `[NOT YET IMPLEMENTED]` — `UserServiceImpl.updateMyProfile` flips `is_private` only; no pending-follow transition runs |
 
 **Block directionality**:
 - The `blocks` table stores a single directional row: `(blocker_id, blocked_id)`.
@@ -73,7 +77,7 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Dependency | Direction | Nature |
 |------------|-----------|--------|
-| `users` | inbound | `follower_id`, `following_id`, `blocker_id`, `blocked_id` all reference `users.id`; counters written back to `users` |
+| `users` | inbound and outbound | Inbound: `follower_id`, `following_id`, `blocker_id`, `blocked_id` all reference `users.id`; counters written back to `users`. Outbound: `SocialServiceImpl` calls `UserSummaryService` to resolve a public summary (with a deleted/unknown placeholder) for each pending-request requester |
 | `notification` | outbound | Follow and follow-request events trigger notification creation |
 | `post` | inbound | Post visibility (private account) is gated by `follows.status = 'accepted'` |
 | `message` | inbound | Messaging permissions depend on whether a block relationship exists |

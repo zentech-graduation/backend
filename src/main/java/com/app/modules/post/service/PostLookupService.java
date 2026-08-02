@@ -27,10 +27,11 @@ public interface PostLookupService {
     List<Post> findActiveByIds(Collection<UUID> ids);
 
     /**
-     * Batch-assembles feed responses with author and media hydration.
+     * Batch-assembles feed responses with author, media, and viewer-state hydration.
      *
+     * @param viewerId the requesting viewer, whose like/save state is batch-resolved
      * @param posts posts to assemble; must not be empty
      * @return feed responses in the same order as the input list, with null ranking score
      */
-    List<FeedPostResponse> assembleFeed(List<Post> posts);
+    List<FeedPostResponse> assembleFeed(UUID viewerId, List<Post> posts);
 }

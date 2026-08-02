@@ -246,7 +246,8 @@ class AuthControllerIT {
         postJson("/api/v1/auth/register", registerBody("user_unverified", email, "password1"));
 
         ResponseEntity<Map> response =
-                postJson("/api/v1/auth/login", Map.of("email", email, "password", "password1"));
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody().get("code")).isEqualTo("AUTH_EMAIL_NOT_VERIFIED");
@@ -260,7 +261,8 @@ class AuthControllerIT {
         rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
         ResponseEntity<Map> response =
-                postJson("/api/v1/auth/login", Map.of("email", email, "password", "password1"));
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
@@ -274,7 +276,7 @@ class AuthControllerIT {
         postJson("/api/v1/auth/register", registerBody("user_wpw", email, "password1"));
 
         ResponseEntity<Map> response =
-                postJson("/api/v1/auth/login", Map.of("email", email, "password", "WRONG-PW"));
+                postJson("/api/v1/auth/login", Map.of("identifier", email, "password", "WRONG-PW"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getBody().get("code")).isEqualTo("AUTH_INVALID_CREDENTIALS");
@@ -285,10 +287,93 @@ class AuthControllerIT {
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("email", uniqueEmail("ghost"), "password", "password1"));
+                        Map.of("identifier", uniqueEmail("ghost"), "password", "password1"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getBody().get("code")).isEqualTo("AUTH_INVALID_CREDENTIALS");
+    }
+
+    @Test
+    void login_byUsername_correctCredentials_returns200WithTokens() {
+        String email = uniqueEmail("uname_ok");
+        String username = uniqueUsername("uok");
+        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+        String token = createVerificationToken(email);
+        rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", username, "password", "password1"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
+                .asString()
+                .isNotBlank();
+    }
+
+    @Test
+    void login_byUsername_wrongPassword_returns401() {
+        String email = uniqueEmail("uname_wpw");
+        String username = uniqueUsername("uwpw");
+        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", username, "password", "WRONG-PW"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_INVALID_CREDENTIALS");
+    }
+
+    @Test
+    void login_byUsername_unknownUsername_returns401SameCodeAsWrongPassword() {
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", uniqueUsername("ughost"), "password", "password1"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_INVALID_CREDENTIALS");
+    }
+
+    @Test
+    void login_byUsername_upperCaseIdentifier_returns200() {
+        String email = uniqueEmail("uname_upper");
+        String username = uniqueUsername("uup");
+        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+        String token = createVerificationToken(email);
+        rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
+
+        // Username is stored lowercase; an uppercase submission must resolve to the same account.
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", username.toUpperCase(), "password", "password1"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
+                .asString()
+                .isNotBlank();
+    }
+
+    @Test
+    void login_byEmail_stillWorksAfterContractChange() {
+        String email = uniqueEmail("email_still");
+        String username = uniqueUsername("estl");
+        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+        String token = createVerificationToken(email);
+        rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
+                .asString()
+                .isNotBlank();
     }
 
     @Test
@@ -383,7 +468,7 @@ class AuthControllerIT {
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("email", uniqueEmail("login_pub"), "password", "password1"));
+                        Map.of("identifier", uniqueEmail("login_pub"), "password", "password1"));
 
         // The endpoint is public; Spring Security must not block with 401-because-no-bearer.
         // A 401 here means bad credentials, not a missing token — that's still acceptable.
@@ -541,7 +626,7 @@ class AuthControllerIT {
             ResponseEntity<Map> response =
                     postJson(
                             "/api/v1/auth/login",
-                            Map.of("email", email, "password", "WRONG"),
+                            Map.of("identifier", email, "password", "WRONG"),
                             forwardedIp);
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         }
@@ -549,7 +634,7 @@ class AuthControllerIT {
         ResponseEntity<Map> blocked =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("email", email, "password", "WRONG"),
+                        Map.of("identifier", email, "password", "WRONG"),
                         forwardedIp);
 
         assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
@@ -598,13 +683,15 @@ class AuthControllerIT {
 
         for (int i = 0; i < 10; i++) {
             postJson(
-                    "/api/v1/auth/login", Map.of("email", email, "password", "WRONG"), forwardedIp);
+                    "/api/v1/auth/login",
+                    Map.of("identifier", email, "password", "WRONG"),
+                    forwardedIp);
         }
 
         ResponseEntity<Map> blocked =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("email", email, "password", "WRONG"),
+                        Map.of("identifier", email, "password", "WRONG"),
                         forwardedIp);
 
         assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
@@ -688,7 +775,7 @@ class AuthControllerIT {
         String verToken = createVerificationToken(email);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + verToken, Map.class);
         ResponseEntity<Map> login =
-                postJson("/api/v1/auth/login", Map.of("email", email, "password", password));
+                postJson("/api/v1/auth/login", Map.of("identifier", email, "password", password));
         return (Map<?, ?>) login.getBody().get("data");
     }
 
@@ -704,6 +791,11 @@ class AuthControllerIT {
 
     private static String uniqueEmail(String tag) {
         return tag + "_" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+    }
+
+    private static String uniqueUsername(String tag) {
+        // Lowercase, no '@', within the 30-char / [a-zA-Z0-9_.] username constraints.
+        return tag + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     }
 
     private static String uniqueIp() {

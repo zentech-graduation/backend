@@ -3,6 +3,10 @@ package com.app.modules.users.api;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -11,9 +15,12 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
 import com.app.common.response.ApiResponse;
+import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.security.user.UserPrincipal;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
@@ -150,6 +157,112 @@ public interface UserApi {
     @GetMapping(ApiConstants.Users.BY_ID)
     ResponseEntity<ApiResponse<PublicUserProfileResponse>> getUserProfile(
             @PathVariable UUID userId, @AuthenticationPrincipal UserPrincipal principal);
+
+    @Operation(
+            summary = "Search users by username",
+            description =
+                    "Case-insensitive substring search over username, ordered by follower count"
+                            + " descending then username. Requires authentication, unlike the"
+                            + " profile lookup endpoints, because it converts the user table from"
+                            + " unlistable to enumerable. The caller never appears in their own"
+                            + " results. Banned, suspended, deactivated, and deleted accounts are"
+                            + " never returned. Users who have blocked the caller are returned with"
+                            + " isBlockedBy true rather than being omitted, since omitting them"
+                            + " would disclose the block.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Search results returned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = CursorPageResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "Query shorter than 2 characters or longer than 30, limit outside 1-100, or"
+                                + " a malformed or out-of-range cursor",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Users.SEARCH)
+    ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> searchUsers(
+            @RequestParam("q") @Size(min = 2, max = 30) String q,
+            @RequestParam(required = false) @Size(max = 512) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
+
+    @Operation(
+            summary = "Get a user's public profile by username",
+            description =
+                    "Returns the public profile of the user holding the given username. Matching is"
+                            + " case-sensitive, because username uniqueness is enforced on the raw"
+                            + " column. A non-existent username, a soft-deleted account, and an"
+                            + " account blocked with respect to the caller all return 404"
+                            + " identically. Counter fields are omitted for unauthenticated"
+                            + " callers.",
+            security = {})
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Profile returned",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema =
+                                        @Schema(implementation = PublicUserProfileResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "No live user holds that username, or the account is block-hidden",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "Username is outside 3-30 characters or contains illegal characters. Path"
+                                + " and query constraint violations return 400, unlike request-body"
+                                + " violations which return 422.",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Users.BY_USERNAME)
+    ResponseEntity<ApiResponse<PublicUserProfileResponse>> getUserProfileByUsername(
+            @PathVariable
+                    @Size(min = 3, max = 30)
+                    @Pattern(
+                            regexp = "^[a-zA-Z0-9_.]+$",
+                            message =
+                                    "Username may only contain letters, digits, underscores and"
+                                            + " dots")
+                    String username,
+            @AuthenticationPrincipal UserPrincipal principal);
 
     @Operation(
             summary = "Get my settings",

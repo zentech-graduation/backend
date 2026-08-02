@@ -62,10 +62,10 @@ class RecommendationFeedServiceImplTest {
         // Feed assembly is a pass-through in these tests; only ranking-score attachment matters.
         // Fallback-path tests never reach the assembler, so this stub is lenient.
         lenient()
-                .when(postLookupService.assembleFeed(anyList()))
+                .when(postLookupService.assembleFeed(any(UUID.class), anyList()))
                 .thenAnswer(
                         inv -> {
-                            List<Post> posts = inv.getArgument(0);
+                            List<Post> posts = inv.getArgument(1);
                             return posts.stream().map(p -> feedResponse(p.getId())).toList();
                         });
     }
@@ -77,9 +77,6 @@ class RecommendationFeedServiceImplTest {
     private FeedPostResponse feedResponse(UUID id) {
         return new FeedPostResponse(
                 id,
-                UUID.randomUUID(),
-                "user",
-                "User",
                 null,
                 "caption",
                 PostType.TEXT,
@@ -87,6 +84,8 @@ class RecommendationFeedServiceImplTest {
                 0,
                 0,
                 0,
+                false,
+                false,
                 0,
                 null,
                 null,
@@ -124,7 +123,7 @@ class RecommendationFeedServiceImplTest {
     void getRecommendedFeed_malformedRankedCursor_delegatesToChronologicalFeedUnchanged() {
         String garbageCursor = "not-a-valid-ranked-cursor!!!";
         CursorPageResponse<FeedPostResponse> chronoPage =
-                CursorPageResponse.of(List.of(), 20, null, null, true);
+                CursorPageResponse.of(List.of(), false, null, null, true);
         when(postService.getFeed(viewerId, garbageCursor, 20)).thenReturn(chronoPage);
 
         CursorPageResponse<FeedPostResponse> page =
@@ -180,7 +179,8 @@ class RecommendationFeedServiceImplTest {
         when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(10), eq(0)))
                 .thenReturn(new SourceBatch('g', List.of()));
         CursorPageResponse<FeedPostResponse> chronoPage =
-                CursorPageResponse.of(List.of(feedResponse(UUID.randomUUID())), 5, "a", "b", false);
+                CursorPageResponse.of(
+                        List.of(feedResponse(UUID.randomUUID())), false, "a", "b", false);
         when(postService.getFeed(viewerId, null, 5)).thenReturn(chronoPage);
 
         CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 5);

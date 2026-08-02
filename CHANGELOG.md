@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A personalized "for you" post feed at GET /api/v1/recommendations/feed, ranked by the Gorse recommender with per-post ranking scores, degrading to the popularity ranking and then the chronological following feed whenever the recommender is unavailable.
 - A deterministic synthetic seed tool generates demo users, text posts, a follow graph, and interaction history for the recommendation demo, and can push or rebuild the Gorse dataset from the same source.
 - The Gorse recommender (v0.5.11) now runs as a dedicated service through a compose overlay, storing data in its own PostgreSQL database, secured by an API key and a loopback-bound authenticated dashboard.
+- The first page of a post's comments now begins with up to three pinned top comments, ordered by like count; each comment carries a `pinned` flag so a client can tell them apart from the newest-first list rather than inferring it from position. Only comments with at least one like are eligible, a pinned comment is never repeated in the same page's newest-first body, and the pinned block is additional to the requested page size. Page two onward is unchanged.
+- Notifications are now delivered in real time over a WebSocket connection, in addition to the existing REST endpoints; a client may subscribe only to its own notification stream, and a missed push is always recoverable by re-fetching the notification list.
+- A WebSocket connection is now terminated automatically if the underlying account is banned, suspended, or logged out, rather than remaining open until the access token naturally expires.
+- A WebSocket handshake is now rate limited, and every rejected handshake is logged.
+- User search by username is available to authenticated callers, matching case-insensitively on any part of the username and ordering results by follower count.
+- The users a caller has blocked can now be listed as a paginated page, newest block first.
+- A user's public profile can now be fetched by username as well as by id; the username match is case-sensitive.
 
 ### Changed
 - Local development containers now persist PostgreSQL and RabbitMQ data across container recreation, declare healthchecks and restart policies, and the RabbitMQ image now ships the management UI bound to loopback.
@@ -28,18 +35,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Regression coverage asserting that liking or saving a post enqueues the corresponding recommendation event with the correct payload, and that no event is enqueued on a conflicting or duplicate action.
 
 ### Changed
+- Notification push delivery latency is significantly reduced by polling for new events roughly five times more often.
+- A comment or story WebSocket session established before an account is banned, suspended, or logged out is no longer left open until its access token naturally expires; the session is now terminated shortly after the account status changes.
+- The user object returned by login, register, and refresh is renamed in the API schema from `UserSummaryResponse` to `AuthenticatedUserResponse` to distinguish the authenticated-self object (which carries email and role) from the shared public author summary; the emitted JSON fields are unchanged.
+- The follower, following, and pending follow-request lists now use the shared user summary object; the emitted JSON is unchanged, only the shared shape is reused.
+- Post responses (single post, feed, saved posts, and a user's posts) now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of separate top-level author id, username, display-name, and avatar fields; the post likers endpoint now returns that same user summary shape, and a post caption edit history entry embeds the editor the same way instead of a bare editor id. A post by a deleted author is hidden as before; a deleted liker now appears as a placeholder rather than silently vanishing from the likers list.
+- Comment responses now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of a bare author id; the previous top-level `userId` field is removed, and a comment by a deleted author returns a placeholder author rather than a dangling id. The same author object arrives over the live comment WebSocket feed, so a live-rendered comment shows the same author as one fetched over REST.
+- Pagination cursors are now opaque and share a single format across every list endpoint; cursors issued by a previous version are no longer accepted.
+- The report and admin listing endpoints now name their page-size parameter `limit`, matching every other paginated endpoint.
+- The notifications endpoint maximum page size is raised from 50 to 100.
+- A malformed pagination cursor now returns a 400 error with a typed code instead of silently returning the first page.
+- Post search now rejects a cursor addressing a result offset beyond 10,000 with a 400 error, matching the bound hashtag search already applied; previously only a negative offset was rejected.
 - A comment WebSocket handshake rejected because of a blacklisted (logged-out) token now returns the same response as every other rejection reason, with no distinguishing status code.
 - The social module's internal route constants now match the endpoints they describe; no endpoint path changed.
 - Removed unused internal path constants that described endpoints the application never served; no served endpoint changed.
 
 ### Added
+- A shared public user summary object - user id, username, display name, avatar URL, and verified flag - is now available for embedding an author or actor inline in API responses; a soft-deleted or unknown user resolves to a placeholder rather than a missing value.
 - Foundation for the direct messaging module: 1-1 and group conversations, group participant management (add, remove, leave with automatic admin handoff), group renaming, and cursor-paginated conversation listing with per-conversation unread counts.
 - A message request from a user who is blocked, or from a non-follower when the recipient has disabled message requests, is now rejected.
+- Users can now log in with either their email address or their username, supplied through a single login identifier field.
+
+### Changed
+- The login endpoint now accepts a single identifier field containing an email address or a username in place of the previous email-only field; this is a breaking change to the login request contract.
 
 ### Fixed
-- A banned or suspended account can no longer complete the comment WebSocket handshake; a still-valid token now authenticates only when the account's status is active, matching the guarantee already enforced on REST requests. An already-open connection from before the status change is not affected; it remains open until its token naturally expires.
+- A comment delivered over the live WebSocket feed, or served from the recent-comments cache, no longer includes a "liked by viewer" flag; that flag is meaningful only per-viewer and could previously show one viewer's own like state to every other subscriber of the same post. It remains present and correct on every REST response.
+- Post list endpoints (feed and a user's posts) no longer issue one extra media query per post; the media for a whole page is now loaded in a single batch.
+- Cursor-paginated lists no longer drop items that share an exact creation timestamp when paging across the boundary; feeds, profile posts, likes, saves, comments, replies, followers, and following now return every item exactly once.
+- An exactly-full final page of any cursor-paginated list now correctly reports that no further page exists rather than advertising a next page that is empty.
+- A banned or suspended account can no longer complete the comment WebSocket handshake; a still-valid token now authenticates only when the account's status is active, matching the guarantee already enforced on REST requests. An already-open connection from before the status change is now also terminated shortly after, rather than remaining open until its token naturally expires (see Changed).
 
 ### Tests
+- Regression coverage proving a user cannot subscribe to another user's notification WebSocket topic, including from a session established on the comment WebSocket endpoint.
+- End-to-end coverage proving a notification is delivered to the correct recipient's WebSocket session only, is suppressed correctly (self-action, disabled preference, blocked actor), and is not delivered to an unrelated connected user.
+- Regression coverage proving a WebSocket session is terminated shortly after the underlying account is banned, suspended, or its token is logged out, and that a still-valid session survives the same check.
+- Regression coverage proving repeated WebSocket handshake attempts beyond the configured limit are rejected.
+- Regression coverage reproducing keyset row loss on a group of rows sharing one creation timestamp and proving the tuple-cursor fix returns every row exactly once.
 - Regression coverage asserting a banned or suspended account's otherwise-valid token no longer establishes a comment WebSocket session.
 - Regression coverage proving the comment WebSocket handshake rejects a missing, malformed, wrong-secret, expired, or blacklisted token, and rejects an unauthenticated caller on the SockJS HTTP fallback transport as well as the native transport.
 - Integration tests that start a Redis container now pin an explicit blank password so a developer's local `REDIS_PASSWORD` environment variable can no longer leak into the test context and cause unrelated authentication failures.
@@ -52,6 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Regression coverage for group-admin handoff when the last admin is forcibly removed from a group.
 - Unit coverage for conversation creation and deduplication, participant and group-admin gating, group admin handoff on leave, and conversation-list cursor pagination.
 - End-to-end integration coverage for the new conversation endpoints, covering creation, deduplication, listing, group management, and membership changes.
+- Coverage for login by username and by email through the identifier field, including uppercase-username resolution and identical failure responses for an unknown identifier and a wrong password.
 
 ### Fixed
 - Comment and story activity (new comments, replies, mentions, comment likes, and story views) now generates notifications in production; these notification types were previously never created outside the development environment because their event consumers were not enabled.
@@ -72,6 +105,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Post search now bounds its page size, so an oversized request can no longer force a mass result hydration or exceed the search engine's result-window limit.
 - Post creation now bounds the number of media identifiers accepted, rejecting an oversized list at request validation.
 - Moderation action metadata is now bounded to a maximum number of entries, preventing unbounded growth of the moderation audit table.
+- Usernames are now stored and matched case-insensitively, and the login rate limit now keys on the submitted identifier so username-based attempts are throttled per account rather than falling back to an address-only bucket.
 
 ### Removed
 - Unused internal mail request type.

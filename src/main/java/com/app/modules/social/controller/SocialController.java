@@ -1,6 +1,5 @@
 package com.app.modules.social.controller;
 
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -11,13 +10,14 @@ import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.social.api.SocialApi;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 import com.app.modules.social.service.SocialService;
 
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -43,9 +43,11 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<List<FollowRequestResponse>>> getPendingFollowRequests() {
-        List<FollowRequestResponse> body =
-                socialService.getPendingFollowRequests(SecurityUtils.getCurrentUserId());
+    public ResponseEntity<ApiResponse<CursorPageResponse<FollowRequestResponse>>>
+            getPendingFollowRequests(String cursor, int limit) {
+        CursorPageResponse<FollowRequestResponse> body =
+                socialService.getPendingFollowRequests(
+                        SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
@@ -82,18 +84,28 @@ public class SocialController extends BaseController implements SocialApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowers(
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getBlockedUsers(
+            String cursor, int limit) {
+        CursorPageResponse<UserListItemResponse> body =
+                socialService.getBlockedUsers(SecurityUtils.getCurrentUserId(), cursor, limit);
+
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    @Override
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowers(
             UUID userId, String cursor, int limit) {
-        CursorPageResponse<SocialUserSummaryResponse> body =
+        CursorPageResponse<UserListItemResponse> body =
                 socialService.getFollowers(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
     @Override
-    public ResponseEntity<ApiResponse<CursorPageResponse<SocialUserSummaryResponse>>> getFollowing(
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowing(
             UUID userId, String cursor, int limit) {
-        CursorPageResponse<SocialUserSummaryResponse> body =
+        CursorPageResponse<UserListItemResponse> body =
                 socialService.getFollowing(userId, SecurityUtils.getCurrentUserId(), cursor, limit);
 
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));

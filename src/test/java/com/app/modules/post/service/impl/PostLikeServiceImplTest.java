@@ -29,21 +29,21 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
-import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
-import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.social.service.SocialService;
+import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
 class PostLikeServiceImplTest {
 
     @Mock private PostRepository postRepository;
     @Mock private PostLikeRepository postLikeRepository;
-    @Mock private PostUserRepository postUserRepository;
     @Mock private PostVisibilityService postVisibilityService;
-    @Mock private PostMapper postMapper;
+    @Mock private UserSummaryService userSummaryService;
+    @Mock private SocialService socialService;
     @Mock private OutboxService outboxService;
 
     private PostLikeServiceImpl service;
@@ -61,9 +61,9 @@ class PostLikeServiceImplTest {
                 new PostLikeServiceImpl(
                         postRepository,
                         postLikeRepository,
-                        postUserRepository,
                         postVisibilityService,
-                        postMapper,
+                        userSummaryService,
+                        socialService,
                         outboxService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
@@ -83,20 +83,6 @@ class PostLikeServiceImplTest {
                 .isEqualTo(ApiErrorCode.POST_ALREADY_LIKED);
         verify(postLikeRepository, never()).saveAndFlush(any());
         verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
-    }
-
-    @Test
-    void likePost_firstLike_savesAndReturnsFreshCount() {
-        when(postLikeRepository.existsById(likeId)).thenReturn(false);
-        when(postLikeRepository.saveAndFlush(any(PostLike.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        when(postRepository.findLikeCount(postId)).thenReturn(1);
-
-        LikeActionResponse response = service.likePost(userId, postId);
-
-        assertThat(response.postId()).isEqualTo(postId);
-        assertThat(response.liked()).isTrue();
-        assertThat(response.likeCount()).isEqualTo(1);
     }
 
     @Test
@@ -123,7 +109,7 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void likePost_concurrentDuplicateInsert_throwsAlreadyLikedAndDoesNotEnqueue() {
+    void likePost_concurrentDuplicateInsert_doesNotEnqueue() {
         when(postLikeRepository.existsById(likeId)).thenReturn(false);
         when(postLikeRepository.saveAndFlush(any(PostLike.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -133,6 +119,32 @@ class PostLikeServiceImplTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_ALREADY_LIKED);
         verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void likePost_firstLike_savesAndReturnsFreshCount() {
+        when(postLikeRepository.existsById(likeId)).thenReturn(false);
+        when(postLikeRepository.saveAndFlush(any(PostLike.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(postRepository.findLikeCount(postId)).thenReturn(1);
+
+        LikeActionResponse response = service.likePost(userId, postId);
+
+        assertThat(response.postId()).isEqualTo(postId);
+        assertThat(response.liked()).isTrue();
+        assertThat(response.likeCount()).isEqualTo(1);
+    }
+
+    @Test
+    void likePost_concurrentDuplicateInsert_throwsAlreadyLiked() {
+        when(postLikeRepository.existsById(likeId)).thenReturn(false);
+        when(postLikeRepository.saveAndFlush(any(PostLike.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.likePost(userId, postId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_ALREADY_LIKED);
     }
 
     @Test
@@ -247,10 +259,10 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void listLikers_invalidCursor_throwsBadRequest() {
+    void listLikers_invalidCursor_throwsInvalidCursor() {
         assertThatThrownBy(() -> service.listLikers(userId, postId, "!!!not-valid-base64!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 }

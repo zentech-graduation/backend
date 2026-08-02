@@ -4,7 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.Base64;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,7 +26,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.comment.config.CommentProperties;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
@@ -47,10 +51,12 @@ import com.app.modules.comment.service.CommentAccessPolicyService;
 import com.app.modules.comment.service.CommentCacheService;
 import com.app.modules.comment.service.CommentModerationService;
 import com.app.modules.comment.service.CommentService;
+import com.app.modules.comment.service.CommentViewerStateService;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.users.service.UserSummaryService;
 
 import io.micrometer.core.instrument.Timer;
 import tools.jackson.databind.ObjectMapper;
@@ -63,6 +69,7 @@ public class CommentServiceImpl implements CommentService {
     private static final int MAX_DEPTH = 10;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int PINNED_COMMENT_COUNT = 3;
     private static final String AGGREGATE_TYPE = "comment";
 
     private final CommentRepository commentRepository;
@@ -80,6 +87,8 @@ public class CommentServiceImpl implements CommentService {
     private final CommentCacheService cacheService;
     private final CommentMetrics metrics;
     private final PostVisibilityService postVisibilityService;
+    private final UserSummaryService userSummaryService;
+    private final CommentViewerStateService commentViewerStateService;
 
     public CommentServiceImpl(
             CommentRepository commentRepository,
@@ -96,7 +105,9 @@ public class CommentServiceImpl implements CommentService {
             ObjectMapper objectMapper,
             CommentCacheService cacheService,
             CommentMetrics metrics,
-            PostVisibilityService postVisibilityService) {
+            PostVisibilityService postVisibilityService,
+            UserSummaryService userSummaryService,
+            CommentViewerStateService commentViewerStateService) {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.idempotencyRepository = idempotencyRepository;
@@ -112,6 +123,8 @@ public class CommentServiceImpl implements CommentService {
         this.cacheService = cacheService;
         this.metrics = metrics;
         this.postVisibilityService = postVisibilityService;
+        this.userSummaryService = userSummaryService;
+        this.commentViewerStateService = commentViewerStateService;
     }
 
     @Override
@@ -195,7 +208,9 @@ public class CommentServiceImpl implements CommentService {
                                 .build());
         MDC.put("commentId", saved.getId().toString());
 
-        CommentResponse response = mapper.toResponse(saved);
+        CommentResponse response =
+                mapper.toResponse(
+                        saved, loadAuthor(saved.getUserId()), loadIsLiked(actorId, saved.getId()));
 
         if (idempotencyKey != null) {
             idempotencyRepository.updateResponseBody(
@@ -232,13 +247,20 @@ public class CommentServiceImpl implements CommentService {
             }
             comment.setContent(content);
             Comment saved = commentRepository.save(comment);
-            CommentResponse response = mapper.toResponse(saved);
+            CommentResponse response =
+                    mapper.toResponse(
+                            saved,
+                            loadAuthor(saved.getUserId()),
+                            loadIsLiked(actorId, saved.getId()));
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", saved.getPostId().toString());
             data.put("commentId", saved.getId().toString());
             data.put("depth", (int) saved.getDepth());
-            data.put("comment", response);
+            // Broadcast projection: this payload is fanned out to every subscriber of the post's
+            // live stream, so the editor's own isLiked state must not ride along as if it applied
+            // to every viewer.
+            data.put("comment", mapper.toBroadcastResponse(response));
             outboxService.enqueue(
                     CommentEventTypes.COMMENT_EDITED_V1,
                     CommentEventTypes.COMMENT_EDITED_V1,
@@ -378,13 +400,25 @@ public class CommentServiceImpl implements CommentService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
         int pageSize = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
+        // Page two onward is the unchanged pure keyset stream: no pinned block, no exclusion.
+        if (decoded != null) {
+            List<Comment> comments =
+                    commentRepository.findTopLevelBefore(
+                            postId,
+                            TimeCursors.fromMicros(decoded.sortValueMicros()),
+                            decoded.id(),
+                            page);
+            return toPage(viewerId, comments, pageSize, cursor);
+        }
+        List<Comment> pinned =
+                commentRepository.findTopLikedTopLevel(
+                        postId, PageRequest.of(0, PINNED_COMMENT_COUNT));
+        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         List<Comment> comments =
-                cursorTime == null
-                        ? commentRepository.findFirstTopLevel(postId, page)
-                        : commentRepository.findTopLevelBefore(postId, cursorTime, page);
-        return toPage(comments, pageSize, cursor);
+                commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, page);
+        return toPage(viewerId, pinned, comments, pageSize, cursor);
     }
 
     @Override
@@ -401,13 +435,17 @@ public class CommentServiceImpl implements CommentService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
         int pageSize = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Comment> replies =
-                cursorTime == null
+                decoded == null
                         ? commentRepository.findFirstReplies(commentId, page)
-                        : commentRepository.findRepliesBefore(commentId, cursorTime, page);
-        return toPage(replies, pageSize, cursor);
+                        : commentRepository.findRepliesBefore(
+                                commentId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        return toPage(viewerId, replies, pageSize, cursor);
     }
 
     // Visibility gate shared by the read, like, and unlike paths, consistent with the create path
@@ -419,16 +457,38 @@ public class CommentServiceImpl implements CommentService {
         }
     }
 
-    // Keyset pagination over limit+1 rows: hasNextPage is decided by the pre-trim size, then the
-    // extra probe row is dropped.
     private CursorPageResponse<CommentResponse> toPage(
-            List<Comment> rows, int pageSize, String cursor) {
+            UUID viewerId, List<Comment> rows, int pageSize, String cursor) {
+        return toPage(viewerId, List.of(), rows, pageSize, cursor);
+    }
+
+    // Keyset pagination over limit+1 rows: hasNextPage is decided by the pre-trim size, then the
+    // extra probe row is dropped. The pinned block is prepended and is additional to pageSize, so
+    // the body remains a full keyset page and the cursor advances by exactly pageSize.
+    private CursorPageResponse<CommentResponse> toPage(
+            UUID viewerId, List<Comment> pinned, List<Comment> rows, int pageSize, String cursor) {
         boolean hasNextPage = rows.size() > pageSize;
         List<Comment> page = hasNextPage ? rows.subList(0, pageSize) : rows;
-        List<CommentResponse> content = page.stream().map(mapper::toResponse).toList();
-        String startCursor = page.isEmpty() ? null : encodeCursor(page.get(0).getCreatedAt());
-        String endCursor =
-                page.isEmpty() ? null : encodeCursor(page.get(page.size() - 1).getCreatedAt());
+        List<Comment> all = new ArrayList<>(pinned.size() + page.size());
+        all.addAll(pinned);
+        all.addAll(page);
+        // Both batch loaders are called once over the pinned block and the body together, so the
+        // pinned block adds no query and the query count stays flat in page size.
+        Map<UUID, UserSummaryResponse> authors =
+                userSummaryService.loadSummaries(all.stream().map(Comment::getUserId).toList());
+        Set<UUID> likedCommentIds =
+                commentViewerStateService.loadLikedCommentIds(
+                        viewerId, all.stream().map(Comment::getId).toList());
+        List<CommentResponse> content = new ArrayList<>(all.size());
+        pinned.forEach(c -> content.add(toResponse(c, authors, likedCommentIds).asPinned()));
+        page.forEach(c -> content.add(toResponse(c, authors, likedCommentIds)));
+        // Cursors describe the newest-first body only. Deriving them from the pinned block would
+        // seek the next page to an arbitrary position in the stream.
+        Comment first = page.isEmpty() ? null : page.get(0);
+        Comment last = page.isEmpty() ? null : page.get(page.size() - 1);
+        String startCursor =
+                first == null ? null : encodeCursor(first.getCreatedAt(), first.getId());
+        String endCursor = last == null ? null : encodeCursor(last.getCreatedAt(), last.getId());
         return CursorPageResponse.<CommentResponse>builder()
                 .content(content)
                 .pageInfo(
@@ -439,6 +499,28 @@ public class CommentServiceImpl implements CommentService {
                                 .endCursor(endCursor)
                                 .build())
                 .build();
+    }
+
+    private CommentResponse toResponse(
+            Comment comment, Map<UUID, UserSummaryResponse> authors, Set<UUID> likedCommentIds) {
+        return mapper.toResponse(
+                comment,
+                authors.get(comment.getUserId()),
+                likedCommentIds.contains(comment.getId()));
+    }
+
+    // Resolves a single author's public summary; the create and edit paths return exactly one
+    // comment, so the batch loader is called with a singleton id.
+    private UserSummaryResponse loadAuthor(UUID userId) {
+        return userSummaryService.loadSummaries(List.of(userId)).get(userId);
+    }
+
+    // Resolves a single comment's viewer-like state; the create and edit paths return exactly one
+    // comment, so the batch loader is called with a singleton id.
+    private boolean loadIsLiked(UUID viewerId, UUID commentId) {
+        return commentViewerStateService
+                .loadLikedCommentIds(viewerId, List.of(commentId))
+                .contains(commentId);
     }
 
     // Re-reads the existing idempotency row to replay the cached response or reject a key reuse
@@ -494,7 +576,10 @@ public class CommentServiceImpl implements CommentService {
         data.put("userId", actorId.toString());
         data.put("depth", (int) saved.getDepth());
         data.put("mentionedUserIds", mentionedUserIds);
-        data.put("comment", response);
+        // Broadcast projection: this payload is fanned out to every subscriber of the post's live
+        // stream, so the creating actor's own isLiked state must not ride along as if it applied to
+        // every viewer.
+        data.put("comment", mapper.toBroadcastResponse(response));
         if (saved.getParentId() != null) {
             data.put("parentId", saved.getParentId().toString());
         }
@@ -571,23 +656,15 @@ public class CommentServiceImpl implements CommentService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID id) {
+        if (time == null || id == null) {
             return null;
         }
-        return Base64.getEncoder().encodeToString(time.toString().getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), id));
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 
     private static String sha256(String input) {

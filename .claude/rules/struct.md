@@ -1,4 +1,4 @@
----
+﻿---
 trigger: model_decision
 description: Load when working on App (social network). Contains the authoritative project map.
 ---
@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V27 SQL migrations
+│   │       ├── db/migration/       # Flyway V01–V40 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -95,6 +95,7 @@ app/
 | `common/config/rabbit/` | `RabbitMqPublisherConfig`, `RabbitMqTopologyConfig` |
 | `common/config/redis/` | `RedisConfig`, `RateLimitProperties` |
 | `common/config/security/` | `SecurityProperties` |
+| `common/config/websocket/` | `WebSocketBrokerConfig` |
 | `common/enums/` | `ApiErrorCode`, `ApiSuccessCode` |
 | `common/exception/` | `ApiException`, `AppException`, `GlobalExceptionHandler` |
 | `common/inbox/entity/` | `ProcessedMessage` |
@@ -121,6 +122,7 @@ app/
 | `common/security/service/impl/` | `RateLimiterServiceImpl`, `RefreshTokenServiceImpl`, `TokenBlacklistServiceImpl` |
 | `common/security/user/` | `SecurityMapper`, `UserPrincipal` |
 | `common/security/util/` | `CachedBodyHttpServletRequest`, `IpExtractor`, `SecurityUtils` |
+| `common/security/websocket/` | `JwtHandshakeInterceptor`, `WebSocketSessionRegistry`, `SessionTrackingWebSocketHandlerDecoratorFactory`, `WebSocketRevocationSweepService` |
 | `common/settings/repository/` | `SystemSettingRepository` |
 | `common/settings/service/` | `SystemSettingService` |
 | `common/settings/service/impl/` | `SystemSettingServiceImpl` |
@@ -162,10 +164,10 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
 | `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, mapper, messaging, repository, runner, search, service/impl |
 | `hashtag` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, event, mapper, messaging, repository, runner, search, service/impl |
-| `notification` | **Implemented** | api, controller, dto/response, entity, entity/converter, entity/enums, mapper, messaging, repository, service/impl |
+| `notification` | **Implemented** | api, config, controller, dto/response, entity, entity/converter, entity/enums, live, mapper, messaging, repository, service/impl |
 | `comment` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, live, mapper, messaging, observability, repository, service/impl, util |
-| `story` | Empty (`.gitkeep`) | — |
-| `message` | Empty (`.gitkeep`) | — |
+| `story` | **Implemented** | api, consumer, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
+| `message` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `admin` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `recommendation` | **Implemented** | api, client/{dto,impl}, config, consumer, controller, messaging, repository, service/impl/feed |
@@ -242,7 +244,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | `modules/post/controller` | `PostControllerIT` |
 | `modules/post/service/impl` | `PostLikeServiceImplTest`, `PostSaveServiceImplTest`, `PostServiceImplTest`, `PostVisibilityServiceImplTest` |
 | `modules/social/repository` | `FollowRepositoryIT` |
-| `modules/social/service/impl` | `FollowServiceImplTest`, `SocialEventServiceImplTest` |
+| `modules/social/service/impl` | `SocialEventServiceImplTest` |
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
 | `modules/users/service/impl` | `UserServiceImplTest` |
@@ -263,7 +265,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 29 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: true`); 40 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -296,6 +298,17 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V27 | create_comment_write_idempotency |
 | V28 | add_user_events_upcoming_partitions |
 | V29 | preserve_admin_action_audit_history |
+| V30 | add_reports_duplicate_unique_index |
+| V31 | create_message_write_idempotency |
+| V32 | preserve_message_sender_history |
+| V33 | add_direct_conversation_pair_key |
+| V34 | add_keyset_tiebreaker_indexes |
+| V35 | add_like_save_keyset_indexes |
+| V36 | add_comment_keyset_indexes |
+| V37 | add_follow_keyset_indexes |
+| V38 | add_story_view_keyset_index |
+| V39 | add_notification_keyset_index |
+| V40 | add_blocks_keyset_index |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -348,6 +361,7 @@ PostgreSQL enum types:
 | `social.events` | Topic | yes | Primary event bus for all domain events |
 | `social.events.dlx` | Topic | yes | Dead-letter exchange for failed messages |
 | `comment.live.events` | Fanout | yes | Live comment fanout tier; receives all `comment.*` events via exchange-to-exchange binding from `social.events` |
+| `notification.live.events` | Fanout | yes | Live notification fanout tier; receives all `notification.*` events via exchange-to-exchange binding from `social.events` |
 
 **Queues and DLQs (all durable):**
 
@@ -358,6 +372,7 @@ PostgreSQL enum types:
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
 | `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
+| `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
 | `recommendation.feedback.queue` | `recommendation.feedback.dlq` | `recommendation.feedback.dead-letter` |
 
 **Bindings (queue → `social.events`):**
@@ -375,8 +390,10 @@ PostgreSQL enum types:
 | `post.index.sync` | `post.index.#` (wildcard) | `PostRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
+| `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
 | `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
+| `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 
 **RabbitMQ configuration (application.yaml):**
 - `publisher-confirm-type: correlated` — broker confirms wired to outbox acknowledge logic

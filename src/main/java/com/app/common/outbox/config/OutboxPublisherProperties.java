@@ -20,7 +20,7 @@ public class OutboxPublisherProperties {
     private Duration confirmTimeout = Duration.ofSeconds(10);
     private Duration processingTimeout = Duration.ofMinutes(2);
     private Duration initialDelay = Duration.ofSeconds(10);
-    private Duration fixedDelay = Duration.ofSeconds(5);
+    private Duration fixedDelay = Duration.ofSeconds(1);
     private List<Duration> retryBackoffs =
             List.of(Duration.ofSeconds(10), Duration.ofSeconds(30), Duration.ofSeconds(60));
 

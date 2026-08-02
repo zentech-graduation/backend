@@ -1,14 +1,10 @@
 package com.app.modules.post.service.impl;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
@@ -18,21 +14,25 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
+import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
-import com.app.modules.post.dto.response.LikerResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
-import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
-import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostLikeService;
 import com.app.modules.post.service.PostVisibilityService;
-import com.app.modules.users.entity.User;
+import com.app.modules.social.service.SocialService;
+import com.app.modules.users.service.UserSummaryService;
 
 @Service
 public class PostLikeServiceImpl implements PostLikeService {
@@ -42,23 +42,23 @@ public class PostLikeServiceImpl implements PostLikeService {
 
     private final PostRepository postRepository;
     private final PostLikeRepository postLikeRepository;
-    private final PostUserRepository postUserRepository;
     private final PostVisibilityService postVisibilityService;
-    private final PostMapper postMapper;
+    private final UserSummaryService userSummaryService;
+    private final SocialService socialService;
     private final OutboxService outboxService;
 
     public PostLikeServiceImpl(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
-            PostUserRepository postUserRepository,
             PostVisibilityService postVisibilityService,
-            PostMapper postMapper,
+            UserSummaryService userSummaryService,
+            SocialService socialService,
             OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
-        this.postUserRepository = postUserRepository;
         this.postVisibilityService = postVisibilityService;
-        this.postMapper = postMapper;
+        this.userSummaryService = userSummaryService;
+        this.socialService = socialService;
         this.outboxService = outboxService;
     }
 
@@ -122,36 +122,48 @@ public class PostLikeServiceImpl implements PostLikeService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<LikerResponse> listLikers(
+    public CursorPageResponse<UserListItemResponse> listLikers(
             UUID viewerId, UUID postId, String cursor, int size) {
         fetchVisiblePublishedPost(viewerId, postId);
         int pageSize = normalizeLimit(size);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostLike> likes =
-                cursorTime == null
+                decoded == null
                         ? postLikeRepository.findFirstLikers(postId, page)
-                        : postLikeRepository.findLikersBefore(postId, cursorTime, page);
-        if (likes.size() > pageSize) {
+                        : postLikeRepository.findLikersBefore(
+                                postId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        boolean hasNextPage = likes.size() > pageSize;
+        if (hasNextPage) {
             likes = likes.subList(0, pageSize);
         }
         if (likes.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<UUID> likerIds = likes.stream().map(l -> l.getId().getUserId()).toList();
-        Map<UUID, User> users =
-                postUserRepository.findAllByIdInAndDeletedAtIsNull(likerIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
-        List<LikerResponse> content =
-                likes.stream()
-                        .map(l -> users.get(l.getId().getUserId()))
-                        .filter(user -> user != null)
-                        .map(postMapper::toLikerResponse)
+        // Batch-resolve every liker; a soft-deleted liker resolves to a placeholder rather than
+        // being dropped, so the page size stays consistent with the like count.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(likerIds);
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                socialService.loadRelationships(viewerId, likerIds);
+        List<UserListItemResponse> content =
+                likerIds.stream()
+                        .map(
+                                id ->
+                                        new UserListItemResponse(
+                                                summaries.get(id),
+                                                relationships.getOrDefault(
+                                                        id, ViewerRelationshipResponse.NONE)))
                         .toList();
-        String startCursor = encodeCursor(likes.get(0).getCreatedAt());
-        String endCursor = encodeCursor(likes.get(likes.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        PostLike first = likes.get(0);
+        PostLike last = likes.get(likes.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getUserId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getUserId());
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     private Post fetchVisiblePublishedPost(UUID viewerId, UUID postId) {
@@ -173,22 +185,14 @@ public class PostLikeServiceImpl implements PostLikeService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID tiebreaker) {
+        if (time == null || tiebreaker == null) {
             return null;
         }
-        return Base64.getEncoder().encodeToString(time.toString().getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker));
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 }

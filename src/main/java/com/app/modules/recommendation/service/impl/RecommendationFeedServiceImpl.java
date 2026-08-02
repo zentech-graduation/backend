@@ -94,8 +94,10 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
         String startCursor = content.isEmpty() ? null : FeedCursor.encode(source, offset);
         String endCursor =
                 content.isEmpty() ? null : FeedCursor.encode(source, offset + rawConsumed);
+        // A full page implies the source still had candidates left when the selector stopped.
+        boolean hasNextPage = content.size() == pageSize;
         return CursorPageResponse.of(
-                content, pageSize, startCursor, endCursor, decoded.offset() > 0);
+                content, hasNextPage, startCursor, endCursor, decoded.offset() > 0);
     }
 
     /**
@@ -135,7 +137,7 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             }
         }
         if (!accepted.isEmpty()) {
-            List<FeedPostResponse> assembled = postLookupService.assembleFeed(accepted);
+            List<FeedPostResponse> assembled = postLookupService.assembleFeed(viewerId, accepted);
             for (int i = 0; i < assembled.size(); i++) {
                 content.add(assembled.get(i).withRankingScore(acceptedScores.get(i)));
             }

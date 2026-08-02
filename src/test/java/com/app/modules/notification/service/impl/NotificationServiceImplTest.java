@@ -3,6 +3,7 @@ package com.app.modules.notification.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -24,12 +25,18 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 
+import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.mapper.NotificationMapper;
+import com.app.modules.notification.messaging.NotificationEventTypes;
 import com.app.modules.notification.repository.NotificationRepository;
 import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.entity.UserSettings;
@@ -42,6 +49,7 @@ class NotificationServiceImplTest {
     @Mock private UserSettingsRepository userSettingsRepository;
     @Mock private BlockRepository blockRepository;
     @Mock private NotificationMapper notificationMapper;
+    @Mock private OutboxService outboxService;
 
     private NotificationServiceImpl service;
 
@@ -52,9 +60,16 @@ class NotificationServiceImplTest {
                         notificationRepository,
                         userSettingsRepository,
                         blockRepository,
-                        notificationMapper);
+                        notificationMapper,
+                        outboxService);
         lenient().when(userSettingsRepository.findById(any())).thenReturn(Optional.empty());
         lenient().when(blockRepository.existsBetween(any(), any())).thenReturn(false);
+        // The live-push path reads the persisted row's generated id immediately after save(); a
+        // freshly built (unsaved) entity has none, so every create()-path test needs a saved
+        // return value with an id, exactly as JPA would assign one on a real insert.
+        lenient()
+                .when(notificationRepository.save(any()))
+                .thenReturn(Notification.builder().id(UUID.randomUUID()).build());
     }
 
     @Test
@@ -117,6 +132,33 @@ class NotificationServiceImplTest {
         assertThat(saved.getActorId()).isEqualTo(actorId);
         assertThat(saved.getRecipientId()).isEqualTo(recipientId);
         assertThat(saved.getType()).isEqualTo(NotificationType.LIKE_POST);
+    }
+
+    @Test
+    void create_allGuardsPass_enqueuesOutboxEvent() {
+        UUID actorId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UUID entityId = UUID.randomUUID();
+
+        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", entityId);
+
+        verify(outboxService)
+                .enqueue(
+                        eq(NotificationEventTypes.NOTIFICATION_CREATED_V1),
+                        eq(NotificationEventTypes.NOTIFICATION_CREATED_V1),
+                        eq("notification"),
+                        any(UUID.class),
+                        eq(actorId),
+                        argThat(data -> recipientId.toString().equals(data.get("recipientId"))));
+    }
+
+    @Test
+    void create_selfNotification_doesNotEnqueueOutboxEvent() {
+        UUID userId = UUID.randomUUID();
+
+        service.create(userId, userId, NotificationType.LIKE_POST, "post", UUID.randomUUID());
+
+        verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -214,8 +256,7 @@ class NotificationServiceImplTest {
     void listNotifications_firstPage_noCursor_returnsContent() {
         UUID recipientId = UUID.randomUUID();
         Notification row = mockNotification();
-        when(notificationRepository.findByRecipientIdWithCursor(
-                        eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
+        when(notificationRepository.findFirstByRecipient(eq(recipientId), any(PageRequest.class)))
                 .thenReturn(List.of(row));
         when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
 
@@ -228,12 +269,15 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void listNotifications_hasNextPage_whenFullPageReturned() {
+    void listNotifications_overFetchReturnsExtraRow_hasNextPage() {
         UUID recipientId = UUID.randomUUID();
         int limit = 2;
-        List<Notification> rows = List.of(mockNotification(), mockNotification());
-        when(notificationRepository.findByRecipientIdWithCursor(
-                        eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
+        // The service over-fetches limit + 1 rows; the extra row proves a further page exists and
+        // is
+        // trimmed off before the content is returned.
+        List<Notification> rows =
+                List.of(mockNotification(), mockNotification(), mockNotification());
+        when(notificationRepository.findFirstByRecipient(eq(recipientId), any(PageRequest.class)))
                 .thenReturn(rows);
         when(notificationMapper.toResponseList(any()))
                 .thenReturn(List.of(mockResponse(), mockResponse()));
@@ -242,14 +286,14 @@ class NotificationServiceImplTest {
                 service.listNotifications(recipientId, null, limit);
 
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
+        assertThat(result.getContent()).hasSize(2);
     }
 
     @Test
     void listNotifications_fewerThanLimit_hasNoNextPage() {
         UUID recipientId = UUID.randomUUID();
         int limit = 5;
-        when(notificationRepository.findByRecipientIdWithCursor(
-                        eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
+        when(notificationRepository.findFirstByRecipient(eq(recipientId), any(PageRequest.class)))
                 .thenReturn(List.of(mockNotification()));
         when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
 
@@ -308,70 +352,53 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void listNotifications_cursorPivotAbsent_fallsBackToFirstPage() {
+    void listNotifications_malformedCursor_throwsInvalidCursor() {
         UUID recipientId = UUID.randomUUID();
-        UUID cursorId = UUID.randomUUID();
-        Notification row = mockNotification();
-        when(notificationRepository.findByIdAndRecipientId(cursorId, recipientId))
-                .thenReturn(Optional.empty());
-        when(notificationRepository.findByRecipientIdWithCursor(
-                        eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
-                .thenReturn(List.of(row));
-        when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
 
-        CursorPageResponse<NotificationResponse> result =
-                service.listNotifications(recipientId, cursorId, 20);
-
-        assertThat(result.getContent()).hasSize(1);
-        // Cursor was provided but pivot was absent - result is still flagged as "past-cursor" page
-        verify(notificationRepository)
-                .findByRecipientIdWithCursor(recipientId, null, null, PageRequest.of(0, 20));
+        assertThatThrownBy(() -> service.listNotifications(recipientId, "!!!not-a-cursor!!!", 20))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test
-    void listNotifications_ownedCursorPivot_paginatesFromPivotTimestamp() {
+    void listNotifications_validCursor_pagesFromCursorPosition() {
         UUID recipientId = UUID.randomUUID();
         UUID cursorId = UUID.randomUUID();
-        OffsetDateTime pivotTime = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
-        Notification pivot =
-                Notification.builder()
-                        .id(cursorId)
-                        .recipientId(recipientId)
-                        .type(NotificationType.LIKE_POST)
-                        .createdAt(pivotTime)
-                        .build();
-        when(notificationRepository.findByIdAndRecipientId(cursorId, recipientId))
-                .thenReturn(Optional.of(pivot));
-        when(notificationRepository.findByRecipientIdWithCursor(
-                        eq(recipientId), eq(cursorId), eq(pivotTime), any(PageRequest.class)))
+        OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        String cursor = CursorCodec.encode(new Cursor(TimeCursors.toMicros(cursorTime), cursorId));
+        // The codec carries microsecond precision; the decoded time round-trips through micros.
+        OffsetDateTime expectedTime = TimeCursors.fromMicros(TimeCursors.toMicros(cursorTime));
+        when(notificationRepository.findByRecipientBefore(
+                        eq(recipientId), eq(expectedTime), eq(cursorId), any(PageRequest.class)))
                 .thenReturn(List.of(mockNotification()));
         when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
 
         CursorPageResponse<NotificationResponse> result =
-                service.listNotifications(recipientId, cursorId, 20);
+                service.listNotifications(recipientId, cursor, 20);
 
         assertThat(result.getContent()).hasSize(1);
         verify(notificationRepository)
-                .findByRecipientIdWithCursor(
-                        recipientId, cursorId, pivotTime, PageRequest.of(0, 20));
+                .findByRecipientBefore(
+                        eq(recipientId), eq(expectedTime), eq(cursorId), any(PageRequest.class));
     }
 
     @Test
-    void listNotifications_foreignCursor_neverResolvesUnscopedPivot() {
+    void listNotifications_cursorIsAPositionNotAnIdLookup() {
         UUID recipientId = UUID.randomUUID();
-        UUID foreignNotificationId = UUID.randomUUID();
-        when(notificationRepository.findByIdAndRecipientId(foreignNotificationId, recipientId))
-                .thenReturn(Optional.empty());
-        when(notificationRepository.findByRecipientIdWithCursor(
-                        eq(recipientId), eq(null), eq(null), any(PageRequest.class)))
+        UUID cursorId = UUID.randomUUID();
+        OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC);
+        String cursor = CursorCodec.encode(new Cursor(TimeCursors.toMicros(cursorTime), cursorId));
+        when(notificationRepository.findByRecipientBefore(
+                        eq(recipientId), any(), eq(cursorId), any(PageRequest.class)))
                 .thenReturn(List.of());
         when(notificationMapper.toResponseList(any())).thenReturn(List.of());
 
-        service.listNotifications(recipientId, foreignNotificationId, 20);
+        service.listNotifications(recipientId, cursor, 20);
 
-        // A cursor belonging to another user must behave exactly like a nonexistent one: the
-        // unscoped lookup is never used, so no cross-tenant existence signal remains.
-        verify(notificationRepository, never()).findById(any(UUID.class));
+        // The opaque cursor is a keyset position, not a notification id, so no ownership or
+        // existence lookup occurs - there is no cross-tenant oracle to leak.
+        verify(notificationRepository, never()).findByIdAndRecipientId(any(), any());
     }
 
     private static Notification mockNotification() {
@@ -379,6 +406,7 @@ class NotificationServiceImplTest {
                 .id(UUID.randomUUID())
                 .recipientId(UUID.randomUUID())
                 .type(NotificationType.FOLLOW)
+                .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
                 .build();
     }
 

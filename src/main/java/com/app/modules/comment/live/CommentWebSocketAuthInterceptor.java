@@ -5,7 +5,6 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageDeliveryException;
@@ -15,6 +14,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
 
 import com.app.common.security.user.UserPrincipal;
+import com.app.common.security.websocket.JwtHandshakeInterceptor;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostVisibilityService;
@@ -25,9 +25,12 @@ import com.app.modules.post.service.PostVisibilityService;
  * <p>The destination encodes the post id ({@code /topic/comments.{postId}.*}); the subscription is
  * rejected when the handshake principal cannot see that post. Post visibility already covers block
  * and private-follow gating, so no separate block check is needed.
+ *
+ * <p>Unconditional (not gated on {@code app.comment.live.enabled}) so the shared inbound channel
+ * config can depend on it regardless of which WebSocket surface is enabled; it is inert for any
+ * destination outside {@code /topic/comments.*}.
  */
 @Component
-@ConditionalOnProperty(prefix = "app.comment.live", name = "enabled", havingValue = "true")
 public class CommentWebSocketAuthInterceptor implements ChannelInterceptor {
 
     private static final Pattern DESTINATION =
@@ -76,8 +79,7 @@ public class CommentWebSocketAuthInterceptor implements ChannelInterceptor {
         Object principal =
                 attributes == null
                         ? null
-                        : attributes.get(
-                                CommentWebSocketJwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE);
+                        : attributes.get(JwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE);
         if (principal instanceof UserPrincipal userPrincipal) {
             return userPrincipal.userId();
         }

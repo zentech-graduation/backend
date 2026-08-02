@@ -497,7 +497,7 @@ public interface AdminApi {
             @RequestParam(required = false) UUID adminId,
             @RequestParam(required = false) AdminActionType actionType,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Returns one audit event by identifier. */
     @Operation(summary = "Get a moderation audit event")
@@ -564,5 +564,5 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActionsForUser(
             @PathVariable("userId") UUID userId,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 }

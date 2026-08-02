@@ -74,11 +74,11 @@ class PostSaveServiceImplTest {
         lenient().when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(true);
         // Mirror the assembler contract: one response per input post, order preserved.
         lenient()
-                .when(postResponseAssembler.assemble(anyList()))
+                .when(postResponseAssembler.assemble(eq(userId), anyList()))
                 .thenAnswer(
                         invocation ->
                                 Collections.nCopies(
-                                        ((List<?>) invocation.getArgument(0)).size(),
+                                        ((List<?>) invocation.getArgument(1)).size(),
                                         (PostResponse) null));
     }
 
@@ -264,11 +264,11 @@ class PostSaveServiceImplTest {
     }
 
     @Test
-    void listSavedPosts_invalidCursor_throwsBadRequest() {
+    void listSavedPosts_invalidCursor_throwsInvalidCursor() {
         assertThatThrownBy(() -> service.listSavedPosts(userId, "!!!invalid-cursor!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test

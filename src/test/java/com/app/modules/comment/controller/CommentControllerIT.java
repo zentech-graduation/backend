@@ -216,6 +216,29 @@ class CommentControllerIT {
     }
 
     @Test
+    void listComments_firstPage_marksThePinnedTopCommentAndLeavesTheBodyUnpinned() {
+        TestUser author = registerUser("pin_author");
+        TestUser liker = registerUser("pin_liker");
+        UUID postId = createImagePost(author, "pinned post");
+        UUID popular = createComment(author, postId, null, "the popular one", null);
+        UUID plain = createComment(author, postId, null, "a plain one", null);
+        rest.exchange(
+                "/api/v1/comments/" + popular + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(liker)),
+                Map.class);
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/posts/" + postId + "/comments", author);
+
+        List<Map<?, ?>> content = contentOf(response);
+        assertThat(content).hasSize(2);
+        assertThat(content.get(0).get("id")).isEqualTo(popular.toString());
+        assertThat(content.get(0).get("pinned")).isEqualTo(true);
+        assertThat(content.get(1).get("id")).isEqualTo(plain.toString());
+        assertThat(content.get(1).get("pinned")).isEqualTo(false);
+    }
+
+    @Test
     void listComments_privatePostStranger_returnsForbidden() {
         TestUser owner = registerUser("vis_owner");
         TestUser stranger = registerUser("vis_stranger");
@@ -335,7 +358,8 @@ class CommentControllerIT {
                 rest.exchange(
                         "/api/v1/auth/login",
                         HttpMethod.POST,
-                        new HttpEntity<>(Map.of("email", email, "password", password), headers),
+                        new HttpEntity<>(
+                                Map.of("identifier", email, "password", password), headers),
                         Map.class);
         assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
         Map<?, ?> data = (Map<?, ?>) login.getBody().get("data");

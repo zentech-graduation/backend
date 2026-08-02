@@ -37,7 +37,7 @@ public class PostLookupServiceImpl implements PostLookupService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<FeedPostResponse> assembleFeed(List<Post> posts) {
-        return postResponseAssembler.assembleFeed(posts);
+    public List<FeedPostResponse> assembleFeed(UUID viewerId, List<Post> posts) {
+        return postResponseAssembler.assembleFeed(viewerId, posts);
     }
 }

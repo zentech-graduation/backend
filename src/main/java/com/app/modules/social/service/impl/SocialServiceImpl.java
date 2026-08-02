@@ -2,10 +2,11 @@ package com.app.modules.social.service.impl;
 
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Base64;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,21 +21,29 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
+import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 import com.app.modules.social.entity.Block;
 import com.app.modules.social.entity.BlockId;
 import com.app.modules.social.entity.Follow;
 import com.app.modules.social.entity.FollowId;
 import com.app.modules.social.enums.FollowStatus;
+import com.app.modules.social.repository.BlockEdgeProjection;
 import com.app.modules.social.repository.BlockRepository;
+import com.app.modules.social.repository.FollowEdgeProjection;
 import com.app.modules.social.repository.FollowRepository;
 import com.app.modules.social.repository.SocialUserRepository;
 import com.app.modules.social.service.SocialEventService;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.service.UserSummaryService;
 
 @Service
 public class SocialServiceImpl implements SocialService {
@@ -45,16 +54,19 @@ public class SocialServiceImpl implements SocialService {
     private final BlockRepository blockRepository;
     private final SocialUserRepository socialUserRepository;
     private final SocialEventService socialEventService;
+    private final UserSummaryService userSummaryService;
 
     public SocialServiceImpl(
             FollowRepository followRepository,
             BlockRepository blockRepository,
             SocialUserRepository socialUserRepository,
-            SocialEventService socialEventService) {
+            SocialEventService socialEventService,
+            UserSummaryService userSummaryService) {
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.socialUserRepository = socialUserRepository;
         this.socialEventService = socialEventService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -222,7 +234,7 @@ public class SocialServiceImpl implements SocialService {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<SocialUserSummaryResponse> getFollowers(
+    public CursorPageResponse<UserListItemResponse> getFollowers(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
         User targetUser =
@@ -234,13 +246,19 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Follow> follows =
-                followRepository.findFollowersWithCursor(
-                        targetUserId, currentUserId, FollowStatus.ACCEPTED, cursorTime, pageable);
+                decoded == null
+                        ? followRepository.findFirstFollowers(targetUserId, currentUserId, pageable)
+                        : followRepository.findFollowersBefore(
+                                targetUserId,
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
 
         boolean hasNextPage = follows.size() > size;
 
@@ -249,7 +267,8 @@ public class SocialServiceImpl implements SocialService {
         }
 
         if (follows.isEmpty()) {
-            return CursorPageResponse.of(Collections.emptyList(), size, null, null, cursor != null);
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> followerIds = follows.stream().map(f -> f.getId().getFollowerId()).toList();
@@ -257,23 +276,29 @@ public class SocialServiceImpl implements SocialService {
         Map<UUID, User> userMap =
                 socialUserRepository.findAllByIdInAndDeletedAtIsNull(followerIds).stream()
                         .collect(Collectors.toMap(User::getId, user -> user));
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, followerIds);
 
-        List<SocialUserSummaryResponse> content =
+        List<UserListItemResponse> content =
                 follows.stream()
                         .map(f -> userMap.get(f.getId().getFollowerId()))
                         .filter(user -> user != null)
-                        .map(this::toSocialUserSummaryResponse)
+                        .map(user -> toUserListItemResponse(user, relationships))
                         .toList();
 
-        String startCursor = encodeCursor(follows.get(0).getCreatedAt());
-        String endCursor = encodeCursor(follows.get(follows.size() - 1).getCreatedAt());
+        Follow firstFollow = follows.get(0);
+        Follow lastFollow = follows.get(follows.size() - 1);
+        String startCursor =
+                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowerId());
+        String endCursor =
+                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowerId());
 
-        return CursorPageResponse.of(content, size, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<SocialUserSummaryResponse> getFollowing(
+    public CursorPageResponse<UserListItemResponse> getFollowing(
             UUID targetUserId, UUID currentUserId, String cursor, int limit) {
 
         User targetUser =
@@ -285,13 +310,19 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Follow> follows =
-                followRepository.findFollowingWithCursor(
-                        targetUserId, currentUserId, FollowStatus.ACCEPTED, cursorTime, pageable);
+                decoded == null
+                        ? followRepository.findFirstFollowing(targetUserId, currentUserId, pageable)
+                        : followRepository.findFollowingBefore(
+                                targetUserId,
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
 
         boolean hasNextPage = follows.size() > size;
 
@@ -300,7 +331,8 @@ public class SocialServiceImpl implements SocialService {
         }
 
         if (follows.isEmpty()) {
-            return CursorPageResponse.of(Collections.emptyList(), size, null, null, cursor != null);
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> followingIds = follows.stream().map(f -> f.getId().getFollowingId()).toList();
@@ -308,58 +340,137 @@ public class SocialServiceImpl implements SocialService {
         Map<UUID, User> userMap =
                 socialUserRepository.findAllByIdInAndDeletedAtIsNull(followingIds).stream()
                         .collect(Collectors.toMap(User::getId, user -> user));
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, followingIds);
 
-        List<SocialUserSummaryResponse> content =
+        List<UserListItemResponse> content =
                 follows.stream()
                         .map(f -> userMap.get(f.getId().getFollowingId()))
                         .filter(user -> user != null)
-                        .map(this::toSocialUserSummaryResponse)
+                        .map(user -> toUserListItemResponse(user, relationships))
                         .toList();
 
-        String startCursor = encodeCursor(follows.get(0).getCreatedAt());
-        String endCursor = encodeCursor(follows.get(follows.size() - 1).getCreatedAt());
+        Follow firstFollow = follows.get(0);
+        Follow lastFollow = follows.get(follows.size() - 1);
+        String startCursor =
+                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowingId());
+        String endCursor =
+                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowingId());
 
-        return CursorPageResponse.of(content, size, startCursor, endCursor, cursor != null);
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<FollowRequestResponse> getPendingFollowRequests(UUID currentUserId) {
+    public CursorPageResponse<UserListItemResponse> getBlockedUsers(
+            UUID currentUserId, String cursor, int limit) {
+        int size = normalizeLimit(limit);
+        Cursor decoded = decodeCursor(cursor);
+        Pageable pageable = PageRequest.of(0, size + 1);
+
+        List<Block> blocks =
+                decoded == null
+                        ? blockRepository.findFirstBlocked(currentUserId, pageable)
+                        : blockRepository.findBlockedBefore(
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
+
+        boolean hasNextPage = blocks.size() > size;
+        if (hasNextPage) {
+            blocks = blocks.subList(0, size);
+        }
+
+        if (blocks.isEmpty()) {
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
+        }
+
+        List<UUID> blockedIds = blocks.stream().map(b -> b.getId().getBlockedId()).toList();
+
+        // Placeholder rather than drop, so the page length matches the row count even when a
+        // blocked account has since been soft-deleted.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(blockedIds);
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, blockedIds);
+
+        List<UserListItemResponse> content =
+                blockedIds.stream()
+                        .map(
+                                id ->
+                                        new UserListItemResponse(
+                                                summaries.get(id),
+                                                relationships.getOrDefault(
+                                                        id, ViewerRelationshipResponse.NONE)))
+                        .toList();
+
+        Block first = blocks.get(0);
+        Block last = blocks.get(blocks.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getBlockedId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getBlockedId());
+
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<FollowRequestResponse> getPendingFollowRequests(
+            UUID currentUserId, String cursor, int limit) {
+        int size = normalizeLimit(limit);
+        Cursor decoded = decodeCursor(cursor);
+        Pageable pageable = PageRequest.of(0, size + 1);
+
         List<Follow> pendingFollows =
-                followRepository.findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
-                        currentUserId, FollowStatus.PENDING);
+                decoded == null
+                        ? followRepository.findFirstPendingRequests(currentUserId, pageable)
+                        : followRepository.findPendingRequestsBefore(
+                                currentUserId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                pageable);
+
+        boolean hasNextPage = pendingFollows.size() > size;
+        if (hasNextPage) {
+            pendingFollows = pendingFollows.subList(0, size);
+        }
 
         if (pendingFollows.isEmpty()) {
-            return Collections.emptyList();
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
 
         List<UUID> requesterIds =
                 pendingFollows.stream().map(f -> f.getId().getFollowerId()).toList();
 
-        Map<UUID, User> userMap =
-                socialUserRepository.findAllByIdInAndDeletedAtIsNull(requesterIds).stream()
-                        .collect(Collectors.toMap(User::getId, user -> user));
+        // Batch-resolve every requester; a soft-deleted or unknown requester resolves to a
+        // placeholder rather than being dropped, so the page size stays consistent with the row
+        // count.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(requesterIds);
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                loadRelationships(currentUserId, requesterIds);
 
-        return pendingFollows.stream()
-                .map(
-                        follow -> {
-                            User user = userMap.get(follow.getId().getFollowerId());
+        List<FollowRequestResponse> content =
+                pendingFollows.stream()
+                        .map(
+                                follow -> {
+                                    UUID requesterId = follow.getId().getFollowerId();
+                                    return new FollowRequestResponse(
+                                            requesterId,
+                                            summaries.get(requesterId),
+                                            follow.getStatus(),
+                                            follow.getCreatedAt(),
+                                            relationships.getOrDefault(
+                                                    requesterId, ViewerRelationshipResponse.NONE));
+                                })
+                        .toList();
 
-                            if (user == null) {
-                                return null;
-                            }
+        Follow first = pendingFollows.get(0);
+        Follow last = pendingFollows.get(pendingFollows.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getFollowerId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getFollowerId());
 
-                            SocialUserSummaryResponse followerSummary =
-                                    toSocialUserSummaryResponse(user);
-
-                            return new FollowRequestResponse(
-                                    user.getId(),
-                                    followerSummary,
-                                    follow.getStatus(),
-                                    follow.getCreatedAt());
-                        })
-                .filter(response -> response != null)
-                .toList();
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
@@ -396,6 +507,50 @@ public class SocialServiceImpl implements SocialService {
         return blockRepository.existsBetween(userIdA, userIdB);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, ViewerRelationshipResponse> loadRelationships(
+            UUID viewerId, Collection<UUID> userIds) {
+        if (viewerId == null || userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> distinct = new LinkedHashSet<>(userIds);
+        Map<UUID, Boolean> following = new HashMap<>();
+        Map<UUID, Boolean> requested = new HashMap<>();
+        Map<UUID, Boolean> followedBy = new HashMap<>();
+        for (FollowEdgeProjection edge :
+                followRepository.findRelationshipEdges(viewerId, distinct)) {
+            boolean accepted = FollowStatus.ACCEPTED.toJson().equalsIgnoreCase(edge.getStatus());
+            if (edge.getOutgoing()) {
+                following.put(edge.getOtherId(), accepted);
+                requested.put(edge.getOtherId(), !accepted);
+            } else {
+                followedBy.put(edge.getOtherId(), accepted);
+            }
+        }
+        Map<UUID, Boolean> blocking = new HashMap<>();
+        Map<UUID, Boolean> blockedBy = new HashMap<>();
+        for (BlockEdgeProjection edge : blockRepository.findRelationshipEdges(viewerId, distinct)) {
+            if (edge.getOutgoing()) {
+                blocking.put(edge.getOtherId(), true);
+            } else {
+                blockedBy.put(edge.getOtherId(), true);
+            }
+        }
+        Map<UUID, ViewerRelationshipResponse> result = new HashMap<>(distinct.size());
+        for (UUID id : distinct) {
+            result.put(
+                    id,
+                    new ViewerRelationshipResponse(
+                            following.getOrDefault(id, false),
+                            requested.getOrDefault(id, false),
+                            followedBy.getOrDefault(id, false),
+                            blocking.getOrDefault(id, false),
+                            blockedBy.getOrDefault(id, false)));
+        }
+        return result;
+    }
+
     private void checkCanViewSocialGraph(UUID currentUserId, UUID targetUserId, User targetUser) {
         if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
                 || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
@@ -413,8 +568,8 @@ public class SocialServiceImpl implements SocialService {
         }
     }
 
-    private SocialUserSummaryResponse toSocialUserSummaryResponse(User user) {
-        return new SocialUserSummaryResponse(
+    private UserSummaryResponse toUserSummaryResponse(User user) {
+        return new UserSummaryResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getDisplayName(),
@@ -422,30 +577,25 @@ public class SocialServiceImpl implements SocialService {
                 user.isVerified());
     }
 
+    private UserListItemResponse toUserListItemResponse(
+            User user, Map<UUID, ViewerRelationshipResponse> relationships) {
+        return new UserListItemResponse(
+                toUserSummaryResponse(user),
+                relationships.getOrDefault(user.getId(), ViewerRelationshipResponse.NONE));
+    }
+
     private int normalizeLimit(int limit) {
         return limit > 100 ? 100 : (limit < 1 ? 20 : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID tiebreaker) {
+        if (time == null || tiebreaker == null) {
             return null;
         }
-
-        return Base64.getEncoder().encodeToString(time.toString().getBytes());
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker));
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            // Return a sentinel far in the future so the query condition `createdAt < :cursor`
-            // matches all rows on the first page without passing an untyped null to JDBC.
-            return OffsetDateTime.now(ZoneOffset.UTC).plusYears(100);
-        }
-
-        try {
-            String decoded = new String(Base64.getDecoder().decode(cursor));
-            return OffsetDateTime.parse(decoded);
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor);
     }
 }

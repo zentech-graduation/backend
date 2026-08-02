@@ -1,20 +1,18 @@
 package com.app.modules.hashtag.service.impl;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 
+import com.app.common.pagination.OffsetCursorCodec;
+import com.app.common.pagination.OffsetPageable;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.hashtag.dto.response.HashtagResponse;
 import com.app.modules.hashtag.mapper.HashtagMapper;
@@ -29,10 +27,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 public class HashtagSearchServiceImpl implements HashtagSearchService {
-
-    // Out-of-range offsets reset to the first page rather than reaching ES/pg_trgm, where a deep
-    // `from`/OFFSET triggers expensive scans and counts as a circuit-breaker failure.
-    private static final int MAX_SEARCH_OFFSET = 10_000;
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final HashtagRepository hashtagRepository;
@@ -51,7 +45,7 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
     @CircuitBreaker(name = "elasticsearchSearch", fallbackMethod = "searchFallback")
     public CursorPageResponse<HashtagResponse> search(String query, String cursor, int limit) {
         String normalized = normalizeQuery(query);
-        int offset = decodeCursor(cursor);
+        int offset = OffsetCursorCodec.decode(cursor);
         int effectiveLimit = limit > 0 ? limit : 20;
         // Page the ES query by the exact cursor offset. PageRequest derives `from` as page * size,
         // which truncates any offset not divisible by the page size (e.g. when the client varies
@@ -89,7 +83,7 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
                 t.getMessage(),
                 t);
         String normalized = normalizeQuery(query);
-        int offset = decodeCursor(cursor);
+        int offset = OffsetCursorCodec.decode(cursor);
         List<HashtagResponse> content =
                 hashtagRepository.searchByNameTrgm(normalized, limit, offset).stream()
                         .map(hashtagMapper::toResponse)
@@ -121,84 +115,8 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
 
     private CursorPageResponse<HashtagResponse> toPage(
             List<HashtagResponse> content, int offset, int limit) {
-        String start = content.isEmpty() ? null : encodeCursor(offset);
-        String end = content.isEmpty() ? null : encodeCursor(offset + content.size());
-        return CursorPageResponse.of(content, limit, start, end, offset > 0);
-    }
-
-    private static String encodeCursor(int offset) {
-        return Base64.getEncoder()
-                .encodeToString(Integer.toString(offset).getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static int decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return 0;
-        }
-        try {
-            int offset =
-                    Integer.parseInt(
-                            new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-            // Clamp valid-but-out-of-range offsets to the first page so a forged cursor cannot
-            // drive
-            // a deep ES `from` / pg_trgm OFFSET that errors and trips the circuit breaker.
-            if (offset < 0 || offset > MAX_SEARCH_OFFSET) {
-                return 0;
-            }
-            return offset;
-        } catch (IllegalArgumentException e) {
-            // Malformed cursor → start from the first page rather than failing the request.
-            return 0;
-        }
-    }
-
-    // Pageable whose `from` is the exact cursor offset, not page * size, so cursor paging stays
-    // correct when the offset is not a multiple of the page size.
-    private record OffsetPageable(int offset, int size) implements Pageable {
-
-        @Override
-        public int getPageNumber() {
-            return size > 0 ? offset / size : 0;
-        }
-
-        @Override
-        public int getPageSize() {
-            return size;
-        }
-
-        @Override
-        public long getOffset() {
-            return offset;
-        }
-
-        @Override
-        public Sort getSort() {
-            return Sort.unsorted();
-        }
-
-        @Override
-        public Pageable next() {
-            return new OffsetPageable(offset + size, size);
-        }
-
-        @Override
-        public Pageable previousOrFirst() {
-            return offset > 0 ? new OffsetPageable(Math.max(0, offset - size), size) : this;
-        }
-
-        @Override
-        public Pageable first() {
-            return new OffsetPageable(0, size);
-        }
-
-        @Override
-        public Pageable withPage(int pageNumber) {
-            return new OffsetPageable(pageNumber * size, size);
-        }
-
-        @Override
-        public boolean hasPrevious() {
-            return offset > 0;
-        }
+        String start = content.isEmpty() ? null : OffsetCursorCodec.encode(offset);
+        String end = content.isEmpty() ? null : OffsetCursorCodec.encode(offset + content.size());
+        return CursorPageResponse.of(content, content.size() == limit, start, end, offset > 0);
     }
 }
