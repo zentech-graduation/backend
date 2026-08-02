@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserStatus;
 
 /**
  * Module-local read-only repository over the users module's {@link User} entity.
@@ -22,4 +23,7 @@ public interface MessageUserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
 
     List<User> findAllByIdInAndDeletedAtIsNull(Collection<UUID> ids);
+
+    /** Used to gate WebSocket connections: only a live, active account may hold one open. */
+    Optional<User> findByIdAndDeletedAtIsNullAndStatus(UUID id, UserStatus status);
 }

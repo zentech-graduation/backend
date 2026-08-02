@@ -39,6 +39,7 @@ public class RabbitMqTopologyConfig {
     public static final String POST_INDEX_DEAD_LETTER_ROUTING_KEY = "post.index.dead-letter";
 
     public static final String COMMENT_LIVE_EVENTS_EXCHANGE = "comment.live.events";
+    public static final String MESSAGE_LIVE_EVENTS_EXCHANGE = "message.live.events";
     public static final String COMMENT_NOTIFICATION_QUEUE = "comment.notification.queue";
     public static final String COMMENT_NOTIFICATION_DEAD_LETTER_QUEUE = "comment.notification.dlq";
     public static final String COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
@@ -48,6 +49,11 @@ public class RabbitMqTopologyConfig {
     public static final String STORY_NOTIFICATION_DEAD_LETTER_QUEUE = "story.notification.dlq";
     public static final String STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
             "story.notification.dead-letter";
+
+    public static final String MESSAGE_NOTIFICATION_QUEUE = "message.notification.queue";
+    public static final String MESSAGE_NOTIFICATION_DEAD_LETTER_QUEUE = "message.notification.dlq";
+    public static final String MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
+            "message.notification.dead-letter";
 
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
@@ -196,5 +202,44 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(storyNotificationDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue messageNotificationQueue() {
+        return QueueBuilder.durable(MESSAGE_NOTIFICATION_QUEUE)
+                .withArgument("x-dead-letter-exchange", SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE)
+                .withArgument(
+                        "x-dead-letter-routing-key", MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    Queue messageNotificationDeadLetterQueue() {
+        return QueueBuilder.durable(MESSAGE_NOTIFICATION_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding messageNotificationDeadLetterBinding(
+            Queue messageNotificationDeadLetterQueue,
+            TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(messageNotificationDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    FanoutExchange messageLiveEventsExchange() {
+        return ExchangeBuilder.fanoutExchange(MESSAGE_LIVE_EVENTS_EXCHANGE).durable(true).build();
+    }
+
+    // Exchange-to-exchange: the topic bus routes every message.* event into the live fanout so the
+    // outbox publishes once and the broker fans out to both the notification queue and the live
+    // tier.
+    @Bean
+    Binding messageLiveExchangeBinding(
+            FanoutExchange messageLiveEventsExchange, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(messageLiveEventsExchange)
+                .to(socialEventsExchange)
+                .with("message.#");
     }
 }
