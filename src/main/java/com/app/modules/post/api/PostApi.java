@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.request.CreatePostRequest;
@@ -250,13 +251,6 @@ public interface PostApi {
                 responseCode = "200",
                 description = "Cursor page of feed posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Malformed cursor",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
                 content =
@@ -264,6 +258,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Posts.FEED)
     ResponseEntity<ApiResponse<CursorPageResponse<FeedPostResponse>>> getFeed(
             @Parameter(description = "Opaque cursor from the previous page")
@@ -304,6 +299,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Posts.USER_POSTS)
     ResponseEntity<ApiResponse<CursorPageResponse<PostResponse>>> listUserPosts(
             @PathVariable("userId") UUID userId,
@@ -343,6 +339,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Posts.HISTORY)
     ResponseEntity<ApiResponse<CursorPageResponse<PostEditHistoryResponse>>> listEditHistory(
             @PathVariable("postId") UUID postId,

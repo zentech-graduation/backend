@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
@@ -123,6 +124,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Social.FOLLOW_REQUESTS)
     ResponseEntity<ApiResponse<CursorPageResponse<FollowRequestResponse>>> getPendingFollowRequests(
             @RequestParam(required = false) @Size(max = 512) String cursor,
@@ -251,6 +253,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Social.FOLLOWERS)
     ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowers(
             @PathVariable UUID userId,
@@ -277,6 +280,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Social.FOLLOWING)
     ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowing(
             @PathVariable UUID userId,

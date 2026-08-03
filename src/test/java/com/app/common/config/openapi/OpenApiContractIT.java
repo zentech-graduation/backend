@@ -175,6 +175,56 @@ class OpenApiContractIT {
     }
 
     @Test
+    void everyCursorEndpointDeclaresA400Response() {
+        JsonNode doc = document();
+        Set<String> cursorOperations = new LinkedHashSet<>();
+
+        // The cursor-endpoint set is derived the same way everyPagedSchemaDeclaresItsItemType
+        // derives it: any operation whose success response resolves to a schema shaped like a
+        // page (an array-typed content property alongside pageInfo), not a hardcoded path list.
+        forEachSuccessResponseWithContent(
+                doc,
+                (operationId, code, mediaType, schema) -> {
+                    if (isPagedSchema(doc, resolve(doc, schema))) {
+                        cursorOperations.add(operationId);
+                    }
+                });
+
+        List<String> offenders = new ArrayList<>();
+        forEachOperation(
+                doc,
+                (operationId, operation) -> {
+                    if (cursorOperations.contains(operationId)
+                            && !operation.path("responses").has("400")) {
+                        offenders.add(operationId);
+                    }
+                });
+
+        assertThat(offenders)
+                .as("every cursor endpoint must declare a 400 response for a malformed cursor")
+                .isEmpty();
+    }
+
+    /**
+     * A cursor page schema sits one $ref past the ApiResponse envelope: {@code ApiResponse<T>.data}
+     * points at the page schema itself, which carries an array-typed {@code content} property
+     * alongside {@code pageInfo}. {@code resolve} only follows one $ref hop, so the envelope's
+     * {@code data} property must be resolved a second time here.
+     */
+    private static boolean isPagedSchema(JsonNode doc, JsonNode resolvedEnvelope) {
+        if (resolvedEnvelope == null) {
+            return false;
+        }
+        JsonNode resolvedData = resolve(doc, resolvedEnvelope.path("properties").path("data"));
+        if (resolvedData == null) {
+            return false;
+        }
+        JsonNode content = resolvedData.path("properties").path("content");
+        return "array".equals(content.path("type").asString(""))
+                && resolvedData.path("properties").has("pageInfo");
+    }
+
+    @Test
     void noContentResponsesDeclareNoBody() {
         JsonNode doc = document();
         List<String> offenders = new ArrayList<>();

@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.request.CreateStoryRequest;
@@ -193,13 +194,6 @@ public interface StoryApi {
                 responseCode = "200",
                 description = "Cursor page of viewers"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Malformed cursor",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is not the story owner",
                 content =
@@ -214,6 +208,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.VIEWS)
     ResponseEntity<ApiResponse<CursorPageResponse<StoryViewerResponse>>> listViewers(
             @PathVariable("storyId") UUID storyId,

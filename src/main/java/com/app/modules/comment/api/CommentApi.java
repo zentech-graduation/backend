@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
@@ -108,6 +109,7 @@ public interface CommentApi {
                 responseCode = "200",
                 description = "Cursor page of comments")
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Posts.ROOT + ApiConstants.Posts.COMMENTS)
     ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listTopLevelComments(
             @PathVariable("postId") UUID postId,
@@ -136,6 +138,7 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.REPLIES)
     ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listReplies(
             @PathVariable("commentId") UUID commentId,
