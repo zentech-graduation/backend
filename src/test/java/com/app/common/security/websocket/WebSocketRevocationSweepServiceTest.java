@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -27,6 +28,8 @@ class WebSocketRevocationSweepServiceTest {
     @Mock private TokenPrincipalResolver tokenPrincipalResolver;
     @Mock private WebSocketSession validSession;
     @Mock private WebSocketSession revokedSession;
+    @Mock private WebSocketSession throwingSession;
+    @Mock private WebSocketSession trailingRevokedSession;
 
     private WebSocketRevocationSweepService sweepService;
 
@@ -76,5 +79,45 @@ class WebSocketRevocationSweepServiceTest {
         sweepService.sweep();
 
         verify(tokenPrincipalResolver, never()).resolve(any());
+    }
+
+    @Test
+    void sweep_resolveThrowsForOneSession_stillSweepsRemaining() throws Exception {
+        UserPrincipal principal = new UserPrincipal(UUID.randomUUID(), null, "USER", "ACTIVE");
+        when(registry.snapshot())
+                .thenReturn(
+                        List.of(
+                                new WebSocketSessionRegistry.Entry(validSession, "valid-token"),
+                                new WebSocketSessionRegistry.Entry(
+                                        throwingSession, "throwing-token"),
+                                new WebSocketSessionRegistry.Entry(
+                                        trailingRevokedSession, "revoked-token")));
+        when(tokenPrincipalResolver.resolve("valid-token")).thenReturn(Optional.of(principal));
+        when(tokenPrincipalResolver.resolve("throwing-token"))
+                .thenThrow(new RedisConnectionFailureException("redis timeout"));
+        when(tokenPrincipalResolver.resolve("revoked-token")).thenReturn(Optional.empty());
+        when(trailingRevokedSession.isOpen()).thenReturn(true);
+
+        sweepService.sweep();
+
+        verify(tokenPrincipalResolver).resolve("valid-token");
+        verify(tokenPrincipalResolver).resolve("throwing-token");
+        verify(tokenPrincipalResolver).resolve("revoked-token");
+        verify(trailingRevokedSession).close(CloseStatus.POLICY_VIOLATION);
+    }
+
+    @Test
+    void sweep_resolveThrows_doesNotCloseThatSession() throws Exception {
+        when(registry.snapshot())
+                .thenReturn(
+                        List.of(
+                                new WebSocketSessionRegistry.Entry(
+                                        throwingSession, "throwing-token")));
+        when(tokenPrincipalResolver.resolve("throwing-token"))
+                .thenThrow(new RedisConnectionFailureException("redis timeout"));
+
+        sweepService.sweep();
+
+        verify(throwingSession, never()).close(any());
     }
 }

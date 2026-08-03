@@ -39,8 +39,22 @@ public class WebSocketRevocationSweepService {
     @Scheduled(fixedDelayString = "${app.websocket.revocation.interval:PT30S}")
     public void sweep() {
         for (WebSocketSessionRegistry.Entry entry : registry.snapshot()) {
-            if (tokenPrincipalResolver.resolve(entry.token()).isEmpty()) {
-                closeRevoked(entry.session());
+            try {
+                if (tokenPrincipalResolver.resolve(entry.token()).isEmpty()) {
+                    closeRevoked(entry.session());
+                }
+            } catch (RuntimeException ex) {
+                // A transient infrastructure failure (Redis timeout, pool exhaustion) resolving
+                // one session must not abandon the rest of the pass. Fail-open, deliberately: the
+                // alternative - closing on resolution failure - would let a single dependency blip
+                // disconnect every WebSocket session simultaneously and trigger a reconnect storm
+                // against the same degraded dependency. The session recovers on the next sweep,
+                // at most one interval later.
+                log.warn(
+                        "Revocation check failed for session {}: {}: {}",
+                        entry.session().getId(),
+                        ex.getClass().getSimpleName(),
+                        ex.getMessage());
             }
         }
     }
