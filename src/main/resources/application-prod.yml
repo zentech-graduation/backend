@@ -81,6 +81,9 @@ app:
         max-attempts: 30
         window-seconds: 60
       "[/ws/**]":
-        max-attempts: 30
+        # Was 30 when GET (handshake) and POST (SockJS xhr) each held a separate bucket, an
+        # effective 60/60s; raised here to preserve that real-world capacity now that removing
+        # the method dimension from the bucket key (M-10) merges both into one shared bucket.
+        max-attempts: 60
         window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
