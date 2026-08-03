@@ -176,11 +176,17 @@ Alongside these, the schema includes config tables (`notification_type_configs`,
 
 The following tables store runtime configuration and feature policy. They are NOT business logic source-of-truth tables. They exist to allow policy changes without code deployments.
 
-| Table | Purpose |
-|-------|---------|
-| `system_settings` | System-wide configurable limits and TTL values |
-| `notification_type_configs` | Notification type registry with display and toggle settings |
-| `moderation_action_configs` | Admin moderation action registry |
-| `feature_flags` | Feature enable/disable control per environment |
+| Table | Purpose | Status |
+|-------|---------|--------|
+| `system_settings` | System-wide configurable limits and TTL values | Live |
+| `notification_type_configs` | Notification type registry with display and toggle settings | Live |
+| `moderation_action_configs` | Admin moderation action registry | Live |
+| `feature_flags` | Feature enable/disable control per environment | **Table exists, never read.** See the note below |
+
+> **`feature_flags` has no runtime reader anywhere in `src/main`.**
+> The table is created and seeded with one decorative `group_chat` row by the V18 migration, but no repository, service, `@Query` method, or `JdbcTemplate`/`JdbcClient` call in the application reads it.
+> The actual per-environment feature-toggle mechanism in this codebase today is a per-module `@ConfigurationProperties` boolean — for example `MessageProperties.groupChatEnabled`, whose own Javadoc states plainly that there is no runtime `feature_flags` reader and that this property, not the table's `group_chat` row, is the real switch.
+> The row above is therefore a specification for a feature-flag mechanism that has not been built, not a description of current behaviour.
+> Do not point a new toggle at this table expecting it to be read; wire it through the owning module's own configuration properties instead, or build a general-purpose runtime reader as its own scoped piece of work.
 
 **Rule**: These tables must never store secrets, private keys, OAuth credentials, database URLs, or any sensitive environment-specific values. Those remain in environment variables.
