@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- A pagination cursor obtained from one list endpoint (for example, the followers list) can no longer be replayed against a different list endpoint; cursors are now bound to the endpoint that issued them. Any cursor obtained before this change is rejected once; affected clients simply restart pagination from the first page.
+- The comment and notification WebSocket endpoints now deny all cross-origin connections by default when no allowed origins are configured, matching the existing REST behavior. A blank configuration previously admitted any localhost-scoped browser origin on these two endpoints only.
+- A user blocked from viewing a post could still register as a live watcher of that post's comment activity over WebSocket by sending watch or heartbeat frames directly, bypassing the same visibility check already enforced when subscribing; both frame types are now authorized identically, and an unrecognized comment-topic subscription is now rejected by default instead of allowed through.
+- An endpoint reachable by more than one HTTP method (the conversations list and the WebSocket handshake) previously received a separate rate-limit budget per method instead of one shared budget; the two methods now share a single budget, and the production WebSocket handshake limit is raised from 30 to 60 attempts per 60 seconds to preserve the same effective capacity.
+- A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
+
+### Changed
+- Notification API responses now embed the triggering user's summary (id, username, display name, avatar, verified flag) instead of a bare actor id; a soft-deleted or unknown actor now renders as a placeholder instead of a raw id the client had to resolve separately. This is a breaking change to the notification response shape.
+- The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
+
+### Fixed
+- Every successful API response in the published API documentation now declares its actual response body type instead of an untyped envelope or the wrong schema, so client code can be generated correctly from it; the logout endpoint's documented response is also corrected to match its actual empty body.
+- Every cursor-paginated endpoint's published API documentation now declares the 400 response returned for a malformed cursor, and every request-body-accepting endpoint's documentation now declares the 400 response returned for a malformed body; most previously did not.
+- The hourly hashtag trending snapshot job now reuses the same time window across runs within the same hour instead of creating an unbounded, ever-growing set of near-duplicate snapshot rows on every run.
+- A transient failure resolving one WebSocket session's token during the periodic revocation sweep no longer aborts the whole sweep pass; the affected session is skipped and retried on the next scheduled run instead of leaving every other session unchecked.
+- Closed a latent inconsistency between the case-insensitive username uniqueness constraint and the documented soft-delete retention policy; no application code path could reach the affected state, but the database now enforces the same rule the application already assumed.
+
+### Tests
+- Added regression coverage proving cursor pagination for notifications, reports, admin actions, and conversations does not drop or duplicate rows when many items share the same sort timestamp, matching coverage already in place for other paginated lists.
+- Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
+
+### Documentation
+- Corrected internal module documentation for the hashtag module, which was still marked as unimplemented scaffolding despite being fully implemented.
+- Corrected internal module documentation for the message module: conversation and participant management is implemented, but sending, listing, and reacting to messages is not, since no send-message endpoint exists yet.
+- Corrected internal documentation to state that account soft delete, for users specifically, is a documented but unimplemented retention policy; no code path currently sets it.
+- Synchronized internal architecture documentation with the current codebase: migration count, test coverage listing, and module directory listing.
+- Synchronized the reference database schema document with the two most recent migrations (the top-liked-comments index and the case-insensitive username index).
+- Internal comment-style guidance no longer cites a pre-commit hook that does not exist in this repository.
+
 ### Added
 - The first page of a post's comments now begins with up to three pinned top comments, ordered by like count; each comment carries a `pinned` flag so a client can tell them apart from the newest-first list rather than inferring it from position. Only comments with at least one like are eligible, a pinned comment is never repeated in the same page's newest-first body, and the pinned block is additional to the requested page size. Page two onward is unchanged.
 - Notifications are now delivered in real time over a WebSocket connection, in addition to the existing REST endpoints; a client may subscribe only to its own notification stream, and a missed push is always recoverable by re-fetching the notification list.
