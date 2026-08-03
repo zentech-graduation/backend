@@ -3,7 +3,6 @@ package com.app.common.security.config;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Stream;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.ServletException;
@@ -32,7 +31,6 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -273,7 +271,7 @@ public class SecurityConfig {
 
         // Refuse to fall back to a wildcard origin when allowCredentials=true. Empty config
         // becomes a deny-all CORS policy; operator must set CORS_ALLOWED_ORIGINS explicitly.
-        configuration.setAllowedOrigins(parseOrigins(corsProperties.allowedOrigins()));
+        configuration.setAllowedOrigins(corsProperties.allowedOriginList());
         configuration.setAllowedMethods(
                 Arrays.asList(
                         HttpMethod.GET.name(),
@@ -319,12 +317,5 @@ public class SecurityConfig {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         objectMapper.writeValue(response.getWriter(), ApiResponse.failure(errorCode));
-    }
-
-    private static List<String> parseOrigins(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return List.of();
-        }
-        return Stream.of(raw.split(",")).map(String::trim).filter(StringUtils::hasText).toList();
     }
 }
