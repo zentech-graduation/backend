@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
 import com.app.common.config.openapi.CursorErrorResponses;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.dto.request.AddParticipantsRequest;
@@ -61,6 +62,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Messages.ROOT)
     ResponseEntity<ApiResponse<ConversationResponse>> createDirectConversation(
             @Valid @RequestBody CreateDirectConversationRequest request);
@@ -166,6 +168,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PatchMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
     ResponseEntity<ApiResponse<ConversationResponse>> updateGroup(
             @PathVariable("conversationId") UUID conversationId,
@@ -217,6 +220,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
     ResponseEntity<ApiResponse<Void>> addParticipants(
             @PathVariable("conversationId") UUID conversationId,

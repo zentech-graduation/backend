@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
@@ -67,6 +68,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.REGISTER)
     ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegisterRequest request);
 
@@ -104,6 +106,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.LOGIN)
     ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest);
@@ -134,6 +137,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.REFRESH)
     ResponseEntity<ApiResponse<AuthResponse>> refresh(
             @Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest);
@@ -163,6 +167,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.LOGOUT)
     ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request);
 
@@ -225,6 +230,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.RESEND_VERIFY)
     ResponseEntity<ApiResponse<Void>> resendVerification(
             @Valid @RequestBody ResendVerificationRequest request);
@@ -251,6 +257,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.FORGOT_PASSWORD)
     ResponseEntity<ApiResponse<Void>> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request);

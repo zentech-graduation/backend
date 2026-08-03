@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
@@ -105,6 +106,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PatchMapping(ApiConstants.Users.ME)
     ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest request);
@@ -301,6 +303,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PatchMapping(ApiConstants.Users.ME_SETTINGS)
     ResponseEntity<ApiResponse<UserSettingsResponse>> updateMySettings(
             @Valid @RequestBody UpdateSettingsRequest request);

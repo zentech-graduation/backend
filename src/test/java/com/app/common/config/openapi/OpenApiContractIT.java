@@ -225,6 +225,29 @@ class OpenApiContractIT {
     }
 
     @Test
+    void everyBodyAcceptingEndpointDeclaresA400Response() {
+        JsonNode doc = document();
+        List<String> offenders = new ArrayList<>();
+
+        // Derived from requestBody presence, not a hardcoded path list: any operation that
+        // accepts a body can be sent a malformed one.
+        forEachOperation(
+                doc,
+                (operationId, operation) -> {
+                    if (operation.path("requestBody").isMissingNode()) {
+                        return;
+                    }
+                    if (!operation.path("responses").has("400")) {
+                        offenders.add(operationId);
+                    }
+                });
+
+        assertThat(offenders)
+                .as("every body-accepting endpoint must declare a 400 response")
+                .isEmpty();
+    }
+
+    @Test
     void noContentResponsesDeclareNoBody() {
         JsonNode doc = document();
         List<String> offenders = new ArrayList<>();

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
 import com.app.common.config.openapi.CursorErrorResponses;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.request.CreateStoryRequest;
@@ -59,6 +60,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Stories.ROOT)
     ResponseEntity<ApiResponse<StoryResponse>> createStory(
             @Valid @RequestBody CreateStoryRequest request);

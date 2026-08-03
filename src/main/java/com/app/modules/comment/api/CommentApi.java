@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
 import com.app.common.config.openapi.CursorErrorResponses;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
@@ -178,6 +179,7 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PatchMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.BY_ID)
     ResponseEntity<ApiResponse<CommentResponse>> editComment(
             @PathVariable("commentId") UUID commentId,
