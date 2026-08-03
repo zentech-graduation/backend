@@ -5,16 +5,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
 
 import com.app.common.response.UserSummaryResponse;
 import com.app.modules.users.entity.User;
 
-@Repository
-public interface UserRepository extends JpaRepository<User, UUID> {
+@org.springframework.stereotype.Repository
+public interface UserRepository extends Repository<User, UUID> {
+
+    User save(User user);
 
     /**
      * Projects the requested non soft-deleted users onto the shared public summary shape in a
