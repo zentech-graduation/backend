@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,6 +43,7 @@ import com.app.modules.notification.repository.NotificationRepository;
 import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.entity.UserSettings;
 import com.app.modules.users.repository.UserSettingsRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceImplTest {
@@ -51,6 +53,7 @@ class NotificationServiceImplTest {
     @Mock private BlockRepository blockRepository;
     @Mock private NotificationMapper notificationMapper;
     @Mock private OutboxService outboxService;
+    @Mock private UserSummaryService userSummaryService;
 
     private NotificationServiceImpl service;
 
@@ -62,9 +65,11 @@ class NotificationServiceImplTest {
                         userSettingsRepository,
                         blockRepository,
                         notificationMapper,
-                        outboxService);
+                        outboxService,
+                        userSummaryService);
         lenient().when(userSettingsRepository.findById(any())).thenReturn(Optional.empty());
         lenient().when(blockRepository.existsBetween(any(), any())).thenReturn(false);
+        lenient().when(userSummaryService.loadSummaries(any())).thenReturn(Map.of());
         // The live-push path reads the persisted row's generated id immediately after save(); a
         // freshly built (unsaved) entity has none, so every create()-path test needs a saved
         // return value with an id, exactly as JPA would assign one on a real insert.
@@ -259,7 +264,7 @@ class NotificationServiceImplTest {
         Notification row = mockNotification();
         when(notificationRepository.findFirstByRecipient(eq(recipientId), any(PageRequest.class)))
                 .thenReturn(List.of(row));
-        when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
+        when(notificationMapper.toResponse(any(), any())).thenReturn(mockResponse());
 
         CursorPageResponse<NotificationResponse> result =
                 service.listNotifications(recipientId, null, 20);
@@ -280,8 +285,7 @@ class NotificationServiceImplTest {
                 List.of(mockNotification(), mockNotification(), mockNotification());
         when(notificationRepository.findFirstByRecipient(eq(recipientId), any(PageRequest.class)))
                 .thenReturn(rows);
-        when(notificationMapper.toResponseList(any()))
-                .thenReturn(List.of(mockResponse(), mockResponse()));
+        when(notificationMapper.toResponse(any(), any())).thenReturn(mockResponse());
 
         CursorPageResponse<NotificationResponse> result =
                 service.listNotifications(recipientId, null, limit);
@@ -296,7 +300,7 @@ class NotificationServiceImplTest {
         int limit = 5;
         when(notificationRepository.findFirstByRecipient(eq(recipientId), any(PageRequest.class)))
                 .thenReturn(List.of(mockNotification()));
-        when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
+        when(notificationMapper.toResponse(any(), any())).thenReturn(mockResponse());
 
         CursorPageResponse<NotificationResponse> result =
                 service.listNotifications(recipientId, null, limit);
@@ -376,7 +380,7 @@ class NotificationServiceImplTest {
         when(notificationRepository.findByRecipientBefore(
                         eq(recipientId), eq(expectedTime), eq(cursorId), any(PageRequest.class)))
                 .thenReturn(List.of(mockNotification()));
-        when(notificationMapper.toResponseList(any())).thenReturn(List.of(mockResponse()));
+        when(notificationMapper.toResponse(any(), any())).thenReturn(mockResponse());
 
         CursorPageResponse<NotificationResponse> result =
                 service.listNotifications(recipientId, cursor, 20);
@@ -399,7 +403,6 @@ class NotificationServiceImplTest {
         when(notificationRepository.findByRecipientBefore(
                         eq(recipientId), any(), eq(cursorId), any(PageRequest.class)))
                 .thenReturn(List.of());
-        when(notificationMapper.toResponseList(any())).thenReturn(List.of());
 
         service.listNotifications(recipientId, cursor, 20);
 

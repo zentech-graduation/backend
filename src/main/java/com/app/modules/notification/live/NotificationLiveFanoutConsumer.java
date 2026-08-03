@@ -1,5 +1,6 @@
 package com.app.modules.notification.live;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -12,10 +13,12 @@ import org.springframework.stereotype.Component;
 
 import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.outbox.model.DomainEventEnvelope;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.mapper.NotificationMapper;
 import com.app.modules.notification.repository.NotificationRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 /**
  * Pushes live notification events received on this instance's fanout queue to local STOMP
@@ -40,16 +43,19 @@ public class NotificationLiveFanoutConsumer {
     private final NotificationRepository notificationRepository;
     private final NotificationMapper notificationMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserSummaryService userSummaryService;
 
     public NotificationLiveFanoutConsumer(
             DomainEventMessageParser parser,
             NotificationRepository notificationRepository,
             NotificationMapper notificationMapper,
-            SimpMessagingTemplate messagingTemplate) {
+            SimpMessagingTemplate messagingTemplate,
+            UserSummaryService userSummaryService) {
         this.parser = parser;
         this.notificationRepository = notificationRepository;
         this.notificationMapper = notificationMapper;
         this.messagingTemplate = messagingTemplate;
+        this.userSummaryService = userSummaryService;
     }
 
     @RabbitListener(
@@ -68,7 +74,12 @@ public class NotificationLiveFanoutConsumer {
             if (notification == null) {
                 return;
             }
-            NotificationResponse response = notificationMapper.toResponse(notification);
+            UUID actorId = notification.getActorId();
+            UserSummaryResponse actor =
+                    actorId == null
+                            ? null
+                            : userSummaryService.loadSummaries(List.of(actorId)).get(actorId);
+            NotificationResponse response = notificationMapper.toResponse(notification, actor);
             messagingTemplate.convertAndSend("/topic/notifications." + recipientId, response);
         } catch (RuntimeException ex) {
             log.warn("Failed to push live notification event: {}", ex.getMessage());
