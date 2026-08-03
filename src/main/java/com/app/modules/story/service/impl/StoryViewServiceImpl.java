@@ -18,6 +18,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.response.StoryViewActionResponse;
@@ -155,10 +156,11 @@ public class StoryViewServiceImpl implements StoryViewService {
 
     private String encodeCursor(StoryView view) {
         return CursorCodec.encode(
-                new Cursor(TimeCursors.toMicros(view.getViewedAt()), view.getId().getViewerId()));
+                new Cursor(TimeCursors.toMicros(view.getViewedAt()), view.getId().getViewerId()),
+                CursorScope.STORY_VIEWERS);
     }
 
     private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+        return CursorCodec.decode(cursor, CursorScope.STORY_VIEWERS);
     }
 }

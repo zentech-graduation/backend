@@ -35,6 +35,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserSummaryResponse;
@@ -654,7 +655,8 @@ class PostServiceImplTest {
         Post post = ownedPost(PostStatus.PUBLISHED);
         String cursor =
                 CursorCodec.encode(
-                        new Cursor(TimeCursors.toMicros(OffsetDateTime.now()), UUID.randomUUID()));
+                        new Cursor(TimeCursors.toMicros(OffsetDateTime.now()), UUID.randomUUID()),
+                        CursorScope.POST_FEED);
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
         when(postRepository.findFeedPostsBefore(any(), any(), any(), any()))

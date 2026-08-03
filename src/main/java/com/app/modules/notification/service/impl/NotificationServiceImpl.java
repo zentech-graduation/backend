@@ -16,6 +16,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
@@ -152,12 +153,12 @@ public class NotificationServiceImpl implements NotificationService {
 
     private String encodeCursor(Notification notification) {
         return CursorCodec.encode(
-                new Cursor(
-                        TimeCursors.toMicros(notification.getCreatedAt()), notification.getId()));
+                new Cursor(TimeCursors.toMicros(notification.getCreatedAt()), notification.getId()),
+                CursorScope.NOTIFICATIONS);
     }
 
     private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+        return CursorCodec.decode(cursor, CursorScope.NOTIFICATIONS);
     }
 
     private boolean isTypeEnabled(NotificationType type, UserSettings settings) {

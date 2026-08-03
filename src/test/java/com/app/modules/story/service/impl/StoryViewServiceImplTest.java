@@ -29,6 +29,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.response.StoryViewActionResponse;
@@ -249,7 +250,9 @@ class StoryViewServiceImplTest {
         OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC);
         UUID cursorViewerId = UUID.randomUUID();
         String cursor =
-                CursorCodec.encode(new Cursor(TimeCursors.toMicros(cursorTime), cursorViewerId));
+                CursorCodec.encode(
+                        new Cursor(TimeCursors.toMicros(cursorTime), cursorViewerId),
+                        CursorScope.STORY_VIEWERS);
         // The codec carries microsecond precision; the decoded time round-trips through micros.
         OffsetDateTime expectedTime = TimeCursors.fromMicros(TimeCursors.toMicros(cursorTime));
         when(storyRepository.findActiveById(eq(storyId), any(OffsetDateTime.class)))

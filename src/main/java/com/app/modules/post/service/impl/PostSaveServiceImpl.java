@@ -18,6 +18,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
@@ -163,10 +164,11 @@ public class PostSaveServiceImpl implements PostSaveService {
         if (time == null || tiebreaker == null) {
             return null;
         }
-        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker));
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(time), tiebreaker), CursorScope.POST_SAVES);
     }
 
     private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+        return CursorCodec.decode(cursor, CursorScope.POST_SAVES);
     }
 }

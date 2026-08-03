@@ -23,6 +23,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
@@ -246,7 +247,7 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_FOLLOWERS);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
@@ -289,9 +290,15 @@ public class SocialServiceImpl implements SocialService {
         Follow firstFollow = follows.get(0);
         Follow lastFollow = follows.get(follows.size() - 1);
         String startCursor =
-                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowerId());
+                encodeCursor(
+                        firstFollow.getCreatedAt(),
+                        firstFollow.getId().getFollowerId(),
+                        CursorScope.SOCIAL_FOLLOWERS);
         String endCursor =
-                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowerId());
+                encodeCursor(
+                        lastFollow.getCreatedAt(),
+                        lastFollow.getId().getFollowerId(),
+                        CursorScope.SOCIAL_FOLLOWERS);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -310,7 +317,7 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_FOLLOWING);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
@@ -353,9 +360,15 @@ public class SocialServiceImpl implements SocialService {
         Follow firstFollow = follows.get(0);
         Follow lastFollow = follows.get(follows.size() - 1);
         String startCursor =
-                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowingId());
+                encodeCursor(
+                        firstFollow.getCreatedAt(),
+                        firstFollow.getId().getFollowingId(),
+                        CursorScope.SOCIAL_FOLLOWING);
         String endCursor =
-                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowingId());
+                encodeCursor(
+                        lastFollow.getCreatedAt(),
+                        lastFollow.getId().getFollowingId(),
+                        CursorScope.SOCIAL_FOLLOWING);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -365,7 +378,7 @@ public class SocialServiceImpl implements SocialService {
     public CursorPageResponse<UserListItemResponse> getBlockedUsers(
             UUID currentUserId, String cursor, int limit) {
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_BLOCKED);
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Block> blocks =
@@ -407,8 +420,16 @@ public class SocialServiceImpl implements SocialService {
 
         Block first = blocks.get(0);
         Block last = blocks.get(blocks.size() - 1);
-        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getBlockedId());
-        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getBlockedId());
+        String startCursor =
+                encodeCursor(
+                        first.getCreatedAt(),
+                        first.getId().getBlockedId(),
+                        CursorScope.SOCIAL_BLOCKED);
+        String endCursor =
+                encodeCursor(
+                        last.getCreatedAt(),
+                        last.getId().getBlockedId(),
+                        CursorScope.SOCIAL_BLOCKED);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -418,7 +439,7 @@ public class SocialServiceImpl implements SocialService {
     public CursorPageResponse<FollowRequestResponse> getPendingFollowRequests(
             UUID currentUserId, String cursor, int limit) {
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_PENDING_REQUESTS);
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Follow> pendingFollows =
@@ -467,8 +488,16 @@ public class SocialServiceImpl implements SocialService {
 
         Follow first = pendingFollows.get(0);
         Follow last = pendingFollows.get(pendingFollows.size() - 1);
-        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getFollowerId());
-        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getFollowerId());
+        String startCursor =
+                encodeCursor(
+                        first.getCreatedAt(),
+                        first.getId().getFollowerId(),
+                        CursorScope.SOCIAL_PENDING_REQUESTS);
+        String endCursor =
+                encodeCursor(
+                        last.getCreatedAt(),
+                        last.getId().getFollowerId(),
+                        CursorScope.SOCIAL_PENDING_REQUESTS);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -588,14 +617,14 @@ public class SocialServiceImpl implements SocialService {
         return limit > 100 ? 100 : (limit < 1 ? 20 : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time, UUID tiebreaker) {
+    private String encodeCursor(OffsetDateTime time, UUID tiebreaker, String scope) {
         if (time == null || tiebreaker == null) {
             return null;
         }
-        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker), scope);
     }
 
-    private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+    private Cursor decodeCursor(String cursor, String scope) {
+        return CursorCodec.decode(cursor, scope);
     }
 }

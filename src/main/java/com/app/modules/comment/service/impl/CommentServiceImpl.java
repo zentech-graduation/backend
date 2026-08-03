@@ -28,6 +28,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserSummaryResponse;
@@ -400,7 +401,7 @@ public class CommentServiceImpl implements CommentService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
         int pageSize = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.COMMENTS_TOP_LEVEL);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         // Page two onward is the unchanged pure keyset stream: no pinned block, no exclusion.
         if (decoded != null) {
@@ -410,7 +411,7 @@ public class CommentServiceImpl implements CommentService {
                             TimeCursors.fromMicros(decoded.sortValueMicros()),
                             decoded.id(),
                             page);
-            return toPage(viewerId, comments, pageSize, cursor);
+            return toPage(viewerId, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
         }
         List<Comment> pinned =
                 commentRepository.findTopLikedTopLevel(
@@ -418,7 +419,7 @@ public class CommentServiceImpl implements CommentService {
         UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         List<Comment> comments =
                 commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, page);
-        return toPage(viewerId, pinned, comments, pageSize, cursor);
+        return toPage(viewerId, pinned, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
     }
 
     @Override
@@ -435,7 +436,7 @@ public class CommentServiceImpl implements CommentService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
         int pageSize = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.COMMENT_REPLIES);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Comment> replies =
                 decoded == null
@@ -445,7 +446,7 @@ public class CommentServiceImpl implements CommentService {
                                 TimeCursors.fromMicros(decoded.sortValueMicros()),
                                 decoded.id(),
                                 page);
-        return toPage(viewerId, replies, pageSize, cursor);
+        return toPage(viewerId, replies, pageSize, cursor, CursorScope.COMMENT_REPLIES);
     }
 
     // Visibility gate shared by the read, like, and unlike paths, consistent with the create path
@@ -458,15 +459,20 @@ public class CommentServiceImpl implements CommentService {
     }
 
     private CursorPageResponse<CommentResponse> toPage(
-            UUID viewerId, List<Comment> rows, int pageSize, String cursor) {
-        return toPage(viewerId, List.of(), rows, pageSize, cursor);
+            UUID viewerId, List<Comment> rows, int pageSize, String cursor, String scope) {
+        return toPage(viewerId, List.of(), rows, pageSize, cursor, scope);
     }
 
     // Keyset pagination over limit+1 rows: hasNextPage is decided by the pre-trim size, then the
     // extra probe row is dropped. The pinned block is prepended and is additional to pageSize, so
     // the body remains a full keyset page and the cursor advances by exactly pageSize.
     private CursorPageResponse<CommentResponse> toPage(
-            UUID viewerId, List<Comment> pinned, List<Comment> rows, int pageSize, String cursor) {
+            UUID viewerId,
+            List<Comment> pinned,
+            List<Comment> rows,
+            int pageSize,
+            String cursor,
+            String scope) {
         boolean hasNextPage = rows.size() > pageSize;
         List<Comment> page = hasNextPage ? rows.subList(0, pageSize) : rows;
         List<Comment> all = new ArrayList<>(pinned.size() + page.size());
@@ -487,8 +493,9 @@ public class CommentServiceImpl implements CommentService {
         Comment first = page.isEmpty() ? null : page.get(0);
         Comment last = page.isEmpty() ? null : page.get(page.size() - 1);
         String startCursor =
-                first == null ? null : encodeCursor(first.getCreatedAt(), first.getId());
-        String endCursor = last == null ? null : encodeCursor(last.getCreatedAt(), last.getId());
+                first == null ? null : encodeCursor(first.getCreatedAt(), first.getId(), scope);
+        String endCursor =
+                last == null ? null : encodeCursor(last.getCreatedAt(), last.getId(), scope);
         return CursorPageResponse.<CommentResponse>builder()
                 .content(content)
                 .pageInfo(
@@ -656,15 +663,15 @@ public class CommentServiceImpl implements CommentService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time, UUID id) {
+    private String encodeCursor(OffsetDateTime time, UUID id, String scope) {
         if (time == null || id == null) {
             return null;
         }
-        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), id));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), id), scope);
     }
 
-    private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+    private Cursor decodeCursor(String cursor, String scope) {
+        return CursorCodec.decode(cursor, scope);
     }
 
     private static String sha256(String input) {

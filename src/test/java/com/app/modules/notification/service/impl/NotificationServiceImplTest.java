@@ -30,6 +30,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
@@ -366,7 +367,10 @@ class NotificationServiceImplTest {
         UUID recipientId = UUID.randomUUID();
         UUID cursorId = UUID.randomUUID();
         OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
-        String cursor = CursorCodec.encode(new Cursor(TimeCursors.toMicros(cursorTime), cursorId));
+        String cursor =
+                CursorCodec.encode(
+                        new Cursor(TimeCursors.toMicros(cursorTime), cursorId),
+                        CursorScope.NOTIFICATIONS);
         // The codec carries microsecond precision; the decoded time round-trips through micros.
         OffsetDateTime expectedTime = TimeCursors.fromMicros(TimeCursors.toMicros(cursorTime));
         when(notificationRepository.findByRecipientBefore(
@@ -388,7 +392,10 @@ class NotificationServiceImplTest {
         UUID recipientId = UUID.randomUUID();
         UUID cursorId = UUID.randomUUID();
         OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC);
-        String cursor = CursorCodec.encode(new Cursor(TimeCursors.toMicros(cursorTime), cursorId));
+        String cursor =
+                CursorCodec.encode(
+                        new Cursor(TimeCursors.toMicros(cursorTime), cursorId),
+                        CursorScope.NOTIFICATIONS);
         when(notificationRepository.findByRecipientBefore(
                         eq(recipientId), any(), eq(cursorId), any(PageRequest.class)))
                 .thenReturn(List.of());

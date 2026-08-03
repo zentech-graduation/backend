@@ -38,6 +38,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.user.UserPrincipal;
@@ -77,7 +78,7 @@ class CommentServiceImplTest {
     // A literal cursor in the wire format issued before the pinned block existed. Hardcoded rather
     // than round-tripped through the encoder so a format change cannot silently pass this test.
     private static final String SECOND_PAGE_CURSOR =
-            "MTc2NzIyNTYwMDAwMDAwMDoxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTE";
+            "Y210OjE3NjcyMjU2MDAwMDAwMDA6MTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTEx";
 
     @Mock private CommentRepository commentRepository;
     @Mock private CommentLikeRepository commentLikeRepository;
@@ -690,9 +691,15 @@ class CommentServiceImplTest {
                 service.listTopLevelComments(actorId, postId, null, 5);
 
         assertThat(result.getPageInfo().getStartCursor())
-                .isEqualTo(CursorCodec.encode(new Cursor(0L, body.get(0).getId())));
+                .isEqualTo(
+                        CursorCodec.encode(
+                                new Cursor(0L, body.get(0).getId()),
+                                CursorScope.COMMENTS_TOP_LEVEL));
         assertThat(result.getPageInfo().getEndCursor())
-                .isEqualTo(CursorCodec.encode(new Cursor(0L, body.get(1).getId())));
+                .isEqualTo(
+                        CursorCodec.encode(
+                                new Cursor(0L, body.get(1).getId()),
+                                CursorScope.COMMENTS_TOP_LEVEL));
     }
 
     // Distinct ids per row so the mapper stub, which returns one shared response, cannot mask an
