@@ -81,9 +81,11 @@ app:
         max-attempts: 30
         window-seconds: 60
       "[/ws/**]":
-        # Was 30 when GET (handshake) and POST (SockJS xhr) each held a separate bucket, an
-        # effective 60/60s; raised here to preserve that real-world capacity now that removing
-        # the method dimension from the bucket key (M-10) merges both into one shared bucket.
+        # Measured against a real SockJS xhr-polling session (.workspace/reports/p8/ws_rate_limit_measurement.md):
+        # one session costs ~7 requests in its first 60s (info + connect burst + 2 heartbeat
+        # polls at the SockJS default 25s interval); a reconnect costs ~5 more each time. 60
+        # covers one session's connect burst plus roughly 11 reconnect attempts inside the same
+        # window - generous headroom for real network flakiness while staying bounded.
         max-attempts: 60
         window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
