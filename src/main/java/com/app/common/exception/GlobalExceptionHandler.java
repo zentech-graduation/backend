@@ -8,6 +8,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -115,6 +116,23 @@ public class GlobalExceptionHandler {
         log.warn("Type mismatch on request parameter '{}'", ex.getName());
         return ResponseEntity.status(ApiErrorCode.BAD_REQUEST.getHttpStatus())
                 .body(ApiResponse.failure(ApiErrorCode.BAD_REQUEST));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<?>> handleMalformedRequestBody(
+            HttpMessageNotReadableException ex) {
+        // Every cause this handler sees - an unrecognised property, invalid JSON syntax, a
+        // missing body, a wrong root type, or an invalid enum value - reaches Spring MVC as this
+        // one exception type, so one handler covers all of them. Client input error, not a server
+        // fault: WARN without a stack trace, and never echo the cause's message, which names the
+        // rejected property and the fully qualified target DTO and would otherwise hand an
+        // unauthenticated caller a schema-enumeration oracle over every request DTO.
+        Throwable cause = ex.getCause();
+        log.warn(
+                "Malformed request body, cause: {}",
+                cause == null ? "none" : cause.getClass().getSimpleName());
+        return ResponseEntity.status(ApiErrorCode.MALFORMED_REQUEST_BODY.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.MALFORMED_REQUEST_BODY));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
