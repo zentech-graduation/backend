@@ -371,9 +371,10 @@ class PostControllerIT {
                 "INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)",
                 owner.id(),
                 viewer.id());
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one.
         ResponseEntity<Map> blocked = getWithAuth(url, viewer);
-        assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(blocked.getBody().get("code")).isEqualTo("SOCIAL_BLOCKED");
+        assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(blocked.getBody().get("code")).isEqualTo("NOT_FOUND");
     }
 
     @Test
@@ -413,6 +414,62 @@ class PostControllerIT {
                         Map.class);
         assertThat(unliked.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Map<?, ?>) unliked.getBody().get("data")).get("likeCount")).isEqualTo(0);
+    }
+
+    @Test
+    @Order(9)
+    void unlikePost_concurrentDuplicate_neverReturns500() throws Exception {
+        // Reproduces the audit's HIGH-6 shape directly: two concurrent unlikes of the same like
+        // must resolve to exactly one 200 and one 404, never a 500 from
+        // ObjectOptimisticLockingFailureException racing a load-then-delete(entity).
+        TestUser author = registerUser("race_author");
+        TestUser liker = registerUser("race_liker");
+        UUID postId =
+                createImagePost(author, "race target", insertMediaAsset(author.id(), "image"));
+        rest.exchange(
+                "/api/v1/posts/" + postId + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(liker)),
+                Map.class);
+
+        int attempts = 10;
+        java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(attempts);
+        java.util.concurrent.CyclicBarrier barrier =
+                new java.util.concurrent.CyclicBarrier(attempts);
+        try {
+            List<java.util.concurrent.Future<HttpStatus>> futures = new java.util.ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                futures.add(
+                        pool.submit(
+                                () -> {
+                                    barrier.await();
+                                    return (HttpStatus)
+                                            rest.exchange(
+                                                            "/api/v1/posts/" + postId + "/like",
+                                                            HttpMethod.DELETE,
+                                                            new HttpEntity<>(authHeaders(liker)),
+                                                            Map.class)
+                                                    .getStatusCode();
+                                }));
+            }
+            List<HttpStatus> statuses = new java.util.ArrayList<>();
+            for (java.util.concurrent.Future<HttpStatus> future : futures) {
+                statuses.add(future.get());
+            }
+
+            assertThat(statuses)
+                    .as("no concurrent unlike may surface as 500")
+                    .doesNotContain(HttpStatus.INTERNAL_SERVER_ERROR);
+            assertThat(statuses.stream().filter(s -> s == HttpStatus.OK).count())
+                    .as("exactly one concurrent unlike wins")
+                    .isEqualTo(1);
+            assertThat(statuses.stream().filter(s -> s == HttpStatus.NOT_FOUND).count())
+                    .as("the rest cleanly lose with 404")
+                    .isEqualTo(attempts - 1);
+        } finally {
+            pool.shutdown();
+        }
     }
 
     @Test
@@ -707,6 +764,80 @@ class PostControllerIT {
         ResponseEntity<Map> response = getFeed(viewer, "!!!not-valid!!!", 20);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @Order(24)
+    void getFeed_limitZero_returns400() {
+        TestUser viewer = registerUser("feed_limitzero_viewer");
+
+        ResponseEntity<Map> response = getFeed(viewer, null, 0);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    @Order(25)
+    void listUserPosts_limitZero_returns400() {
+        TestUser viewer = registerUser("userposts_limitzero_viewer");
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/user/" + viewer.id() + "?limit=0", viewer);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    @Order(26)
+    void listEditHistory_limitZero_returns400() {
+        TestUser author = registerUser("history_limitzero_author");
+        UUID postId =
+                createImagePost(author, "history probe", insertMediaAsset(author.id(), "image"));
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/" + postId + "/history?limit=0", author);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    @Order(27)
+    void searchPosts_limitZero_returns400() {
+        TestUser viewer = registerUser("search_limitzero_viewer");
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/search?q=anything&limit=0", viewer);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    @Order(28)
+    void listSavedPosts_limitZero_returns400() {
+        TestUser viewer = registerUser("saved_limitzero_viewer");
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/posts/saved?limit=0", viewer);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    @Order(29)
+    void listLikers_limitZero_returns400() {
+        TestUser author = registerUser("likers_limitzero_author");
+        UUID postId =
+                createImagePost(author, "likers probe", insertMediaAsset(author.id(), "image"));
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/" + postId + "/likes?limit=0", author);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
     }
 
     private TestUser registerUser(String username) {

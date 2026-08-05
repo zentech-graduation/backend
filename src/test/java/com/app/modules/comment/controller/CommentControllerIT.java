@@ -157,6 +157,28 @@ class CommentControllerIT {
     }
 
     @Test
+    void createComment_success_returnsNonNullTimestamps() {
+        TestUser author = registerUser("ts_author");
+        TestUser commenter = registerUser("ts_commenter");
+        UUID postId = createImagePost(author, "timestamp probe post");
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("postId", postId.toString());
+        body.put("content", "timestamp probe comment");
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts/" + postId + "/comments",
+                        HttpMethod.POST,
+                        new HttpEntity<>(body, authHeaders(commenter)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("createdAt")).as("createdAt on the create response").isNotNull();
+        assertThat(data.get("updatedAt")).as("updatedAt on the create response").isNotNull();
+    }
+
+    @Test
     void createComment_idempotencyKey_replaysOriginalResponse() {
         TestUser author = registerUser("idem_author");
         TestUser commenter = registerUser("idem_commenter");
@@ -236,6 +258,28 @@ class CommentControllerIT {
         assertThat(content.get(0).get("pinned")).isEqualTo(true);
         assertThat(content.get(1).get("id")).isEqualTo(plain.toString());
         assertThat(content.get(1).get("pinned")).isEqualTo(false);
+    }
+
+    @Test
+    void listTopLevelComments_limitZero_returns400() {
+        TestUser viewer = registerUser("toplevel_limitzero_viewer");
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/" + UUID.randomUUID() + "/comments?limit=0", viewer);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    void listReplies_limitZero_returns400() {
+        TestUser viewer = registerUser("replies_limitzero_viewer");
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/comments/" + UUID.randomUUID() + "/replies?limit=0", viewer);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
     }
 
     @Test

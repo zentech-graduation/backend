@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
 import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
@@ -61,6 +64,7 @@ public interface StoryApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Stories.ROOT)
     ResponseEntity<ApiResponse<StoryResponse>> createStory(
             @Valid @RequestBody CreateStoryRequest request);
@@ -77,6 +81,7 @@ public interface StoryApi {
                 responseCode = "200",
                 description = "Story feed tray; empty when nobody has active stories")
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.FEED)
     ResponseEntity<ApiResponse<List<StoryFeedItemResponse>>> getStoryFeed();
 
@@ -105,6 +110,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.USER_STORIES)
     ResponseEntity<ApiResponse<List<StoryResponse>>> listUserStories(
             @PathVariable("userId") UUID userId);
@@ -134,6 +140,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.BY_ID)
     ResponseEntity<ApiResponse<StoryResponse>> getStoryById(@PathVariable("storyId") UUID storyId);
 
@@ -161,6 +168,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.BY_ID)
     ResponseEntity<ApiResponse<Void>> deleteStory(@PathVariable("storyId") UUID storyId);
 
@@ -182,6 +190,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.VIEWS)
     ResponseEntity<ApiResponse<StoryViewActionResponse>> recordView(
             @PathVariable("storyId") UUID storyId);
@@ -211,6 +220,7 @@ public interface StoryApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.VIEWS)
     ResponseEntity<ApiResponse<CursorPageResponse<StoryViewerResponse>>> listViewers(
             @PathVariable("storyId") UUID storyId,
@@ -219,5 +229,7 @@ public interface StoryApi {
                     String cursor,
             @Parameter(description = "Page size, 1-100, default 20")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 }

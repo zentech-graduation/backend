@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
 import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
@@ -63,6 +66,7 @@ public interface MessageApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Messages.ROOT)
     ResponseEntity<ApiResponse<ConversationResponse>> createDirectConversation(
             @Valid @RequestBody CreateDirectConversationRequest request);
@@ -91,6 +95,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.GROUP)
     ResponseEntity<ApiResponse<ConversationResponse>> createGroupConversation(
             @Valid @RequestBody CreateGroupRequest request);
@@ -106,6 +111,7 @@ public interface MessageApi {
                 description = "Cursor page of conversation summaries")
     })
     @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Messages.ROOT)
     ResponseEntity<ApiResponse<CursorPageResponse<ConversationSummaryResponse>>>
             listMyConversations(
@@ -114,6 +120,8 @@ public interface MessageApi {
                             String cursor,
                     @Parameter(description = "Page size, 1-100, default 20")
                             @RequestParam(value = "limit", defaultValue = "20")
+                            @Min(1)
+                            @Max(100)
                             int limit);
 
     @Operation(
@@ -140,6 +148,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
     ResponseEntity<ApiResponse<ConversationResponse>> getConversation(
             @PathVariable("conversationId") UUID conversationId);
@@ -169,6 +178,7 @@ public interface MessageApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
     ResponseEntity<ApiResponse<ConversationResponse>> updateGroup(
             @PathVariable("conversationId") UUID conversationId,
@@ -191,6 +201,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
     ResponseEntity<ApiResponse<List<ParticipantResponse>>> listParticipants(
             @PathVariable("conversationId") UUID conversationId);
@@ -221,6 +232,7 @@ public interface MessageApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
     ResponseEntity<ApiResponse<Void>> addParticipants(
             @PathVariable("conversationId") UUID conversationId,
@@ -251,6 +263,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANT_BY_ID)
     ResponseEntity<ApiResponse<Void>> removeParticipant(
             @PathVariable("conversationId") UUID conversationId,
@@ -275,6 +288,7 @@ public interface MessageApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.LEAVE)
     ResponseEntity<ApiResponse<Void>> leaveConversation(
             @PathVariable("conversationId") UUID conversationId);
