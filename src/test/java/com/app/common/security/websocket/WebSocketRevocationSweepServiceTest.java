@@ -44,9 +44,10 @@ class WebSocketRevocationSweepServiceTest {
         when(registry.snapshot())
                 .thenReturn(
                         List.of(
-                                new WebSocketSessionRegistry.Entry(validSession, "valid-token"),
                                 new WebSocketSessionRegistry.Entry(
-                                        revokedSession, "revoked-token")));
+                                        validSession, "valid-token", null),
+                                new WebSocketSessionRegistry.Entry(
+                                        revokedSession, "revoked-token", null)));
         when(tokenPrincipalResolver.resolve("valid-token")).thenReturn(Optional.of(principal));
         when(tokenPrincipalResolver.resolve("revoked-token")).thenReturn(Optional.empty());
         when(revokedSession.isOpen()).thenReturn(true);
@@ -63,7 +64,7 @@ class WebSocketRevocationSweepServiceTest {
                 .thenReturn(
                         List.of(
                                 new WebSocketSessionRegistry.Entry(
-                                        revokedSession, "revoked-token")));
+                                        revokedSession, "revoked-token", null)));
         when(tokenPrincipalResolver.resolve("revoked-token")).thenReturn(Optional.empty());
         when(revokedSession.isOpen()).thenReturn(false);
 
@@ -87,11 +88,12 @@ class WebSocketRevocationSweepServiceTest {
         when(registry.snapshot())
                 .thenReturn(
                         List.of(
-                                new WebSocketSessionRegistry.Entry(validSession, "valid-token"),
                                 new WebSocketSessionRegistry.Entry(
-                                        throwingSession, "throwing-token"),
+                                        validSession, "valid-token", null),
                                 new WebSocketSessionRegistry.Entry(
-                                        trailingRevokedSession, "revoked-token")));
+                                        throwingSession, "throwing-token", null),
+                                new WebSocketSessionRegistry.Entry(
+                                        trailingRevokedSession, "revoked-token", null)));
         when(tokenPrincipalResolver.resolve("valid-token")).thenReturn(Optional.of(principal));
         when(tokenPrincipalResolver.resolve("throwing-token"))
                 .thenThrow(new RedisConnectionFailureException("redis timeout"));
@@ -112,7 +114,7 @@ class WebSocketRevocationSweepServiceTest {
                 .thenReturn(
                         List.of(
                                 new WebSocketSessionRegistry.Entry(
-                                        throwingSession, "throwing-token")));
+                                        throwingSession, "throwing-token", null)));
         when(tokenPrincipalResolver.resolve("throwing-token"))
                 .thenThrow(new RedisConnectionFailureException("redis timeout"));
 

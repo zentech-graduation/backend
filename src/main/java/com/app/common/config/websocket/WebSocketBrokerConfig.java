@@ -10,6 +10,7 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 
 import com.app.common.security.websocket.BrokerSendGuardInterceptor;
 import com.app.common.security.websocket.SessionTrackingWebSocketHandlerDecoratorFactory;
+import com.app.modules.comment.live.CommentLiveBlockFilterInterceptor;
 import com.app.modules.comment.live.CommentWebSocketAuthInterceptor;
 import com.app.modules.notification.live.NotificationWebSocketAuthInterceptor;
 
@@ -38,16 +39,19 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
     private final CommentWebSocketAuthInterceptor commentAuthInterceptor;
     private final NotificationWebSocketAuthInterceptor notificationAuthInterceptor;
     private final SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory;
+    private final CommentLiveBlockFilterInterceptor commentLiveBlockFilterInterceptor;
 
     public WebSocketBrokerConfig(
             BrokerSendGuardInterceptor brokerSendGuardInterceptor,
             CommentWebSocketAuthInterceptor commentAuthInterceptor,
             NotificationWebSocketAuthInterceptor notificationAuthInterceptor,
-            SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory) {
+            SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory,
+            CommentLiveBlockFilterInterceptor commentLiveBlockFilterInterceptor) {
         this.brokerSendGuardInterceptor = brokerSendGuardInterceptor;
         this.commentAuthInterceptor = commentAuthInterceptor;
         this.notificationAuthInterceptor = notificationAuthInterceptor;
         this.sessionTrackingDecoratorFactory = sessionTrackingDecoratorFactory;
+        this.commentLiveBlockFilterInterceptor = commentLiveBlockFilterInterceptor;
     }
 
     @Override
@@ -63,6 +67,11 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
         // rejected before any module-specific interceptor logic runs.
         registration.interceptors(
                 brokerSendGuardInterceptor, commentAuthInterceptor, notificationAuthInterceptor);
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(commentLiveBlockFilterInterceptor);
     }
 
     @Override

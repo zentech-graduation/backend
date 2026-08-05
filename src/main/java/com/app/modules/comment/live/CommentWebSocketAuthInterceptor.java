@@ -98,16 +98,14 @@ public class CommentWebSocketAuthInterceptor implements ChannelInterceptor {
         return message;
     }
 
+    // A missing post and a post hidden by block or private-follow rules throw the identical
+    // MessageDeliveryException message: the stealth block model requires a blocked subscriber to
+    // be unable to distinguish "post does not exist" from "post exists but you are blocked" from
+    // the STOMP ERROR frame, the same as every REST surface this interceptor's checks mirror.
     private void checkVisibility(Message<?> message, StompHeaderAccessor accessor, UUID postId) {
         UUID viewerId = resolveViewer(accessor);
-        Post post =
-                postRepository
-                        .findById(postId)
-                        .orElseThrow(
-                                () ->
-                                        new MessageDeliveryException(
-                                                message, "Post not found for subscription"));
-        if (!postVisibilityService.isVisibleTo(viewerId, post)) {
+        Post post = postRepository.findById(postId).orElse(null);
+        if (post == null || !postVisibilityService.isVisibleTo(viewerId, post)) {
             throw new MessageDeliveryException(message, "Subscription not permitted");
         }
     }

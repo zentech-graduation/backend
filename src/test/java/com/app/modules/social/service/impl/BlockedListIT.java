@@ -123,7 +123,9 @@ class BlockedListIT {
     }
 
     @Test
-    void getBlockedUsers_isBlockingAlwaysTrue_andMutualBlockSetsIsBlockedBy() {
+    void getBlockedUsers_isBlockingAlwaysTrue() {
+        // No isBlockedBy field exists on the wire at all under the stealth block model, mutual
+        // block or not - only "the viewer blocks this account" is ever disclosed.
         UUID viewer = insertUser("viewer");
         UUID oneWay = insertUser("oneWay");
         UUID mutual = insertUser("mutual");
@@ -137,9 +139,7 @@ class BlockedListIT {
         UserListItemResponse oneWayRow = rowFor(content, oneWay);
         UserListItemResponse mutualRow = rowFor(content, mutual);
         assertThat(oneWayRow.viewerState().isBlocking()).isTrue();
-        assertThat(oneWayRow.viewerState().isBlockedBy()).isFalse();
         assertThat(mutualRow.viewerState().isBlocking()).isTrue();
-        assertThat(mutualRow.viewerState().isBlockedBy()).isTrue();
     }
 
     @Test

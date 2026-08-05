@@ -307,8 +307,10 @@ public class PostServiceImpl implements PostService {
                         .findByIdAndDeletedAtIsNull(targetUserId)
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.NOT_FOUND, "User not found"));
+        // Stealth block model: matches assemblePublicProfile's reference behaviour - a block in
+        // either direction must be indistinguishable from targetUserId not existing.
         if (socialService.isBlockedBetween(viewerId, targetUserId)) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+            throw new AppException(ApiErrorCode.NOT_FOUND, "User not found");
         }
         boolean isOwner = viewerId.equals(targetUserId);
         if (target.isPrivate()

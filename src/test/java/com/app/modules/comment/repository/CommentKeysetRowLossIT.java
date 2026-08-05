@@ -67,14 +67,14 @@ class CommentKeysetRowLossIT {
         }
 
         List<UUID> seen = new ArrayList<>();
-        List<Comment> page = commentRepository.findFirstTopLevel(postId, page());
+        List<Comment> page = commentRepository.findFirstTopLevel(postId, user, page());
         int guard = 0;
         while (!page.isEmpty() && guard++ < 100) {
             page.forEach(c -> seen.add(c.getId()));
             Comment last = page.get(page.size() - 1);
             page =
                     commentRepository.findTopLevelBefore(
-                            postId, last.getCreatedAt(), last.getId(), page());
+                            postId, user, last.getCreatedAt(), last.getId(), page());
         }
 
         assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
@@ -91,14 +91,14 @@ class CommentKeysetRowLossIT {
         }
 
         List<UUID> seen = new ArrayList<>();
-        List<Comment> page = commentRepository.findFirstReplies(parentId, page());
+        List<Comment> page = commentRepository.findFirstReplies(parentId, user, page());
         int guard = 0;
         while (!page.isEmpty() && guard++ < 100) {
             page.forEach(c -> seen.add(c.getId()));
             Comment last = page.get(page.size() - 1);
             page =
                     commentRepository.findRepliesBefore(
-                            parentId, last.getCreatedAt(), last.getId(), page());
+                            parentId, user, last.getCreatedAt(), last.getId(), page());
         }
 
         assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
