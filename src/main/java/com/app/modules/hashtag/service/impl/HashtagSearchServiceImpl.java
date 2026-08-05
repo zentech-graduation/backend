@@ -53,16 +53,22 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
         NativeQuery nativeQuery =
                 NativeQuery.builder()
                         .withQuery(q -> q.match(m -> m.field("name.ngram").query(normalized)))
-                        .withPageable(new OffsetPageable(offset, effectiveLimit))
+                        .withPageable(new OffsetPageable(offset, effectiveLimit + 1))
                         .build();
         SearchHits<HashtagDocument> hits =
                 elasticsearchOperations.search(nativeQuery, HashtagDocument.class);
-        List<HashtagResponse> content =
+        List<HashtagResponse> allContent =
                 hits.getSearchHits().stream()
                         .map(SearchHit::getContent)
                         .map(hashtagMapper::fromDocument)
                         .toList();
-        return toPage(content, offset, effectiveLimit);
+        // Over-fetch by one and use its presence as the hasNextPage signal, rather than inferring
+        // it from a full page, which is indistinguishable from an exhausted result set on the last
+        // page and forces the client into one extra, always-empty request.
+        boolean hasNextPage = allContent.size() > effectiveLimit;
+        List<HashtagResponse> content =
+                hasNextPage ? allContent.subList(0, effectiveLimit) : allContent;
+        return toPage(content, offset, hasNextPage);
     }
 
     // Resilience4j fallback: invoked when the primary throws OR the circuit is open. Falls back to
@@ -84,11 +90,13 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
                 t);
         String normalized = normalizeQuery(query);
         int offset = OffsetCursorCodec.decode(cursor);
-        List<HashtagResponse> content =
-                hashtagRepository.searchByNameTrgm(normalized, limit, offset).stream()
+        List<HashtagResponse> allContent =
+                hashtagRepository.searchByNameTrgm(normalized, limit + 1, offset).stream()
                         .map(hashtagMapper::toResponse)
                         .toList();
-        return toPage(content, offset, limit);
+        boolean hasNextPage = allContent.size() > limit;
+        List<HashtagResponse> content = hasNextPage ? allContent.subList(0, limit) : allContent;
+        return toPage(content, offset, hasNextPage);
     }
 
     // Spring Data Elasticsearch translates transport/connection failures to
@@ -114,9 +122,9 @@ public class HashtagSearchServiceImpl implements HashtagSearchService {
     }
 
     private CursorPageResponse<HashtagResponse> toPage(
-            List<HashtagResponse> content, int offset, int limit) {
+            List<HashtagResponse> content, int offset, boolean hasNextPage) {
         String start = content.isEmpty() ? null : OffsetCursorCodec.encode(offset);
         String end = content.isEmpty() ? null : OffsetCursorCodec.encode(offset + content.size());
-        return CursorPageResponse.of(content, content.size() == limit, start, end, offset > 0);
+        return CursorPageResponse.of(content, hasNextPage, start, end, offset > 0);
     }
 }
