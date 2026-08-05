@@ -14,6 +14,9 @@ public enum ApiErrorCode {
     BAD_REQUEST("BAD_REQUEST", "Invalid request", HttpStatus.BAD_REQUEST),
     INVALID_CURSOR("INVALID_CURSOR", "Malformed pagination cursor", HttpStatus.BAD_REQUEST),
     MALFORMED_REQUEST_BODY("MALFORMED_REQUEST_BODY", "Request body could not be read", HttpStatus.BAD_REQUEST),
+    MISSING_REQUIRED_PARAMETER("MISSING_REQUIRED_PARAMETER", "A required request parameter is missing", HttpStatus.BAD_REQUEST),
+    UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", "Content-Type is not supported", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
+    NOT_ACCEPTABLE("NOT_ACCEPTABLE", "None of the Accept header's media types are supported", HttpStatus.NOT_ACCEPTABLE),
     NOT_FOUND("NOT_FOUND", "Requested resource was not found", HttpStatus.NOT_FOUND),
     FORBIDDEN("FORBIDDEN", "Access to this resource is forbidden", HttpStatus.FORBIDDEN),
     UNAUTHORIZED("UNAUTHORIZED", "Authentication is required", HttpStatus.UNAUTHORIZED),
@@ -50,7 +53,6 @@ public enum ApiErrorCode {
     SOCIAL_REQUEST_NOT_FOUND("SOCIAL_REQUEST_NOT_FOUND", "Follow request not found", HttpStatus.NOT_FOUND),
     SOCIAL_SELF_BLOCK("SOCIAL_SELF_BLOCK", "You cannot block yourself", HttpStatus.BAD_REQUEST),
     SOCIAL_ALREADY_BLOCKED("SOCIAL_ALREADY_BLOCKED", "User already blocked", HttpStatus.CONFLICT),
-    SOCIAL_BLOCKED("SOCIAL_BLOCKED", "This action is not allowed because of a block relationship", HttpStatus.FORBIDDEN),
 
     // Media
     MEDIA_INVALID_METADATA("MEDIA_INVALID_METADATA", "Media metadata is invalid", HttpStatus.BAD_REQUEST),

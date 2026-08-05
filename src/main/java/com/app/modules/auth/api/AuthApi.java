@@ -27,9 +27,18 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-/** OpenAPI contract for the authentication module. */
+/**
+ * OpenAPI contract for the authentication module.
+ *
+ * <p>Every anonymous operation below declares {@code security = {@SecurityRequirement(name = "")}}
+ * rather than {@code security = {}}. A truly empty array is indistinguishable from the annotation
+ * attribute's unset default, so springdoc silently falls back to the global {@code bearerAuth}
+ * requirement instead of emitting {@code security: []}. A single requirement with an empty scheme
+ * name is springdoc's documented idiom for an explicit override to no security.
+ */
 @Tag(
         name = "Authentication",
         description = "Registration, login, token management, and password flows")
@@ -41,7 +50,7 @@ public interface AuthApi {
             description =
                     "Creates a user account and records verification/welcome mail events. No"
                             + " tokens are issued — the client must call /verify-email before logging in.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
@@ -54,7 +63,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
+                responseCode = "400",
                 description = "Validation failure",
                 content =
                         @Content(
@@ -79,7 +88,7 @@ public interface AuthApi {
                     "Authenticates credentials by email or username and returns an access/refresh"
                             + " token pair. The identifier field accepts either an email address or"
                             + " a username.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -92,7 +101,7 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
+                responseCode = "400",
                 description = "Validation failure",
                 content =
                         @Content(
@@ -117,7 +126,7 @@ public interface AuthApi {
             description =
                     "Rotates the supplied refresh token and returns a new access/refresh token"
                             + " pair.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -178,7 +187,7 @@ public interface AuthApi {
                     "Marks the account's email as verified using the one-time token from the"
                             + " verification link, then issues a session pair so the user is"
                             + " logged in immediately.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -217,7 +226,7 @@ public interface AuthApi {
             description =
                     "Records a verification mail event. Always returns 200 to prevent account"
                             + " enumeration.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -244,7 +253,7 @@ public interface AuthApi {
             description =
                     "Records a password-reset mail event for the supplied email. Always returns"
                             + " 200 to prevent account enumeration.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -267,21 +276,14 @@ public interface AuthApi {
             summary = "Reset password",
             description =
                     "Consumes the one-time reset token and replaces the account's password hash.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Password updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "Token invalid or expired",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
-                description = "Validation failure",
+                description = "Validation failure, or token invalid or expired",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -305,21 +307,14 @@ public interface AuthApi {
                     "Consumes the one-time exchange code issued by the OAuth2 success handler and"
                             + " returns a standard access/refresh token pair. The code is valid for"
                             + " 120 seconds and is deleted on first use.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Exchange successful — access + refresh tokens returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "Exchange code invalid or expired",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
-                description = "Validation failure",
+                description = "Validation failure, or exchange code invalid or expired",
                 content =
                         @Content(
                                 mediaType = "application/json",

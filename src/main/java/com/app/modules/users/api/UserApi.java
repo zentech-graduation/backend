@@ -36,7 +36,15 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-/** OpenAPI contract for the users module. */
+/**
+ * OpenAPI contract for the users module.
+ *
+ * <p>Both anonymous operations below declare {@code security = {@SecurityRequirement(name = "")}}
+ * rather than {@code security = {}}. A truly empty array is indistinguishable from the annotation
+ * attribute's unset default, so springdoc silently falls back to the global {@code bearerAuth}
+ * requirement instead of emitting {@code security: []}. A single requirement with an empty scheme
+ * name is springdoc's documented idiom for an explicit override to no security.
+ */
 @Tag(name = "Users", description = "User profile and settings management")
 @RequestMapping(ApiConstants.Users.ROOT)
 public interface UserApi {
@@ -92,7 +100,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
+                responseCode = "400",
                 description = "Validation failure",
                 content =
                         @Content(
@@ -116,7 +124,7 @@ public interface UserApi {
             description =
                     "Returns the public profile of the specified user. Private accounts return"
                             + " 401. Counter fields are omitted for unauthenticated callers.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -202,7 +210,7 @@ public interface UserApi {
                             + " account blocked with respect to the caller all return 404"
                             + " identically. Counter fields are omitted for unauthenticated"
                             + " callers.",
-            security = {})
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -289,7 +297,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
+                responseCode = "400",
                 description = "Validation failure",
                 content =
                         @Content(

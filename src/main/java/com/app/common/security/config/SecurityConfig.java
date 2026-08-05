@@ -76,7 +76,7 @@ public class SecurityConfig {
     };
 
     private static final String[] PUBLIC_INFRA_PATHS = {
-        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
+        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error",
     };
 
     private final JwtProperties jwtProperties;
@@ -197,8 +197,15 @@ public class SecurityConfig {
     }
 
     /**
-     * Opens health and API-documentation endpoints to all callers; restricts remaining actuator
-     * endpoints to ADMIN.
+     * Opens health, API-documentation, and the error-dispatch endpoints to all callers; restricts
+     * remaining actuator endpoints to ADMIN.
+     *
+     * <p>{@code /error} must be reachable regardless of the original request's authentication
+     * state: Spring's ERROR dispatch (used when a {@code HandlerExceptionResolver} falls through to
+     * {@code response.sendError(...)}) re-enters this filter chain as a fresh, unauthenticated
+     * request. Without this rule that dispatch was itself rejected with 401, masking the original
+     * status - most visibly turning a 406 content-negotiation failure into a 401 that looks like an
+     * expired session.
      */
     private void configureInfrastructureEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry

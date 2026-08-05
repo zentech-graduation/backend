@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
 import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
@@ -76,6 +77,7 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping
     ResponseEntity<ApiResponse<ReportResponse>> submitReport(
             @Valid @RequestBody CreateReportRequest request);
@@ -106,6 +108,7 @@ public interface ReportApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping
     ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> listReports(
             @RequestParam(required = false) ReportStatus status,
@@ -139,6 +142,7 @@ public interface ReportApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Reports.PENDING)
     ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getPendingReports(
             @RequestParam(required = false) String cursor,
@@ -174,6 +178,7 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Reports.BY_ID)
     ResponseEntity<ApiResponse<ReportResponse>> getReport(@PathVariable("reportId") UUID reportId);
 
@@ -224,6 +229,7 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Reports.STATUS)
     ResponseEntity<ApiResponse<ReportResponse>> updateStatus(
             @PathVariable("reportId") UUID reportId,

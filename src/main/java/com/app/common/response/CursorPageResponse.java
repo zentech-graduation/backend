@@ -2,6 +2,7 @@ package com.app.common.response;
 
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -31,7 +32,11 @@ public class CursorPageResponse<T> {
     public static class PageInfo {
         private boolean hasNextPage;
         private boolean hasPreviousPage;
+
+        @Schema(nullable = true)
         private String startCursor;
+
+        @Schema(nullable = true)
         private String endCursor;
     }
 

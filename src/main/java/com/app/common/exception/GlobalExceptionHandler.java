@@ -7,12 +7,16 @@ import jakarta.validation.ConstraintViolationException;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -116,6 +120,40 @@ public class GlobalExceptionHandler {
         log.warn("Type mismatch on request parameter '{}'", ex.getName());
         return ResponseEntity.status(ApiErrorCode.BAD_REQUEST.getHttpStatus())
                 .body(ApiResponse.failure(ApiErrorCode.BAD_REQUEST));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<?>> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException ex) {
+        // Client input error, not a server fault: WARN without a stack trace.
+        log.warn("Unsupported Content-Type: {}", ex.getContentType());
+        return ResponseEntity.status(ApiErrorCode.UNSUPPORTED_MEDIA_TYPE.getHttpStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ApiResponse.failure(ApiErrorCode.UNSUPPORTED_MEDIA_TYPE));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ApiResponse<?>> handleNotAcceptable(
+            HttpMediaTypeNotAcceptableException ex) {
+        // The Content-Type is set explicitly rather than negotiated: the caller's Accept header
+        // is exactly what this handler exists to reject, so honouring it here would recreate the
+        // failure the handler is supposed to resolve. Writing JSON regardless is what lets this
+        // response reach the caller through the normal advice mechanism instead of falling
+        // through to Spring's response.sendError(...), which re-enters the security filter chain
+        // on the /error ERROR dispatch and answers 401 instead of 406.
+        log.warn("No acceptable media type for Accept header");
+        return ResponseEntity.status(ApiErrorCode.NOT_ACCEPTABLE.getHttpStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ApiResponse.failure(ApiErrorCode.NOT_ACCEPTABLE));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<?>> handleMissingParameter(
+            MissingServletRequestParameterException ex) {
+        // Client input error, not a server fault: WARN without a stack trace.
+        log.warn("Missing required request parameter '{}'", ex.getParameterName());
+        return ResponseEntity.status(ApiErrorCode.MISSING_REQUIRED_PARAMETER.getHttpStatus())
+                .body(ApiResponse.failure(ApiErrorCode.MISSING_REQUIRED_PARAMETER));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
