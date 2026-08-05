@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Security
+- Closed several remaining ways a blocked party's identity could leak: the live comment feed now filters each subscriber individually instead of broadcasting to everyone watching a post, notification listings and unread counts exclude blocked actors, mentioning a blocked account no longer delivers a notification, and the last few endpoints that confirmed a block's existence now respond identically to a nonexistent account instead.
+- Email uniqueness is now case-insensitive, closing a duplicate-account gap equivalent to the one already closed for usernames.
+- A forged pagination cursor for the conversations list could overflow the underlying timestamp column and return a server error instead of a clean validation failure; it now uses the same bounded cursor format as every other paginated list.
+- A concurrent duplicate unfollow, follow-request rejection, unblock, unlike, or unsave request could return a server error instead of a not-found response; all five now resolve cleanly under concurrent requests.
+- Ten paginated endpoints across posts, comments, conversations, and stories previously accepted an unbounded or zero page size; one of them could be driven to a server error this way. All paginated endpoints now enforce the same 1-100 page size bound.
 - A pagination cursor obtained from one list endpoint (for example, the followers list) can no longer be replayed against a different list endpoint; cursors are now bound to the endpoint that issued them. Any cursor obtained before this change is rejected once; affected clients simply restart pagination from the first page.
 - The comment and notification WebSocket endpoints now deny all cross-origin connections by default when no allowed origins are configured, matching the existing REST behavior. A blank configuration previously admitted any localhost-scoped browser origin on these two endpoints only.
 - A user blocked from viewing a post could still register as a live watcher of that post's comment activity over WebSocket by sending watch or heartbeat frames directly, bypassing the same visibility check already enforced when subscribing; both frame types are now authorized identically, and an unrecognized comment-topic subscription is now rejected by default instead of allowed through.
@@ -18,6 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- Several published API responses documented the wrong status code (422 where the API actually returns 400) or omitted responses the API actually returns (401, 403, 409); documentation now matches actual behavior, and every field that can genuinely be null is now marked nullable instead of only a previously observed subset.
+- Hashtag search now accepts flat query parameters instead of requiring a client to bind an object, matching its documented contract.
+- A comment's timestamps could render as null immediately after creation; comment creation now returns the fully persisted values.
+- Requests with an unsupported or unacceptable content type, or missing a required query parameter, now return the correct 415/406/400 response instead of the platform default error page, which no longer requires authentication to reach.
 - Every successful API response in the published API documentation now declares its actual response body type instead of an untyped envelope or the wrong schema, so client code can be generated correctly from it; the logout endpoint's documented response is also corrected to match its actual empty body.
 - Every cursor-paginated endpoint's published API documentation now declares the 400 response returned for a malformed cursor, and every request-body-accepting endpoint's documentation now declares the 400 response returned for a malformed body; most previously did not.
 - The hourly hashtag trending snapshot job now reuses the same time window across runs within the same hour instead of creating an unbounded, ever-growing set of near-duplicate snapshot rows on every run.
@@ -25,10 +34,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Closed a latent inconsistency between the case-insensitive username uniqueness constraint and the documented soft-delete retention policy; no application code path could reach the affected state, but the database now enforces the same rule the application already assumed.
 
 ### Tests
+- Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, and the page size bound on every newly-covered endpoint.
 - Added regression coverage proving cursor pagination for notifications, reports, admin actions, and conversations does not drop or duplicate rows when many items share the same sort timestamp, matching coverage already in place for other paginated lists.
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
 ### Documentation
+- Recorded that follower and following counts are visible to everyone regardless of the viewer's own blocks, so comparing a count against a filtered list can reveal that a block exists somewhere in that list, as a known and accepted tradeoff rather than an oversight.
 - Corrected internal module documentation for the hashtag module, which was still marked as unimplemented scaffolding despite being fully implemented.
 - Corrected internal module documentation for the message module: conversation and participant management is implemented, but sending, listing, and reacting to messages is not, since no send-message endpoint exists yet.
 - Corrected internal documentation to state that account soft delete, for users specifically, is a documented but unimplemented retention policy; no code path currently sets it.
