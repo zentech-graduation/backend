@@ -221,6 +221,22 @@ class AuthControllerIT {
     }
 
     @Test
+    void register_duplicateEmailDifferentCase_returns409() {
+        String email = uniqueEmail("dupcase");
+        postJson("/api/v1/auth/register", registerBody("user_dupcase1", email, "password1"));
+
+        String upperCaseVariant =
+                email.substring(0, email.indexOf('@')).toUpperCase()
+                        + email.substring(email.indexOf('@'));
+        ResponseEntity<Map> second =
+                postJson(
+                        "/api/v1/auth/register",
+                        registerBody("user_dupcase2", upperCaseVariant, "password1"));
+
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
     void register_invalidEmail_returns400() {
         ResponseEntity<Map> response =
                 postJson(

@@ -107,7 +107,7 @@ public class CustomOidcUserService extends OidcUserService {
                 throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
             }
 
-            Optional<User> existingByEmail = userRepository.findByEmail(email);
+            Optional<User> existingByEmail = userRepository.findByEmailIgnoreCase(email);
 
             if (existingByEmail.isPresent()) {
                 User found = existingByEmail.get();
