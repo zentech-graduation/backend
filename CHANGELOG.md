@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- A user's, post's, or comment's `updated_at` value returned by the API could be a few milliseconds off from what was actually persisted, because both the application and the database independently computed it on every update. The database is now the sole source of truth for this value.
 - Several published API responses documented the wrong status code (422 where the API actually returns 400) or omitted responses the API actually returns (401, 403, 409); documentation now matches actual behavior, and every field that can genuinely be null is now marked nullable instead of only a previously observed subset.
 - Hashtag search now accepts flat query parameters instead of requiring a client to bind an object, matching its documented contract.
 - A comment's timestamps could render as null immediately after creation; comment creation now returns the fully persisted values.
@@ -34,7 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Closed a latent inconsistency between the case-insensitive username uniqueness constraint and the documented soft-delete retention policy; no application code path could reach the affected state, but the database now enforces the same rule the application already assumed.
 
 ### Tests
-- Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, and the page size bound on every newly-covered endpoint.
+- Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, the page size bound on every newly-covered endpoint, and the single-writer `updated_at` fix.
 - Added regression coverage proving cursor pagination for notifications, reports, admin actions, and conversations does not drop or duplicate rows when many items share the same sort timestamp, matching coverage already in place for other paginated lists.
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
