@@ -8,6 +8,7 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
+import com.app.common.security.websocket.BrokerSendGuardInterceptor;
 import com.app.common.security.websocket.SessionTrackingWebSocketHandlerDecoratorFactory;
 import com.app.modules.comment.live.CommentWebSocketAuthInterceptor;
 import com.app.modules.notification.live.NotificationWebSocketAuthInterceptor;
@@ -33,14 +34,17 @@ import com.app.modules.notification.live.NotificationWebSocketAuthInterceptor;
         "${app.comment.live.enabled:false} or ${app.notification.live.enabled:false}")
 public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
 
+    private final BrokerSendGuardInterceptor brokerSendGuardInterceptor;
     private final CommentWebSocketAuthInterceptor commentAuthInterceptor;
     private final NotificationWebSocketAuthInterceptor notificationAuthInterceptor;
     private final SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory;
 
     public WebSocketBrokerConfig(
+            BrokerSendGuardInterceptor brokerSendGuardInterceptor,
             CommentWebSocketAuthInterceptor commentAuthInterceptor,
             NotificationWebSocketAuthInterceptor notificationAuthInterceptor,
             SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory) {
+        this.brokerSendGuardInterceptor = brokerSendGuardInterceptor;
         this.commentAuthInterceptor = commentAuthInterceptor;
         this.notificationAuthInterceptor = notificationAuthInterceptor;
         this.sessionTrackingDecoratorFactory = sessionTrackingDecoratorFactory;
@@ -49,12 +53,16 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/topic");
-        registry.setApplicationDestinationPrefixes("/app");
+        registry.setApplicationDestinationPrefixes(
+                BrokerSendGuardInterceptor.APPLICATION_DESTINATION_PREFIX);
     }
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(commentAuthInterceptor, notificationAuthInterceptor);
+        // brokerSendGuardInterceptor runs first so a forged SEND at a /topic/** destination is
+        // rejected before any module-specific interceptor logic runs.
+        registration.interceptors(
+                brokerSendGuardInterceptor, commentAuthInterceptor, notificationAuthInterceptor);
     }
 
     @Override
