@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -29,6 +30,21 @@ public interface PostSaveRepository extends JpaRepository<PostSave, PostSaveId> 
                     + " WHERE ps.id.userId = :viewerId AND ps.id.postId IN :postIds")
     List<UUID> findSavedPostIds(
             @Param("viewerId") UUID viewerId, @Param("postIds") Collection<UUID> postIds);
+
+    /**
+     * Deletes a single save, returning the affected-row count so the caller can distinguish an
+     * actual unsave from a no-op instead of loading the row first and calling {@code
+     * delete(entity)}, which raises {@link
+     * org.springframework.orm.ObjectOptimisticLockingFailureException} when a concurrent request
+     * already removed the same row.
+     *
+     * @param userId user removing the save
+     * @param postId post being unsaved
+     * @return number of rows deleted (0 or 1)
+     */
+    @Modifying
+    @Query("DELETE FROM PostSave ps WHERE ps.id.userId = :userId AND ps.id.postId = :postId")
+    int deleteByUserAndPost(@Param("userId") UUID userId, @Param("postId") UUID postId);
 
     /**
      * First keyset page of a user's saves, newest first.
