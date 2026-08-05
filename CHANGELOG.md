@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- Post and hashtag search reported another page was available whenever the current page happened to be exactly full, even on the last page, forcing an extra request that always came back empty; this now matches the already-correct behavior of user search.
+- The documented 401 on the user profile lookup for a private account has been removed; the endpoint always returns 200, with counter fields null when the caller cannot see them.
 - A user's, post's, or comment's `updated_at` value returned by the API could be a few milliseconds off from what was actually persisted, because both the application and the database independently computed it on every update. The database is now the sole source of truth for this value.
 - Several published API responses documented the wrong status code (422 where the API actually returns 400) or omitted responses the API actually returns (401, 403, 409); documentation now matches actual behavior, and every field that can genuinely be null is now marked nullable instead of only a previously observed subset.
 - Hashtag search now accepts flat query parameters instead of requiring a client to bind an object, matching its documented contract.
