@@ -122,23 +122,20 @@ public interface UserApi {
     @Operation(
             summary = "Get a user's public profile",
             description =
-                    "Returns the public profile of the specified user. Private accounts return"
-                            + " 401. Counter fields are omitted for unauthenticated callers.",
+                    "Returns the public profile of the specified user, always with 200. The"
+                            + " follower, following, and post counts are null unless the caller is"
+                            + " the owner, an accepted follower of a private account, or any"
+                            + " authenticated caller of a public account.",
             security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Profile returned"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "401",
-                description = "Target account is private",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description =
+                        "Profile returned; counter fields are null when the caller is not"
+                                + " entitled to see them"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "User not found",
+                description = "User not found, soft-deleted, or blocked in either direction",
                 content =
                         @Content(
                                 mediaType = "application/json",
