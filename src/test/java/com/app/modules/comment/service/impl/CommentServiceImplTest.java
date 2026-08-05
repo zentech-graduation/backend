@@ -223,7 +223,7 @@ class CommentServiceImplTest {
                         .userId(actorId)
                         .depth((short) 0)
                         .build();
-        when(commentRepository.save(any())).thenReturn(saved);
+        when(commentRepository.saveAndFlush(any())).thenReturn(saved);
         when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CommentResponse response = service.createComment(actorId, createRequest(null), null);
@@ -252,7 +252,7 @@ class CommentServiceImplTest {
                         .userId(actorId)
                         .depth((short) 0)
                         .build();
-        when(commentRepository.save(any())).thenReturn(saved);
+        when(commentRepository.saveAndFlush(any())).thenReturn(saved);
         when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
         when(commentUserRepository.findByUsernameAndDeletedAtIsNull("unrelated"))
                 .thenReturn(
