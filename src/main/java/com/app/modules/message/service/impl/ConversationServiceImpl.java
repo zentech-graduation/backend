@@ -1,10 +1,8 @@
 package com.app.modules.message.service.impl;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -24,6 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.config.MessageProperties;
 import com.app.modules.message.dto.request.AddParticipantsRequest;
@@ -374,9 +376,13 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+    // Stealth block model: matches assemblePublicProfile's reference behaviour - a block in
+    // either direction must be indistinguishable from userB not existing, not a status that
+    // confirms a block relationship. Shared by direct-conversation creation, group creation, and
+    // adding a participant, so a blocked target looks the same across all three.
     private void assertNotBlocked(UUID userA, UUID userB) {
         if (socialService.isBlockedBetween(userA, userB)) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+            throw new AppException(ApiErrorCode.NOT_FOUND, "Target user not found");
         }
     }
 
@@ -477,39 +483,37 @@ public class ConversationServiceImpl implements ConversationService {
     // The conversation list orders by last_message_at, a mutable key that advances whenever a new
     // message arrives, so a conversation can shift across a page boundary and be seen twice or
     // missed. That instability is intrinsic to any most-recently-active ordering and is accepted;
-    // the (last_message_at, id) tuple only breaks exact ties, not the moving key. The cursor stays
-    // bespoke rather than adopting the shared codec because it must encode a null last_message_at
-    // for the NULLS-LAST group, which the shared (epoch-micros, uuid) cursor cannot represent.
+    // the (last_message_at, id) tuple only breaks exact ties, not the moving key.
+    //
+    // last_message_at is nullable (NULLS LAST group for a conversation with no message yet), which
+    // the shared Cursor's sortValueMicros cannot represent directly since it is a primitive long.
+    // NULL_LAST_MESSAGE_SENTINEL stands in for it instead of a bespoke hand-rolled codec: the
+    // server is the only issuer of valid cursors and never assigns a real conversation's
+    // last_message_at to exactly Long.MIN_VALUE, so the sentinel is unambiguous, and reusing
+    // CursorCodec/TimeCursors bounds the decoded value to a long's range - closing the defect a
+    // free-text OffsetDateTime.parse had, where a forged out-of-range year overflowed at JDBC
+    // bind time instead of failing cleanly at decode time.
+    private static final long NULL_LAST_MESSAGE_SENTINEL = Long.MIN_VALUE;
+
     private String encodeCursor(Conversation conversation) {
-        // A null lastMessageAt is preserved as-is (empty segment), never substituted with a
-        // sentinel instant: OffsetDateTime.MIN falls far outside PostgreSQL's timestamptz range
-        // and previously caused a bind-time "date/time field value out of range" 500 on decode.
-        String sortKey =
+        long sortValue =
                 conversation.getLastMessageAt() != null
-                        ? conversation.getLastMessageAt().toString()
-                        : "";
-        String raw = sortKey + "|" + conversation.getId();
-        return Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+                        ? TimeCursors.toMicros(conversation.getLastMessageAt())
+                        : NULL_LAST_MESSAGE_SENTINEL;
+        return CursorCodec.encode(
+                new Cursor(sortValue, conversation.getId()), CursorScope.CONVERSATIONS);
     }
 
     private ConversationCursor decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
+        Cursor decoded = CursorCodec.decode(cursor, CursorScope.CONVERSATIONS);
+        if (decoded == null) {
             return new ConversationCursor(null, null);
         }
-        try {
-            String raw = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-            String[] parts = raw.split("\\|", 2);
-            if (parts.length != 2) {
-                throw new IllegalArgumentException("Cursor must contain lastMessageAt and id");
-            }
-            OffsetDateTime lastMessageAt =
-                    parts[0].isEmpty() ? null : OffsetDateTime.parse(parts[0]);
-            return new ConversationCursor(lastMessageAt, UUID.fromString(parts[1]));
-        } catch (RuntimeException e) {
-            throw new AppException(ApiErrorCode.INVALID_CURSOR);
-        }
+        OffsetDateTime lastMessageAt =
+                decoded.sortValueMicros() == NULL_LAST_MESSAGE_SENTINEL
+                        ? null
+                        : TimeCursors.fromMicros(decoded.sortValueMicros());
+        return new ConversationCursor(lastMessageAt, decoded.id());
     }
 
     private record ConversationCursor(OffsetDateTime lastMessageAt, UUID conversationId) {

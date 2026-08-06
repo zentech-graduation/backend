@@ -21,6 +21,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserSummaryResponse;
@@ -306,8 +307,10 @@ public class PostServiceImpl implements PostService {
                         .findByIdAndDeletedAtIsNull(targetUserId)
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.NOT_FOUND, "User not found"));
+        // Stealth block model: matches assemblePublicProfile's reference behaviour - a block in
+        // either direction must be indistinguishable from targetUserId not existing.
         if (socialService.isBlockedBetween(viewerId, targetUserId)) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+            throw new AppException(ApiErrorCode.NOT_FOUND, "User not found");
         }
         boolean isOwner = viewerId.equals(targetUserId);
         if (target.isPrivate()
@@ -316,7 +319,7 @@ public class PostServiceImpl implements PostService {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
         int pageSize = normalizeLimit(size);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.POST_USER_POSTS);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Post> posts =
                 decoded == null
@@ -337,21 +340,26 @@ public class PostServiceImpl implements PostService {
         List<PostResponse> content = postResponseAssembler.assemble(viewerId, posts);
         Post first = posts.get(0);
         Post last = posts.get(posts.size() - 1);
-        String startCursor = encodeCursor(first.getCreatedAt(), first.getId());
-        String endCursor = encodeCursor(last.getCreatedAt(), last.getId());
+        String startCursor =
+                encodeCursor(first.getCreatedAt(), first.getId(), CursorScope.POST_USER_POSTS);
+        String endCursor =
+                encodeCursor(last.getCreatedAt(), last.getId(), CursorScope.POST_USER_POSTS);
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<FeedPostResponse> getFeed(UUID viewerId, String cursor, int size) {
+        // Decoded before the empty-follow-set short-circuit below so a malformed cursor is
+        // rejected the same way regardless of how many accounts the viewer follows, instead of
+        // silently returning an empty page for a viewer who follows nobody.
+        Cursor decoded = decodeCursor(cursor, CursorScope.POST_FEED);
         List<UUID> authorIds = socialService.getAcceptedFollowingExcludingBlocks(viewerId);
         int pageSize = normalizeLimit(size);
         if (authorIds.isEmpty()) {
             return CursorPageResponse.of(
                     Collections.emptyList(), false, null, null, cursor != null);
         }
-        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Post> posts =
                 decoded == null
@@ -372,8 +380,9 @@ public class PostServiceImpl implements PostService {
         List<FeedPostResponse> content = postResponseAssembler.assembleFeed(viewerId, posts);
         Post first = posts.get(0);
         Post last = posts.get(posts.size() - 1);
-        String startCursor = encodeCursor(first.getCreatedAt(), first.getId());
-        String endCursor = encodeCursor(last.getCreatedAt(), last.getId());
+        String startCursor =
+                encodeCursor(first.getCreatedAt(), first.getId(), CursorScope.POST_FEED);
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId(), CursorScope.POST_FEED);
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
@@ -389,7 +398,7 @@ public class PostServiceImpl implements PostService {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
         int pageSize = normalizeLimit(size);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.POST_EDIT_HISTORY);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostEditHistory> rows =
                 decoded == null
@@ -416,8 +425,10 @@ public class PostServiceImpl implements PostService {
                         .toList();
         PostEditHistory first = rows.get(0);
         PostEditHistory last = rows.get(rows.size() - 1);
-        String startCursor = encodeCursor(first.getEditedAt(), first.getId());
-        String endCursor = encodeCursor(last.getEditedAt(), last.getId());
+        String startCursor =
+                encodeCursor(first.getEditedAt(), first.getId(), CursorScope.POST_EDIT_HISTORY);
+        String endCursor =
+                encodeCursor(last.getEditedAt(), last.getId(), CursorScope.POST_EDIT_HISTORY);
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
@@ -529,14 +540,14 @@ public class PostServiceImpl implements PostService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time, UUID id) {
+    private String encodeCursor(OffsetDateTime time, UUID id, String scope) {
         if (time == null || id == null) {
             return null;
         }
-        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), id));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), id), scope);
     }
 
-    private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+    private Cursor decodeCursor(String cursor, String scope) {
+        return CursorCodec.decode(cursor, scope);
     }
 }

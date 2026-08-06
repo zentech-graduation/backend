@@ -38,6 +38,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.user.UserPrincipal;
@@ -55,7 +56,6 @@ import com.app.modules.comment.repository.CommentLikeRepository;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.comment.repository.CommentUserRepository;
 import com.app.modules.comment.service.CommentAccessPolicyService;
-import com.app.modules.comment.service.CommentCacheService;
 import com.app.modules.comment.service.CommentModerationService;
 import com.app.modules.comment.service.CommentModerationService.ModerationResult;
 import com.app.modules.comment.service.CommentViewerStateService;
@@ -63,6 +63,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.service.UserSummaryService;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -77,7 +78,7 @@ class CommentServiceImplTest {
     // A literal cursor in the wire format issued before the pinned block existed. Hardcoded rather
     // than round-tripped through the encoder so a format change cannot silently pass this test.
     private static final String SECOND_PAGE_CURSOR =
-            "MTc2NzIyNTYwMDAwMDAwMDoxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTE";
+            "Y210OjE3NjcyMjU2MDAwMDAwMDA6MTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTEx";
 
     @Mock private CommentRepository commentRepository;
     @Mock private CommentLikeRepository commentLikeRepository;
@@ -90,11 +91,11 @@ class CommentServiceImplTest {
     @Mock private OutboxService outboxService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ObjectMapper objectMapper;
-    @Mock private CommentCacheService cacheService;
     @Mock private CommentMetrics metrics;
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private UserSummaryService userSummaryService;
     @Mock private CommentViewerStateService commentViewerStateService;
+    @Mock private BlockRepository blockRepository;
 
     private CommentServiceImpl service;
 
@@ -118,11 +119,11 @@ class CommentServiceImplTest {
                         new CommentProperties(0, 24, java.util.List.of()),
                         redisTemplate,
                         objectMapper,
-                        cacheService,
                         metrics,
                         postVisibilityService,
                         userSummaryService,
-                        commentViewerStateService);
+                        commentViewerStateService,
+                        blockRepository);
         lenient()
                 .when(metrics.createLatency())
                 .thenReturn(new SimpleMeterRegistry().timer("comment.create.latency"));
@@ -222,7 +223,7 @@ class CommentServiceImplTest {
                         .userId(actorId)
                         .depth((short) 0)
                         .build();
-        when(commentRepository.save(any())).thenReturn(saved);
+        when(commentRepository.saveAndFlush(any())).thenReturn(saved);
         when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CommentResponse response = service.createComment(actorId, createRequest(null), null);
@@ -236,7 +237,59 @@ class CommentServiceImplTest {
                         eq(commentId),
                         eq(actorId),
                         anyMap());
-        verify(cacheService).pushToFront(eq(postId), any());
+    }
+
+    @Test
+    void createComment_mentionsBlockedUser_silentlyExcludesFromMentionedUserIds() {
+        UUID unrelatedUserId = UUID.randomUUID();
+        UUID blockedUserId = UUID.randomUUID();
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(moderationService.check(any())).thenReturn(ModerationResult.approved());
+        Comment saved =
+                Comment.builder()
+                        .id(commentId)
+                        .postId(postId)
+                        .userId(actorId)
+                        .depth((short) 0)
+                        .build();
+        when(commentRepository.saveAndFlush(any())).thenReturn(saved);
+        when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(commentUserRepository.findByUsernameAndDeletedAtIsNull("unrelated"))
+                .thenReturn(
+                        Optional.of(
+                                com.app.modules.users.entity.User.builder()
+                                        .id(unrelatedUserId)
+                                        .username("unrelated")
+                                        .build()));
+        when(commentUserRepository.findByUsernameAndDeletedAtIsNull("blocked"))
+                .thenReturn(
+                        Optional.of(
+                                com.app.modules.users.entity.User.builder()
+                                        .id(blockedUserId)
+                                        .username("blocked")
+                                        .build()));
+        when(blockRepository.existsBetween(actorId, unrelatedUserId)).thenReturn(false);
+        when(blockRepository.existsBetween(actorId, blockedUserId)).thenReturn(true);
+        CreateCommentRequest request =
+                new CreateCommentRequest(postId, null, "hi @unrelated and @blocked");
+
+        service.createComment(actorId, request, null);
+
+        ArgumentCaptor<java.util.Map> dataCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        verify(outboxService)
+                .enqueue(
+                        eq(CommentEventTypes.COMMENT_CREATED_V1),
+                        eq(CommentEventTypes.COMMENT_CREATED_V1),
+                        eq("comment"),
+                        eq(commentId),
+                        eq(actorId),
+                        dataCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<String> mentionedUserIds =
+                (List<String>) dataCaptor.getValue().get("mentionedUserIds");
+        assertThat(mentionedUserIds)
+                .containsExactly(unrelatedUserId.toString())
+                .doesNotContain(blockedUserId.toString());
     }
 
     @Test
@@ -322,7 +375,6 @@ class CommentServiceImplTest {
                         eq(commentId),
                         eq(actorId),
                         anyMap());
-        verify(cacheService).invalidate(postId);
     }
 
     @Test
@@ -354,7 +406,6 @@ class CommentServiceImplTest {
                         eq(commentId),
                         eq(actorId),
                         anyMap());
-        verify(cacheService).invalidate(postId);
     }
 
     @Test
@@ -529,8 +580,9 @@ class CommentServiceImplTest {
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build());
-        when(commentRepository.findTopLikedTopLevel(eq(postId), any())).thenReturn(List.of());
-        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any()))
+        when(commentRepository.findTopLikedTopLevel(eq(postId), any(), any()))
+                .thenReturn(List.of());
+        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(rows);
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
@@ -552,8 +604,9 @@ class CommentServiceImplTest {
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build(),
                         Comment.builder().id(UUID.randomUUID()).postId(postId).build());
-        when(commentRepository.findTopLikedTopLevel(eq(postId), any())).thenReturn(List.of());
-        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any()))
+        when(commentRepository.findTopLikedTopLevel(eq(postId), any(), any()))
+                .thenReturn(List.of());
+        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(rows);
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
@@ -621,7 +674,8 @@ class CommentServiceImplTest {
 
         service.listTopLevelComments(actorId, postId, null, 5);
 
-        verify(commentRepository).findFirstTopLevelExcluding(eq(postId), excluded.capture(), any());
+        verify(commentRepository)
+                .findFirstTopLevelExcluding(eq(postId), excluded.capture(), any(), any());
         assertThat(excluded.getValue())
                 .containsExactlyElementsOf(pinned.stream().map(Comment::getId).toList());
     }
@@ -642,15 +696,15 @@ class CommentServiceImplTest {
     void listTopLevelComments_withCursor_queriesNeitherThePinnedNorTheExcludingStatement() {
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any()))
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any()))
                 .thenReturn(comments(2));
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
 
-        verify(commentRepository, never()).findTopLikedTopLevel(any(), any());
-        verify(commentRepository, never()).findFirstTopLevelExcluding(any(), any(), any());
+        verify(commentRepository, never()).findTopLikedTopLevel(any(), any(), any());
+        verify(commentRepository, never()).findFirstTopLevelExcluding(any(), any(), any(), any());
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getContent()).noneMatch(CommentResponse::pinned);
     }
@@ -659,14 +713,14 @@ class CommentServiceImplTest {
     void listTopLevelComments_cursorIssuedBeforePinningWasAdded_stillDecodes() {
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any()))
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
 
         assertThat(result.getContent()).isEmpty();
-        verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any());
+        verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any(), any());
     }
 
     @Test
@@ -690,9 +744,15 @@ class CommentServiceImplTest {
                 service.listTopLevelComments(actorId, postId, null, 5);
 
         assertThat(result.getPageInfo().getStartCursor())
-                .isEqualTo(CursorCodec.encode(new Cursor(0L, body.get(0).getId())));
+                .isEqualTo(
+                        CursorCodec.encode(
+                                new Cursor(0L, body.get(0).getId()),
+                                CursorScope.COMMENTS_TOP_LEVEL));
         assertThat(result.getPageInfo().getEndCursor())
-                .isEqualTo(CursorCodec.encode(new Cursor(0L, body.get(1).getId())));
+                .isEqualTo(
+                        CursorCodec.encode(
+                                new Cursor(0L, body.get(1).getId()),
+                                CursorScope.COMMENTS_TOP_LEVEL));
     }
 
     // Distinct ids per row so the mapper stub, which returns one shared response, cannot mask an
@@ -712,8 +772,8 @@ class CommentServiceImplTest {
     private void stubFirstPage(List<Comment> pinned, List<Comment> body) {
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        when(commentRepository.findTopLikedTopLevel(eq(postId), any())).thenReturn(pinned);
-        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any()))
+        when(commentRepository.findTopLikedTopLevel(eq(postId), any(), any())).thenReturn(pinned);
+        when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(body);
         when(mapper.toResponse(any(), any(), anyBoolean()))
                 .thenAnswer(

@@ -12,9 +12,10 @@ public record PostMediaResponse(
         @Schema(description = "Post media row identifier.") UUID id,
         @Schema(description = "Referenced media asset identifier.") UUID mediaAssetId,
         @Schema(description = "Zero-based carousel position.") short position,
-        @Schema(description = "Accessibility alt text.") String altText,
+        @Schema(description = "Accessibility alt text.", nullable = true) String altText,
         @Schema(description = "Public CDN URL of the media object.") String cdnUrl,
         @Schema(description = "Media category.") MediaType mediaType,
-        @Schema(description = "Media width in pixels.") Integer width,
-        @Schema(description = "Media height in pixels.") Integer height,
-        @Schema(description = "Client-generated blurhash preview.") String blurhash) {}
+        @Schema(description = "Media width in pixels.", nullable = true) Integer width,
+        @Schema(description = "Media height in pixels.", nullable = true) Integer height,
+        @Schema(description = "Client-generated blurhash preview.", nullable = true)
+                String blurhash) {}

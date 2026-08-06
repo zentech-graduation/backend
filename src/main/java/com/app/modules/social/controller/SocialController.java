@@ -20,6 +20,13 @@ import com.app.modules.social.service.SocialService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * Follow graph and block-list endpoints: follow/unfollow, follow request approval, blocking, and
+ * cursor-paginated follower/following/blocked-user listings.
+ *
+ * <p>All endpoints require an authenticated caller, resolved via {@link
+ * SecurityUtils#getCurrentUserId()}.
+ */
 @RestController
 @RequiredArgsConstructor
 public class SocialController extends BaseController implements SocialApi {

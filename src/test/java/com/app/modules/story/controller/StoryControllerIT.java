@@ -287,7 +287,9 @@ class StoryControllerIT {
     }
 
     @Test
-    void listUserStories_blocked_returnsBlocked() {
+    void listUserStories_blocked_returnsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one,
+        // so this is NOT_FOUND rather than a status that confirms the block relationship exists.
         TestUser owner = registerUser("block_story_owner");
         TestUser viewer = registerUser("block_story_viewer");
         createStory(owner, "blocked story");
@@ -298,8 +300,19 @@ class StoryControllerIT {
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/stories/user/" + owner.id(), viewer);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(response.getBody().get("code")).isEqualTo("SOCIAL_BLOCKED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("NOT_FOUND");
+    }
+
+    @Test
+    void listViewers_limitZero_returns400() {
+        TestUser viewer = registerUser("viewers_limitzero_viewer");
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/stories/" + UUID.randomUUID() + "/views?limit=0", viewer);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
     }
 
     @Test

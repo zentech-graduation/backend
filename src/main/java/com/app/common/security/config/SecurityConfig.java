@@ -3,7 +3,6 @@ package com.app.common.security.config;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Stream;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.ServletException;
@@ -32,7 +31,6 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -78,7 +76,7 @@ public class SecurityConfig {
     };
 
     private static final String[] PUBLIC_INFRA_PATHS = {
-        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
+        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error",
     };
 
     private final JwtProperties jwtProperties;
@@ -199,8 +197,15 @@ public class SecurityConfig {
     }
 
     /**
-     * Opens health and API-documentation endpoints to all callers; restricts remaining actuator
-     * endpoints to ADMIN.
+     * Opens health, API-documentation, and the error-dispatch endpoints to all callers; restricts
+     * remaining actuator endpoints to ADMIN.
+     *
+     * <p>{@code /error} must be reachable regardless of the original request's authentication
+     * state: Spring's ERROR dispatch (used when a {@code HandlerExceptionResolver} falls through to
+     * {@code response.sendError(...)}) re-enters this filter chain as a fresh, unauthenticated
+     * request. Without this rule that dispatch was itself rejected with 401, masking the original
+     * status - most visibly turning a 406 content-negotiation failure into a 401 that looks like an
+     * expired session.
      */
     private void configureInfrastructureEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
@@ -273,7 +278,7 @@ public class SecurityConfig {
 
         // Refuse to fall back to a wildcard origin when allowCredentials=true. Empty config
         // becomes a deny-all CORS policy; operator must set CORS_ALLOWED_ORIGINS explicitly.
-        configuration.setAllowedOrigins(parseOrigins(corsProperties.allowedOrigins()));
+        configuration.setAllowedOrigins(corsProperties.allowedOriginList());
         configuration.setAllowedMethods(
                 Arrays.asList(
                         HttpMethod.GET.name(),
@@ -319,12 +324,5 @@ public class SecurityConfig {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         objectMapper.writeValue(response.getWriter(), ApiResponse.failure(errorCode));
-    }
-
-    private static List<String> parseOrigins(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return List.of();
-        }
-        return Stream.of(raw.split(",")).map(String::trim).filter(StringUtils::hasText).toList();
     }
 }

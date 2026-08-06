@@ -15,6 +15,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
@@ -95,13 +96,15 @@ public class PostLikeServiceImpl implements PostLikeService {
         if (!postVisibilityService.isVisibleTo(userId, post)) {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
-        PostLikeId likeId = new PostLikeId(userId, postId);
-        PostLike like =
-                postLikeRepository
-                        .findById(likeId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
-        postLikeRepository.delete(like);
-        postLikeRepository.flush();
+        // Conditional delete rather than load-then-delete(entity): the latter raises
+        // ObjectOptimisticLockingFailureException (-> 500) when a concurrent duplicate request
+        // already removed the same row. A missing like row still collapses onto POST_NOT_FOUND,
+        // matching the visibility checks above, so it cannot serve as a separate "have you liked
+        // this" oracle.
+        int deleted = postLikeRepository.deleteByUserAndPost(userId, postId);
+        if (deleted == 0) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
         return new LikeActionResponse(postId, false, postRepository.findLikeCount(postId));
     }
 
@@ -115,9 +118,10 @@ public class PostLikeServiceImpl implements PostLikeService {
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostLike> likes =
                 decoded == null
-                        ? postLikeRepository.findFirstLikers(postId, page)
+                        ? postLikeRepository.findFirstLikers(postId, viewerId, page)
                         : postLikeRepository.findLikersBefore(
                                 postId,
+                                viewerId,
                                 TimeCursors.fromMicros(decoded.sortValueMicros()),
                                 decoded.id(),
                                 page);
@@ -174,10 +178,11 @@ public class PostLikeServiceImpl implements PostLikeService {
         if (time == null || tiebreaker == null) {
             return null;
         }
-        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker));
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(time), tiebreaker), CursorScope.POST_LIKERS);
     }
 
     private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+        return CursorCodec.decode(cursor, CursorScope.POST_LIKERS);
     }
 }

@@ -13,6 +13,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.report.dto.request.CreateReportRequest;
@@ -76,20 +77,20 @@ public class ReportServiceImpl implements ReportService {
     public CursorPageResponse<ReportSummaryResponse> listReports(
             ReportStatus status, ReportType reportType, String cursor, int size) {
         int pageSize = normalizeLimit(size);
-        ReportCursor decoded = decodeCursor(cursor);
+        ReportCursor decoded = decodeCursor(cursor, CursorScope.REPORTS);
         int queryLimit = pageSize + 1;
         var reports =
                 decoded.isEmpty()
                         ? findFirstReportPage(status, reportType, queryLimit)
                         : findReportPageAfterCursor(status, reportType, decoded, queryLimit);
-        return toSummaryPage(reports, pageSize, cursor != null);
+        return toSummaryPage(reports, pageSize, cursor != null, CursorScope.REPORTS);
     }
 
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<ReportSummaryResponse> getPendingReports(String cursor, int size) {
         int pageSize = normalizeLimit(size);
-        ReportCursor decoded = decodeCursor(cursor);
+        ReportCursor decoded = decodeCursor(cursor, CursorScope.PENDING_REPORTS);
         int queryLimit = pageSize + 1;
         var reports =
                 decoded.isEmpty()
@@ -100,7 +101,7 @@ public class ReportServiceImpl implements ReportService {
                                 decoded.createdAt(),
                                 decoded.id(),
                                 queryLimit);
-        return toSummaryPage(reports, pageSize, cursor != null);
+        return toSummaryPage(reports, pageSize, cursor != null, CursorScope.PENDING_REPORTS);
     }
 
     @Override
@@ -203,7 +204,7 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private CursorPageResponse<ReportSummaryResponse> toSummaryPage(
-            java.util.List<Report> reports, int pageSize, boolean hasPreviousPage) {
+            java.util.List<Report> reports, int pageSize, boolean hasPreviousPage, String scope) {
         boolean hasNextPage = reports.size() > pageSize;
         java.util.List<Report> pageReports = hasNextPage ? reports.subList(0, pageSize) : reports;
         if (pageReports.isEmpty()) {
@@ -226,8 +227,10 @@ public class ReportServiceImpl implements ReportService {
                         CursorPageResponse.PageInfo.builder()
                                 .hasNextPage(hasNextPage)
                                 .hasPreviousPage(hasPreviousPage)
-                                .startCursor(encodeCursor(pageReports.get(0)))
-                                .endCursor(encodeCursor(pageReports.get(pageReports.size() - 1)))
+                                .startCursor(encodeCursor(pageReports.get(0), scope))
+                                .endCursor(
+                                        encodeCursor(
+                                                pageReports.get(pageReports.size() - 1), scope))
                                 .build())
                 .build();
     }
@@ -239,13 +242,13 @@ public class ReportServiceImpl implements ReportService {
         return Math.min(size, MAX_PAGE_SIZE);
     }
 
-    private String encodeCursor(Report report) {
+    private String encodeCursor(Report report, String scope) {
         return CursorCodec.encode(
-                new Cursor(TimeCursors.toMicros(report.getCreatedAt()), report.getId()));
+                new Cursor(TimeCursors.toMicros(report.getCreatedAt()), report.getId()), scope);
     }
 
-    private ReportCursor decodeCursor(String cursor) {
-        Cursor decoded = CursorCodec.decode(cursor);
+    private ReportCursor decodeCursor(String cursor, String scope) {
+        Cursor decoded = CursorCodec.decode(cursor, scope);
         if (decoded == null) {
             return new ReportCursor(null, null);
         }

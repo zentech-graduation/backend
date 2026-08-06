@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
+import com.app.common.config.openapi.CursorErrorResponses;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
@@ -38,11 +41,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User banned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User banned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -72,6 +71,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.BAN_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> banUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -81,11 +82,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User unbanned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User unbanned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -115,6 +112,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.UNBAN_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> unbanUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -124,11 +123,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User suspended",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User suspended"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -158,6 +153,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -167,11 +164,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User unsuspended",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "User unsuspended"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -201,6 +194,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.UNSUSPEND_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> unsuspendUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -210,11 +205,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post removed",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Post removed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -244,6 +235,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.REMOVE_POST)
     ResponseEntity<ApiResponse<AdminActionResponse>> removePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
@@ -253,11 +246,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Post restored",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Post restored"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -287,6 +276,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.RESTORE_POST)
     ResponseEntity<ApiResponse<AdminActionResponse>> restorePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
@@ -296,11 +287,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment removed",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Comment removed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -330,6 +317,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.REMOVE_COMMENT)
     ResponseEntity<ApiResponse<AdminActionResponse>> removeComment(
             @PathVariable("commentId") UUID commentId,
@@ -340,11 +329,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment restored",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Comment restored"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -374,6 +359,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.RESTORE_COMMENT)
     ResponseEntity<ApiResponse<AdminActionResponse>> restoreComment(
             @PathVariable("commentId") UUID commentId,
@@ -384,11 +371,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report resolved",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Report resolved"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -418,6 +401,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.RESOLVE_REPORT)
     ResponseEntity<ApiResponse<AdminActionResponse>> resolveReport(
             @PathVariable("reportId") UUID reportId,
@@ -428,11 +413,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report dismissed",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Report dismissed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -462,6 +443,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.DISMISS_REPORT)
     ResponseEntity<ApiResponse<AdminActionResponse>> dismissReport(
             @PathVariable("reportId") UUID reportId,
@@ -472,11 +455,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Audit event page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Audit event page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -492,6 +471,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Admin.ACTIONS)
     ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActions(
             @RequestParam(required = false) UUID adminId,
@@ -504,11 +485,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Audit event returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = AdminActionResponse.class))),
+                description = "Audit event returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -531,6 +508,7 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Admin.ACTION_BY_ID)
     ResponseEntity<ApiResponse<AdminActionResponse>> getActionById(
             @PathVariable("actionId") UUID actionId);
@@ -540,11 +518,7 @@ public interface AdminApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "User audit event page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "User audit event page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -560,6 +534,8 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Admin.ACTIONS_FOR_USER)
     ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActionsForUser(
             @PathVariable("userId") UUID userId,

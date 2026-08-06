@@ -89,7 +89,8 @@ class SocialServiceImplTest {
     }
 
     @Test
-    void followUser_blockExists_throwsBlocked() {
+    void followUser_blockExists_throwsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one.
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
@@ -99,7 +100,7 @@ class SocialServiceImplTest {
         assertThatThrownBy(() -> service.followUser(follower, target))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+                .isEqualTo(ApiErrorCode.NOT_FOUND);
 
         verify(followRepository, never()).insert(any(), any(), any());
     }
@@ -248,8 +249,7 @@ class SocialServiceImplTest {
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(target)).thenReturn(true);
-        when(followRepository.findById(new FollowId(follower, target)))
-                .thenReturn(Optional.empty());
+        when(followRepository.deleteByFollowerIdAndFollowingId(follower, target)).thenReturn(0);
 
         assertThatThrownBy(() -> service.unfollowUser(follower, target))
                 .isInstanceOf(AppException.class)
@@ -261,14 +261,12 @@ class SocialServiceImplTest {
     void unfollowUser_existing_deletes() {
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
-        Follow follow = follow(follower, target, FollowStatus.ACCEPTED);
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(target)).thenReturn(true);
-        when(followRepository.findById(new FollowId(follower, target)))
-                .thenReturn(Optional.of(follow));
+        when(followRepository.deleteByFollowerIdAndFollowingId(follower, target)).thenReturn(1);
 
         service.unfollowUser(follower, target);
 
-        verify(followRepository).delete(follow);
+        verify(followRepository).deleteByFollowerIdAndFollowingId(follower, target);
     }
 
     @Test
@@ -292,16 +290,36 @@ class SocialServiceImplTest {
     void respondToFollowRequest_reject_deletes() {
         UUID current = UUID.randomUUID();
         UUID requester = UUID.randomUUID();
-        Follow follow = follow(requester, current, FollowStatus.PENDING);
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(requester)).thenReturn(true);
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(current)).thenReturn(true);
-        when(followRepository.findByIdAndStatus(
-                        new FollowId(requester, current), FollowStatus.PENDING))
-                .thenReturn(Optional.of(follow));
+        when(followRepository.deleteByFollowerIdAndFollowingIdAndStatus(
+                        requester, current, FollowStatus.PENDING))
+                .thenReturn(1);
 
         service.respondToFollowRequest(current, requester, "reject");
 
-        verify(followRepository).delete(follow);
+        verify(followRepository)
+                .deleteByFollowerIdAndFollowingIdAndStatus(
+                        requester, current, FollowStatus.PENDING);
+    }
+
+    @Test
+    void respondToFollowRequest_rejectConcurrentDuplicate_throwsRequestNotFoundNotServerError() {
+        // Proves the fix for the load-then-delete(entity) race: a second concurrent reject that
+        // finds zero rows affected must produce a clean SOCIAL_REQUEST_NOT_FOUND, not an
+        // ObjectOptimisticLockingFailureException bubbling up as 500.
+        UUID current = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        when(socialUserRepository.existsByIdAndDeletedAtIsNull(requester)).thenReturn(true);
+        when(socialUserRepository.existsByIdAndDeletedAtIsNull(current)).thenReturn(true);
+        when(followRepository.deleteByFollowerIdAndFollowingIdAndStatus(
+                        requester, current, FollowStatus.PENDING))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> service.respondToFollowRequest(current, requester, "reject"))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.SOCIAL_REQUEST_NOT_FOUND);
     }
 
     @Test
@@ -383,7 +401,7 @@ class SocialServiceImplTest {
     void unblockUser_notBlocked_throwsNotFound() {
         UUID current = UUID.randomUUID();
         UUID target = UUID.randomUUID();
-        when(blockRepository.findById(new BlockId(current, target))).thenReturn(Optional.empty());
+        when(blockRepository.deleteByBlockerIdAndBlockedId(current, target)).thenReturn(0);
 
         assertThatThrownBy(() -> service.unblockUser(current, target))
                 .isInstanceOf(AppException.class)
@@ -392,7 +410,19 @@ class SocialServiceImplTest {
     }
 
     @Test
-    void getFollowers_blocked_throwsBlocked() {
+    void unblockUser_existing_deletes() {
+        UUID current = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        when(blockRepository.deleteByBlockerIdAndBlockedId(current, target)).thenReturn(1);
+
+        service.unblockUser(current, target);
+
+        verify(blockRepository).deleteByBlockerIdAndBlockedId(current, target);
+    }
+
+    @Test
+    void getFollowers_blocked_throwsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one.
         UUID viewer = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
@@ -402,7 +432,7 @@ class SocialServiceImplTest {
         assertThatThrownBy(() -> service.getFollowers(target, viewer, null, 20))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+                .isEqualTo(ApiErrorCode.NOT_FOUND);
     }
 
     @Test

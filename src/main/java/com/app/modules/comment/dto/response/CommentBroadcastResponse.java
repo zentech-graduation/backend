@@ -25,9 +25,14 @@ public record CommentBroadcastResponse(
         @Schema(description = "Comment identifier.") UUID id,
         @Schema(description = "Post the comment belongs to.") UUID postId,
         @Schema(description = "Author of the comment.") UserSummaryResponse author,
-        @Schema(description = "Parent comment identifier; null for a top-level comment.")
+        @Schema(
+                        description = "Parent comment identifier; null for a top-level comment.",
+                        nullable = true)
                 UUID parentId,
-        @Schema(description = "Top-level ancestor identifier; null for a top-level comment.")
+        @Schema(
+                        description =
+                                "Top-level ancestor identifier; null for a top-level comment.",
+                        nullable = true)
                 UUID rootId,
         @Schema(description = "Nesting depth, 0 for top-level.") short depth,
         @Schema(description = "Comment body.") String content,

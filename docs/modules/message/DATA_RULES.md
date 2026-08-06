@@ -1,6 +1,9 @@
 # Message Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Conversation and participant management is implemented.
+Direct and group conversation creation, cursor-paginated conversation listing with unread counts, participant listing, adding and removing participants, group admin promotion on departure, leaving a conversation, and group metadata updates are all in place.
+There is no send-message or list-messages endpoint.
+The `messages` table exists and is read for unread counts, but no API path ever writes to it, so the message-level rules in Section 3B below are unexercised until that endpoint ships.
 
 ---
 
@@ -46,17 +49,17 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| A user may only send messages to conversations they are an active participant of (`left_at IS NULL`) | `[NOT YET IMPLEMENTED]` |
-| For a 1-1 conversation (`is_group = FALSE`), there must be exactly 2 participants | `[NOT YET IMPLEMENTED]` |
-| A blocked user may not initiate or reply to messages with the blocker | `[NOT YET IMPLEMENTED]` |
-| Message soft-delete sets `is_deleted = TRUE` and `deleted_at = NOW()`; message `content` should be cleared or replaced with a tombstone | `[NOT YET IMPLEMENTED]` |
-| Only the message sender may delete their own message | `[NOT YET IMPLEMENTED]` |
-| `last_read_at` on `conversation_participants` is updated when the user reads the conversation | `[NOT YET IMPLEMENTED]` |
-| A message of type `'post_share'` must have `shared_post_id` set; `'story_share'` must have `shared_story_id` set | `[NOT YET IMPLEMENTED]` |
-| A message of type `'image'` or `'video'` must have `media_asset_id` set | `[NOT YET IMPLEMENTED]` |
-| Group admins may add/remove participants and update `group_name` / `group_avatar_url` | `[NOT YET IMPLEMENTED]` |
-| Sending a message generates a `message` notification for all participants except the sender | `[NOT YET IMPLEMENTED]` |
-| `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `[NOT YET IMPLEMENTED]` |
+| A user may only send messages to conversations they are an active participant of (`left_at IS NULL`) | `[NOT YET IMPLEMENTED]` — blocked on a send-message endpoint |
+| For a 1-1 conversation (`is_group = FALSE`), there must be exactly 2 participants | `ConversationServiceImpl.createDirectConversation`, enforced by construction: it is the only path that creates a non-group conversation, and it always inserts the actor plus exactly one target |
+| A blocked user may not initiate or reply to messages with the blocker | Initiation enforced by `ConversationServiceImpl.assertNotBlocked`, called from `createDirectConversation`, `createGroupConversation`, and `addParticipants`; the "reply" half is `[NOT YET IMPLEMENTED]` — blocked on a send-message endpoint |
+| Message soft-delete sets `is_deleted = TRUE` and `deleted_at = NOW()`; message `content` should be cleared or replaced with a tombstone | `[NOT YET IMPLEMENTED]` — no code path writes to `messages` at all |
+| Only the message sender may delete their own message | `[NOT YET IMPLEMENTED]` — blocked on a send-message endpoint |
+| `last_read_at` on `conversation_participants` is updated when the user reads the conversation | `[NOT YET IMPLEMENTED]`; `last_read_at` is only ever read, by `MessageRepository.countUnreadPerConversation` |
+| A message of type `'post_share'` must have `shared_post_id` set; `'story_share'` must have `shared_story_id` set | `[NOT YET IMPLEMENTED]` — no code path writes to `messages` at all |
+| A message of type `'image'` or `'video'` must have `media_asset_id` set | `[NOT YET IMPLEMENTED]` — no code path writes to `messages` at all |
+| Group admins may add/remove participants and update `group_name` / `group_avatar_url` | `ConversationServiceImpl.addParticipants` / `removeParticipant` / `updateGroup`, all gated by `requireGroupAdmin` |
+| Sending a message generates a `message` notification for all participants except the sender | `[NOT YET IMPLEMENTED]` — blocked on a send-message endpoint; see the `notification` module's dead `MESSAGE` toggle |
+| `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `ConversationServiceImpl.assertMessageRequestAllowed` |
 
 **`sender_id` cascade behavior** `[KNOWN GAP — pending migration fix]`:
 - The current schema defines `sender_id` with `ON DELETE CASCADE`, meaning deleting a user deletes their sent messages.
@@ -82,5 +85,5 @@ These tables cannot be rebuilt from any other source if lost.
 | `post` | outbound | `messages.shared_post_id` references `posts` for shared-post messages |
 | `story` | outbound | `messages.shared_story_id` references `stories` for shared-story messages |
 | `social` | inbound | Block relationships govern messaging permissions |
-| `notification` | outbound | New messages trigger notification creation for participants |
+| `notification` | outbound | Intended: new messages would trigger `MESSAGE` notification creation for participants once a send-message endpoint exists. `notification_type_configs.MESSAGE` and `user_settings.notify_messages` exist for this but have no creation site today. |
 | `report` | inbound | Reports can target a message via polymorphic `entity_id` |

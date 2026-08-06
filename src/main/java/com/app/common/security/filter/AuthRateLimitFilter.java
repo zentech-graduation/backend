@@ -33,7 +33,8 @@ import tools.jackson.databind.ObjectMapper;
  * Rejects abusive traffic on configured endpoints before it reaches downstream filters or
  * controllers. The bucket key is namespaced per-client: per-IP for the login path (with the login
  * identifier appended so a single-account brute force cannot hide behind a rotating IP counter);
- * per {@code method:path:ip} for all other endpoints.
+ * per {@code path:ip} for all other endpoints, shared across every HTTP method that reaches the
+ * matched key so a rule's configured budget is the total across methods, not a multiple of it.
  *
  * <p>Rule resolution uses an exact-match fast path first, then falls back to {@link AntPathMatcher}
  * so path-variable routes (e.g. {@code /posts/{id}/likes}) can be configured without requiring
@@ -113,7 +114,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             // negotiation embeds a random server/session segment in the URL on every connection
             // attempt, so keying on the concrete path would hand every attempt a fresh bucket.
             // Exact-match rules are unaffected since their matched key equals the concrete path.
-            key = method + ":" + match.matchedKey() + ":" + ip;
+            // No method in the key: a rule's configured budget applies to the endpoint as a whole,
+            // not once per HTTP method that happens to reach it.
+            key = match.matchedKey() + ":" + ip;
         }
 
         if (!rateLimiterService.isAllowed(key, rule.maxAttempts(), rule.windowSeconds())) {

@@ -36,11 +36,11 @@ public class NotificationWebSocketConfig implements WebSocketMessageBrokerConfig
                 .withSockJS();
     }
 
-    private String[] allowedOrigins() {
-        String origins = corsProperties.allowedOrigins();
-        if (origins == null || origins.isBlank()) {
-            return new String[] {"http://localhost:*"};
-        }
-        return origins.split("\\s*,\\s*");
+    // Deny-by-default: a blank CORS_ALLOWED_ORIGINS yields an empty array here, matching the
+    // REST surface's fail-closed behaviour, rather than quietly admitting localhost.
+    // Package-private rather than private so the mapping can be unit tested directly, without
+    // mocking the StompEndpointRegistry fluent builder chain.
+    String[] allowedOrigins() {
+        return corsProperties.allowedOriginList().toArray(String[]::new);
     }
 }

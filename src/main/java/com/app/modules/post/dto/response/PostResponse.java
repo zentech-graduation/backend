@@ -16,7 +16,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record PostResponse(
         @Schema(description = "Post identifier.") UUID id,
         @Schema(description = "Post author.") UserSummaryResponse author,
-        @Schema(description = "Post caption.") String caption,
+        @Schema(description = "Post caption.", nullable = true) String caption,
         @Schema(description = "Post type.") PostType postType,
         @Schema(description = "Lifecycle status.") PostStatus status,
         @Schema(description = "Number of likes; trigger-maintained.") int likeCount,
@@ -26,9 +26,10 @@ public record PostResponse(
         @Schema(description = "Whether the viewer has saved this post.") boolean isSaved,
         @Schema(description = "Number of views; updated by a background job and may lag.")
                 int viewCount,
-        @Schema(description = "Free-form location label.") String locationName,
-        @Schema(description = "Latitude in decimal degrees.") BigDecimal latitude,
-        @Schema(description = "Longitude in decimal degrees.") BigDecimal longitude,
+        @Schema(description = "Free-form location label.", nullable = true) String locationName,
+        @Schema(description = "Latitude in decimal degrees.", nullable = true) BigDecimal latitude,
+        @Schema(description = "Longitude in decimal degrees.", nullable = true)
+                BigDecimal longitude,
         @Schema(description = "Ordered media items.") List<PostMediaResponse> media,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
         @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt) {}

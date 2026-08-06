@@ -65,7 +65,26 @@ These tables cannot be rebuilt from any other source if lost.
 - This bidirectional enforcement is an application-layer rule, not a DB constraint.
 - The DB only enforces that `blocker_id ≠ blocked_id` and that the pair is unique.
 
-### C. Scope Simplifications
+### C. Known and Accepted Residual Disclosure
+
+`users.follower_count` and `users.following_count` are trigger-maintained (Section 2) and viewer-blind: every caller who can see the counter at all sees the identical number, regardless of that caller's own block relationships.
+
+That viewer-blindness is a weak signal, not a safeguard.
+A block-filtered list and a viewer-blind counter can disagree by subtraction.
+Concretely: C blocks A.
+Both A and C follow M.
+A reads M's follower list, which the block-exclusion subqueries on `FollowRepository` filter, and separately reads M's `followerCount`, which they do not.
+If the list is short one row relative to the count, A learns that some account in M's follower set is in a block relationship with A.
+Repeating this across every profile A and C both follow, and intersecting the results, narrows the candidate set — though A never learns which account it is, only that at least one exists.
+
+This was evaluated and the counters were left unchanged.
+Computing a counter per viewer would require a live count query on every profile read instead of the trigger-maintained column, and would need to run per viewer since the same profile is read by many different viewers with different block sets.
+That cost was judged not worth closing a signal this weak: it discloses that a block exists somewhere in an intersection, never whose.
+
+A future reader must not re-derive the "counters are safe because they're viewer-blind" reasoning and must not treat this as a defect still open for a simple fix — it is accepted, for the stated reason, and the trade-off has already been made.
+See `docs/modules/users/DATA_RULES.md` Section 3D for the same entry from the profile-read side.
+
+### D. Scope Simplifications
 
 - No mutual-follow (friends) concept; the model is strictly unidirectional.
 - Block relationships have no expiry or appeal mechanism.

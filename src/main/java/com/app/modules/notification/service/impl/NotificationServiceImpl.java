@@ -5,6 +5,7 @@ import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.data.domain.PageRequest;
@@ -16,8 +17,10 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
@@ -28,6 +31,7 @@ import com.app.modules.notification.service.NotificationService;
 import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.entity.UserSettings;
 import com.app.modules.users.repository.UserSettingsRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 @Service
 public class NotificationServiceImpl implements NotificationService {
@@ -39,18 +43,21 @@ public class NotificationServiceImpl implements NotificationService {
     private final BlockRepository blockRepository;
     private final NotificationMapper notificationMapper;
     private final OutboxService outboxService;
+    private final UserSummaryService userSummaryService;
 
     public NotificationServiceImpl(
             NotificationRepository notificationRepository,
             UserSettingsRepository userSettingsRepository,
             BlockRepository blockRepository,
             NotificationMapper notificationMapper,
-            OutboxService outboxService) {
+            OutboxService outboxService,
+            UserSummaryService userSummaryService) {
         this.notificationRepository = notificationRepository;
         this.userSettingsRepository = userSettingsRepository;
         this.blockRepository = blockRepository;
         this.notificationMapper = notificationMapper;
         this.outboxService = outboxService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -142,7 +149,23 @@ public class NotificationServiceImpl implements NotificationService {
         if (hasNextPage) {
             rows = rows.subList(0, limit);
         }
-        List<NotificationResponse> content = notificationMapper.toResponseList(rows);
+        // One batched actor lookup for the whole page instead of one profile fetch per row.
+        Map<UUID, UserSummaryResponse> actors =
+                userSummaryService.loadSummaries(
+                        rows.stream()
+                                .map(Notification::getActorId)
+                                .filter(Objects::nonNull)
+                                .toList());
+        List<NotificationResponse> content =
+                rows.stream()
+                        .map(
+                                n ->
+                                        notificationMapper.toResponse(
+                                                n,
+                                                n.getActorId() == null
+                                                        ? null
+                                                        : actors.get(n.getActorId())))
+                        .toList();
         Notification first = rows.isEmpty() ? null : rows.get(0);
         Notification last = rows.isEmpty() ? null : rows.get(rows.size() - 1);
         String startCursor = first == null ? null : encodeCursor(first);
@@ -152,12 +175,12 @@ public class NotificationServiceImpl implements NotificationService {
 
     private String encodeCursor(Notification notification) {
         return CursorCodec.encode(
-                new Cursor(
-                        TimeCursors.toMicros(notification.getCreatedAt()), notification.getId()));
+                new Cursor(TimeCursors.toMicros(notification.getCreatedAt()), notification.getId()),
+                CursorScope.NOTIFICATIONS);
     }
 
     private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+        return CursorCodec.decode(cursor, CursorScope.NOTIFICATIONS);
     }
 
     private boolean isTypeEnabled(NotificationType type, UserSettings settings) {

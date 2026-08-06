@@ -23,6 +23,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
@@ -35,7 +36,6 @@ import com.app.modules.social.entity.BlockId;
 import com.app.modules.social.entity.Follow;
 import com.app.modules.social.entity.FollowId;
 import com.app.modules.social.enums.FollowStatus;
-import com.app.modules.social.repository.BlockEdgeProjection;
 import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.social.repository.FollowEdgeProjection;
 import com.app.modules.social.repository.FollowRepository;
@@ -84,9 +84,12 @@ public class SocialServiceImpl implements SocialService {
                                         new AppException(
                                                 ApiErrorCode.NOT_FOUND, "Target user not found"));
 
+        // Stealth block model: a block in either direction must be indistinguishable from the
+        // target not existing, so this collapses onto the same NOT_FOUND the nonexistent-target
+        // check above throws, not a status that confirms a block relationship exists.
         if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
                 || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+            throw new AppException(ApiErrorCode.NOT_FOUND, "Target user not found");
         }
 
         FollowId followId = new FollowId(currentUserId, targetUserId);
@@ -142,18 +145,16 @@ public class SocialServiceImpl implements SocialService {
             throw new AppException(ApiErrorCode.NOT_FOUND, "Target user not found");
         }
 
-        FollowId followId = new FollowId(currentUserId, targetUserId);
-
-        Follow follow =
-                followRepository
-                        .findById(followId)
-                        .orElseThrow(
-                                () ->
-                                        new AppException(
-                                                ApiErrorCode.NOT_FOUND,
-                                                "Follow relationship not found"));
-
-        followRepository.delete(follow);
+        // Conditional delete rather than load-then-delete(entity): the latter raises
+        // ObjectOptimisticLockingFailureException (-> 500) when a concurrent duplicate request
+        // already removed the same row, since Hibernate's entity-based DELETE always checks the
+        // affected-row count. Branching on the returned count here instead makes the loser of the
+        // race a clean 404, not a 500.
+        int deleted =
+                followRepository.deleteByFollowerIdAndFollowingId(currentUserId, targetUserId);
+        if (deleted == 0) {
+            throw new AppException(ApiErrorCode.NOT_FOUND, "Follow relationship not found");
+        }
     }
 
     @Override
@@ -167,6 +168,20 @@ public class SocialServiceImpl implements SocialService {
             throw new AppException(ApiErrorCode.NOT_FOUND, "Current user not found");
         }
 
+        // Conditional delete rather than load-then-delete(entity): the latter raises
+        // ObjectOptimisticLockingFailureException (-> 500) when a concurrent duplicate request
+        // already resolved the same pending row. Checked before the shared load below so a reject
+        // never loads the entity it is only going to delete.
+        if ("reject".equalsIgnoreCase(action)) {
+            int deleted =
+                    followRepository.deleteByFollowerIdAndFollowingIdAndStatus(
+                            requesterId, currentUserId, FollowStatus.PENDING);
+            if (deleted == 0) {
+                throw new AppException(ApiErrorCode.SOCIAL_REQUEST_NOT_FOUND);
+            }
+            return;
+        }
+
         FollowId followId = new FollowId(requesterId, currentUserId);
 
         Follow follow =
@@ -177,11 +192,6 @@ public class SocialServiceImpl implements SocialService {
         if ("approve".equalsIgnoreCase(action)) {
             follow.setStatus(FollowStatus.ACCEPTED);
             followRepository.save(follow);
-            return;
-        }
-
-        if ("reject".equalsIgnoreCase(action)) {
-            followRepository.delete(follow);
             return;
         }
 
@@ -218,18 +228,13 @@ public class SocialServiceImpl implements SocialService {
     @Override
     @Transactional
     public void unblockUser(UUID currentUserId, UUID targetUserId) {
-        BlockId blockId = new BlockId(currentUserId, targetUserId);
-
-        Block block =
-                blockRepository
-                        .findById(blockId)
-                        .orElseThrow(
-                                () ->
-                                        new AppException(
-                                                ApiErrorCode.NOT_FOUND,
-                                                "Block relationship not found"));
-
-        blockRepository.delete(block);
+        // Conditional delete rather than load-then-delete(entity): the latter raises
+        // ObjectOptimisticLockingFailureException (-> 500) when a concurrent duplicate request
+        // already removed the same row.
+        int deleted = blockRepository.deleteByBlockerIdAndBlockedId(currentUserId, targetUserId);
+        if (deleted == 0) {
+            throw new AppException(ApiErrorCode.NOT_FOUND, "Block relationship not found");
+        }
     }
 
     @Override
@@ -246,7 +251,7 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_FOLLOWERS);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
@@ -289,9 +294,15 @@ public class SocialServiceImpl implements SocialService {
         Follow firstFollow = follows.get(0);
         Follow lastFollow = follows.get(follows.size() - 1);
         String startCursor =
-                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowerId());
+                encodeCursor(
+                        firstFollow.getCreatedAt(),
+                        firstFollow.getId().getFollowerId(),
+                        CursorScope.SOCIAL_FOLLOWERS);
         String endCursor =
-                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowerId());
+                encodeCursor(
+                        lastFollow.getCreatedAt(),
+                        lastFollow.getId().getFollowerId(),
+                        CursorScope.SOCIAL_FOLLOWERS);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -310,7 +321,7 @@ public class SocialServiceImpl implements SocialService {
         checkCanViewSocialGraph(currentUserId, targetUserId, targetUser);
 
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_FOLLOWING);
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
@@ -353,9 +364,15 @@ public class SocialServiceImpl implements SocialService {
         Follow firstFollow = follows.get(0);
         Follow lastFollow = follows.get(follows.size() - 1);
         String startCursor =
-                encodeCursor(firstFollow.getCreatedAt(), firstFollow.getId().getFollowingId());
+                encodeCursor(
+                        firstFollow.getCreatedAt(),
+                        firstFollow.getId().getFollowingId(),
+                        CursorScope.SOCIAL_FOLLOWING);
         String endCursor =
-                encodeCursor(lastFollow.getCreatedAt(), lastFollow.getId().getFollowingId());
+                encodeCursor(
+                        lastFollow.getCreatedAt(),
+                        lastFollow.getId().getFollowingId(),
+                        CursorScope.SOCIAL_FOLLOWING);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -365,7 +382,7 @@ public class SocialServiceImpl implements SocialService {
     public CursorPageResponse<UserListItemResponse> getBlockedUsers(
             UUID currentUserId, String cursor, int limit) {
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_BLOCKED);
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Block> blocks =
@@ -407,8 +424,16 @@ public class SocialServiceImpl implements SocialService {
 
         Block first = blocks.get(0);
         Block last = blocks.get(blocks.size() - 1);
-        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getBlockedId());
-        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getBlockedId());
+        String startCursor =
+                encodeCursor(
+                        first.getCreatedAt(),
+                        first.getId().getBlockedId(),
+                        CursorScope.SOCIAL_BLOCKED);
+        String endCursor =
+                encodeCursor(
+                        last.getCreatedAt(),
+                        last.getId().getBlockedId(),
+                        CursorScope.SOCIAL_BLOCKED);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -418,7 +443,7 @@ public class SocialServiceImpl implements SocialService {
     public CursorPageResponse<FollowRequestResponse> getPendingFollowRequests(
             UUID currentUserId, String cursor, int limit) {
         int size = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor, CursorScope.SOCIAL_PENDING_REQUESTS);
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<Follow> pendingFollows =
@@ -467,8 +492,16 @@ public class SocialServiceImpl implements SocialService {
 
         Follow first = pendingFollows.get(0);
         Follow last = pendingFollows.get(pendingFollows.size() - 1);
-        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getFollowerId());
-        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getFollowerId());
+        String startCursor =
+                encodeCursor(
+                        first.getCreatedAt(),
+                        first.getId().getFollowerId(),
+                        CursorScope.SOCIAL_PENDING_REQUESTS);
+        String endCursor =
+                encodeCursor(
+                        last.getCreatedAt(),
+                        last.getId().getFollowerId(),
+                        CursorScope.SOCIAL_PENDING_REQUESTS);
 
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
@@ -528,15 +561,10 @@ public class SocialServiceImpl implements SocialService {
                 followedBy.put(edge.getOtherId(), accepted);
             }
         }
-        Map<UUID, Boolean> blocking = new HashMap<>();
-        Map<UUID, Boolean> blockedBy = new HashMap<>();
-        for (BlockEdgeProjection edge : blockRepository.findRelationshipEdges(viewerId, distinct)) {
-            if (edge.getOutgoing()) {
-                blocking.put(edge.getOtherId(), true);
-            } else {
-                blockedBy.put(edge.getOtherId(), true);
-            }
-        }
+        // Outgoing-only: no response surface renders "this user has blocked the viewer" under the
+        // stealth block model, so the incoming direction has no caller.
+        Set<UUID> blocking =
+                new HashSet<>(blockRepository.findOutgoingBlockedIds(viewerId, distinct));
         Map<UUID, ViewerRelationshipResponse> result = new HashMap<>(distinct.size());
         for (UUID id : distinct) {
             result.put(
@@ -545,16 +573,19 @@ public class SocialServiceImpl implements SocialService {
                             following.getOrDefault(id, false),
                             requested.getOrDefault(id, false),
                             followedBy.getOrDefault(id, false),
-                            blocking.getOrDefault(id, false),
-                            blockedBy.getOrDefault(id, false)));
+                            blocking.contains(id)));
         }
         return result;
     }
 
     private void checkCanViewSocialGraph(UUID currentUserId, UUID targetUserId, User targetUser) {
+        // Stealth block model: matches assemblePublicProfile's reference behaviour exactly - a
+        // block in either direction must be indistinguishable from targetUserId not existing.
+        // The private-account branch below is a separate, legitimate disclosure and is untouched:
+        // private accounts are visibly private on real platforms.
         if (blockRepository.existsById(new BlockId(currentUserId, targetUserId))
                 || blockRepository.existsById(new BlockId(targetUserId, currentUserId))) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+            throw new AppException(ApiErrorCode.NOT_FOUND, "User not found");
         }
 
         boolean isOwner = currentUserId.equals(targetUserId);
@@ -588,14 +619,14 @@ public class SocialServiceImpl implements SocialService {
         return limit > 100 ? 100 : (limit < 1 ? 20 : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time, UUID tiebreaker) {
+    private String encodeCursor(OffsetDateTime time, UUID tiebreaker, String scope) {
         if (time == null || tiebreaker == null) {
             return null;
         }
-        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker));
+        return CursorCodec.encode(new Cursor(TimeCursors.toMicros(time), tiebreaker), scope);
     }
 
-    private Cursor decodeCursor(String cursor) {
-        return CursorCodec.decode(cursor);
+    private Cursor decodeCursor(String cursor, String scope) {
+        return CursorCodec.decode(cursor, scope);
     }
 }

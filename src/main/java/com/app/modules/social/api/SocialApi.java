@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
@@ -45,11 +46,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Followed user or follow request created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = FollowResponse.class))),
+                description = "Followed user or follow request created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid follow action",
@@ -118,11 +115,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Pending follow requests returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Pending follow requests returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -131,6 +124,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Social.FOLLOW_REQUESTS)
     ResponseEntity<ApiResponse<CursorPageResponse<FollowRequestResponse>>> getPendingFollowRequests(
             @RequestParam(required = false) @Size(max = 512) String cursor,
@@ -209,6 +203,13 @@ public interface SocialApi {
                 content =
                         @Content(
                                 mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Target user is already blocked",
+                content =
+                        @Content(
+                                mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping(ApiConstants.Social.BLOCK)
@@ -243,14 +244,18 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Followers returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Followers returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Target account is private and the caller is not an accepted follower",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -263,6 +268,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Social.FOLLOWERS)
     ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowers(
             @PathVariable UUID userId,
@@ -273,14 +279,18 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Following list returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Following list returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Target account is private and the caller is not an accepted follower",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -293,6 +303,7 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Social.FOLLOWING)
     ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> getFollowing(
             @PathVariable UUID userId,
@@ -311,11 +322,7 @@ public interface SocialApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Blocked list returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Blocked list returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Malformed pagination cursor, or limit outside 1-100",

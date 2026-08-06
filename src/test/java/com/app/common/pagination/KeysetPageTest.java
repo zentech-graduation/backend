@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 class KeysetPageTest {
 
     private static final Function<Row, Cursor> CURSOR_OF = r -> new Cursor(r.sort(), r.id());
+    private static final String SCOPE = "tst";
 
     private record Row(long sort, UUID id) {}
 
@@ -22,7 +23,7 @@ class KeysetPageTest {
     void of_overFetchedByOne_reportsNextPageAndTrims() {
         List<Row> rows = List.of(row(3), row(2), row(1));
 
-        KeysetPage.Result<Row> page = KeysetPage.of(rows, 2, CURSOR_OF);
+        KeysetPage.Result<Row> page = KeysetPage.of(rows, 2, CURSOR_OF, SCOPE);
 
         assertThat(page.hasNextPage()).isTrue();
         assertThat(page.content()).hasSize(2);
@@ -33,7 +34,7 @@ class KeysetPageTest {
     void of_exactlyFullFinalPage_reportsNoNextPage() {
         List<Row> rows = List.of(row(2), row(1));
 
-        KeysetPage.Result<Row> page = KeysetPage.of(rows, 2, CURSOR_OF);
+        KeysetPage.Result<Row> page = KeysetPage.of(rows, 2, CURSOR_OF, SCOPE);
 
         assertThat(page.hasNextPage()).isFalse();
         assertThat(page.content()).hasSize(2);
@@ -41,7 +42,7 @@ class KeysetPageTest {
 
     @Test
     void of_emptyResult_hasNullCursorsAndNoNextPage() {
-        KeysetPage.Result<Row> page = KeysetPage.of(List.of(), 20, CURSOR_OF);
+        KeysetPage.Result<Row> page = KeysetPage.of(List.of(), 20, CURSOR_OF, SCOPE);
 
         assertThat(page.hasNextPage()).isFalse();
         assertThat(page.content()).isEmpty();
@@ -55,9 +56,9 @@ class KeysetPageTest {
         Row last = row(7);
         List<Row> rows = List.of(first, row(8), last, row(6));
 
-        KeysetPage.Result<Row> page = KeysetPage.of(rows, 3, CURSOR_OF);
+        KeysetPage.Result<Row> page = KeysetPage.of(rows, 3, CURSOR_OF, SCOPE);
 
-        assertThat(CursorCodec.decode(page.startCursor())).isEqualTo(CURSOR_OF.apply(first));
-        assertThat(CursorCodec.decode(page.endCursor())).isEqualTo(CURSOR_OF.apply(last));
+        assertThat(CursorCodec.decode(page.startCursor(), SCOPE)).isEqualTo(CURSOR_OF.apply(first));
+        assertThat(CursorCodec.decode(page.endCursor(), SCOPE)).isEqualTo(CURSOR_OF.apply(last));
     }
 }

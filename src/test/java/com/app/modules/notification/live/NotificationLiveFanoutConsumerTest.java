@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,11 +23,14 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.outbox.model.DomainEventEnvelope;
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.mapper.NotificationMapper;
 import com.app.modules.notification.repository.NotificationRepository;
+import com.app.modules.social.repository.BlockRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationLiveFanoutConsumerTest {
@@ -35,6 +39,8 @@ class NotificationLiveFanoutConsumerTest {
     @Mock private NotificationRepository notificationRepository;
     @Mock private NotificationMapper notificationMapper;
     @Mock private SimpMessagingTemplate messagingTemplate;
+    @Mock private UserSummaryService userSummaryService;
+    @Mock private BlockRepository blockRepository;
     @Mock private Message amqpMessage;
 
     private NotificationLiveFanoutConsumer consumer;
@@ -43,7 +49,12 @@ class NotificationLiveFanoutConsumerTest {
     void setUp() {
         consumer =
                 new NotificationLiveFanoutConsumer(
-                        parser, notificationRepository, notificationMapper, messagingTemplate);
+                        parser,
+                        notificationRepository,
+                        notificationMapper,
+                        messagingTemplate,
+                        userSummaryService,
+                        blockRepository);
     }
 
     @Test
@@ -69,22 +80,55 @@ class NotificationLiveFanoutConsumerTest {
                         .type(NotificationType.FOLLOW)
                         .build();
         when(notificationRepository.findById(notificationId)).thenReturn(Optional.of(notification));
+        UserSummaryResponse actor =
+                new UserSummaryResponse(actorId, "actor_username", "Actor", null, false);
+        when(userSummaryService.loadSummaries(List.of(actorId))).thenReturn(Map.of(actorId, actor));
         NotificationResponse response =
                 new NotificationResponse(
                         notificationId,
-                        actorId,
+                        actor,
                         NotificationType.FOLLOW,
                         null,
                         null,
                         false,
                         null,
                         OffsetDateTime.now(ZoneOffset.UTC));
-        when(notificationMapper.toResponse(notification)).thenReturn(response);
+        when(notificationMapper.toResponse(notification, actor)).thenReturn(response);
 
         consumer.consume(amqpMessage);
 
         verify(messagingTemplate)
                 .convertAndSend(eq("/topic/notifications." + recipientId), eq(response));
+    }
+
+    @Test
+    void consume_actorBlockedWithRecipient_doesNotPush() {
+        UUID notificationId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        DomainEventEnvelope event =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        "notification.created.v1",
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        actorId,
+                        "notification",
+                        notificationId,
+                        Map.of("recipientId", recipientId.toString()));
+        when(parser.parse(amqpMessage)).thenReturn(event);
+        Notification notification =
+                Notification.builder()
+                        .id(notificationId)
+                        .recipientId(recipientId)
+                        .actorId(actorId)
+                        .type(NotificationType.MENTION_POST)
+                        .build();
+        when(notificationRepository.findById(notificationId)).thenReturn(Optional.of(notification));
+        when(blockRepository.existsBetween(actorId, recipientId)).thenReturn(true);
+
+        consumer.consume(amqpMessage);
+
+        verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
     }
 
     @Test

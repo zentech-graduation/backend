@@ -41,8 +41,11 @@ No `@Cacheable` annotation and no `users:*` Redis key exists anywhere in the tre
 | Rule | Enforced By |
 |------|-------------|
 | `username` max 30 characters, unique, not null | `VARCHAR(30) UNIQUE NOT NULL` (V02) |
-| `username` uniqueness is **case-sensitive** | Plain `UNIQUE` on the raw column — `Alice` and `alice` are two distinct legal accounts |
+| `username` identity is **case-insensitive**; `Alice` and `alice` are one account | `UNIQUE` functional index `idx_users_username_lower` on `lower(username)` (V42). The plain `UNIQUE` on the raw column from V02 is retained as a structural guard |
+| `username` storage is **case-preserving**; the column holds exactly what the caller submitted | No write path normalizes the value. `AuthServiceImpl.register` and `UserServiceImpl.updateMyProfile` store the raw input, and the V42 migration deliberately does not lowercase existing rows |
 | `email` max 255 characters, unique, not null | `VARCHAR(255) UNIQUE NOT NULL` (V02) |
+| `email` identity is **case-insensitive**; `Alice@example.com` and `alice@example.com` are one account | `UNIQUE` functional index `idx_users_email_lower` on `lower(email)` (V44). The plain `UNIQUE` on the raw column from V02 is retained as a structural guard |
+| `email` storage is **case-preserving**; the column holds exactly what the caller submitted | No write path normalizes the value, mirroring the username treatment |
 | `display_name` max 100 characters | `VARCHAR(100)` (V02) |
 | `is_private` defaults to `FALSE` | `DEFAULT FALSE NOT NULL` (V02) |
 | Counter columns are non-negative | `CHECK (column >= 0)` (V02) |
@@ -65,10 +68,10 @@ Queries using them must filter soft-deleted rows themselves.
 | A block in either direction hides the target profile entirely | `UserServiceImpl.getUserProfile` — returns `NOT_FOUND` so a blocked caller cannot confirm the account exists |
 | User search matches `username` case-insensitively via `ILIKE '%q%'` on `idx_users_username_trgm`, never the `%` similarity operator | `UserRepository.searchByUsername` — the similarity operator returned all 200,000 rows and discarded 174,846 on recheck in measurement |
 | User search requires authentication, excludes the viewer, and excludes non-`active` and soft-deleted accounts | `UserSearchServiceImpl.searchUsers`; the `authenticated()` matcher must precede the `/{userId}` `permitAll` matcher in `SecurityConfig`, since that template also matches `/users/search` |
-| User search does **not** filter blocked users; it ships accurate `isBlocking` and `isBlockedBy` instead | Omitting them would disclose the block set by omission |
+| User search excludes any account in a block relationship with the viewer, in either direction | `UserRepository.searchByUsername` — a bidirectional `NOT EXISTS` against `blocks`, matching the stealth block model every other list applies. There is no `isBlockedBy` field on the wire at all; `ViewerRelationshipResponse` carries only `isBlocking`, since no response surface may confirm "this user has blocked the viewer" |
 | User search rejects a query shorter than 2 characters and caps reachable offset at 10,000 | `UserSearchServiceImpl` and `OffsetCursorCodec.MAX_OFFSET` |
 | User search has no circuit breaker; database availability failures propagate rather than becoming an empty page | An empty page would be indistinguishable from "no such user" |
-| Username lookup is **case-sensitive** and shares the id lookup's gating path | `UserServiceImpl.getUserProfileByUsername` — resolves via `findByUsernameAndDeletedAtIsNull`, then the same `assemblePublicProfile` used by the id lookup, so the two cannot drift on block handling or counter masking |
+| Username lookup is **case-insensitive** and shares the id lookup's gating path | `UserServiceImpl.getUserProfileByUsername` — resolves via `findByUsernameAndDeletedAtIsNull`, which compares `lower(username)` on both sides, then the same `assemblePublicProfile` used by the id lookup, so the two cannot drift on block handling or counter masking. The response echoes the stored casing, not the casing that was queried |
 | Absent, soft-deleted, and block-hidden accounts are indistinguishable on lookup | All three yield `NOT_FOUND` with an identical response body apart from the timestamp |
 | Social counts are relationship-gated | `UserServiceImpl.getUserProfile` — owner always sees them; a private account reveals them only to accepted followers; a public account reveals them to any authenticated caller; everyone else receives `null` |
 | Every user-referencing response carries the viewer's relationship state | `UserServiceImpl.getUserProfile` via `SocialService.loadRelationships` |
@@ -93,14 +96,38 @@ These rules are stated in the schema's intent but have no application code behin
 | Soft delete of a user must set `deleted_at = NOW()` and must not hard-delete | Not implemented — no code path sets `users.deleted_at`; reads filter on it, but nothing writes it |
 | Restoring a soft-deleted user must set `deleted_at = NULL` | Not implemented |
 
-### D. Scope Simplifications
+### D. Known and Accepted Residual Disclosure
+
+`users.follower_count`, `users.following_count`, and `users.post_count` are trigger-maintained (Section 2) and viewer-blind: every caller who can see the counter at all sees the identical number, regardless of that caller's own block relationships.
+
+That viewer-blindness is a weak signal, not a safeguard.
+A block-filtered list and a viewer-blind counter can disagree by subtraction.
+Concretely: C blocks A.
+Both A and C follow M.
+A reads M's follower list — which `social`'s follower-listing filter (see `docs/modules/social/DATA_RULES.md`) excludes accounts in a block relationship with A from — and separately reads M's `followerCount`, which does not.
+If the list is short one row relative to the count, A learns that some account in M's follower set is in a block relationship with A.
+Repeating this across every profile A and C both follow, and intersecting the results, narrows the candidate set — though A never learns which account it is, only that at least one exists.
+
+This was evaluated and the counters were left unchanged.
+Computing a counter per viewer would require a live count query on every profile read instead of the trigger-maintained column, and would not be a simple filter — it would need to run per viewer, since the same profile is read by many different viewers with different block sets.
+That cost was judged not worth closing a signal this weak: it discloses that a block exists somewhere in an intersection, never whose.
+
+A future reader must not re-derive the "counters are safe because they're viewer-blind" reasoning and must not treat this as a defect still open for a simple fix — it is accepted, for the stated reason, and the trade-off has already been made.
+
+### E. Scope Simplifications
 
 - `users.avatar_url` is a plain `TEXT` CDN URL, not a foreign key to `media_assets`.
   This avoids enforcing deletion ordering but means avatar asset and profile are not referentially linked.
   The client supplies the CDN URL directly on profile update; the users module performs no `media_assets` lookup.
 - No account deactivation self-service flow; `status` changes are admin-only actions.
-- Username uniqueness is case-sensitive, so `Alice` and `alice` can coexist.
-  This is an impersonation vector and is tracked as a security finding; correcting it requires a collision audit and a rename policy before a unique functional index on `lower(username)` can be created.
+- Username identity is case-insensitive and storage is case-preserving: `Alice` and `alice` are one account, and whichever casing was submitted is what the profile renders.
+  The impersonation vector previously recorded here is closed by the `lower(username)` unique index added in V42.
+- The rename policy for accounts that already collided before V42 remains an open product decision.
+  The migration deliberately fails closed rather than auto-resolving: a database holding two accounts whose usernames differ only by case blocks deployment with `Username case collision detected` until an operator reconciles them.
+  Silently renaming or merging a live account is not a decision a migration should make.
+- Username availability is checked table-wide, including soft-deleted accounts, because soft delete does not release a username and no purge job exists.
+  See `GLOBAL_RULES.md` section 3.
+  `UserRepository.existsByUsername` is the single guard on every write path: registration, OAuth username generation, and profile update.
 
 ---
 

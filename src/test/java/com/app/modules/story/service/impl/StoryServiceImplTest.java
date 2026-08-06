@@ -211,7 +211,8 @@ class StoryServiceImplTest {
     }
 
     @Test
-    void listUserStories_blocked_throwsBlocked() {
+    void listUserStories_blocked_throwsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one.
         when(storyUserRepository.findByIdAndDeletedAtIsNull(ownerId))
                 .thenReturn(Optional.of(User.builder().id(ownerId).build()));
         when(socialService.isBlockedBetween(viewerId, ownerId)).thenReturn(true);
@@ -219,7 +220,7 @@ class StoryServiceImplTest {
         assertThatThrownBy(() -> service.listUserStories(viewerId, ownerId))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+                .isEqualTo(ApiErrorCode.NOT_FOUND);
     }
 
     @Test
