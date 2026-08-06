@@ -573,6 +573,16 @@ class PostControllerIT {
     }
 
     @Test
+    @Order(30)
+    void getFeed_noFollowsWithMalformedCursor_returns400NotEmptyPage() {
+        TestUser viewer = registerUser("feed_nofollow_badcursor");
+
+        ResponseEntity<Map> response = getFeed(viewer, "!!!not-valid!!!", 20);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     @Order(13)
     void getFeed_acceptedFollow_returnsFollowedPosts() {
         TestUser author = registerUser("feed_author");

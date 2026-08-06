@@ -673,9 +673,9 @@ class PostServiceImplTest {
     @Test
     void getFeed_invalidCursor_throwsInvalidCursor() {
         UUID viewer = UUID.randomUUID();
-        when(socialService.getAcceptedFollowingExcludingBlocks(viewer))
-                .thenReturn(List.of(UUID.randomUUID()));
 
+        // The cursor is decoded before the accepted-following lookup, so an invalid cursor throws
+        // even for a viewer who follows nobody; socialService is deliberately never stubbed here.
         assertThatThrownBy(() -> service.getFeed(viewer, "!!!not-valid-base64!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
