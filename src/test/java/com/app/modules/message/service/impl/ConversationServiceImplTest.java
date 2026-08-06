@@ -11,10 +11,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -29,6 +27,10 @@ import org.springframework.data.domain.Pageable;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.config.MessageProperties;
 import com.app.modules.message.dto.request.AddParticipantsRequest;
@@ -159,7 +161,8 @@ class ConversationServiceImplTest {
     }
 
     @Test
-    void createDirectConversation_blockedPair_throwsSocialBlocked() {
+    void createDirectConversation_blockedPair_throwsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one.
         UUID actorId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         when(userRepository.findByIdAndDeletedAtIsNull(targetId))
@@ -172,7 +175,7 @@ class ConversationServiceImplTest {
                                         actorId, new CreateDirectConversationRequest(targetId)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+                .isEqualTo(ApiErrorCode.NOT_FOUND);
         verify(conversationRepository, never()).findDirectConversationBetween(any(), any());
     }
 
@@ -592,13 +595,16 @@ class ConversationServiceImplTest {
     void listMyConversations_withCursor_decodesAndQueriesContinuation() {
         UUID actorId = UUID.randomUUID();
         UUID conv1Id = UUID.randomUUID();
-        OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        // Truncated to microsecond resolution: the cursor round-trips through epoch-micros, and a
+        // nanosecond remainder would make the decoded value compare unequal to this one.
+        OffsetDateTime cursorTime =
+                TimeCursors.fromMicros(
+                        TimeCursors.toMicros(OffsetDateTime.now(ZoneOffset.UTC).minusHours(1)));
         UUID cursorConvId = UUID.randomUUID();
         String cursor =
-                Base64.getUrlEncoder()
-                        .withoutPadding()
-                        .encodeToString(
-                                (cursorTime + "|" + cursorConvId).getBytes(StandardCharsets.UTF_8));
+                CursorCodec.encode(
+                        new Cursor(TimeCursors.toMicros(cursorTime), cursorConvId),
+                        CursorScope.CONVERSATIONS);
         Conversation conv1 =
                 Conversation.builder()
                         .id(conv1Id)

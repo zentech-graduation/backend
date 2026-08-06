@@ -18,6 +18,7 @@ import com.app.modules.notification.dto.response.NotificationResponse;
 import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.mapper.NotificationMapper;
 import com.app.modules.notification.repository.NotificationRepository;
+import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.service.UserSummaryService;
 
 /**
@@ -32,6 +33,12 @@ import com.app.modules.users.service.UserSummaryService;
  * {@code created_at} is database-defaulted and still null on the entity at the point {@code
  * NotificationServiceImpl.create} enqueues the event, and the outbox payload contract is
  * identifiers only, not the full response shape.
+ *
+ * <p>Stealth block enforcement: unlike the comment fan-out, a notification has exactly one
+ * subscriber (the recipient), so a single {@code existsBetween} check before publishing is
+ * sufficient - no per-session interceptor is needed. Most notification types cannot be generated
+ * across a block in the first place because the actor could never see the recipient's content to
+ * act on it; the check here is a backstop for the one path that can, an unrelated-post mention.
  */
 @Component
 @ConditionalOnProperty(prefix = "app.notification.live", name = "enabled", havingValue = "true")
@@ -44,18 +51,21 @@ public class NotificationLiveFanoutConsumer {
     private final NotificationMapper notificationMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final UserSummaryService userSummaryService;
+    private final BlockRepository blockRepository;
 
     public NotificationLiveFanoutConsumer(
             DomainEventMessageParser parser,
             NotificationRepository notificationRepository,
             NotificationMapper notificationMapper,
             SimpMessagingTemplate messagingTemplate,
-            UserSummaryService userSummaryService) {
+            UserSummaryService userSummaryService,
+            BlockRepository blockRepository) {
         this.parser = parser;
         this.notificationRepository = notificationRepository;
         this.notificationMapper = notificationMapper;
         this.messagingTemplate = messagingTemplate;
         this.userSummaryService = userSummaryService;
+        this.blockRepository = blockRepository;
     }
 
     @RabbitListener(
@@ -75,6 +85,9 @@ public class NotificationLiveFanoutConsumer {
                 return;
             }
             UUID actorId = notification.getActorId();
+            if (actorId != null && blockRepository.existsBetween(actorId, recipientId)) {
+                return;
+            }
             UserSummaryResponse actor =
                     actorId == null
                             ? null

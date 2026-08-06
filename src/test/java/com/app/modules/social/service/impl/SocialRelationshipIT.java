@@ -280,7 +280,7 @@ class SocialRelationshipIT {
     }
 
     @Test
-    void listLikers_blockFlagsReachableUnlikeFollowersEndpoint() {
+    void listLikers_excludesBlockedLikerButKeepsOrdinaryOne() {
         UUID owner = insertUser("owner");
         UUID viewer = insertUser("viewer");
         UUID blockedLiker = insertUser("blockedLiker");
@@ -288,25 +288,17 @@ class SocialRelationshipIT {
         UUID post = insertPublishedPost(owner);
         like(post, blockedLiker);
         like(post, ordinaryLiker);
-        // Viewer blocks blockedLiker after they liked the post; listLikers applies no block
-        // filter, so the like (and therefore the block-flag reachability) survives.
+        // Viewer blocks blockedLiker after they liked the post; the stealth block model requires
+        // listLikers to exclude a liker in a block relationship with the viewer rather than
+        // surface them with an isBlocking flag.
         block(viewer, blockedLiker);
 
         List<UserListItemResponse> content =
                 postLikeService.listLikers(viewer, post, null, 10).getContent();
 
-        assertThat(content).hasSize(2);
-        UserListItemResponse blocked =
-                content.stream()
-                        .filter(i -> i.user().id().equals(blockedLiker))
-                        .findFirst()
-                        .orElseThrow();
-        UserListItemResponse ordinary =
-                content.stream()
-                        .filter(i -> i.user().id().equals(ordinaryLiker))
-                        .findFirst()
-                        .orElseThrow();
-        assertThat(blocked.viewerState().isBlocking()).isTrue();
+        assertThat(content).hasSize(1);
+        UserListItemResponse ordinary = content.get(0);
+        assertThat(ordinary.user().id()).isEqualTo(ordinaryLiker);
         assertThat(ordinary.viewerState().isBlocking()).isFalse();
     }
 

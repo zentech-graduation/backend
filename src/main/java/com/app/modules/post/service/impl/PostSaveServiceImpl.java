@@ -99,12 +99,15 @@ public class PostSaveServiceImpl implements PostSaveService {
         if (!postVisibilityService.isVisibleTo(userId, post)) {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
-        PostSaveId saveId = new PostSaveId(userId, postId);
-        PostSave save =
-                postSaveRepository
-                        .findById(saveId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
-        postSaveRepository.delete(save);
+        // Conditional delete rather than load-then-delete(entity): the latter raises
+        // ObjectOptimisticLockingFailureException (-> 500) when a concurrent duplicate request
+        // already removed the same row. A missing save row still collapses onto POST_NOT_FOUND,
+        // matching the visibility checks above, so it cannot serve as a separate "have you saved
+        // this" oracle.
+        int deleted = postSaveRepository.deleteByUserAndPost(userId, postId);
+        if (deleted == 0) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
     }
 
     @Override

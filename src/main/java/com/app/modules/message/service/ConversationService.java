@@ -25,9 +25,10 @@ public interface ConversationService {
      * @param request the target user to converse with
      * @return the conversation, existing or newly created
      * @throws com.app.common.exception.AppException CONVERSATION_INVALID_PARTICIPANTS for a
-     *     self-conversation; USER_NOT_FOUND when the target does not exist; SOCIAL_BLOCKED on a
-     *     block in either direction; MESSAGE_REQUEST_NOT_ALLOWED when the target restricts message
-     *     requests and does not already follow the caller
+     *     self-conversation; NOT_FOUND when the target does not exist, or on a block in either
+     *     direction - the stealth block model requires the two to be indistinguishable;
+     *     MESSAGE_REQUEST_NOT_ALLOWED when the target restricts message requests and does not
+     *     already follow the caller
      */
     ConversationResponse createDirectConversation(
             UUID actorId, CreateDirectConversationRequest request);

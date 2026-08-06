@@ -9,10 +9,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Conversation participant summary")
 public record ParticipantResponse(
         @Schema(description = "User identifier.") UUID userId,
-        @Schema(description = "Unique username.") String username,
-        @Schema(description = "Display name shown on the profile.") String displayName,
-        @Schema(description = "Avatar CDN URL.") String avatarUrl,
+        @Schema(description = "Unique username.", nullable = true) String username,
+        @Schema(description = "Display name shown on the profile.", nullable = true)
+                String displayName,
+        @Schema(description = "Avatar CDN URL.", nullable = true) String avatarUrl,
         @Schema(description = "Whether this member is a group admin.") boolean isAdmin,
         @Schema(description = "When this member joined.") OffsetDateTime joinedAt,
-        @Schema(description = "When this member left, or null if still active.")
+        @Schema(description = "When this member left, or null if still active.", nullable = true)
                 OffsetDateTime leftAt) {}

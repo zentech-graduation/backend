@@ -29,6 +29,7 @@ import com.app.modules.notification.entity.Notification;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.mapper.NotificationMapper;
 import com.app.modules.notification.repository.NotificationRepository;
+import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +40,7 @@ class NotificationLiveFanoutConsumerTest {
     @Mock private NotificationMapper notificationMapper;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private UserSummaryService userSummaryService;
+    @Mock private BlockRepository blockRepository;
     @Mock private Message amqpMessage;
 
     private NotificationLiveFanoutConsumer consumer;
@@ -51,7 +53,8 @@ class NotificationLiveFanoutConsumerTest {
                         notificationRepository,
                         notificationMapper,
                         messagingTemplate,
-                        userSummaryService);
+                        userSummaryService,
+                        blockRepository);
     }
 
     @Test
@@ -96,6 +99,36 @@ class NotificationLiveFanoutConsumerTest {
 
         verify(messagingTemplate)
                 .convertAndSend(eq("/topic/notifications." + recipientId), eq(response));
+    }
+
+    @Test
+    void consume_actorBlockedWithRecipient_doesNotPush() {
+        UUID notificationId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        DomainEventEnvelope event =
+                new DomainEventEnvelope(
+                        UUID.randomUUID(),
+                        "notification.created.v1",
+                        OffsetDateTime.now(ZoneOffset.UTC),
+                        actorId,
+                        "notification",
+                        notificationId,
+                        Map.of("recipientId", recipientId.toString()));
+        when(parser.parse(amqpMessage)).thenReturn(event);
+        Notification notification =
+                Notification.builder()
+                        .id(notificationId)
+                        .recipientId(recipientId)
+                        .actorId(actorId)
+                        .type(NotificationType.MENTION_POST)
+                        .build();
+        when(notificationRepository.findById(notificationId)).thenReturn(Optional.of(notification));
+        when(blockRepository.existsBetween(actorId, recipientId)).thenReturn(true);
+
+        consumer.consume(amqpMessage);
+
+        verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
     }
 
     @Test

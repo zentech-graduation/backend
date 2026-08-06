@@ -768,6 +768,11 @@ CREATE INDEX idx_users_fts              ON users USING gin (
 -- matching the documented soft-delete retention policy; users_username_key (raw UNIQUE column
 -- constraint above) is retained as a structural guard and is implied by this index.
 CREATE UNIQUE INDEX idx_users_username_lower ON users (lower(username));
+-- Same table-wide shape and rationale as idx_users_username_lower, applied to email: soft delete
+-- does not release an email either, and email identity is case-insensitive per RFC 5321 and every
+-- major mail provider's practice. users_email_key (raw UNIQUE column constraint above) is retained
+-- as a structural guard and is implied by this index.
+CREATE UNIQUE INDEX idx_users_email_lower ON users (lower(email));
 
 -- follows
 CREATE INDEX idx_follows_following      ON follows (following_id, status, created_at DESC);

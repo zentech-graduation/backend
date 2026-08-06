@@ -20,8 +20,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -49,7 +47,6 @@ import com.app.modules.comment.repository.CommentLikeRepository;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.comment.repository.CommentUserRepository;
 import com.app.modules.comment.service.CommentAccessPolicyService;
-import com.app.modules.comment.service.CommentCacheService;
 import com.app.modules.comment.service.CommentModerationService;
 import com.app.modules.comment.service.CommentService;
 import com.app.modules.comment.service.CommentViewerStateService;
@@ -57,6 +54,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.social.repository.BlockRepository;
 import com.app.modules.users.service.UserSummaryService;
 
 import io.micrometer.core.instrument.Timer;
@@ -85,11 +83,11 @@ public class CommentServiceImpl implements CommentService {
     private final CommentProperties properties;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final CommentCacheService cacheService;
     private final CommentMetrics metrics;
     private final PostVisibilityService postVisibilityService;
     private final UserSummaryService userSummaryService;
     private final CommentViewerStateService commentViewerStateService;
+    private final BlockRepository blockRepository;
 
     public CommentServiceImpl(
             CommentRepository commentRepository,
@@ -104,11 +102,11 @@ public class CommentServiceImpl implements CommentService {
             CommentProperties properties,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
-            CommentCacheService cacheService,
             CommentMetrics metrics,
             PostVisibilityService postVisibilityService,
             UserSummaryService userSummaryService,
-            CommentViewerStateService commentViewerStateService) {
+            CommentViewerStateService commentViewerStateService,
+            BlockRepository blockRepository) {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.idempotencyRepository = idempotencyRepository;
@@ -121,11 +119,11 @@ public class CommentServiceImpl implements CommentService {
         this.properties = properties;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
-        this.cacheService = cacheService;
         this.metrics = metrics;
         this.postVisibilityService = postVisibilityService;
         this.userSummaryService = userSummaryService;
         this.commentViewerStateService = commentViewerStateService;
+        this.blockRepository = blockRepository;
     }
 
     @Override
@@ -196,8 +194,11 @@ public class CommentServiceImpl implements CommentService {
 
         enforceSlowMode(post.getId(), actorId);
 
+        // Flush forces the INSERT (and its @CreationTimestamp/@UpdateTimestamp assignment) before
+        // the response is assembled below; save() alone leaves both timestamps null until the
+        // persistence context eventually flushes on its own schedule.
         Comment saved =
-                commentRepository.save(
+                commentRepository.saveAndFlush(
                         Comment.builder()
                                 .postId(post.getId())
                                 .userId(actorId)
@@ -220,8 +221,6 @@ public class CommentServiceImpl implements CommentService {
 
         List<String> mentionedUserIds = resolveMentions(content, actorId);
         enqueueCreated(post, saved, actorId, parentOwnerId, mentionedUserIds, response);
-        CommentResponse cached = response;
-        afterCommit(() -> cacheService.pushToFront(post.getId(), cached));
         return response;
     }
 
@@ -257,6 +256,7 @@ public class CommentServiceImpl implements CommentService {
             Map<String, Object> data = new HashMap<>();
             data.put("postId", saved.getPostId().toString());
             data.put("commentId", saved.getId().toString());
+            data.put("commentOwnerId", saved.getUserId().toString());
             data.put("depth", (int) saved.getDepth());
             // Broadcast projection: this payload is fanned out to every subscriber of the post's
             // live stream, so the editor's own isLiked state must not ride along as if it applied
@@ -269,7 +269,6 @@ public class CommentServiceImpl implements CommentService {
                     saved.getId(),
                     actorId,
                     data);
-            afterCommit(() -> cacheService.invalidate(saved.getPostId()));
             return response;
         } finally {
             clearWriteMdc();
@@ -294,6 +293,10 @@ public class CommentServiceImpl implements CommentService {
             Map<String, Object> data = new HashMap<>();
             data.put("postId", comment.getPostId().toString());
             data.put("commentId", comment.getId().toString());
+            // The comment's own owner, not actorId - a moderator can delete another user's
+            // comment, and the fan-out filter must key off who authored the content, not who
+            // performed this action.
+            data.put("commentOwnerId", comment.getUserId().toString());
             if (comment.getRootId() != null) {
                 data.put("rootId", comment.getRootId().toString());
             }
@@ -304,7 +307,6 @@ public class CommentServiceImpl implements CommentService {
                     comment.getId(),
                     actorId,
                     data);
-            afterCommit(() -> cacheService.invalidate(comment.getPostId()));
         } finally {
             clearWriteMdc();
         }
@@ -379,6 +381,7 @@ public class CommentServiceImpl implements CommentService {
             Map<String, Object> data = new HashMap<>();
             data.put("postId", comment.getPostId().toString());
             data.put("commentId", comment.getId().toString());
+            data.put("commentOwnerId", comment.getUserId().toString());
             outboxService.enqueue(
                     CommentEventTypes.COMMENT_UNLIKED_V1,
                     CommentEventTypes.COMMENT_UNLIKED_V1,
@@ -408,6 +411,7 @@ public class CommentServiceImpl implements CommentService {
             List<Comment> comments =
                     commentRepository.findTopLevelBefore(
                             postId,
+                            viewerId,
                             TimeCursors.fromMicros(decoded.sortValueMicros()),
                             decoded.id(),
                             page);
@@ -415,10 +419,10 @@ public class CommentServiceImpl implements CommentService {
         }
         List<Comment> pinned =
                 commentRepository.findTopLikedTopLevel(
-                        postId, PageRequest.of(0, PINNED_COMMENT_COUNT));
+                        postId, viewerId, PageRequest.of(0, PINNED_COMMENT_COUNT));
         UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         List<Comment> comments =
-                commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, page);
+                commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, viewerId, page);
         return toPage(viewerId, pinned, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
     }
 
@@ -440,9 +444,10 @@ public class CommentServiceImpl implements CommentService {
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Comment> replies =
                 decoded == null
-                        ? commentRepository.findFirstReplies(commentId, page)
+                        ? commentRepository.findFirstReplies(commentId, viewerId, page)
                         : commentRepository.findRepliesBefore(
                                 commentId,
+                                viewerId,
                                 TimeCursors.fromMicros(decoded.sortValueMicros()),
                                 decoded.id(),
                                 page);
@@ -581,6 +586,7 @@ public class CommentServiceImpl implements CommentService {
         data.put("postOwnerId", post.getUserId().toString());
         data.put("commentId", saved.getId().toString());
         data.put("userId", actorId.toString());
+        data.put("commentOwnerId", actorId.toString());
         data.put("depth", (int) saved.getDepth());
         data.put("mentionedUserIds", mentionedUserIds);
         // Broadcast projection: this payload is fanned out to every subscriber of the post's live
@@ -605,6 +611,13 @@ public class CommentServiceImpl implements CommentService {
                 data);
     }
 
+    // A mention across a block relationship, in either direction, resolves to nothing: the
+    // mentioned user must not receive a notification (the harassment channel the stealth block
+    // model exists to close), and the mentioner must not be able to tell resolution was
+    // suppressed rather than the username simply not existing, since that distinction is itself a
+    // disclosure. The filter applies here, at the single source every downstream consumer of
+    // mentionedUserIds reads from - the comment-notification consumer and the live WS fan-out both
+    // inherit it for free rather than needing their own copy of this check.
     private List<String> resolveMentions(String content, UUID actorId) {
         Set<String> usernames = new LinkedHashSet<>();
         Matcher matcher = MENTION.matcher(content);
@@ -617,25 +630,10 @@ public class CommentServiceImpl implements CommentService {
                     .findByUsernameAndDeletedAtIsNull(username)
                     .map(u -> u.getId())
                     .filter(id -> !id.equals(actorId))
+                    .filter(id -> !blockRepository.existsBetween(actorId, id))
                     .ifPresent(id -> ids.add(id.toString()));
         }
         return ids;
-    }
-
-    // Cache mutations run only after the write commits so a rolled-back transaction never leaks
-    // into the cache; outside a transaction the action runs inline.
-    private void afterCommit(Runnable action) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            action.run();
-                        }
-                    });
-        } else {
-            action.run();
-        }
     }
 
     // MDC keys are not in the current logback console pattern; they exist for correlation in log

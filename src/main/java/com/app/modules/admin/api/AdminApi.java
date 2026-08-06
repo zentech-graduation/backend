@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
 import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
@@ -71,6 +72,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.BAN_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> banUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -111,6 +113,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.UNBAN_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> unbanUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -151,6 +154,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -191,6 +195,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.UNSUSPEND_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> unsuspendUser(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
@@ -231,6 +236,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.REMOVE_POST)
     ResponseEntity<ApiResponse<AdminActionResponse>> removePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
@@ -271,6 +277,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.RESTORE_POST)
     ResponseEntity<ApiResponse<AdminActionResponse>> restorePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
@@ -311,6 +318,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.REMOVE_COMMENT)
     ResponseEntity<ApiResponse<AdminActionResponse>> removeComment(
             @PathVariable("commentId") UUID commentId,
@@ -352,6 +360,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.RESTORE_COMMENT)
     ResponseEntity<ApiResponse<AdminActionResponse>> restoreComment(
             @PathVariable("commentId") UUID commentId,
@@ -393,6 +402,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.RESOLVE_REPORT)
     ResponseEntity<ApiResponse<AdminActionResponse>> resolveReport(
             @PathVariable("reportId") UUID reportId,
@@ -434,6 +444,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.DISMISS_REPORT)
     ResponseEntity<ApiResponse<AdminActionResponse>> dismissReport(
             @PathVariable("reportId") UUID reportId,
@@ -461,6 +472,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Admin.ACTIONS)
     ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActions(
             @RequestParam(required = false) UUID adminId,
@@ -496,6 +508,7 @@ public interface AdminApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Admin.ACTION_BY_ID)
     ResponseEntity<ApiResponse<AdminActionResponse>> getActionById(
             @PathVariable("actionId") UUID actionId);
@@ -522,6 +535,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Admin.ACTIONS_FOR_USER)
     ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActionsForUser(
             @PathVariable("userId") UUID userId,

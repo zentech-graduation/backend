@@ -63,7 +63,7 @@ class CommentTopLikedQueryIT {
         UUID high = insertTopLevelComment(postId, user, BASE.minusMinutes(1), 50);
         UUID middle = insertTopLevelComment(postId, user, BASE.minusMinutes(2), 7);
 
-        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, pinnedPage());
+        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, user, pinnedPage());
 
         assertThat(pinned).extracting(Comment::getId).containsExactly(high, middle, low);
     }
@@ -75,7 +75,7 @@ class CommentTopLikedQueryIT {
         UUID older = insertTopLevelComment(postId, user, BASE.minusMinutes(5), 4);
         UUID newer = insertTopLevelComment(postId, user, BASE, 4);
 
-        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, pinnedPage());
+        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, user, pinnedPage());
 
         assertThat(pinned).extracting(Comment::getId).containsExactly(newer, older);
     }
@@ -87,7 +87,7 @@ class CommentTopLikedQueryIT {
         insertTopLevelComment(postId, user, BASE, 0);
         insertTopLevelComment(postId, user, BASE.minusMinutes(1), 0);
 
-        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, pinnedPage());
+        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, user, pinnedPage());
 
         assertThat(pinned).isEmpty();
     }
@@ -101,7 +101,7 @@ class CommentTopLikedQueryIT {
         insertRemovedTopLevelComment(postId, user, BASE.minusMinutes(2), 950);
         insertReply(postId, user, onlyEligible, BASE.minusMinutes(3), 999);
 
-        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, pinnedPage());
+        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, user, pinnedPage());
 
         assertThat(pinned).extracting(Comment::getId).containsExactly(onlyEligible);
     }
@@ -114,7 +114,7 @@ class CommentTopLikedQueryIT {
         UUID mine = insertTopLevelComment(postId, user, BASE, 2);
         insertTopLevelComment(otherPostId, user, BASE.minusMinutes(1), 900);
 
-        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, pinnedPage());
+        List<Comment> pinned = commentRepository.findTopLikedTopLevel(postId, user, pinnedPage());
 
         assertThat(pinned).extracting(Comment::getId).containsExactly(mine);
     }
@@ -129,7 +129,7 @@ class CommentTopLikedQueryIT {
 
         List<Comment> body =
                 commentRepository.findFirstTopLevelExcluding(
-                        postId, new UUID[] {first}, PageRequest.of(0, 10));
+                        postId, new UUID[] {first}, user, PageRequest.of(0, 10));
 
         assertThat(body).extracting(Comment::getId).containsExactly(second, third);
     }
@@ -143,7 +143,7 @@ class CommentTopLikedQueryIT {
 
         List<Comment> body =
                 commentRepository.findFirstTopLevelExcluding(
-                        postId, new UUID[0], PageRequest.of(0, 10));
+                        postId, new UUID[0], user, PageRequest.of(0, 10));
 
         assertThat(body).extracting(Comment::getId).containsExactly(first, second);
     }
@@ -158,7 +158,7 @@ class CommentTopLikedQueryIT {
 
         List<Comment> body =
                 commentRepository.findFirstTopLevelExcluding(
-                        postId, new UUID[] {excluded}, PageRequest.of(0, 2));
+                        postId, new UUID[] {excluded}, user, PageRequest.of(0, 2));
 
         assertThat(body).extracting(Comment::getId).containsExactly(second, third);
     }

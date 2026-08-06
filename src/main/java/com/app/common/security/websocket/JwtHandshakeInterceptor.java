@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -67,11 +68,13 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         String token = extractToken(request.getURI());
         if (token == null || token.isBlank()) {
             logRejection(request, "missing_token");
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
         Optional<UserPrincipal> principal = tokenPrincipalResolver.resolve(token);
         if (principal.isEmpty()) {
             logRejection(request, "rejected");
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
         attributes.put(PRINCIPAL_ATTRIBUTE, principal.get());

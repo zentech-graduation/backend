@@ -40,10 +40,14 @@ public interface UserRepository extends Repository<User, UUID> {
      * discarded 174,846 on recheck for a 200 ms execution, because short similar usernames all fall
      * within the default similarity threshold.
      *
-     * <p>Excludes soft-deleted rows, non-active accounts, and the viewer themselves. Blocked users
-     * are deliberately <em>not</em> excluded - omitting them would leak the block set to a caller
-     * who compares results before and after being blocked. The block relationship travels to the
-     * client as viewer state instead.
+     * <p>Excludes soft-deleted rows, non-active accounts, and the viewer themselves. Also excludes
+     * any account in a block relationship with the viewer, in either direction: the stealth block
+     * model requires a blocked party to be unable to distinguish "no match" from "this account
+     * exists but has blocked you," and search is a surface that must honor that the same as every
+     * other list.
+     *
+     * <p>The block-exclusion subquery is served by {@code idx_blocks_blocker} and {@code
+     * idx_blocks_blocked} (V15), one index per direction of the {@code OR}.
      *
      * <p>{@code id} is the final sort key so the offset window stays deterministic when two
      * accounts share a {@code follower_count}.
@@ -52,8 +56,8 @@ public interface UserRepository extends Repository<User, UUID> {
      * @param viewerId the requesting user, excluded from their own results
      * @param limit maximum number of rows to return
      * @param offset number of leading rows to skip
-     * @return matching live, active users ordered by {@code follower_count} descending, then {@code
-     *     username}, then {@code id}
+     * @return matching live, active, unblocked users ordered by {@code follower_count} descending,
+     *     then {@code username}, then {@code id}
      */
     @Query(
             value =
@@ -62,6 +66,9 @@ public interface UserRepository extends Repository<User, UUID> {
                             + " AND status = 'active'"
                             + " AND username ILIKE '%' || :query || '%'"
                             + " AND id <> :viewerId"
+                            + " AND NOT EXISTS (SELECT 1 FROM blocks b"
+                            + " WHERE (b.blocker_id = :viewerId AND b.blocked_id = users.id)"
+                            + " OR (b.blocker_id = users.id AND b.blocked_id = :viewerId))"
                             + " ORDER BY follower_count DESC, username ASC, id ASC"
                             + " LIMIT :limit OFFSET :offset",
             nativeQuery = true)
@@ -71,7 +78,33 @@ public interface UserRepository extends Repository<User, UUID> {
             @Param("limit") int limit,
             @Param("offset") int offset);
 
-    Optional<User> findByEmailAndDeletedAtIsNull(String email);
+    /**
+     * Resolves an active user by email, comparing case-insensitively.
+     *
+     * <p>Email identity is case-insensitive per RFC 5321's domain part and every major mail
+     * provider's practice for the local part too, so the comparison must normalize both sides
+     * rather than assume the stored value is lowercase. Seeks on {@code idx_users_email_lower}
+     * (V44), a table-wide unique functional index, and applies {@code deleted_at IS NULL} as a
+     * filter. At most one row can share a lowercased email, so the filter never discards more than
+     * one row.
+     *
+     * @param email email address in any casing
+     * @return the matching active user, or empty when no active account holds that address
+     */
+    @Query("SELECT u FROM User u WHERE lower(u.email) = lower(:email) AND u.deletedAt IS NULL")
+    Optional<User> findByEmailAndDeletedAtIsNull(@Param("email") String email);
+
+    /**
+     * Resolves a user by email, including a soft-deleted one, comparing case-insensitively.
+     *
+     * <p>Used by OAuth2 account linking, which must find an existing account by its verified
+     * provider email regardless of the casing either side happens to hold.
+     *
+     * @param email email address in any casing
+     * @return the matching account, live or soft-deleted, or empty when none holds that address
+     */
+    @Query("SELECT u FROM User u WHERE lower(u.email) = lower(:email)")
+    Optional<User> findByEmailIgnoreCase(@Param("email") String email);
 
     /**
      * Resolves an active user by username, comparing case-insensitively.
@@ -97,7 +130,22 @@ public interface UserRepository extends Repository<User, UUID> {
      */
     Optional<UserSecurityProjection> findProjectedByIdAndDeletedAtIsNull(UUID id);
 
-    boolean existsByEmailAndDeletedAtIsNull(String email);
+    /**
+     * Reports whether an active account already holds this email, comparing case-insensitively.
+     *
+     * <p>Served by {@code idx_users_email_lower} (V44).
+     *
+     * <p>Currently unused. Availability checks deliberately use the table-wide {@link
+     * #existsByEmail} instead, because soft delete does not release an email; see {@code
+     * GLOBAL_RULES.md} section 3.
+     *
+     * @param email email address in any casing
+     * @return true when an active account holds that address under case-insensitive comparison
+     */
+    @Query(
+            "SELECT COUNT(u) > 0 FROM User u "
+                    + "WHERE lower(u.email) = lower(:email) AND u.deletedAt IS NULL")
+    boolean existsByEmailAndDeletedAtIsNull(@Param("email") String email);
 
     /**
      * Reports whether an active account already holds this username, comparing case-insensitively.
@@ -116,11 +164,22 @@ public interface UserRepository extends Repository<User, UUID> {
                     + "WHERE lower(u.username) = lower(:username) AND u.deletedAt IS NULL")
     boolean existsByUsernameAndDeletedAtIsNull(@Param("username") String username);
 
-    // Table-wide checks — used for uniqueness validation consistent with DB UNIQUE constraints
-    // that have no partial index excluding soft-deleted rows.
-    Optional<User> findByEmail(String email);
-
-    boolean existsByEmail(String email);
+    /**
+     * Reports whether any account, including a soft-deleted one, holds this email under
+     * case-insensitive comparison.
+     *
+     * <p>Deliberately table-wide: soft delete does not release an email and no purge job exists, so
+     * a registration check that skipped soft-deleted rows would pass and then fail on the {@code
+     * users_email_key} constraint.
+     *
+     * <p>Served by {@code idx_users_email_lower} (V44), which is table-wide and so answers a query
+     * spanning soft-deleted rows.
+     *
+     * @param email email address in any casing
+     * @return true when any account, live or soft-deleted, holds that address
+     */
+    @Query("SELECT COUNT(u) > 0 FROM User u WHERE lower(u.email) = lower(:email)")
+    boolean existsByEmail(@Param("email") String email);
 
     /**
      * Reports whether any account, including a soft-deleted one, holds this username under

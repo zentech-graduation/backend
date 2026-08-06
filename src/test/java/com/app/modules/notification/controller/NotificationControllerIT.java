@@ -166,6 +166,32 @@ class NotificationControllerIT {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void listNotifications_readAndUnread_reflectsIsReadInResponseBody() {
+        Notification read = seedFollow(userA.getId(), userB.getId());
+        Notification unread = seedFollow(userA.getId(), userB.getId());
+        patchWithToken("/api/v1/notifications/" + read.getId() + "/read", userA);
+
+        ResponseEntity<Map> response = getWithToken("/api/v1/notifications", userA);
+
+        List<?> items = content(response);
+        Map<?, ?> readItem =
+                items.stream()
+                        .map(i -> (Map<?, ?>) i)
+                        .filter(i -> i.get("id").equals(read.getId().toString()))
+                        .findFirst()
+                        .orElseThrow();
+        Map<?, ?> unreadItem =
+                items.stream()
+                        .map(i -> (Map<?, ?>) i)
+                        .filter(i -> i.get("id").equals(unread.getId().toString()))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(readItem.get("isRead")).isEqualTo(true);
+        assertThat(unreadItem.get("isRead")).isEqualTo(false);
+    }
+
+    @Test
     void markAsRead_otherUsersNotification_returns403() {
         Notification n = seedFollow(userB.getId(), userA.getId());
 

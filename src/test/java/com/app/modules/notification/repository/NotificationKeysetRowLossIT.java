@@ -80,8 +80,50 @@ class NotificationKeysetRowLossIT {
         assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
     }
 
+    @Test
+    void findFirstByRecipient_excludesNotificationsFromBlockedActor_eitherDirection() {
+        UUID recipient = insertUser("notif_recipient_blocked");
+        UUID blockedByRecipient = insertUser("actor_blocked_by_recipient");
+        UUID blockedTheRecipient = insertUser("actor_blocked_the_recipient");
+        UUID unrelatedActor = insertUser("actor_unrelated");
+        block(recipient, blockedByRecipient);
+        block(blockedTheRecipient, recipient);
+        UUID keep = insertNotificationWithActor(recipient, unrelatedActor, SHARED_INSTANT);
+        insertNotificationWithActor(recipient, blockedByRecipient, SHARED_INSTANT.minusMinutes(1));
+        insertNotificationWithActor(recipient, blockedTheRecipient, SHARED_INSTANT.minusMinutes(2));
+
+        List<Notification> page =
+                notificationRepository.findFirstByRecipient(recipient, PageRequest.of(0, 10));
+
+        assertThat(page).extracting(Notification::getId).containsExactly(keep);
+    }
+
+    @Test
+    void countByRecipientIdAndIsReadFalse_excludesUnreadFromBlockedActor() {
+        UUID recipient = insertUser("notif_recipient_count");
+        UUID blockedActor = insertUser("actor_blocked_for_count");
+        UUID unrelatedActor = insertUser("actor_unrelated_for_count");
+        block(recipient, blockedActor);
+        insertNotificationWithActor(recipient, unrelatedActor, SHARED_INSTANT);
+        insertNotificationWithActor(recipient, blockedActor, SHARED_INSTANT.minusMinutes(1));
+
+        long unread = notificationRepository.countByRecipientIdAndIsReadFalse(recipient);
+
+        assertThat(unread).isEqualTo(1);
+    }
+
     private static PageRequest page() {
         return PageRequest.of(0, PAGE_SIZE);
+    }
+
+    private void block(UUID blockerId, UUID blockedId) {
+        jdbcClient
+                .sql(
+                        "INSERT INTO blocks(blocker_id, blocked_id, created_at)"
+                                + " VALUES (:blockerId, :blockedId, now())")
+                .param("blockerId", blockerId)
+                .param("blockedId", blockedId)
+                .update();
     }
 
     private UUID insertUser(String username) {
@@ -105,6 +147,20 @@ class NotificationKeysetRowLossIT {
                         "INSERT INTO notifications(recipient_id, type, created_at)"
                                 + " VALUES (:recipientId, 'follow', :createdAt) RETURNING id")
                 .param("recipientId", recipientId)
+                .param("createdAt", createdAt)
+                .query(UUID.class)
+                .single();
+    }
+
+    private UUID insertNotificationWithActor(
+            UUID recipientId, UUID actorId, OffsetDateTime createdAt) {
+        return jdbcClient
+                .sql(
+                        "INSERT INTO notifications(recipient_id, actor_id, type, created_at)"
+                                + " VALUES (:recipientId, :actorId, 'follow', :createdAt) RETURNING"
+                                + " id")
+                .param("recipientId", recipientId)
+                .param("actorId", actorId)
                 .param("createdAt", createdAt)
                 .query(UUID.class)
                 .single();

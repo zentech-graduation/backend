@@ -1,16 +1,24 @@
 package com.app.common.config.websocket;
 
+import java.util.List;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
+import com.app.common.security.websocket.BrokerSendGuardInterceptor;
 import com.app.common.security.websocket.SessionTrackingWebSocketHandlerDecoratorFactory;
+import com.app.modules.comment.live.CommentLiveBlockFilterInterceptor;
 import com.app.modules.comment.live.CommentWebSocketAuthInterceptor;
 import com.app.modules.notification.live.NotificationWebSocketAuthInterceptor;
+
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Owns the broker-wide STOMP concerns shared by every WebSocket endpoint in the application: the
@@ -33,28 +41,64 @@ import com.app.modules.notification.live.NotificationWebSocketAuthInterceptor;
         "${app.comment.live.enabled:false} or ${app.notification.live.enabled:false}")
 public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
 
+    private final BrokerSendGuardInterceptor brokerSendGuardInterceptor;
     private final CommentWebSocketAuthInterceptor commentAuthInterceptor;
     private final NotificationWebSocketAuthInterceptor notificationAuthInterceptor;
     private final SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory;
+    private final CommentLiveBlockFilterInterceptor commentLiveBlockFilterInterceptor;
+    private final JsonMapper jsonMapper;
 
     public WebSocketBrokerConfig(
+            BrokerSendGuardInterceptor brokerSendGuardInterceptor,
             CommentWebSocketAuthInterceptor commentAuthInterceptor,
             NotificationWebSocketAuthInterceptor notificationAuthInterceptor,
-            SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory) {
+            SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory,
+            CommentLiveBlockFilterInterceptor commentLiveBlockFilterInterceptor,
+            JsonMapper jsonMapper) {
+        this.brokerSendGuardInterceptor = brokerSendGuardInterceptor;
         this.commentAuthInterceptor = commentAuthInterceptor;
         this.notificationAuthInterceptor = notificationAuthInterceptor;
         this.sessionTrackingDecoratorFactory = sessionTrackingDecoratorFactory;
+        this.commentLiveBlockFilterInterceptor = commentLiveBlockFilterInterceptor;
+        this.jsonMapper = jsonMapper;
+    }
+
+    /**
+     * Serializes STOMP payloads with the application's own {@link JsonMapper} rather than the
+     * private one Spring builds by default for this converter, which reads none of the {@code
+     * spring.jackson.*} configuration.
+     *
+     * <p>This aligns the surface for any value the converter itself serializes. It does not govern
+     * a domain event's {@code data}, which reaches the socket already serialized by {@code
+     * DomainEventEnvelopeJson} and is re-emitted verbatim; that codec sets its own timestamp zone
+     * for the same reason. Returning {@code true} keeps the framework's String and byte-array
+     * converters registered after this one; the composite picks the first that can handle the
+     * payload, so JSON is served from here.
+     */
+    @Override
+    public boolean configureMessageConverters(List<MessageConverter> messageConverters) {
+        messageConverters.add(new JacksonJsonMessageConverter(jsonMapper));
+        return true;
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/topic");
-        registry.setApplicationDestinationPrefixes("/app");
+        registry.setApplicationDestinationPrefixes(
+                BrokerSendGuardInterceptor.APPLICATION_DESTINATION_PREFIX);
     }
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(commentAuthInterceptor, notificationAuthInterceptor);
+        // brokerSendGuardInterceptor runs first so a forged SEND at a /topic/** destination is
+        // rejected before any module-specific interceptor logic runs.
+        registration.interceptors(
+                brokerSendGuardInterceptor, commentAuthInterceptor, notificationAuthInterceptor);
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(commentLiveBlockFilterInterceptor);
     }
 
     @Override

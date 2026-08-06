@@ -57,6 +57,9 @@ app:
   security:
     trusted-proxy-cidrs:
       - "127.0.0.1"
+      # A request over loopback arrives as the IPv6 form on most local setups; without this
+      # entry the IPv4 entry above never actually matches during local testing.
+      - "::1"
     max-login-body-bytes: 2048
     cookie-signing-secret: "dev-insecure-cookie-signing-secret-change-me"
   rate-limit:

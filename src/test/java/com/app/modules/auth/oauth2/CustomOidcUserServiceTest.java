@@ -117,7 +117,7 @@ class CustomOidcUserServiceTest {
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
 
-        verify(userRepository, never()).findByEmail(any());
+        verify(userRepository, never()).findByEmailIgnoreCase(any());
         verify(userRepository, never()).save(any());
     }
 
@@ -160,7 +160,8 @@ class CustomOidcUserServiceTest {
         OidcUserRequest request = buildRequestForRegistrationId("google");
         when(oauthAccountRepository.findByProviderAndProviderId(eq(OAuthProvider.GOOGLE), any()))
                 .thenReturn(Optional.empty());
-        when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase("newuser@example.com"))
+                .thenReturn(Optional.empty());
         when(userRepository.existsByUsername(any())).thenReturn(false);
         User saved =
                 User.builder()

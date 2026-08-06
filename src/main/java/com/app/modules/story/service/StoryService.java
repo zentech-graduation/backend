@@ -43,9 +43,9 @@ public interface StoryService {
      * @param viewerId the requesting user
      * @param targetUserId the story owner
      * @return active stories of the target user
-     * @throws com.app.common.exception.AppException NOT_FOUND when the target user does not exist;
-     *     SOCIAL_BLOCKED on a block in either direction; STORY_FORBIDDEN for a private account
-     *     without an accepted follow
+     * @throws com.app.common.exception.AppException NOT_FOUND when the target user does not exist,
+     *     or on a block in either direction - the stealth block model requires the two to be
+     *     indistinguishable; STORY_FORBIDDEN for a private account without an accepted follow
      */
     List<StoryResponse> listUserStories(UUID viewerId, UUID targetUserId);
 

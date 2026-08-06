@@ -203,6 +203,13 @@ public interface SocialApi {
                 content =
                         @Content(
                                 mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Target user is already blocked",
+                content =
+                        @Content(
+                                mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping(ApiConstants.Social.BLOCK)
@@ -246,6 +253,14 @@ public interface SocialApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Target account is private and the caller is not an accepted follower",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "User not found",
                 content =
@@ -268,6 +283,14 @@ public interface SocialApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Target account is private and the caller is not an accepted follower",
                 content =
                         @Content(
                                 mediaType = "application/json",

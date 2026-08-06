@@ -307,8 +307,10 @@ public class PostServiceImpl implements PostService {
                         .findByIdAndDeletedAtIsNull(targetUserId)
                         .orElseThrow(
                                 () -> new AppException(ApiErrorCode.NOT_FOUND, "User not found"));
+        // Stealth block model: matches assemblePublicProfile's reference behaviour - a block in
+        // either direction must be indistinguishable from targetUserId not existing.
         if (socialService.isBlockedBetween(viewerId, targetUserId)) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+            throw new AppException(ApiErrorCode.NOT_FOUND, "User not found");
         }
         boolean isOwner = viewerId.equals(targetUserId);
         if (target.isPrivate()
@@ -348,13 +350,16 @@ public class PostServiceImpl implements PostService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<FeedPostResponse> getFeed(UUID viewerId, String cursor, int size) {
+        // Decoded before the empty-follow-set short-circuit below so a malformed cursor is
+        // rejected the same way regardless of how many accounts the viewer follows, instead of
+        // silently returning an empty page for a viewer who follows nobody.
+        Cursor decoded = decodeCursor(cursor, CursorScope.POST_FEED);
         List<UUID> authorIds = socialService.getAcceptedFollowingExcludingBlocks(viewerId);
         int pageSize = normalizeLimit(size);
         if (authorIds.isEmpty()) {
             return CursorPageResponse.of(
                     Collections.emptyList(), false, null, null, cursor != null);
         }
-        Cursor decoded = decodeCursor(cursor, CursorScope.POST_FEED);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<Post> posts =
                 decoded == null
