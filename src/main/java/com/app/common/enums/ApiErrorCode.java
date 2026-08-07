@@ -21,7 +21,9 @@ public enum ApiErrorCode {
     FORBIDDEN("FORBIDDEN", "Access to this resource is forbidden", HttpStatus.FORBIDDEN),
     UNAUTHORIZED("UNAUTHORIZED", "Authentication is required", HttpStatus.UNAUTHORIZED),
     INTERNAL_ERROR("INTERNAL_ERROR", "An unexpected error occurred", HttpStatus.INTERNAL_SERVER_ERROR),
-    TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "The system is busy. Please try again in a few minutes.", HttpStatus.TOO_MANY_REQUESTS),
+    // Raised only when the caller exceeds their own per-endpoint quota, never for server load,
+    // so the message must not attribute it to the system being busy.
+    TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "Too many requests. Please wait before trying again.", HttpStatus.TOO_MANY_REQUESTS),
     SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", "External service temporarily unavailable. Please try again later.", HttpStatus.SERVICE_UNAVAILABLE),
 
     // Auth
@@ -30,9 +32,13 @@ public enum ApiErrorCode {
     AUTH_TOKEN_INVALID("AUTH_TOKEN_INVALID", "Invalid access token", HttpStatus.UNAUTHORIZED),
     AUTH_REFRESH_TOKEN_EXPIRED("AUTH_REFRESH_TOKEN_EXPIRED", "Refresh token has expired", HttpStatus.UNAUTHORIZED),
     AUTH_REFRESH_TOKEN_INVALID("AUTH_REFRESH_TOKEN_INVALID", "Invalid or revoked refresh token", HttpStatus.UNAUTHORIZED),
-    AUTH_ACCOUNT_LOCKED("AUTH_ACCOUNT_LOCKED", "Account is temporarily locked due to too many failed attempts", HttpStatus.FORBIDDEN),
-    AUTH_ACCOUNT_INACTIVE("AUTH_ACCOUNT_INACTIVE", "Account is inactive", HttpStatus.FORBIDDEN),
-    AUTH_EMAIL_NOT_VERIFIED("AUTH_EMAIL_NOT_VERIFIED", "Email address has not been verified", HttpStatus.FORBIDDEN),
+    // The three account states below are the only conditions that produce a 403 from
+    // UserStateValidator, and each message names the state that produced it. AUTH_ACCOUNT_LOCKED
+    // previously read "temporarily locked due to too many failed attempts", which was false on
+    // every count: it is raised only for a permanent ban, and no failed-attempt lockout exists.
+    AUTH_ACCOUNT_LOCKED("AUTH_ACCOUNT_LOCKED", "This account has been banned", HttpStatus.FORBIDDEN),
+    AUTH_ACCOUNT_INACTIVE("AUTH_ACCOUNT_INACTIVE", "This account is suspended or deactivated", HttpStatus.FORBIDDEN),
+    AUTH_EMAIL_NOT_VERIFIED("AUTH_EMAIL_NOT_VERIFIED", "This account's email address has not been verified", HttpStatus.FORBIDDEN),
     AUTH_PASSWORD_MISMATCH("AUTH_PASSWORD_MISMATCH", "Current password is incorrect", HttpStatus.BAD_REQUEST),
     AUTH_RESET_TOKEN_INVALID("AUTH_RESET_TOKEN_INVALID", "Invalid or expired reset token", HttpStatus.BAD_REQUEST),
     AUTH_RESET_TOKEN_EXPIRED("AUTH_RESET_TOKEN_EXPIRED", "Reset token has expired", HttpStatus.GONE),
