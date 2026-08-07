@@ -379,12 +379,19 @@ class OpenApiContractIT {
         JsonNode doc = document();
         // Each pair names one status the audit observed on the wire but the document did not
         // list, confirmed against source as a real, reachable outcome (not the 500s HIGH-1/
-        // HIGH-6/HIGH-7/MED-5 already account for). One audit-observed 403 on POST
-        // /api/v1/auth/login could not be traced to a source-level cause and is deliberately not
-        // documented here rather than guessed at.
+        // HIGH-6/HIGH-7/MED-5 already account for).
+        //
+        // The four auth entries are the 403 UserStateValidator raises for a banned, suspended,
+        // deactivated, or email-unverified account. The audit's authorisation matrix skips
+        // /api/v1/auth/** by design, so this whole group went unmeasured there and was only
+        // caught by re-running the harness end to end.
         record Expectation(String operationId, String status) {}
         List<Expectation> expectations =
                 List.of(
+                        new Expectation("POST /api/v1/auth/login", "403"),
+                        new Expectation("POST /api/v1/auth/refresh", "403"),
+                        new Expectation("POST /api/v1/auth/reset-password", "403"),
+                        new Expectation("POST /api/v1/auth/oauth2/exchange", "403"),
                         new Expectation("GET /api/v1/posts/{postId}/comments", "403"),
                         new Expectation("GET /api/v1/comments/{commentId}/replies", "403"),
                         new Expectation("DELETE /api/v1/comments/{commentId}/like", "403"),

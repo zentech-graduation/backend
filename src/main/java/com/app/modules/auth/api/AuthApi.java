@@ -101,6 +101,19 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Credentials were correct but the account may not start a session:"
+                                + " banned (AUTH_ACCOUNT_LOCKED), suspended or deactivated"
+                                + " (AUTH_ACCOUNT_INACTIVE), or email not yet verified"
+                                + " (AUTH_EMAIL_NOT_VERIFIED). Raised only after the password is"
+                                + " verified, so it never reveals account state to a caller who"
+                                + " has not proven knowledge of the credentials.",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure",
                 content =
@@ -134,6 +147,16 @@ public interface AuthApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Refresh token invalid or expired",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Account is banned (AUTH_ACCOUNT_LOCKED), or suspended or deactivated"
+                                + " (AUTH_ACCOUNT_INACTIVE), since a session must not outlive the"
+                                + " account state that permitted it",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -289,6 +312,15 @@ public interface AuthApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Token was valid but the account is banned (AUTH_ACCOUNT_LOCKED), or"
+                                + " suspended or deactivated (AUTH_ACCOUNT_INACTIVE)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
                 content =
@@ -315,6 +347,15 @@ public interface AuthApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure, or exchange code invalid or expired",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description =
+                        "Code was valid but the account is banned (AUTH_ACCOUNT_LOCKED), or"
+                                + " suspended or deactivated (AUTH_ACCOUNT_INACTIVE)",
                 content =
                         @Content(
                                 mediaType = "application/json",
