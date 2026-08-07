@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Refresh tokens are now also issued as an `HttpOnly`, `SameSite`-scoped cookie on login, email verification, OAuth2 code exchange, and refresh, so browser clients can restore a session after a page reload without persisting a credential to web storage.
+- New `app.security.refresh-cookie` configuration group controls the cookie's name, path, `Secure` flag, and `SameSite` policy per environment.
+
 ### Security
 - Closed several remaining ways a blocked party's identity could leak: the live comment feed now filters each subscriber individually instead of broadcasting to everyone watching a post, notification listings and unread counts exclude blocked actors, mentioning a blocked account no longer delivers a notification, and the last few endpoints that confirmed a block's existence now respond identically to a nonexistent account instead.
 - Email uniqueness is now case-insensitive, closing a duplicate-account gap equivalent to the one already closed for usernames.
@@ -19,11 +23,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
 
 ### Changed
+- `POST /auth/refresh` and `POST /auth/logout` accept the refresh token from the `luvax_refresh` cookie when the request body omits it; a token supplied in the body always takes precedence.
+- `POST /auth/refresh` now returns `401` rather than `400` when no refresh token is supplied by either the body or the cookie.
+- `POST /auth/logout` clears the refresh cookie and remains idempotent when no token is supplied at all.
 - Flyway no longer accepts out-of-order migrations; the migration set is a contiguous sequence with no gaps, so this only re-enables a safety check that was previously suppressed for no reason tied to an actual workflow.
 - Notification API responses now embed the triggering user's summary (id, username, display name, avatar, verified flag) instead of a bare actor id; a soft-deleted or unknown actor now renders as a placeholder instead of a raw id the client had to resolve separately. This is a breaking change to the notification response shape.
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- Validation constraints declared on security configuration properties are now enforced at startup; they were previously bound without ever being checked.
 - Login, token refresh, password reset, and OAuth2 code exchange all reject a banned, suspended, deactivated, or unverified account with 403, but none of them documented it, so a client had no documented contract to branch on. All four now declare it, including which error code corresponds to which account state.
 - Every endpoint that accepts a request body now documents the 415 it returns for an unsupported content type, along with four further statuses that were reachable but undeclared (a malformed id in the path, an invalid token sent to an otherwise-anonymous endpoint, and removing a group's last admin).
 - Timestamps delivered over WebSocket rendered in the server's local offset while the same field over REST rendered in UTC; both now render in UTC.
