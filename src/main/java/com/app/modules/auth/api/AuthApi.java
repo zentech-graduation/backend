@@ -175,7 +175,9 @@ public interface AuthApi {
     @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.REFRESH)
     ResponseEntity<ApiResponse<AuthResponse>> refresh(
-            @Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest);
+            @Valid @RequestBody(required = false) RefreshRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse);
 
     /** Revokes the supplied refresh token. Idempotent. */
     @Operation(
@@ -204,7 +206,10 @@ public interface AuthApi {
     })
     @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.LOGOUT)
-    ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request);
+    ResponseEntity<Void> logout(
+            @Valid @RequestBody(required = false) RefreshRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse);
 
     /** Verifies an email address using the token embedded in the verification link. */
     @Operation(

@@ -764,6 +764,128 @@ class AuthControllerIT {
     }
 
     @Test
+    void refresh_emptyBodyWithCookie_returns200AndRotatesTheCookie() {
+        String email = uniqueEmail("ck_refresh_ok");
+        postJson("/api/v1/auth/register", registerBody("user_ckr", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        ResponseEntity<Map> login =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+        String originalCookieValue = cookieValue(setCookie(login, "luvax_refresh"));
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie(
+                        "/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + originalCookieValue);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("accessToken")).asString().isNotBlank();
+        String rotatedCookie = setCookie(response, "luvax_refresh");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(cookieValue(rotatedCookie)).isNotEqualTo(originalCookieValue);
+        assertThat(cookieValue(rotatedCookie)).isEqualTo(data.get("refreshToken"));
+    }
+
+    @Test
+    void refresh_bodyAndCookieBothPresent_bodyTokenTakesPrecedence() {
+        String emailA = uniqueEmail("ck_prec_a");
+        String emailB = uniqueEmail("ck_prec_b");
+        String bodyToken =
+                (String)
+                        registerVerifyAndLogin("user_ckpa", emailA, "password1")
+                                .get("refreshToken");
+        String cookieToken =
+                (String)
+                        registerVerifyAndLogin("user_ckpb", emailB, "password1")
+                                .get("refreshToken");
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie(
+                        "/api/v1/auth/refresh",
+                        Map.of("refreshToken", bodyToken),
+                        "luvax_refresh=" + cookieToken);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // The body token belongs to user A, so precedence is proved by whose session came back.
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        Map<?, ?> user = (Map<?, ?>) data.get("user");
+        assertThat(user.get("email")).isEqualTo(emailA);
+        // The cookie token was never consumed, so it still rotates successfully afterwards.
+        assertThat(
+                        postJson("/api/v1/auth/refresh", Map.of("refreshToken", cookieToken))
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void refresh_consumedTokenSuppliedByCookie_returns401() {
+        String email = uniqueEmail("ck_reuse");
+        String refresh =
+                (String)
+                        registerVerifyAndLogin("user_ckru", email, "password1").get("refreshToken");
+        postJson("/api/v1/auth/refresh", Map.of("refreshToken", refresh));
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie("/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + refresh);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void refresh_noBodyTokenAndNoCookie_returns401() {
+        ResponseEntity<Map> response = postJson("/api/v1/auth/refresh", Map.of());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void logout_clearsTheCookieAndTheClearedCookieCannotRefresh() {
+        String email = uniqueEmail("ck_logout");
+        Map<?, ?> session = registerVerifyAndLogin("user_cklo", email, "password1");
+        String refresh = (String) session.get("refreshToken");
+        String access = (String) session.get("accessToken");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(access);
+        headers.add(HttpHeaders.COOKIE, "luvax_refresh=" + refresh);
+        ResponseEntity<Map> logout =
+                rest.exchange(
+                        "/api/v1/auth/logout",
+                        HttpMethod.POST,
+                        new HttpEntity<>(Map.of(), headers),
+                        Map.class);
+
+        assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        String cleared = setCookie(logout, "luvax_refresh");
+        assertThat(cleared).isNotNull();
+        assertThat(cleared).contains("Max-Age=0");
+        assertThat(cleared).contains("Path=/api/v1/auth");
+
+        ResponseEntity<Map> afterLogout =
+                postJsonWithCookie("/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + refresh);
+        assertThat(afterLogout.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(afterLogout.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void logout_noBodyTokenAndNoCookie_returns204AndStillClearsTheCookie() {
+        // Logout is documented as idempotent. A client that lost its token value on reload must
+        // still be able to clear its own cookie and blacklist its access token.
+        String email = uniqueEmail("ck_logout_bare");
+        String access =
+                (String) registerVerifyAndLogin("user_cklb", email, "password1").get("accessToken");
+
+        ResponseEntity<Map> response = postJsonWithAuth("/api/v1/auth/logout", Map.of(), access);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("Max-Age=0");
+    }
+
+    @Test
     void login_returnsHttpOnlyRefreshCookieScopedToTheAuthPath() {
         String email = uniqueEmail("cookie_login");
         postJson("/api/v1/auth/register", registerBody("user_ckl", email, "password1"));

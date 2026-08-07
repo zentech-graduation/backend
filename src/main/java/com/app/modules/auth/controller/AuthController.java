@@ -68,20 +68,40 @@ public class AuthController extends BaseController implements AuthApi {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
-    /** Rotates the refresh token and returns a new session pair. */
+    /**
+     * Rotates the refresh token and returns a new session pair. The token is taken from the request
+     * body when supplied, otherwise from the HttpOnly refresh cookie, so browser clients that hold
+     * no token in memory can restore a session after a page reload.
+     */
     @Override
     @PostMapping(ApiConstants.Auth.REFRESH)
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(
-            @Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
-        AuthResponse body = authService.refresh(request, httpRequest);
+            @Valid @RequestBody(required = false) RefreshRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
+        String rawRefreshToken =
+                refreshTokenCookieManager.resolve(
+                        request == null ? null : request.refreshToken(), httpRequest);
+        AuthResponse body = authService.refresh(rawRefreshToken, httpRequest);
+        refreshTokenCookieManager.write(httpResponse, body.refreshToken());
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
-    /** Revokes the supplied refresh token. Idempotent. */
+    /**
+     * Revokes the supplied refresh token and clears the refresh cookie. Idempotent, including when
+     * neither the body nor the cookie carries a token.
+     */
     @Override
     @PostMapping(ApiConstants.Auth.LOGOUT)
-    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request) {
-        authService.logout(request);
+    public ResponseEntity<Void> logout(
+            @Valid @RequestBody(required = false) RefreshRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
+        String rawRefreshToken =
+                refreshTokenCookieManager.resolve(
+                        request == null ? null : request.refreshToken(), httpRequest);
+        authService.logout(rawRefreshToken);
+        refreshTokenCookieManager.clear(httpResponse);
         return ResponseEntity.noContent().build();
     }
 

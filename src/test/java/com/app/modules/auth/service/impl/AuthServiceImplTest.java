@@ -46,7 +46,6 @@ import com.app.common.security.service.TokenBlacklistService;
 import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
-import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
@@ -528,7 +527,7 @@ class AuthServiceImplTest {
                 .when(userStateValidator)
                 .enforceActive(u);
 
-        assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD"), stubRequest()))
+        assertThatThrownBy(() -> service.refresh("OLD", stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
@@ -549,7 +548,7 @@ class AuthServiceImplTest {
                 .when(userStateValidator)
                 .enforceActive(u);
 
-        assertThatThrownBy(() -> service.refresh(new RefreshRequest("OLD-SUSP"), stubRequest()))
+        assertThatThrownBy(() -> service.refresh("OLD-SUSP", stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
@@ -569,7 +568,7 @@ class AuthServiceImplTest {
                 .thenReturn(Optional.of(credential(userId, "HASH")));
         when(jwtTokenProvider.generateAccessToken(eq(userId), eq("USER"))).thenReturn("ACCESS-NEW");
 
-        AuthResponse resp = service.refresh(new RefreshRequest("OLD"), stubRequest());
+        AuthResponse resp = service.refresh("OLD", stubRequest());
 
         assertThat(resp.accessToken()).isEqualTo("ACCESS-NEW");
         assertThat(resp.refreshToken()).isEqualTo("NEW");
@@ -580,7 +579,7 @@ class AuthServiceImplTest {
         when(refreshTokenService.rotate(anyString(), anyString()))
                 .thenThrow(new AppException(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID));
 
-        assertThatThrownBy(() -> service.refresh(new RefreshRequest("BAD"), stubRequest()))
+        assertThatThrownBy(() -> service.refresh("BAD", stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_REFRESH_TOKEN_INVALID);
@@ -588,7 +587,7 @@ class AuthServiceImplTest {
 
     @Test
     void logout_callsRevokeOnce() {
-        service.logout(new RefreshRequest("RAW"));
+        service.logout("RAW");
         verify(refreshTokenService, times(1)).revoke("RAW");
     }
 
@@ -596,8 +595,7 @@ class AuthServiceImplTest {
     void logout_unknownToken_doesNotPropagateException() {
         // revoke is no-op-by-contract; the service must not propagate any exception even if
         // the underlying repository update returns zero rows.
-        assertThatCode(() -> service.logout(new RefreshRequest("UNKNOWN")))
-                .doesNotThrowAnyException();
+        assertThatCode(() -> service.logout("UNKNOWN")).doesNotThrowAnyException();
     }
 
     @Test
@@ -612,7 +610,7 @@ class AuthServiceImplTest {
                 .setAuthentication(
                         new UsernamePasswordAuthenticationToken("principal", rawAccessToken));
         try {
-            service.logout(new RefreshRequest("REFRESH-RAW"));
+            service.logout("REFRESH-RAW");
         } finally {
             SecurityContextHolder.clearContext();
         }
@@ -631,7 +629,7 @@ class AuthServiceImplTest {
                 .setAuthentication(
                         new UsernamePasswordAuthenticationToken("principal", rawAccessToken));
         try {
-            service.logout(new RefreshRequest("REFRESH-RAW"));
+            service.logout("REFRESH-RAW");
         } finally {
             SecurityContextHolder.clearContext();
         }
@@ -644,7 +642,7 @@ class AuthServiceImplTest {
     void logout_noAuthContext_blacklistsNothingAndRevokesRefreshToken() {
         SecurityContextHolder.clearContext();
 
-        service.logout(new RefreshRequest("REFRESH-RAW"));
+        service.logout("REFRESH-RAW");
 
         verify(tokenBlacklistService, never()).blacklist(anyString(), anyLong());
         verify(refreshTokenService).revoke("REFRESH-RAW");
