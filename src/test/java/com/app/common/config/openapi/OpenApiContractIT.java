@@ -465,19 +465,25 @@ class OpenApiContractIT {
     }
 
     @Test
-    void userProfileByIdNoLongerDocumentsAnUnreachable401() {
+    void userProfileByIdDocumentsOnlyTheReachableReasonFor401() {
         JsonNode doc = document();
-        // assemblePublicProfile never throws on a private account; it returns 200 with the
-        // counter fields masked to null. The operation used to document a 401 no code path
-        // produces, which this guards against reintroducing.
+        // Two different 401s are easy to confuse here. The operation used to document one for
+        // "target account is private", which no code path produces: assemblePublicProfile
+        // returns 200 with the counter fields masked instead. It does return 401 when an
+        // Authorization header is present but invalid, even though the endpoint is otherwise
+        // anonymous, so the response stays documented - for that reason only.
         Map<String, JsonNode> operations = new java.util.HashMap<>();
         forEachOperation(doc, operations::put);
 
         JsonNode operation = operations.get("GET /api/v1/users/{userId}");
         assertThat(operation).isNotNull();
-        assertThat(operation.path("responses").has("401"))
-                .as("GET /api/v1/users/{userId} must not document an unreachable 401")
+        JsonNode unauthorized = operation.path("responses").path("401");
+        assertThat(unauthorized.isMissingNode())
+                .as("the reachable invalid-token 401 must stay documented")
                 .isFalse();
+        assertThat(unauthorized.path("description").asString("").toLowerCase())
+                .as("the 401 must not be attributed to the account being private")
+                .doesNotContain("private");
     }
 
     @Test

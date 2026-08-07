@@ -24,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- Login, token refresh, password reset, and OAuth2 code exchange all reject a banned, suspended, deactivated, or unverified account with 403, but none of them documented it, so a client had no documented contract to branch on. All four now declare it, including which error code corresponds to which account state.
+- Every endpoint that accepts a request body now documents the 415 it returns for an unsupported content type, along with four further statuses that were reachable but undeclared (a malformed id in the path, an invalid token sent to an otherwise-anonymous endpoint, and removing a group's last admin).
+- Timestamps delivered over WebSocket rendered in the server's local offset while the same field over REST rendered in UTC; both now render in UTC.
 - Every notification's `isRead` field in the API response was hardcoded to false regardless of its actual read state, so a client could never tell a read notification from an unread one. It now reflects the real value.
 - A rejected WebSocket handshake (missing or invalid token) returned an empty 200 response, indistinguishable from an unavailable endpoint; it now returns 401.
 - The same timestamp field on the same resource rendered with a local UTC offset right after creation and a UTC (`Z`) offset on every subsequent read; every timestamp now renders in UTC regardless of which code path produced it.
@@ -44,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 - Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, the page size bound on every newly-covered endpoint, the single-writer `updated_at` fix, the notification `isRead` fix, the WebSocket handshake 401 fix, and the UTC timestamp rendering fix.
+- Added a contract test asserting that every request-body endpoint declares its 415, derived from the published document rather than a fixed list, so a new endpoint that omits it fails the build.
 - Added regression coverage proving cursor pagination for notifications, reports, admin actions, and conversations does not drop or duplicate rows when many items share the same sort timestamp, matching coverage already in place for other paginated lists.
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
