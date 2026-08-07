@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- A malformed feed pagination cursor was silently ignored, returning an empty page instead of an error, for a viewer who does not follow anyone yet. It is now rejected the same way regardless of how many accounts the viewer follows.
 - Post and hashtag search reported another page was available whenever the current page happened to be exactly full, even on the last page, forcing an extra request that always came back empty; this now matches the already-correct behavior of user search.
 - The documented 401 on the user profile lookup for a private account has been removed; the endpoint always returns 200, with counter fields null when the caller cannot see them.
 - A user's, post's, or comment's `updated_at` value returned by the API could be a few milliseconds off from what was actually persisted, because both the application and the database independently computed it on every update. The database is now the sole source of truth for this value.
