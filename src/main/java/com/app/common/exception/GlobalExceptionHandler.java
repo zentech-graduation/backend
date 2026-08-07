@@ -32,6 +32,12 @@ import lombok.extern.slf4j.Slf4j;
  * Translates framework-level and generic runtime exceptions into a uniform {@link ApiResponse}
  * envelope. Domain-specific exceptions must be converted to {@link AppException} at the service
  * layer before they reach this handler.
+ *
+ * <p>One class of malformed request never reaches here: a request line or header exceeding Tomcat's
+ * {@code max-http-request-header-size} is rejected by the connector itself before Spring MVC
+ * dispatch begins, so the client receives Tomcat's own HTML error page instead of this envelope.
+ * This is accepted rather than worked around, since matching JSON output for it would require a
+ * connector-level valve outside the servlet exception-handling path this class covers.
  */
 @Slf4j
 @RestControllerAdvice
