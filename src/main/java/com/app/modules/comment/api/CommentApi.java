@@ -48,6 +48,13 @@ public interface CommentApi {
                             + " original response on retry.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
                 description = "Comment created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(

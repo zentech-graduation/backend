@@ -444,6 +444,27 @@ class OpenApiContractIT {
     }
 
     @Test
+    void everyBodyAcceptingEndpointDeclaresA415Response() {
+        JsonNode doc = document();
+        // GlobalExceptionHandler answers a wrong Content-Type with 415 on every operation that
+        // reads a request body, so every such operation must declare it. Derived from the
+        // document's own requestBody presence rather than a hardcoded list, so a new body
+        // endpoint that forgets it turns this red.
+        List<String> offenders = new ArrayList<>();
+        forEachOperation(
+                doc,
+                (operationId, operation) -> {
+                    if (operation.has("requestBody") && !operation.path("responses").has("415")) {
+                        offenders.add(operationId);
+                    }
+                });
+
+        assertThat(offenders)
+                .as("every request-body endpoint must declare the 415 it returns")
+                .isEmpty();
+    }
+
+    @Test
     void userProfileByIdNoLongerDocumentsAnUnreachable401() {
         JsonNode doc = document();
         // assemblePublicProfile never throws on a private account; it returns 200 with the

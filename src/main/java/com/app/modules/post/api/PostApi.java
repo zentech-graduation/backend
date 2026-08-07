@@ -49,6 +49,13 @@ public interface PostApi {
                             + " Publishing extracts caption hashtags synchronously.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
                 description = "Post created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -128,6 +135,13 @@ public interface PostApi {
                             + " associations refreshed.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Updated post"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -172,6 +186,13 @@ public interface PostApi {
                             + " published (owner only), and any status to removed (owner or admin"
                             + " — equivalent to soft delete).")
     @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Post after the transition"),

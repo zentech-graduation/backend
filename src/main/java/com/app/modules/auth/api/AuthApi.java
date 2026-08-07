@@ -302,6 +302,13 @@ public interface AuthApi {
             security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Password updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -341,6 +348,13 @@ public interface AuthApi {
                             + " 120 seconds and is deleted on first use.",
             security = {@SecurityRequirement(name = "")})
     @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Exchange successful — access + refresh tokens returned"),

@@ -46,6 +46,13 @@ public interface ReportApi {
                             + " Duplicate and self-owned targets are rejected.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
                 description = "Report submitted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -190,6 +197,13 @@ public interface ReportApi {
                             + " Resolution and dismissal require a note. Requires MODERATOR or"
                             + " ADMIN.")
     @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Report status updated"),

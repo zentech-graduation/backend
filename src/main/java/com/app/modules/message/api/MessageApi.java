@@ -78,6 +78,13 @@ public interface MessageApi {
                             + " authentication.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
                 description = "Group conversation created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(

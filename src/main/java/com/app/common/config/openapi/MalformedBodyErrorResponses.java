@@ -30,4 +30,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
                 @Content(
                         mediaType = "application/json",
                         schema = @Schema(implementation = ApiResponse.class)))
+@io.swagger.v3.oas.annotations.responses.ApiResponse(
+        responseCode = "415",
+        description = "Request body was sent with an unsupported Content-Type",
+        content =
+                @Content(
+                        mediaType = "application/json",
+                        schema = @Schema(implementation = ApiResponse.class)))
 public @interface MalformedBodyErrorResponses {}
