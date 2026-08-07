@@ -19,10 +19,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
 
 ### Changed
+- Flyway no longer accepts out-of-order migrations; the migration set is a contiguous sequence with no gaps, so this only re-enables a safety check that was previously suppressed for no reason tied to an actual workflow.
 - Notification API responses now embed the triggering user's summary (id, username, display name, avatar, verified flag) instead of a bare actor id; a soft-deleted or unknown actor now renders as a placeholder instead of a raw id the client had to resolve separately. This is a breaking change to the notification response shape.
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- Every notification's `isRead` field in the API response was hardcoded to false regardless of its actual read state, so a client could never tell a read notification from an unread one. It now reflects the real value.
+- A rejected WebSocket handshake (missing or invalid token) returned an empty 200 response, indistinguishable from an unavailable endpoint; it now returns 401.
+- The same timestamp field on the same resource rendered with a local UTC offset right after creation and a UTC (`Z`) offset on every subsequent read; every timestamp now renders in UTC regardless of which code path produced it.
+- The dev environment's trusted-proxy list only recognized the IPv4 form of localhost, so `X-Forwarded-For` was silently ignored for requests arriving over IPv6 loopback, which is how most local requests actually arrive.
 - A malformed feed pagination cursor was silently ignored, returning an empty page instead of an error, for a viewer who does not follow anyone yet. It is now rejected the same way regardless of how many accounts the viewer follows.
 - Post and hashtag search reported another page was available whenever the current page happened to be exactly full, even on the last page, forcing an extra request that always came back empty; this now matches the already-correct behavior of user search.
 - The documented 401 on the user profile lookup for a private account has been removed; the endpoint always returns 200, with counter fields null when the caller cannot see them.
@@ -38,11 +43,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Closed a latent inconsistency between the case-insensitive username uniqueness constraint and the documented soft-delete retention policy; no application code path could reach the affected state, but the database now enforces the same rule the application already assumed.
 
 ### Tests
-- Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, the page size bound on every newly-covered endpoint, and the single-writer `updated_at` fix.
+- Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, the page size bound on every newly-covered endpoint, the single-writer `updated_at` fix, the notification `isRead` fix, the WebSocket handshake 401 fix, and the UTC timestamp rendering fix.
 - Added regression coverage proving cursor pagination for notifications, reports, admin actions, and conversations does not drop or duplicate rows when many items share the same sort timestamp, matching coverage already in place for other paginated lists.
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
 ### Documentation
+- Recorded why a small number of harmless startup proxy warnings and one non-JSON error response for an over-long request remain as accepted, understood gaps rather than unexplained rough edges.
 - Recorded that follower and following counts are visible to everyone regardless of the viewer's own blocks, so comparing a count against a filtered list can reveal that a block exists somewhere in that list, as a known and accepted tradeoff rather than an oversight.
 - Corrected internal module documentation for the hashtag module, which was still marked as unimplemented scaffolding despite being fully implemented.
 - Corrected internal module documentation for the message module: conversation and participant management is implemented, but sending, listing, and reacting to messages is not, since no send-message endpoint exists yet.
