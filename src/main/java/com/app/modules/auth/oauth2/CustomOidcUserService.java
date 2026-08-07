@@ -42,6 +42,12 @@ import com.app.modules.users.repository.UserSettingsRepository;
  *   <li>Otherwise a new local user is created with {@code email_verified=true} and no password.
  *   <li>{@code OAuth2AuthenticationSuccessHandler} then issues a JWT access + refresh pair.
  * </ol>
+ *
+ * <p>Boot logs three CGLIB proxy warnings for this class: it extends {@link OidcUserService}, which
+ * declares {@code final} setters, and {@code @EnableMethodSecurity(proxyTargetClass = true)}
+ * requires a class proxy rather than an interface proxy. Nothing in this codebase calls those
+ * setters after Spring constructs the bean, so the warnings are harmless; excluding this one class
+ * from class-proxying is not worth the configuration surface it would add.
  */
 @Service
 public class CustomOidcUserService extends OidcUserService {
