@@ -10,6 +10,14 @@ spring:
     virtual:
       enabled: true
   jackson:
+    # Every OffsetDateTime is rendered in the same UTC offset regardless of the zone it was
+    # constructed with, so the same field on the same resource does not render differently
+    # depending on whether the value just came from application code (local zone) or was read
+    # back from Postgres (UTC).
+    time-zone: UTC
+    datatype:
+      datetime:
+        write-dates-with-context-time-zone: true
     deserialization:
       fail-on-unknown-properties: true
   datasource:

@@ -850,6 +850,34 @@ class PostControllerIT {
         assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
     }
 
+    @Test
+    @Order(31)
+    void createdAt_renderedIdenticallyOnCreateAndOnRead() {
+        TestUser author = registerUser("timestamp_offset_author");
+        UUID mediaId = insertMediaAsset(author.id(), "image");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("caption", "offset check");
+        payload.put("postType", "image");
+        payload.put("mediaIds", List.of(mediaId.toString()));
+        ResponseEntity<Map> created =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+        Map<?, ?> createdData = (Map<?, ?>) created.getBody().get("data");
+        String createdAtOnCreate = (String) createdData.get("createdAt");
+        UUID postId = UUID.fromString((String) createdData.get("id"));
+
+        ResponseEntity<Map> fetched = getWithAuth("/api/v1/posts/" + postId, author);
+        Map<?, ?> fetchedData = (Map<?, ?>) fetched.getBody().get("data");
+        String createdAtOnRead = (String) fetchedData.get("createdAt");
+
+        assertThat(createdAtOnCreate).isEqualTo(createdAtOnRead);
+        assertThat(createdAtOnCreate).endsWith("Z");
+    }
+
     private TestUser registerUser(String username) {
         String email = username + "@test.local";
         String password = "S3cur3P@ssword!";
