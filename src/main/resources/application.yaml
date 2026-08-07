@@ -34,7 +34,10 @@ spring:
         stringtype: unspecified
   flyway:
     enabled: true
-    out-of-order: true
+    # The migration set is a contiguous V01-V43 sequence with no gaps; out-of-order would only
+    # suppress Flyway's own check against an out-of-order apply, which has no branch-merge
+    # workflow here to justify disabling.
+    out-of-order: false
     locations: classpath:db/migration
   data:
     redis:
