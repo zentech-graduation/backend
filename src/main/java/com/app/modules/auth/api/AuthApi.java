@@ -1,6 +1,7 @@
 package com.app.modules.auth.api;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
@@ -131,7 +132,9 @@ public interface AuthApi {
     @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.LOGIN)
     ResponseEntity<ApiResponse<AuthResponse>> login(
-            @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest);
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse);
 
     /** Rotates the refresh token and returns a new session pair. */
     @Operation(
@@ -238,7 +241,8 @@ public interface AuthApi {
                             required = true)
                     @RequestParam("token")
                     String token,
-            HttpServletRequest httpRequest);
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse);
 
     /**
      * Records a verification mail event when an account exists for the supplied address. Always
@@ -384,5 +388,7 @@ public interface AuthApi {
     })
     @PostMapping(ApiConstants.Auth.OAUTH2_EXCHANGE)
     ResponseEntity<ApiResponse<AuthResponse>> exchangeOAuth2Code(
-            @Valid @RequestBody OAuth2ExchangeRequest request, HttpServletRequest httpRequest);
+            @Valid @RequestBody OAuth2ExchangeRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse);
 }

@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.crypto.SecretKey;
@@ -58,6 +59,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.repository.RefreshTokenRepository;
+import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
@@ -115,6 +117,7 @@ class AuthControllerIT {
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private TokenService tokenService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
     @Test
     void refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked() {
@@ -760,6 +763,80 @@ class AuthControllerIT {
         }
     }
 
+    @Test
+    void login_returnsHttpOnlyRefreshCookieScopedToTheAuthPath() {
+        String email = uniqueEmail("cookie_login");
+        postJson("/api/v1/auth/register", registerBody("user_ckl", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+
+        String cookie = setCookie(response, "luvax_refresh");
+        assertThat(cookie).isNotNull();
+        assertThat(cookie).contains("HttpOnly");
+        assertThat(cookie).contains("Path=/api/v1/auth");
+        assertThat(cookie).contains("Max-Age=3600");
+        assertThat(cookie).contains("SameSite=Lax");
+        // The dev profile serves plain HTTP, where a Secure cookie would never be stored.
+        assertThat(cookie).doesNotContain("Secure");
+    }
+
+    @Test
+    void login_stillReturnsRefreshTokenInTheResponseBody() {
+        String email = uniqueEmail("cookie_body");
+        Map<?, ?> data = registerVerifyAndLogin("user_ckb", email, "password1");
+
+        assertThat(data.get("refreshToken")).asString().isNotBlank();
+    }
+
+    @Test
+    void login_cookieValueMatchesTheResponseBodyToken() {
+        String email = uniqueEmail("cookie_match");
+        postJson("/api/v1/auth/register", registerBody("user_ckm", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(cookieValue(setCookie(response, "luvax_refresh")))
+                .isEqualTo(data.get("refreshToken"));
+    }
+
+    @Test
+    void verifyEmail_returnsRefreshCookieBecauseItIssuesASession() {
+        String email = uniqueEmail("cookie_verify");
+        postJson("/api/v1/auth/register", registerBody("user_ckv", email, "password1"));
+
+        ResponseEntity<Map> response =
+                rest.getForEntity(
+                        "/api/v1/auth/verify-email?token=" + createVerificationToken(email),
+                        Map.class);
+
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("HttpOnly");
+    }
+
+    @Test
+    void exchangeOAuth2Code_returnsRefreshCookie() {
+        String email = uniqueEmail("cookie_oauth");
+        postJson("/api/v1/auth/register", registerBody("user_cko", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        String code = oauth2ExchangeCodeService.storeExchangeCode(userId);
+
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/oauth2/exchange", Map.of("code", code));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("HttpOnly");
+    }
+
     private ResponseEntity<Map> postJson(String path, Object body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -770,6 +847,26 @@ class AuthControllerIT {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Forwarded-For", forwardedIp);
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
+    private static String setCookie(ResponseEntity<?> response, String name) {
+        List<String> headers = response.getHeaders().get(HttpHeaders.SET_COOKIE);
+        if (headers == null) {
+            return null;
+        }
+        return headers.stream().filter(h -> h.startsWith(name + "=")).findFirst().orElse(null);
+    }
+
+    private static String cookieValue(String setCookieHeader) {
+        String nameValuePair = setCookieHeader.split(";", 2)[0];
+        return nameValuePair.substring(nameValuePair.indexOf('=') + 1);
+    }
+
+    private ResponseEntity<Map> postJsonWithCookie(String path, Object body, String cookiePair) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.add(HttpHeaders.COOKIE, cookiePair);
         return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
     }
 

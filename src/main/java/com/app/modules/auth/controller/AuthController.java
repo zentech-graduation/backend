@@ -1,6 +1,7 @@
 package com.app.modules.auth.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,7 @@ import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.modules.auth.api.AuthApi;
+import com.app.modules.auth.cookie.RefreshTokenCookieManager;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
@@ -31,9 +33,12 @@ import com.app.modules.auth.service.AuthService;
 public class AuthController extends BaseController implements AuthApi {
 
     private final AuthService authService;
+    private final RefreshTokenCookieManager refreshTokenCookieManager;
 
-    public AuthController(AuthService authService) {
+    public AuthController(
+            AuthService authService, RefreshTokenCookieManager refreshTokenCookieManager) {
         this.authService = authService;
+        this.refreshTokenCookieManager = refreshTokenCookieManager;
     }
 
     /**
@@ -48,12 +53,18 @@ public class AuthController extends BaseController implements AuthApi {
                 .body(ApiResponse.success(ApiSuccessCode.CREATED));
     }
 
-    /** Authenticates an existing user and returns access + refresh tokens. */
+    /**
+     * Authenticates an existing user and returns access + refresh tokens. The refresh token is also
+     * issued as an HttpOnly cookie so a browser client can restore the session after a page reload.
+     */
     @Override
     @PostMapping(ApiConstants.Auth.LOGIN)
     public ResponseEntity<ApiResponse<AuthResponse>> login(
-            @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         AuthResponse body = authService.login(request, httpRequest);
+        refreshTokenCookieManager.write(httpResponse, body.refreshToken());
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
@@ -74,12 +85,18 @@ public class AuthController extends BaseController implements AuthApi {
         return ResponseEntity.noContent().build();
     }
 
-    /** Verifies an email address using the token embedded in the verification link. */
+    /**
+     * Verifies an email address using the token embedded in the verification link and issues a
+     * session, including the HttpOnly refresh cookie.
+     */
     @Override
     @GetMapping(ApiConstants.Auth.VERIFY_EMAIL)
     public ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(
-            @RequestParam("token") String token, HttpServletRequest httpRequest) {
+            @RequestParam("token") String token,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         AuthResponse body = authService.verifyEmail(token, httpRequest);
+        refreshTokenCookieManager.write(httpResponse, body.refreshToken());
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
@@ -116,12 +133,18 @@ public class AuthController extends BaseController implements AuthApi {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
     }
 
-    /** Redeems a short-lived OAuth2 exchange code for an access/refresh token pair. */
+    /**
+     * Redeems a short-lived OAuth2 exchange code for an access/refresh token pair and issues the
+     * HttpOnly refresh cookie.
+     */
     @Override
     @PostMapping(ApiConstants.Auth.OAUTH2_EXCHANGE)
     public ResponseEntity<ApiResponse<AuthResponse>> exchangeOAuth2Code(
-            @Valid @RequestBody OAuth2ExchangeRequest request, HttpServletRequest httpRequest) {
+            @Valid @RequestBody OAuth2ExchangeRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         AuthResponse body = authService.exchangeOAuth2Code(request, httpRequest);
+        refreshTokenCookieManager.write(httpResponse, body.refreshToken());
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 }
