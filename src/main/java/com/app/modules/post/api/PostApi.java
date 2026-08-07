@@ -99,6 +99,13 @@ public interface PostApi {
                             + " accounts visible to them.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Path variable is not a valid UUID",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Post"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(

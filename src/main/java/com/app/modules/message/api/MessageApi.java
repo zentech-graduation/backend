@@ -253,6 +253,13 @@ public interface MessageApi {
                             + " authentication as an active group admin.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Target is the last remaining admin of the group",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Member removed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(

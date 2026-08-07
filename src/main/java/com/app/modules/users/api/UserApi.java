@@ -129,6 +129,21 @@ public interface UserApi {
             security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Path variable is not a valid UUID",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description =
+                        "An Authorization header was supplied but the token is invalid or expired; the endpoint itself is anonymous",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description =
                         "Profile returned; counter fields are null when the caller is not"
