@@ -25,6 +25,8 @@ import com.app.modules.auth.dto.response.AuthResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -93,7 +95,14 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Authenticated"),
+                description = "Authenticated",
+                headers =
+                        @Header(
+                                name = "Set-Cookie",
+                                description =
+                                        "HttpOnly luvax_refresh cookie carrying the refresh token,"
+                                                + " scoped to /api/v1/auth",
+                                schema = @Schema(type = "string"))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Invalid credentials",
@@ -140,16 +149,34 @@ public interface AuthApi {
     @Operation(
             summary = "Refresh tokens",
             description =
-                    "Rotates the supplied refresh token and returns a new access/refresh token"
-                            + " pair.",
+                    "Rotates the refresh token and returns a new access/refresh token pair. The"
+                            + " token is read from the request body when present and non-blank,"
+                            + " otherwise from the HttpOnly luvax_refresh cookie. The rotated token"
+                            + " is returned both in the response body and as a replacement cookie.",
             security = {@SecurityRequirement(name = "")})
+    @Parameter(
+            name = "luvax_refresh",
+            in = ParameterIn.COOKIE,
+            required = false,
+            description =
+                    "HttpOnly refresh cookie. Used only when the request body omits refreshToken"
+                            + " or supplies it blank; the body always takes precedence.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Tokens rotated"),
+                description = "Tokens rotated",
+                headers =
+                        @Header(
+                                name = "Set-Cookie",
+                                description =
+                                        "HttpOnly luvax_refresh cookie carrying the rotated refresh"
+                                                + " token, scoped to /api/v1/auth",
+                                schema = @Schema(type = "string"))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
-                description = "Refresh token invalid or expired",
+                description =
+                        "Refresh token invalid or expired, or absent from both the request body"
+                                + " and the cookie",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -183,12 +210,26 @@ public interface AuthApi {
     @Operation(
             summary = "Log out",
             description =
-                    "Revokes the supplied refresh token and blacklists the current access token."
-                            + " Idempotent.")
+                    "Revokes the refresh token, blacklists the current access token, and clears the"
+                            + " HttpOnly luvax_refresh cookie. The token is read from the request"
+                            + " body when present, otherwise from the cookie. Idempotent, and still"
+                            + " returns 204 when neither source carries a token.")
+    @Parameter(
+            name = "luvax_refresh",
+            in = ParameterIn.COOKIE,
+            required = false,
+            description =
+                    "HttpOnly refresh cookie. Used only when the request body omits refreshToken"
+                            + " or supplies it blank; the body always takes precedence.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "204",
-                description = "Logged out"),
+                description = "Logged out",
+                headers =
+                        @Header(
+                                name = "Set-Cookie",
+                                description = "Expired luvax_refresh cookie (Max-Age=0)",
+                                schema = @Schema(type = "string"))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -222,7 +263,14 @@ public interface AuthApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Email verified — access + refresh tokens returned"),
+                description = "Email verified — access + refresh tokens returned",
+                headers =
+                        @Header(
+                                name = "Set-Cookie",
+                                description =
+                                        "HttpOnly luvax_refresh cookie carrying the refresh token,"
+                                                + " scoped to /api/v1/auth",
+                                schema = @Schema(type = "string"))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Token invalid or expired",
@@ -366,7 +414,14 @@ public interface AuthApi {
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Exchange successful — access + refresh tokens returned"),
+                description = "Exchange successful — access + refresh tokens returned",
+                headers =
+                        @Header(
+                                name = "Set-Cookie",
+                                description =
+                                        "HttpOnly luvax_refresh cookie carrying the refresh token,"
+                                                + " scoped to /api/v1/auth",
+                                schema = @Schema(type = "string"))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure, or exchange code invalid or expired",
