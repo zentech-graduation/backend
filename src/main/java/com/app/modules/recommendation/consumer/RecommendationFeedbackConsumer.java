@@ -170,6 +170,7 @@ public class RecommendationFeedbackConsumer {
         return switch (eventType) {
             case PostEventTypes.POST_LIKED_V1 -> new FeedbackMapping("post_like", "like");
             case PostEventTypes.POST_SAVED_V1 -> new FeedbackMapping("post_save", "save");
+            case PostEventTypes.POST_VIEWED_V1 -> new FeedbackMapping("post_view", "read");
             case CommentEventTypes.COMMENT_CREATED_V1 ->
                     new FeedbackMapping("post_comment", "comment");
             default -> throw new PermanentMessageException("unknown event type: " + eventType);

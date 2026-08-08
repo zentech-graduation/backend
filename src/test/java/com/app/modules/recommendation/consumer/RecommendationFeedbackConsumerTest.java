@@ -159,6 +159,20 @@ class RecommendationFeedbackConsumerTest {
     }
 
     @Test
+    void consume_postViewed_recordsUserEventAndPushesReadFeedback() throws Exception {
+        stubProcessOnce();
+        Message message = message(envelope(PostEventTypes.POST_VIEWED_V1));
+
+        consumer.consume(message, channel);
+
+        verify(userEventJdbcRepository)
+                .insertIgnoreDuplicate(
+                        EVENT_ID, USER_ID, "post_view", "post", POST_ID, OCCURRED_AT);
+        verifyFeedbackPushed("read");
+        verify(channel).basicAck(1L, false);
+    }
+
+    @Test
     void consume_unknownEventType_nacksWithoutRequeueForBrokerDeadLettering() throws Exception {
         Message message = message(envelope("unknown.event.type"));
         stubProcessOnce();

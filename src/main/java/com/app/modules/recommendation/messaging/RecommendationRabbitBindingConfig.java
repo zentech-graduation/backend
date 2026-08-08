@@ -37,4 +37,12 @@ public class RecommendationRabbitBindingConfig {
                 .to(socialEventsExchange)
                 .with(CommentEventTypes.COMMENT_CREATED_V1);
     }
+
+    @Bean
+    Binding recommendationPostViewedBinding(
+            Queue recommendationFeedbackQueue, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(recommendationFeedbackQueue)
+                .to(socialEventsExchange)
+                .with(PostEventTypes.POST_VIEWED_V1);
+    }
 }
