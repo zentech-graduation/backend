@@ -129,19 +129,21 @@ A cursor that does not match this shape is treated as a chronological-feed curso
 ## 5. Feedback mapping
 
 Gorse classifies feedback by **type**, not by numeric weight.
-All three app signals are configured as positive types in `gorse/config/config.toml`.
+`like`, `save`, and `comment` are configured as positive types; `read` is configured as the read type, in `gorse/config/config.toml`.
 
 | App event | Gorse `FeedbackType` | `user_events.event_type` |
 |---|---|---|
 | `post.liked.v1` | `like` | `post_like` |
 | `post.saved.v1` | `save` | `post_save` |
 | `comment.created.v1` | `comment` | `post_comment` |
+| `post.viewed.v1` | `read` | `post_view` |
+
+`post.viewed.v1` is published by `POST /api/v1/posts/{postId}/view` (post module) and is the only read-class signal; a view by the post's own owner is accepted but not recorded, so it never reaches this pipeline.
 
 Deliberately excluded:
 
 - `comment.liked.v1` — its payload carries no `postId`, so it cannot be mapped to an item without a cross-module lookup.
 - `user.followed.v1` — a user-to-user edge, not user-to-item feedback.
-- Post views — no view event exists in the application yet; `read` stays reserved in the Gorse config.
 - Unlike and unsave — withdrawal of positive feedback is not propagated.
 
 ---

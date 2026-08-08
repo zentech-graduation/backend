@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- A post view can now be recorded via `POST /api/v1/posts/{postId}/view`; the view is captured as a behavioral event and feeds the recommendation engine as a read signal, without synchronously changing any counter on the post.
 - Liking or saving a post now feeds the recommendation engine: each action is recorded as a behavioral event and forwarded to the recommender asynchronously, so the personalized feed reflects real engagement, not only the seeded interaction history.
 - A personalized "for you" post feed at GET /api/v1/recommendations/feed, ranked by the Gorse recommender with per-post ranking scores, degrading to the popularity ranking and then the chronological following feed whenever the recommender is unavailable.
 - A deterministic synthetic seed tool generates demo users, text posts, a follow graph, and interaction history for the recommendation demo, and can push or rebuild the Gorse dataset from the same source.
@@ -42,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Regression coverage for the recommender REST client, covering request shape, authentication headers, and response parsing for every supported operation.
 - Regression coverage asserting that liking or saving a post enqueues the corresponding recommendation event with the correct payload, and that no event is enqueued on a conflicting or duplicate action.
 - Regression coverage for the batched post-visibility check used by the personalized feed, and for the recommendation feedback consumer's broker-dead-letter behavior on a permanent failure.
+- Regression coverage for post view recording, including self-view suppression, and for the resulting read-class recommendation feedback.
 - The follower, following, and pending follow-request lists now use the shared user summary object; the emitted JSON is unchanged, only the shared shape is reused.
 - Post responses (single post, feed, saved posts, and a user's posts) now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of separate top-level author id, username, display-name, and avatar fields; the post likers endpoint now returns that same user summary shape, and a post caption edit history entry embeds the editor the same way instead of a bare editor id. A post by a deleted author is hidden as before; a deleted liker now appears as a placeholder rather than silently vanishing from the likers list.
 - Comment responses now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of a bare author id; the previous top-level `userId` field is removed, and a comment by a deleted author returns a placeholder author rather than a dangling id. The same author object arrives over the live comment WebSocket feed, so a live-rendered comment shows the same author as one fetched over REST.

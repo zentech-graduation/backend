@@ -27,7 +27,7 @@ These tables cannot be rebuilt from any other source if lost.
 | `posts.like_count` | `posts` table | `COUNT(*)` from `post_likes` where `post_id = post.id` | Trigger `trg_post_like_count` (V16) |
 | `posts.comment_count` | `posts` table | `COUNT(*)` from `comments` where `post_id = post.id` and `deleted_at IS NULL` | Trigger `trg_post_comment_count` (V16) |
 | `posts.save_count` | `posts` table | `COUNT(*)` from `post_saves` where `post_id = post.id` | Trigger `trg_post_save_count` (V16) |
-| `posts.view_count` | `posts` table | No trigger; intended to be updated by a background job | `[NOT YET IMPLEMENTED]` — no such job exists yet, so `view_count` never changes from its default |
+| `posts.view_count` | `posts` table | No trigger; intended to be updated by a background job | `[NOT YET IMPLEMENTED]` — `POST /api/v1/posts/{postId}/view` records a `post.viewed.v1` event (consumed into `user_events` as `post_view`), but no job yet aggregates it back into this counter, so `view_count` still never changes from its default |
 | `posts.updated_at` | `posts` table | Auto-maintained | Trigger `trg_posts_updated_at` (V16) |
 | `users.post_count` | `users` table | `COUNT(*)` from `posts` where `user_id` matches, `status='published'`, `deleted_at IS NULL` | Trigger `trg_post_count` (V16) |
 | `post_interaction_scores` | `post_interaction_scores` table | Computed from `post_likes`, `comments`, `post_saves`, `user_events` by background scheduler | Scheduled background job |
@@ -61,7 +61,8 @@ These tables cannot be rebuilt from any other source if lost.
 | `status = 'removed'` by admin sets `deleted_at = NOW()` via admin action | Implemented in `AdminServiceImpl.moderatePost` via `PostRepository.applyAdminModeration` (`admin` module). |
 | Posts from blocked users must be excluded from feeds | Enforced by `PostVisibilityServiceImpl.isVisibleTo`. |
 | Posts from private accounts are only visible to accepted followers | Enforced by `PostVisibilityServiceImpl.isVisibleTo`. |
-| `posts.view_count` is updated by a background job, not a trigger. It may lag real-time activity. See `GLOBAL_RULES.md` — Counter Policy Exception. | `[NOT YET IMPLEMENTED]` — no job exists; `view_count` is never written anywhere in the codebase today |
+| `posts.view_count` is updated by a background job, not a trigger. It may lag real-time activity. See `GLOBAL_RULES.md` — Counter Policy Exception. | `[NOT YET IMPLEMENTED]` — no job exists; `view_count` is never written anywhere in the codebase today. `PostViewServiceImpl.recordView` deliberately does not touch it, only enqueues the behavioral event. |
+| A view is accepted but not recorded when the viewer is the post's own owner, so self-views can never inflate any downstream signal | `PostViewServiceImpl.recordView` |
 | Hashtags in `caption` are parsed and written to `post_hashtags` at publish time | Implemented in `PostServiceImpl.upsertCaptionHashtags`, called from `createPost` (when initially published) and `updateCaption` (when the post is already published). |
 | User mentions in `caption` generate `mention_post` notifications | `[NOT YET IMPLEMENTED]` — no mention parsing exists in the post module |
 | Every caption update appends one `post_edit_history` row recording the pre-edit caption and the editor | `PostServiceImpl` |

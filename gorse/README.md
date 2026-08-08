@@ -55,7 +55,7 @@ This deployment uses Postgres for the cache store instead of adding a Redis Stac
 | `post.liked.v1` | `like` | positive |
 | `post.saved.v1` | `save` | positive |
 | `comment.created.v1` | `comment` | positive |
-| (reserved) | `read` | read |
+| `post.viewed.v1` | `read` | read |
 
 ## Seeding
 

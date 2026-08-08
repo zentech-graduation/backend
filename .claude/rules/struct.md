@@ -178,13 +178,13 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`users`**: Public and private user profiles, user settings, role/status management.
 - **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
-- **`post`**: Post CRUD (image/video/carousel), likes, saves, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
+- **`post`**: Post CRUD (image/video/carousel), likes, saves, view recording, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
 - **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback.
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
 - **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
 - **`admin`**: Immutable moderation audit log and atomic moderation actions; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
-- **`recommendation`**: Personalized ranked feed backed by the external Gorse recommender, reached over REST through `GorseClient`; `RecommendationFeedServiceImpl` runs a Source → Hydrator → Filter → Scorer → Selector pipeline with a `gorse` circuit breaker and degrades to the popularity ranking then the chronological feed; `RecommendationFeedbackConsumer` turns `post.liked.v1`, `post.saved.v1`, and `comment.created.v1` into append-only `user_events` rows plus Gorse feedback. See `docs/modules/recommendation/README.md`.
+- **`recommendation`**: Personalized ranked feed backed by the external Gorse recommender, reached over REST through `GorseClient`; `RecommendationFeedServiceImpl` runs a Source → Hydrator → Filter → Scorer → Selector pipeline with a `gorse` circuit breaker and degrades to the popularity ranking then the chronological feed; `RecommendationFeedbackConsumer` turns `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, and `comment.created.v1` into append-only `user_events` rows plus Gorse feedback. See `docs/modules/recommendation/README.md`.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -391,7 +391,7 @@ PostgreSQL enum types:
 | `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
 | `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
-| `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
+| `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 
