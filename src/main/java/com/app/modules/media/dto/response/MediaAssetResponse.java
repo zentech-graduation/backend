@@ -16,8 +16,10 @@ public record MediaAssetResponse(
         @Schema(description = "Media category.") MediaType mediaType,
         @Schema(description = "Uploaded object MIME type.") String mimeType,
         @Schema(description = "Uploaded object size in bytes.") long fileSize,
-        @Schema(description = "Media width in pixels.") Integer width,
-        @Schema(description = "Media height in pixels.") Integer height,
-        @Schema(description = "Video duration in seconds, or null for images.") Integer duration,
-        @Schema(description = "Optional client-generated blurhash preview.") String blurhash,
+        @Schema(description = "Media width in pixels.", nullable = true) Integer width,
+        @Schema(description = "Media height in pixels.", nullable = true) Integer height,
+        @Schema(description = "Video duration in seconds, or null for images.", nullable = true)
+                Integer duration,
+        @Schema(description = "Optional client-generated blurhash preview.", nullable = true)
+                String blurhash,
         @Schema(description = "Database creation timestamp.") OffsetDateTime createdAt) {}

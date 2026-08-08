@@ -39,7 +39,8 @@ public record ReportResponse(
                 UUID entityId,
         @Schema(
                         description = "Optional context supplied by the reporter",
-                        example = "Repeated unsolicited promotional content")
+                        example = "Repeated unsolicited promotional content",
+                        nullable = true)
                 String description,
         @Schema(
                         description = "Current review status",
@@ -48,15 +49,18 @@ public record ReportResponse(
                 ReportStatus status,
         @Schema(
                         description = "Moderator or administrator who reviewed the report",
-                        example = "550e8400-e29b-41d4-a716-446655440003")
+                        example = "550e8400-e29b-41d4-a716-446655440003",
+                        nullable = true)
                 UUID reviewedBy,
         @Schema(
                         description = "Time the report most recently entered review",
-                        example = "2026-07-11T10:30:00.000000Z")
+                        example = "2026-07-11T10:30:00.000000Z",
+                        nullable = true)
                 OffsetDateTime reviewedAt,
         @Schema(
                         description = "Explanation recorded when the report was closed",
-                        example = "Confirmed policy violation and removed the content")
+                        example = "Confirmed policy violation and removed the content",
+                        nullable = true)
                 String resolutionNote,
         @Schema(
                         description = "Report submission time",

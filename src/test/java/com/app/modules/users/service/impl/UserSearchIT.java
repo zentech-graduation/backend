@@ -37,9 +37,12 @@ import com.app.modules.mail.service.MailService;
 import com.app.modules.users.service.UserSearchService;
 
 /**
- * Proves user search excludes self, non-active, and deleted accounts, surfaces blocked users with
- * accurate viewer state rather than hiding them, pages deterministically under a follower-count
- * tie, resolves relationships in a constant number of queries, and refuses anonymous callers.
+ * Proves user search excludes self, non-active, deleted, and blocked accounts (in either direction
+ * - the stealth block model requires a blocker to be indistinguishable from a nonexistent user, and
+ * excluding an account the viewer themselves blocked leaks nothing since {@code GET
+ * /social/blocked} is a complete, independent path to find and unblock them), pages
+ * deterministically under a follower-count tie, resolves relationships in a constant number of
+ * queries, and refuses anonymous callers.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -137,33 +140,31 @@ class UserSearchIT {
     }
 
     @Test
-    void searchUsers_returnsUsersWhoBlockedTheViewer_withIsBlockedByTrue() {
+    void searchUsers_excludesAccountThatBlockedTheViewer() {
+        // The leak the stealth block model closes: a blocker must not appear in the blocked
+        // viewer's search results at all, filtered in the query itself rather than flagged.
         UUID viewer = insertUser("viewer", "active", false, 0);
         UUID blocker = insertUser("janeblocker", "active", false, 5);
         UUID ordinary = insertUser("janeordinary", "active", false, 4);
         block(blocker, viewer);
 
-        List<UserListItemResponse> content =
-                userSearchService.searchUsers(viewer, "jane", null, 20).getContent();
+        List<UUID> ids = idsOf(userSearchService.searchUsers(viewer, "jane", null, 20));
 
-        // Not filtered: omitting them would let the viewer detect the block by comparing results
-        // before and after. The relationship travels as viewer state instead.
-        assertThat(idsOf(content)).containsExactly(blocker, ordinary);
-        assertThat(rowFor(content, blocker).viewerState().isBlockedBy()).isTrue();
-        assertThat(rowFor(content, blocker).viewerState().isBlocking()).isFalse();
-        assertThat(rowFor(content, ordinary).viewerState().isBlockedBy()).isFalse();
+        assertThat(ids).containsExactly(ordinary).doesNotContain(blocker);
     }
 
     @Test
-    void searchUsers_returnsUsersTheViewerBlocked_withIsBlockingTrue() {
+    void searchUsers_excludesAccountTheViewerBlocked() {
+        // Filtering both directions is safe here specifically because GET /social/blocked
+        // remains a complete, independent path for the viewer to find and unblock this account.
         UUID viewer = insertUser("viewer", "active", false, 0);
         UUID blocked = insertUser("janeblocked", "active", false, 5);
+        UUID ordinary = insertUser("janeordinary", "active", false, 4);
         block(viewer, blocked);
 
-        List<UserListItemResponse> content =
-                userSearchService.searchUsers(viewer, "jane", null, 20).getContent();
+        List<UUID> ids = idsOf(userSearchService.searchUsers(viewer, "jane", null, 20));
 
-        assertThat(rowFor(content, blocked).viewerState().isBlocking()).isTrue();
+        assertThat(ids).containsExactly(ordinary).doesNotContain(blocked);
     }
 
     @Test

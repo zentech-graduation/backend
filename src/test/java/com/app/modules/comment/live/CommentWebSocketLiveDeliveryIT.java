@@ -193,6 +193,23 @@ class CommentWebSocketLiveDeliveryIT {
         byte[] payload = received.get(20, TimeUnit.SECONDS);
         String body = new String(payload, StandardCharsets.UTF_8);
         assertThat(body).contains("comment.created.v1");
+
+        // The STOMP converter must serialize with the application's own JsonMapper, not the
+        // private one Spring builds by default, which reads no spring.jackson.* configuration and
+        // rendered timestamps in the JVM's local offset while REST rendered the same field in UTC.
+        java.util.regex.Matcher timestamps =
+                java.util.regex.Pattern.compile("\"(?:createdAt|updatedAt)\":\"([^\"]+)\"")
+                        .matcher(body);
+        int asserted = 0;
+        while (timestamps.find()) {
+            assertThat(timestamps.group(1))
+                    .as("WebSocket payload timestamp must render in UTC, matching the REST surface")
+                    .endsWith("Z");
+            asserted++;
+        }
+        assertThat(asserted)
+                .as("payload must carry at least one timestamp for this assertion to mean anything")
+                .isGreaterThan(0);
     }
 
     private void createCommentOverHttp(String token) {

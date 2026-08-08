@@ -15,7 +15,10 @@ public record AuthenticatedUserResponse(
                 UUID id,
         @Schema(description = "Unique username", example = "john_doe") String username,
         @Schema(description = "User's email address", example = "john@example.com") String email,
-        @Schema(description = "Display name shown on the profile", example = "John Doe")
+        @Schema(
+                        description = "Display name shown on the profile",
+                        example = "John Doe",
+                        nullable = true)
                 String displayName,
         @Schema(description = "User's role in the system", example = "user") UserRole role,
         @Schema(description = "Whether the user has completed email verification", example = "true")

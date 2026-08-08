@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V40 SQL migrations
+│   │       ├── db/migration/       # Flyway V01–V43 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -65,7 +65,7 @@ app/
 │           ├── common/outbox/{repository,service/impl}/                 # Outbox repo IT, publisher/service tests
 │           ├── common/response/                                         # ApiResponse tests
 │           ├── common/security/{filter,jwt,service/impl,util}/          # Security unit tests
-│           └── modules/{auth,hashtag,media,notification,post,social,users}/  # Module tests (see §2)
+│           └── modules/{admin,auth,comment,hashtag,media,message,notification,post,recommendation,report,social,story,users}/  # Module tests (see §2)
 ├── docker-compose.yaml             # Local dev: PostgreSQL, RabbitMQ, Redis, Elasticsearch
 ├── pom.xml
 ├── mvnw / mvnw.cmd
@@ -207,56 +207,90 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
+Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 162 test classes total.
+
 | Package | Test Classes |
 |---------|-------------|
-| `(root)` | `ApplicationTests` — full context smoke test |
+| `(root)` | `ApplicationTests` |
+| `common` | `ApiConstantsSocialTest`, `ApiConstantsUnroutedFieldsTest` |
+| `common/base` | `BaseControllerTest` |
+| `common/config` | `ProdProfileConsumerActivationIT` |
 | `common/config/elasticsearch` | `ElasticsearchConfigTest`, `ElasticsearchHealthIT` |
+| `common/config/openapi` | `OpenApiContractIT` |
 | `common/config/rabbit` | `RabbitMqTopologyConfigTest` |
-| `common/exception` | `AppExceptionTest`, `GlobalExceptionHandlerTest` |
+| `common/exception` | `ApiExceptionTest`, `AppExceptionTest`, `GlobalExceptionHandlerTest`, `MalformedRequestBodyIT` |
 | `common/inbox/service/impl` | `ProcessedMessageServiceImplIT` |
 | `common/mail/config` | `MailPropertiesBindingTest` |
 | `common/mail/service/impl` | `MailServiceImplTest`, `ResendMailSenderTest` |
 | `common/mail/util` | `MailTemplateRendererTest` |
+| `common/messaging` | `DeadLetterPublisherTest` |
 | `common/outbox/repository` | `OutboxEventRepositoryIT` |
 | `common/outbox/service/impl` | `OutboxPublisherRabbitMqIT`, `OutboxPublisherServiceImplTest`, `OutboxServiceImplTest` |
-| `common/response` | `ApiResponseTest` |
+| `common/pagination` | `CursorCodecTest`, `KeysetPageTest`, `OffsetCursorCodecTest`, `OffsetPageableTest`, `TimeCursorsTest` |
+| `common/response` | `ApiResponseTest`, `CursorPageResponseTest`, `ViewerRelationshipResponseTest` |
+| `common/security/config` | `CorsPropertiesTest` |
 | `common/security/filter` | `AuthRateLimitFilterTest`, `JwtAuthenticationFilterTest` |
 | `common/security/jwt` | `JwtTokenProviderTest` |
-| `common/security/service/impl` | `RateLimiterServiceImplTest`, `RefreshTokenServiceImplTest`, `TokenBlacklistServiceImplTest` |
-| `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest` |
+| `common/security/service/impl` | `RateLimiterServiceImplTest`, `RefreshTokenServiceImplTest`, `TokenBlacklistServiceImplTest`, `TokenPrincipalResolverImplTest` |
+| `common/security/user` | `UserPrincipalTest` |
+| `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest`, `SecurityUtilsTest` |
+| `common/security/websocket` | `JwtHandshakeInterceptorTest`, `WebSocketHandshakeRateLimitIT`, `WebSocketRevocationIT`, `WebSocketRevocationSweepServiceTest` |
+| `common/settings/service/impl` | `SystemSettingServiceImplTest` |
+| `modules/admin/controller` | `AdminControllerIT` |
+| `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest` |
+| `modules/admin/service/impl` | `AdminServiceImplTest` |
 | `modules/auth/controller` | `AuthControllerIT` |
+| `modules/auth/converter` | `OAuthProviderConverterTest` |
 | `modules/auth/dto/request` | `RegisterRequestDeserializationTest`, `ResetPasswordRequestDeserializationTest` |
 | `modules/auth/messaging` | `AuthMailEventConsumerRabbitMqIT`, `AuthMailEventConsumerTest`, `AuthMailEventHandlerTest` |
-| `modules/auth/oauth2` | `CookieOAuth2AuthorizationRequestRepositoryTest`, `CustomOidcUserServiceTest`, `OAuth2AuthenticationFailureHandlerTest` |
-| `modules/auth/service/impl` | `AuthForgotPasswordEventServiceImplTest`, `AuthMailEventServiceImplTest`, `AuthServiceImplTest`, `ForgotPasswordTimingEqualizerTest`, `TokenServiceImplTest` |
+| `modules/auth/oauth2` | `CookieOAuth2AuthorizationRequestRepositoryTest`, `CustomOidcUserServiceTest`, `CustomOidcUserTest`, `OAuth2AuthenticationFailureHandlerTest` |
+| `modules/auth/service/impl` | `AuthForgotPasswordEventServiceImplTest`, `AuthMailEventServiceImplTest`, `AuthResendVerificationEventServiceImplTest`, `AuthServiceImplTest`, `ForgotPasswordTimingEqualizerTest`, `OAuth2ExchangeCodeServiceImplTest`, `RefreshTokenPurgeJobTest`, `TokenServiceImplTest` |
 | `modules/auth/validation` | `UserStateValidatorTest` |
-| `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT` |
+| `modules/comment/config` | `CommentWebSocketConfigTest` |
+| `modules/comment/consumer` | `CommentNotificationConsumerIT` |
+| `modules/comment/controller` | `CommentControllerIT` |
+| `modules/comment/live` | `CommentStompSendAuthIT`, `CommentWebSocketAccountStatusIT`, `CommentWebSocketHandshakeRejectionIT`, `CommentWebSocketLiveDeliveryIT` |
+| `modules/comment/repository` | `CommentKeysetRowLossIT`, `CommentTopLikedQueryIT` |
+| `modules/comment/service/impl` | `CommentAuthorEmbeddingIT`, `CommentCacheServiceImplTest`, `CommentModerationServiceImplTest`, `CommentPinnedTopCommentsIT`, `CommentServiceImplTest`, `CommentViewerStateIT`, `CommentViewerStateServiceImplTest` |
+| `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT`, `HashtagIndexSyncConsumerTest` |
 | `modules/hashtag/controller` | `HashtagControllerIT` |
-| `modules/hashtag/service/impl` | `HashtagSearchServiceImplTest`, `HashtagServiceImplTest` |
+| `modules/hashtag/service/impl` | `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT` |
 | `modules/media/repository` | `MediaAssetRepositoryIT` |
 | `modules/media/service/impl` | `MediaEventServiceImplTest`, `MediaServiceImplTest` |
 | `modules/media/storage` | `MediaStorageKeyGeneratorTest`, `R2ObjectStoragePresignServiceTest` |
 | `modules/media/validation` | `MediaMetadataValidatorTest` |
+| `modules/message/config` | `MessagePropertiesTest` |
+| `modules/message/controller` | `MessageControllerIT` |
+| `modules/message/converter` | `MessageTypeConverterTest` |
+| `modules/message/repository` | `ConversationKeysetRowLossIT` |
+| `modules/message/service/impl` | `ConversationServiceImplTest` |
+| `modules/notification/config` | `NotificationWebSocketConfigTest` |
 | `modules/notification/controller` | `NotificationControllerIT` |
-| `modules/notification/messaging` | `SocialNotificationConsumerIT` |
-| `modules/notification/service/impl` | `NotificationServiceImplTest` |
-| `modules/post/consumer` | `PostIndexSyncConsumerIT` |
+| `modules/notification/entity/converter` | `NotificationTypeConverterTest` |
+| `modules/notification/live` | `NotificationLiveDeliveryIT`, `NotificationLiveFanoutConsumerTest`, `NotificationOnlyWebSocketConfigIT`, `NotificationPushLatencyIT`, `NotificationWebSocketSubscriptionAuthIT` |
+| `modules/notification/messaging` | `SocialNotificationConsumerIT`, `SocialNotificationConsumerTest` |
+| `modules/notification/repository` | `NotificationKeysetRowLossIT` |
+| `modules/notification/service/impl` | `NotificationAuthorEmbeddingIT`, `NotificationServiceImplTest` |
+| `modules/post/consumer` | `PostIndexSyncConsumerIT`, `PostIndexSyncConsumerTest` |
 | `modules/post/controller` | `PostControllerIT` |
-| `modules/post/service/impl` | `PostLikeServiceImplTest`, `PostSaveServiceImplTest`, `PostServiceImplTest`, `PostVisibilityServiceImplTest` |
-| `modules/social/repository` | `FollowRepositoryIT` |
-| `modules/social/service/impl` | `SocialEventServiceImplTest` |
+| `modules/post/repository` | `PostKeysetRowLossIT` |
+| `modules/post/service/impl` | `PostAuthorEmbeddingIT`, `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostViewerStateIT`, `PostViewerStateServiceImplTest`, `PostVisibilityServiceImplTest` |
+| `modules/recommendation/service/impl` | `UserEventsPartitionJobTest` |
+| `modules/report/controller` | `ReportControllerIT` |
+| `modules/report/repository` | `ReportKeysetRowLossIT`, `ReportRepositoryIT` |
+| `modules/report/service/impl` | `ReportServiceImplTest` |
+| `modules/social/controller` | `SocialControllerIT` |
+| `modules/social/converter` | `FollowStatusConverterTest` |
+| `modules/social/repository` | `FollowKeysetRowLossIT`, `FollowRepositoryIT` |
+| `modules/social/service/impl` | `BlockedListIT`, `SocialEventServiceImplTest`, `SocialRelationshipIT`, `SocialServiceImplTest` |
+| `modules/story/consumer` | `StoryNotificationConsumerIT`, `StoryNotificationConsumerTest` |
+| `modules/story/controller` | `StoryControllerIT` |
+| `modules/story/repository` | `StoryViewKeysetRowLossIT` |
+| `modules/story/service/impl` | `StoryServiceImplTest`, `StoryViewServiceImplTest`, `StoryVisibilityServiceImplTest` |
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
-| `modules/users/service/impl` | `UserServiceImplTest` |
-| `modules/comment/consumer` | `CommentNotificationConsumerIT` |
-| `modules/comment/controller` | `CommentControllerIT` |
-| `modules/comment/live` | `CommentWebSocketJwtHandshakeInterceptorTest` |
-| `modules/comment/service/impl` | `CommentModerationServiceImplTest`, `CommentServiceImplTest` |
-| `modules/report/controller` | `ReportControllerIT` |
-| `modules/report/service/impl` | `ReportServiceImplTest` |
-| `modules/admin/controller` | `AdminControllerIT` |
-| `modules/admin/repository` | `AdminActionRepositoryTest` |
-| `modules/admin/service/impl` | `AdminServiceImplTest` |
+| `modules/users/repository` | `UserRepositorySurfaceTest` |
+| `modules/users/service/impl` | `UserProfileViewerStateIT`, `UserSearchIT`, `UserSearchServiceImplTest`, `UserServiceImplTest`, `UserSummaryServiceIT`, `UserSummaryServiceImplTest`, `UsernameLookupIT` |
 
 ---
 
@@ -265,7 +299,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 40 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: true`); 43 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -309,6 +343,9 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 | V38 | add_story_view_keyset_index |
 | V39 | add_notification_keyset_index |
 | V40 | add_blocks_keyset_index |
+| V41 | add_comment_top_liked_index |
+| V42 | add_username_case_insensitive_index |
+| V43 | align_username_index_with_soft_delete_policy |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)

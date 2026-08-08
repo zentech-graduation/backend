@@ -425,3 +425,65 @@ and the implementing method.
 Fix: Every response that returns a body requires a `@Content(mediaType = "application/json",
 schema = @Schema(implementation = ...))` block. Without it, springdoc generates an empty response
 schema and the Swagger UI shows no body structure for that status code.
+
+---
+
+## 7. Composed Response Annotations
+
+A response that is identical across many endpoints — the 400 every cursor endpoint returns for a
+malformed pagination cursor is the first case — is declared **once** as a composed meta-annotation
+under `com.app.common.config.openapi`, rather than hand-written on every `*Api` method. This is a
+deliberate exception to the "one `@ApiResponse` entry per status code, declared individually"
+convention in section 2: identical, repeated declarations are exactly what drifts out of sync one
+hand-edit at a time, which is the defect class this guide exists to prevent.
+
+**How it works.** `io.swagger.v3.oas.annotations.responses.ApiResponse` is `@Repeatable`, and
+springdoc resolves repeatable annotations through Spring's meta-annotation composition
+(`AnnotatedElementUtils`), so a custom annotation meta-annotated with a single `@ApiResponse` is
+picked up the same as one written directly on the method — including alongside an `@ApiResponses`
+block already present on that method. The two sources merge; neither overrides the other, provided
+they declare different status codes.
+
+**Example — `CursorErrorResponses`:**
+
+```java
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@io.swagger.v3.oas.annotations.responses.ApiResponse(
+        responseCode = "400",
+        description = "Malformed cursor",
+        content =
+                @Content(
+                        mediaType = "application/json",
+                        schema = @Schema(implementation = ApiResponse.class)))
+public @interface CursorErrorResponses {}
+```
+
+Applied on the method, alongside the existing per-endpoint `@ApiResponses` block:
+
+```java
+@Operation(summary = "List the caller's conversations", ...)
+@ApiResponses({
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Cursor page of conversation summaries")
+})
+@CursorErrorResponses
+@GetMapping(ApiConstants.Messages.ROOT)
+ResponseEntity<ApiResponse<CursorPageResponse<ConversationSummaryResponse>>> listMyConversations(...);
+```
+
+**When not to use a composed annotation.** If an endpoint's 400 covers more than the common case —
+for example, an offset-paginated search endpoint whose 400 also covers a missing or too-short query
+parameter — write that endpoint's `@ApiResponse` entry by hand with a description covering every
+cause. A composed annotation and a hand-written entry for the same status code on the same method
+cannot coexist: OpenAPI responses are keyed by status code, so a second declaration for a code
+already present does not merge, it silently competes with the first. `HashtagApi.search`,
+`PostApi.searchPosts`, `SocialApi.getBlockedUsers`, and `UserApi.searchUsers` are documented this
+way deliberately and must not be converted to `@CursorErrorResponses`.
+
+**Existing composed annotations:**
+
+| Annotation | Declares | Applies to |
+|---|---|---|
+| `CursorErrorResponses` | `400` — malformed pagination cursor | Every cursor-paginated endpoint whose only 400 cause is a malformed cursor |

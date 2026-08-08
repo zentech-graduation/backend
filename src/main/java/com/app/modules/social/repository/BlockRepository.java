@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -30,6 +31,24 @@ public interface BlockRepository extends JpaRepository<Block, BlockId> {
         return existsById(new BlockId(firstUserId, secondUserId))
                 || existsById(new BlockId(secondUserId, firstUserId));
     }
+
+    /**
+     * Deletes a block edge, returning the affected-row count so the caller can distinguish an
+     * actual unblock from a no-op instead of loading the row first and calling {@code
+     * delete(entity)}, which raises {@link
+     * org.springframework.orm.ObjectOptimisticLockingFailureException} when a concurrent request
+     * already removed the same row.
+     *
+     * @param blockerId the account that issued the block
+     * @param blockedId the blocked account
+     * @return number of rows deleted (0 or 1)
+     */
+    @Modifying
+    @Query(
+            "DELETE FROM Block b WHERE b.id.blockerId = :blockerId "
+                    + "AND b.id.blockedId = :blockedId")
+    int deleteByBlockerIdAndBlockedId(
+            @Param("blockerId") UUID blockerId, @Param("blockedId") UUID blockedId);
 
     /**
      * First keyset page of the viewer's outgoing blocks, newest first.
@@ -77,25 +96,42 @@ public interface BlockRepository extends JpaRepository<Block, BlockId> {
             Pageable pageable);
 
     /**
-     * Every block edge between the viewer and any of {@code userIds}, in either direction, in one
-     * round trip.
+     * The subset of {@code userIds} the viewer has outgoing-blocked, in one round trip.
      *
-     * <p>Compiles to two independent index scans against {@code blocks_pkey} and {@code
-     * idx_blocks_blocked} appended in a single statement, one for each direction.
+     * <p>Deliberately outgoing-only: the application implements a stealth block model, so no
+     * response surface ever renders "this user has blocked the viewer" - only "the viewer has
+     * blocked this user" ({@code isBlocking}) is a legitimate thing to tell the viewer about
+     * themselves. An incoming-block query has no remaining caller.
      *
      * @param viewerId the requesting viewer
      * @param userIds candidate user ids on the current page
-     * @return directed edges; a user absent from the result has no block relationship with the
-     *     viewer in either direction
+     * @return the ids among {@code userIds} the viewer blocks; absence means not blocked by the
+     *     viewer
      */
     @Query(
             value =
-                    "SELECT blocked_id AS other_id, true AS outgoing FROM blocks"
-                            + " WHERE blocker_id = :viewerId AND blocked_id IN (:userIds)"
-                            + " UNION ALL "
-                            + "SELECT blocker_id AS other_id, false AS outgoing FROM blocks"
-                            + " WHERE blocked_id = :viewerId AND blocker_id IN (:userIds)",
+                    "SELECT blocked_id FROM blocks WHERE blocker_id = :viewerId "
+                            + "AND blocked_id IN (:userIds)",
             nativeQuery = true)
-    List<BlockEdgeProjection> findRelationshipEdges(
+    List<UUID> findOutgoingBlockedIds(
             @Param("viewerId") UUID viewerId, @Param("userIds") Collection<UUID> userIds);
+
+    /**
+     * Every id in a block relationship with {@code userId}, in either direction, in one round trip.
+     *
+     * <p>Used to filter WebSocket fan-out: a broadcast authored by (or otherwise attributable to)
+     * {@code userId} must not reach a subscriber who blocks or is blocked by them. One query per
+     * fan-out event regardless of subscriber count, bounded by {@code userId}'s own block-list size
+     * rather than the number of connected sessions.
+     *
+     * @param userId the content owner whose block relationships are resolved
+     * @return every counterparty id blocking or blocked by {@code userId}
+     */
+    @Query(
+            value =
+                    "SELECT blocked_id AS id FROM blocks WHERE blocker_id = :userId "
+                            + "UNION "
+                            + "SELECT blocker_id AS id FROM blocks WHERE blocked_id = :userId",
+            nativeQuery = true)
+    List<UUID> findBlockedCounterpartyIds(@Param("userId") UUID userId);
 }

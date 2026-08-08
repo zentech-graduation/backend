@@ -105,7 +105,6 @@ class UserProfileViewerStateIT {
         assertThat(response.viewerState().isFollowRequested()).isFalse();
         assertThat(response.viewerState().isFollowedBy()).isFalse();
         assertThat(response.viewerState().isBlocking()).isFalse();
-        assertThat(response.viewerState().isBlockedBy()).isFalse();
 
         // Re-run with a real viewer to isolate the relationship-query delta the anonymous path
         // must avoid: findByIdAndDeletedAtIsNull (the profile lookup) still runs either way, so
@@ -152,7 +151,6 @@ class UserProfileViewerStateIT {
         assertThat(response.viewerState().isFollowRequested()).isFalse();
         assertThat(response.viewerState().isFollowedBy()).isFalse();
         assertThat(response.viewerState().isBlocking()).isFalse();
-        assertThat(response.viewerState().isBlockedBy()).isFalse();
     }
 
     private UUID insertUser(String username, boolean isPrivate) {

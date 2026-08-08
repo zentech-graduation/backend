@@ -108,7 +108,7 @@ class PostVisibilityServiceImplTest {
     }
 
     @Test
-    void filterVisibleOwnerIds_issuesExactlyTwoBatchedQueriesRegardlessOfCandidateCount() {
+    void filterVisibleOwnerIds_issuesExactlyThreeBatchedQueriesRegardlessOfCandidateCount() {
         UUID publicOwner = UUID.randomUUID();
         UUID privateFollowed = UUID.randomUUID();
         UUID privateNotFollowed = UUID.randomUUID();
@@ -123,15 +123,15 @@ class PostVisibilityServiceImplTest {
                         blockedEitherDirection,
                         softDeleted);
 
+        when(socialService.findBlockedEitherDirection(viewerId))
+                .thenReturn(Set.of(blockedEitherDirection));
         when(socialService.loadRelationships(any(), anyCollection()))
                 .thenReturn(
                         Map.of(
                                 privateFollowed,
-                                new ViewerRelationshipResponse(true, false, false, false, false),
+                                new ViewerRelationshipResponse(true, false, false, false),
                                 privateNotFollowed,
-                                new ViewerRelationshipResponse(false, false, false, false, false),
-                                blockedEitherDirection,
-                                new ViewerRelationshipResponse(false, false, false, true, false)));
+                                new ViewerRelationshipResponse(false, false, false, false)));
         when(postUserRepository.findAllByIdInAndDeletedAtIsNull(candidates))
                 .thenReturn(
                         List.of(
@@ -142,6 +142,7 @@ class PostVisibilityServiceImplTest {
         Set<UUID> visible = service.filterVisibleOwnerIds(viewerId, candidates);
 
         assertThat(visible).containsExactlyInAnyOrder(viewerId, publicOwner, privateFollowed);
+        verify(socialService).findBlockedEitherDirection(viewerId);
         verify(socialService).loadRelationships(viewerId, candidates);
         verify(postUserRepository).findAllByIdInAndDeletedAtIsNull(candidates);
         verify(socialService, never()).isBlockedBetween(any(), any());
@@ -150,16 +151,14 @@ class PostVisibilityServiceImplTest {
     }
 
     @Test
-    void filterVisibleOwnerIds_blockedByOtherDirection_excluded() {
-        UUID blockedBy = UUID.randomUUID();
-        when(socialService.loadRelationships(any(), anyCollection()))
-                .thenReturn(
-                        Map.of(
-                                blockedBy,
-                                new ViewerRelationshipResponse(false, false, false, false, true)));
-        when(postUserRepository.findAllByIdInAndDeletedAtIsNull(Set.of(blockedBy)))
-                .thenReturn(List.of(User.builder().id(blockedBy).isPrivate(false).build()));
+    void filterVisibleOwnerIds_blockedInEitherDirection_excluded() {
+        UUID blocked = UUID.randomUUID();
+        when(socialService.findBlockedEitherDirection(viewerId)).thenReturn(Set.of(blocked));
+        when(postUserRepository.findAllByIdInAndDeletedAtIsNull(Set.of(blocked)))
+                .thenReturn(List.of(User.builder().id(blocked).isPrivate(false).build()));
 
-        assertThat(service.filterVisibleOwnerIds(viewerId, Set.of(blockedBy))).isEmpty();
+        Set<UUID> visible = service.filterVisibleOwnerIds(viewerId, Set.of(blocked));
+
+        assertThat(visible).isEmpty();
     }
 }

@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -28,6 +29,44 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId>, Follo
     boolean existsByIdAndStatus(FollowId id, FollowStatus status);
 
     List<Follow> findByIdFollowerIdAndStatus(UUID followerId, FollowStatus status);
+
+    /**
+     * Deletes a follow edge regardless of status, returning the affected-row count so the caller
+     * can distinguish an actual unfollow from a no-op instead of loading the row first and calling
+     * {@code delete(entity)}, which raises {@link
+     * org.springframework.orm.ObjectOptimisticLockingFailureException} when a concurrent request
+     * already removed the same row.
+     *
+     * @param followerId the follower whose outgoing follow is removed
+     * @param followingId the followee
+     * @return number of rows deleted (0 or 1)
+     */
+    @Modifying
+    @Query(
+            "DELETE FROM Follow f WHERE f.id.followerId = :followerId "
+                    + "AND f.id.followingId = :followingId")
+    int deleteByFollowerIdAndFollowingId(
+            @Param("followerId") UUID followerId, @Param("followingId") UUID followingId);
+
+    /**
+     * Deletes a follow edge only when it currently has the given status, returning the affected-row
+     * count. Used to reject a pending follow request: a status-mismatched row (e.g. already
+     * accepted) is left untouched and the zero count tells the caller nothing was rejected, the
+     * same conditional-delete shape as {@link #deleteByFollowerIdAndFollowingId} above.
+     *
+     * @param followerId the requester
+     * @param followingId the followee whose pending request is rejected
+     * @param status the required current status; only a matching row is deleted
+     * @return number of rows deleted (0 or 1)
+     */
+    @Modifying
+    @Query(
+            "DELETE FROM Follow f WHERE f.id.followerId = :followerId "
+                    + "AND f.id.followingId = :followingId AND f.status = :status")
+    int deleteByFollowerIdAndFollowingIdAndStatus(
+            @Param("followerId") UUID followerId,
+            @Param("followingId") UUID followingId,
+            @Param("status") FollowStatus status);
 
     /**
      * Returns the IDs of all users that the given viewer follows with the specified status.

@@ -3,6 +3,7 @@ package com.app.common.security.websocket;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -85,6 +87,7 @@ class JwtHandshakeInterceptorTest {
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
 
         assertThat(result).isFalse();
+        verify(response).setStatusCode(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -96,6 +99,7 @@ class JwtHandshakeInterceptorTest {
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
 
         assertThat(result).isFalse();
+        verify(response).setStatusCode(HttpStatus.UNAUTHORIZED);
     }
 
     @Test

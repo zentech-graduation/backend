@@ -6,6 +6,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- Closed several remaining ways a blocked party's identity could leak: the live comment feed now filters each subscriber individually instead of broadcasting to everyone watching a post, notification listings and unread counts exclude blocked actors, mentioning a blocked account no longer delivers a notification, and the last few endpoints that confirmed a block's existence now respond identically to a nonexistent account instead.
+- Email uniqueness is now case-insensitive, closing a duplicate-account gap equivalent to the one already closed for usernames.
+- A forged pagination cursor for the conversations list could overflow the underlying timestamp column and return a server error instead of a clean validation failure; it now uses the same bounded cursor format as every other paginated list.
+- A concurrent duplicate unfollow, follow-request rejection, unblock, unlike, or unsave request could return a server error instead of a not-found response; all five now resolve cleanly under concurrent requests.
+- Ten paginated endpoints across posts, comments, conversations, and stories previously accepted an unbounded or zero page size; one of them could be driven to a server error this way. All paginated endpoints now enforce the same 1-100 page size bound.
+- A pagination cursor obtained from one list endpoint (for example, the followers list) can no longer be replayed against a different list endpoint; cursors are now bound to the endpoint that issued them. Any cursor obtained before this change is rejected once; affected clients simply restart pagination from the first page.
+- The comment and notification WebSocket endpoints now deny all cross-origin connections by default when no allowed origins are configured, matching the existing REST behavior. A blank configuration previously admitted any localhost-scoped browser origin on these two endpoints only.
+- A user blocked from viewing a post could still register as a live watcher of that post's comment activity over WebSocket by sending watch or heartbeat frames directly, bypassing the same visibility check already enforced when subscribing; both frame types are now authorized identically, and an unrecognized comment-topic subscription is now rejected by default instead of allowed through.
+- An endpoint reachable by more than one HTTP method (the conversations list and the WebSocket handshake) previously received a separate rate-limit budget per method instead of one shared budget; the two methods now share a single budget, and the production WebSocket handshake limit is raised from 30 to 60 attempts per 60 seconds to preserve the same effective capacity.
+- A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
+
+### Changed
+- Flyway no longer accepts out-of-order migrations; the migration set is a contiguous sequence with no gaps, so this only re-enables a safety check that was previously suppressed for no reason tied to an actual workflow.
+- Notification API responses now embed the triggering user's summary (id, username, display name, avatar, verified flag) instead of a bare actor id; a soft-deleted or unknown actor now renders as a placeholder instead of a raw id the client had to resolve separately. This is a breaking change to the notification response shape.
+- The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
+
+### Fixed
+- Login, token refresh, password reset, and OAuth2 code exchange all reject a banned, suspended, deactivated, or unverified account with 403, but none of them documented it, so a client had no documented contract to branch on. All four now declare it, including which error code corresponds to which account state.
+- Every endpoint that accepts a request body now documents the 415 it returns for an unsupported content type, along with four further statuses that were reachable but undeclared (a malformed id in the path, an invalid token sent to an otherwise-anonymous endpoint, and removing a group's last admin).
+- Timestamps delivered over WebSocket rendered in the server's local offset while the same field over REST rendered in UTC; both now render in UTC.
+- Every notification's `isRead` field in the API response was hardcoded to false regardless of its actual read state, so a client could never tell a read notification from an unread one. It now reflects the real value.
+- A rejected WebSocket handshake (missing or invalid token) returned an empty 200 response, indistinguishable from an unavailable endpoint; it now returns 401.
+- The same timestamp field on the same resource rendered with a local UTC offset right after creation and a UTC (`Z`) offset on every subsequent read; every timestamp now renders in UTC regardless of which code path produced it.
+- The dev environment's trusted-proxy list only recognized the IPv4 form of localhost, so `X-Forwarded-For` was silently ignored for requests arriving over IPv6 loopback, which is how most local requests actually arrive.
+- A malformed feed pagination cursor was silently ignored, returning an empty page instead of an error, for a viewer who does not follow anyone yet. It is now rejected the same way regardless of how many accounts the viewer follows.
+- Post and hashtag search reported another page was available whenever the current page happened to be exactly full, even on the last page, forcing an extra request that always came back empty; this now matches the already-correct behavior of user search.
+- The documented 401 on the user profile lookup for a private account has been removed; the endpoint always returns 200, with counter fields null when the caller cannot see them.
+- A user's, post's, or comment's `updated_at` value returned by the API could be a few milliseconds off from what was actually persisted, because both the application and the database independently computed it on every update. The database is now the sole source of truth for this value.
+- Several published API responses documented the wrong status code (422 where the API actually returns 400) or omitted responses the API actually returns (401, 403, 409); documentation now matches actual behavior, and every field that can genuinely be null is now marked nullable instead of only a previously observed subset.
+- Hashtag search now accepts flat query parameters instead of requiring a client to bind an object, matching its documented contract.
+- A comment's timestamps could render as null immediately after creation; comment creation now returns the fully persisted values.
+- Requests with an unsupported or unacceptable content type, or missing a required query parameter, now return the correct 415/406/400 response instead of the platform default error page, which no longer requires authentication to reach.
+- Every successful API response in the published API documentation now declares its actual response body type instead of an untyped envelope or the wrong schema, so client code can be generated correctly from it; the logout endpoint's documented response is also corrected to match its actual empty body.
+- Every cursor-paginated endpoint's published API documentation now declares the 400 response returned for a malformed cursor, and every request-body-accepting endpoint's documentation now declares the 400 response returned for a malformed body; most previously did not.
+- The hourly hashtag trending snapshot job now reuses the same time window across runs within the same hour instead of creating an unbounded, ever-growing set of near-duplicate snapshot rows on every run.
+- A transient failure resolving one WebSocket session's token during the periodic revocation sweep no longer aborts the whole sweep pass; the affected session is skipped and retried on the next scheduled run instead of leaving every other session unchecked.
+- Closed a latent inconsistency between the case-insensitive username uniqueness constraint and the documented soft-delete retention policy; no application code path could reach the affected state, but the database now enforces the same rule the application already assumed.
+
+### Tests
+- Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, the page size bound on every newly-covered endpoint, the single-writer `updated_at` fix, the notification `isRead` fix, the WebSocket handshake 401 fix, and the UTC timestamp rendering fix.
+- Added a contract test asserting that every request-body endpoint declares its 415, derived from the published document rather than a fixed list, so a new endpoint that omits it fails the build.
+- Added regression coverage proving cursor pagination for notifications, reports, admin actions, and conversations does not drop or duplicate rows when many items share the same sort timestamp, matching coverage already in place for other paginated lists.
+- Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
+
+### Documentation
+- Recorded why a small number of harmless startup proxy warnings and one non-JSON error response for an over-long request remain as accepted, understood gaps rather than unexplained rough edges.
+- Recorded that follower and following counts are visible to everyone regardless of the viewer's own blocks, so comparing a count against a filtered list can reveal that a block exists somewhere in that list, as a known and accepted tradeoff rather than an oversight.
+- Corrected internal module documentation for the hashtag module, which was still marked as unimplemented scaffolding despite being fully implemented.
+- Corrected internal module documentation for the message module: conversation and participant management is implemented, but sending, listing, and reacting to messages is not, since no send-message endpoint exists yet.
+- Corrected internal documentation to state that account soft delete, for users specifically, is a documented but unimplemented retention policy; no code path currently sets it.
+- Synchronized internal architecture documentation with the current codebase: migration count, test coverage listing, and module directory listing.
+- Synchronized the reference database schema document with the two most recent migrations (the top-liked-comments index and the case-insensitive username index).
+- Internal comment-style guidance no longer cites a pre-commit hook that does not exist in this repository.
+
 ### Added
 - A post view can now be recorded via `POST /api/v1/posts/{postId}/view`; the view is captured as a behavioral event and feeds the recommendation engine as a read signal, without synchronously changing any counter on the post.
 - Liking or saving a post now feeds the recommendation engine: each action is recorded as a behavioral event and forwarded to the recommender asynchronously, so the personalized feed reflects real engagement, not only the seeded interaction history.
@@ -18,10 +73,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A WebSocket handshake is now rate limited, and every rejected handshake is logged.
 - User search by username is available to authenticated callers, matching case-insensitively on any part of the username and ordering results by follower count.
 - The users a caller has blocked can now be listed as a paginated page, newest block first.
-- A user's public profile can now be fetched by username as well as by id; the username match is case-sensitive.
+- A user's public profile can now be fetched by username as well as by id; the username match is case-insensitive.
 
 ### Changed
 - Local development containers now persist PostgreSQL and RabbitMQ data across container recreation, declare healthchecks and restart policies, and the RabbitMQ image now ships the management UI bound to loopback.
+- Usernames now identify an account case-insensitively while preserving the casing they were registered with. `Alice` and `alice` are the same person, so only one of them can exist, and logging in or looking up a profile works with any casing. The profile continues to display the casing the account was created with rather than a lowercased form.
+- Registering or renaming to a username that differs from an existing one only by case is now rejected with the same generic conflict returned for any other duplicate. Previously it slipped past the availability check and surfaced as a different, more specific error, which allowed a caller to distinguish a taken username from a taken email.
 - Notification push delivery latency is significantly reduced by polling for new events roughly five times more often.
 - A comment or story WebSocket session established before an account is banned, suspended, or logged out is no longer left open until its access token naturally expires; the session is now terminated shortly after the account status changes.
 - The user object returned by login, register, and refresh is renamed in the API schema from `UserSummaryResponse` to `AuthenticatedUserResponse` to distinguish the authenticated-self object (which carries email and role) from the shared public author summary; the emitted JSON fields are unchanged.

@@ -280,8 +280,8 @@ class AuthRateLimitFilterTest {
 
     @Test
     void doFilterInternal_exactMatchRule_keepsPathAsBucketKey() throws Exception {
-        // Existing exact-match auth rules must keep bucketing on the concrete path exactly as
-        // before this change: for an exact match, matchedKey equals path, so the key is unchanged.
+        // Existing exact-match auth rules must keep bucketing on the concrete path: for an exact
+        // match, matchedKey equals path, so the key is the path plus the IP, with no method.
         when(request.getRequestURI()).thenReturn(FORGOT_PATH);
         when(request.getMethod()).thenReturn("POST");
         when(ipExtractor.extract(any())).thenReturn("5.5.5.5");
@@ -291,6 +291,41 @@ class AuthRateLimitFilterTest {
 
         ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(rateLimiterService).isAllowed(keyCaptor.capture(), anyInt(), anyLong());
-        assertThat(keyCaptor.getValue()).isEqualTo("POST:" + FORGOT_PATH + ":5.5.5.5");
+        assertThat(keyCaptor.getValue()).isEqualTo(FORGOT_PATH + ":5.5.5.5");
+    }
+
+    @Test
+    void differentMethodsSamePath_shareOneBucket() throws Exception {
+        // A rule's configured budget is for the endpoint as a whole. GET and POST reaching the
+        // same matched key (e.g. /api/v1/conversations, or SockJS handshake vs xhr transport under
+        // /ws/**) must consume the same bucket rather than each getting its own, which would
+        // silently double the effective allowance.
+        RateLimitProperties conversationsProps =
+                new RateLimitProperties(Map.of("/api/v1/conversations", new Rule(30, 60)));
+        SecurityProperties securityProperties =
+                new SecurityProperties(
+                        java.util.List.of(), 2048, "test-cookie-signing-secret-placeholder-32ch");
+        AuthRateLimitFilter conversationsFilter =
+                new AuthRateLimitFilter(
+                        rateLimiterService,
+                        conversationsProps,
+                        objectMapper,
+                        ipExtractor,
+                        securityProperties);
+
+        when(ipExtractor.extract(any())).thenReturn("7.7.7.7");
+        when(rateLimiterService.isAllowed(anyString(), anyInt(), anyLong())).thenReturn(true);
+        when(request.getRequestURI()).thenReturn("/api/v1/conversations");
+
+        when(request.getMethod()).thenReturn("GET");
+        conversationsFilter.doFilterInternal(request, new MockHttpServletResponse(), chain);
+
+        when(request.getMethod()).thenReturn("POST");
+        conversationsFilter.doFilterInternal(request, new MockHttpServletResponse(), chain);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rateLimiterService, times(2)).isAllowed(keyCaptor.capture(), anyInt(), anyLong());
+        List<String> keys = keyCaptor.getAllValues();
+        assertThat(keys.get(0)).isEqualTo(keys.get(1));
     }
 }

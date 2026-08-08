@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,7 +134,7 @@ class WebSocketRevocationIT {
         userRepository.save(user);
         sweepService.sweep();
 
-        CloseStatus closeStatus = handler.closed.get(10, TimeUnit.SECONDS);
+        CloseStatus closeStatus = handler.awaitClose();
         assertThat(closeStatus.getCode()).isEqualTo(CloseStatus.POLICY_VIOLATION.getCode());
     }
 
@@ -147,7 +148,7 @@ class WebSocketRevocationIT {
         userRepository.save(user);
         sweepService.sweep();
 
-        CloseStatus closeStatus = handler.closed.get(10, TimeUnit.SECONDS);
+        CloseStatus closeStatus = handler.awaitClose();
         assertThat(closeStatus.getCode()).isEqualTo(CloseStatus.POLICY_VIOLATION.getCode());
     }
 
@@ -161,7 +162,7 @@ class WebSocketRevocationIT {
         tokenBlacklistService.blacklist(claims.jti(), 900);
         sweepService.sweep();
 
-        CloseStatus closeStatus = handler.closed.get(10, TimeUnit.SECONDS);
+        CloseStatus closeStatus = handler.awaitClose();
         assertThat(closeStatus.getCode()).isEqualTo(CloseStatus.POLICY_VIOLATION.getCode());
     }
 
@@ -181,6 +182,30 @@ class WebSocketRevocationIT {
     private static final class RecordingHandler implements WebSocketHandler {
 
         private final CompletableFuture<CloseStatus> closed = new CompletableFuture<>();
+        private volatile Throwable transportError;
+
+        /**
+         * Waits for the server-initiated close and returns its status.
+         *
+         * <p>A transport error is deliberately not treated as a close. When the server closes the
+         * session, the client stack replies with its own close frame, and under a loaded suite that
+         * blocking write can time out. Completing {@code closed} exceptionally from {@link
+         * #handleTransportError} let that teardown noise win the race against {@link
+         * #afterConnectionClosed} and fail a test whose subject, the server-side close, had already
+         * succeeded. Any recorded error is still surfaced if the close never arrives.
+         */
+        CloseStatus awaitClose() throws Exception {
+            try {
+                return closed.get(10, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                if (transportError != null) {
+                    throw new AssertionError(
+                            "session never closed; transport error was: " + transportError,
+                            transportError);
+                }
+                throw e;
+            }
+        }
 
         @Override
         public void afterConnectionEstablished(WebSocketSession session) {
@@ -194,7 +219,7 @@ class WebSocketRevocationIT {
 
         @Override
         public void handleTransportError(WebSocketSession session, Throwable exception) {
-            closed.completeExceptionally(exception);
+            transportError = exception;
         }
 
         @Override

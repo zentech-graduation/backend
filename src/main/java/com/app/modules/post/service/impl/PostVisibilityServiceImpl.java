@@ -58,8 +58,12 @@ public class PostVisibilityServiceImpl implements PostVisibilityService {
         if (ownerIds.isEmpty()) {
             return Set.of();
         }
-        // Two fixed-count batched round trips (relationships, owners) replace what would otherwise
-        // be up to three queries per candidate owner if isVisibleTo were called in a loop.
+        // Three fixed-count batched round trips (blocks, follows, owners) replace what would
+        // otherwise be up to three queries per candidate owner if isVisibleTo were called in a
+        // loop. Block direction comes from findBlockedEitherDirection, not loadRelationships: the
+        // latter is scoped to the stealth-block UI surface and deliberately omits the incoming
+        // direction, which this internal visibility decision still needs in full.
+        Set<UUID> blockedEitherDirection = socialService.findBlockedEitherDirection(viewerId);
         Map<UUID, ViewerRelationshipResponse> relationships =
                 socialService.loadRelationships(viewerId, ownerIds);
         List<User> owners = postUserRepository.findAllByIdInAndDeletedAtIsNull(ownerIds);
@@ -72,9 +76,7 @@ public class PostVisibilityServiceImpl implements PostVisibilityService {
                 visible.add(ownerId);
                 continue;
             }
-            ViewerRelationshipResponse relationship =
-                    relationships.getOrDefault(ownerId, ViewerRelationshipResponse.NONE);
-            if (relationship.isBlocking() || relationship.isBlockedBy()) {
+            if (blockedEitherDirection.contains(ownerId)) {
                 continue;
             }
             // A soft-deleted owner is absent from ownersById and hides all of their content.
@@ -82,6 +84,8 @@ public class PostVisibilityServiceImpl implements PostVisibilityService {
             if (owner == null) {
                 continue;
             }
+            ViewerRelationshipResponse relationship =
+                    relationships.getOrDefault(ownerId, ViewerRelationshipResponse.NONE);
             if (owner.isPrivate() && !relationship.isFollowing()) {
                 continue;
             }

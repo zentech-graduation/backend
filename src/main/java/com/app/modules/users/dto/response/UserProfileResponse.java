@@ -24,10 +24,11 @@ public record UserProfileResponse(
                 UUID id,
         @Schema(description = "Unique username", example = "jane_doe") String username,
         @Schema(description = "Email address", example = "jane@example.com") String email,
-        @Schema(description = "Display name", example = "Jane Doe") String displayName,
-        @Schema(description = "Short bio") String bio,
-        @Schema(description = "Avatar CDN URL") String avatarUrl,
-        @Schema(description = "Personal website URL") String websiteUrl,
+        @Schema(description = "Display name", example = "Jane Doe", nullable = true)
+                String displayName,
+        @Schema(description = "Short bio", nullable = true) String bio,
+        @Schema(description = "Avatar CDN URL", nullable = true) String avatarUrl,
+        @Schema(description = "Personal website URL", nullable = true) String websiteUrl,
         @Schema(description = "Whether the account is private", example = "false")
                 boolean isPrivate,
         @Schema(

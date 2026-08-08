@@ -18,9 +18,14 @@ public record UserSummaryResponse(
                         description = "Unique user identifier",
                         example = "550e8400-e29b-41d4-a716-446655440000")
                 UUID id,
-        @Schema(description = "Unique username; null when the user is deleted or unknown")
+        @Schema(
+                        description = "Unique username; null when the user is deleted or unknown",
+                        nullable = true)
                 String username,
-        @Schema(description = "Display name shown on the profile", example = "John Doe")
+        @Schema(
+                        description = "Display name shown on the profile",
+                        example = "John Doe",
+                        nullable = true)
                 String displayName,
-        @Schema(description = "Avatar CDN URL; null when absent") String avatarUrl,
+        @Schema(description = "Avatar CDN URL; null when absent", nullable = true) String avatarUrl,
         @Schema(description = "Verified badge flag", example = "false") boolean isVerified) {}

@@ -119,7 +119,8 @@ class PostKeysetRowLossIT {
 
     @Test
     void likes_tieGroupOnCreatedAt_pagesEveryRowExactlyOnce() {
-        UUID postId = insertPost(insertUser("like_post_owner"), SHARED_INSTANT);
+        UUID owner = insertUser("like_post_owner");
+        UUID postId = insertPost(owner, SHARED_INSTANT);
         List<UUID> expected = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
             UUID liker = insertUser("liker_" + i);
@@ -128,14 +129,14 @@ class PostKeysetRowLossIT {
         }
 
         List<UUID> seen = new ArrayList<>();
-        List<PostLike> page = postLikeRepository.findFirstLikers(postId, page());
+        List<PostLike> page = postLikeRepository.findFirstLikers(postId, owner, page());
         int guard = 0;
         while (!page.isEmpty() && guard++ < 100) {
             page.forEach(l -> seen.add(l.getId().getUserId()));
             PostLike last = page.get(page.size() - 1);
             page =
                     postLikeRepository.findLikersBefore(
-                            postId, last.getCreatedAt(), last.getId().getUserId(), page());
+                            postId, owner, last.getCreatedAt(), last.getId().getUserId(), page());
         }
 
         assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);

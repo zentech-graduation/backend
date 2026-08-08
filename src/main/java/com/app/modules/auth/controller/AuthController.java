@@ -69,10 +69,9 @@ public class AuthController extends BaseController implements AuthApi {
     /** Revokes the supplied refresh token. Idempotent. */
     @Override
     @PostMapping(ApiConstants.Auth.LOGOUT)
-    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshRequest request) {
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(ApiResponse.success(ApiSuccessCode.NO_CONTENT));
+        return ResponseEntity.noContent().build();
     }
 
     /** Verifies an email address using the token embedded in the verification link. */

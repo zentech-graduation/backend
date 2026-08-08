@@ -764,6 +764,15 @@ CREATE INDEX idx_users_username_trgm    ON users USING gin (username gin_trgm_op
 CREATE INDEX idx_users_fts              ON users USING gin (
     to_tsvector('simple', COALESCE(username, '') || ' ' || COALESCE(display_name, ''))
 );
+-- Table-wide (not partial on deleted_at) so a soft-deleted account's username stays reserved,
+-- matching the documented soft-delete retention policy; users_username_key (raw UNIQUE column
+-- constraint above) is retained as a structural guard and is implied by this index.
+CREATE UNIQUE INDEX idx_users_username_lower ON users (lower(username));
+-- Same table-wide shape and rationale as idx_users_username_lower, applied to email: soft delete
+-- does not release an email either, and email identity is case-insensitive per RFC 5321 and every
+-- major mail provider's practice. users_email_key (raw UNIQUE column constraint above) is retained
+-- as a structural guard and is implied by this index.
+CREATE UNIQUE INDEX idx_users_email_lower ON users (lower(email));
 
 -- follows
 CREATE INDEX idx_follows_following      ON follows (following_id, status, created_at DESC);
@@ -825,6 +834,9 @@ CREATE INDEX idx_comments_root          ON comments (root_id)
 CREATE INDEX idx_comments_user          ON comments (user_id);
 CREATE INDEX idx_comments_post_moderation ON comments (post_id, moderation_status, created_at DESC)
     WHERE deleted_at IS NULL;
+-- Serves the pinned "top comments" block: the most-liked eligible top-level comments on a post.
+CREATE INDEX idx_comments_post_top_liked ON comments (post_id, like_count DESC, created_at DESC, id DESC)
+    WHERE parent_id IS NULL AND deleted_at IS NULL AND moderation_status = 'approved';
 
 -- comment_write_idempotency
 CREATE INDEX idx_comment_idempotency_created ON comment_write_idempotency (created_at);

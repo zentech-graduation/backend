@@ -13,6 +13,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
@@ -134,7 +135,7 @@ public class AdminServiceImpl implements AdminService {
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminActionSummaryResponse> getActions(
             UUID adminId, AdminActionType actionType, String cursor, int size) {
-        return findActions(adminId, null, actionType, cursor, size);
+        return findActions(adminId, null, actionType, cursor, size, CursorScope.ADMIN_ACTIONS);
     }
 
     @Override
@@ -150,7 +151,7 @@ public class AdminServiceImpl implements AdminService {
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminActionSummaryResponse> getActionsForUser(
             UUID userId, String cursor, int size) {
-        return findActions(null, userId, null, cursor, size);
+        return findActions(null, userId, null, cursor, size, CursorScope.ADMIN_ACTIONS_FOR_USER);
     }
 
     private AdminActionResponse changeUserStatus(
@@ -262,10 +263,15 @@ public class AdminServiceImpl implements AdminService {
     }
 
     private CursorPageResponse<AdminActionSummaryResponse> findActions(
-            UUID adminId, UUID targetUserId, AdminActionType actionType, String cursor, int size) {
+            UUID adminId,
+            UUID targetUserId,
+            AdminActionType actionType,
+            String cursor,
+            int size,
+            String scope) {
         int pageSize = normalizeLimit(size);
         int queryLimit = pageSize + 1;
-        ActionCursor decoded = decodeCursor(cursor);
+        ActionCursor decoded = decodeCursor(cursor, scope);
         List<AdminAction> actions =
                 adminActionRepository.findActions(
                         adminId,
@@ -274,7 +280,7 @@ public class AdminServiceImpl implements AdminService {
                         decoded.createdAt(),
                         decoded.id(),
                         queryLimit);
-        return toPage(actions, pageSize, cursor != null);
+        return toPage(actions, pageSize, cursor != null, scope);
     }
 
     private UserStatus targetUserStatus(AdminActionType actionType, UserStatus currentStatus) {
@@ -335,7 +341,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     private CursorPageResponse<AdminActionSummaryResponse> toPage(
-            List<AdminAction> actions, int pageSize, boolean hasPreviousPage) {
+            List<AdminAction> actions, int pageSize, boolean hasPreviousPage, String scope) {
         boolean hasNextPage = actions.size() > pageSize;
         List<AdminAction> pageActions = hasNextPage ? actions.subList(0, pageSize) : actions;
         if (pageActions.isEmpty()) {
@@ -354,8 +360,10 @@ public class AdminServiceImpl implements AdminService {
                         CursorPageResponse.PageInfo.builder()
                                 .hasNextPage(hasNextPage)
                                 .hasPreviousPage(hasPreviousPage)
-                                .startCursor(encodeCursor(pageActions.get(0)))
-                                .endCursor(encodeCursor(pageActions.get(pageActions.size() - 1)))
+                                .startCursor(encodeCursor(pageActions.get(0), scope))
+                                .endCursor(
+                                        encodeCursor(
+                                                pageActions.get(pageActions.size() - 1), scope))
                                 .build())
                 .build();
     }
@@ -364,13 +372,13 @@ public class AdminServiceImpl implements AdminService {
         return size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
     }
 
-    private String encodeCursor(AdminAction action) {
+    private String encodeCursor(AdminAction action, String scope) {
         return CursorCodec.encode(
-                new Cursor(TimeCursors.toMicros(action.getCreatedAt()), action.getId()));
+                new Cursor(TimeCursors.toMicros(action.getCreatedAt()), action.getId()), scope);
     }
 
-    private ActionCursor decodeCursor(String cursor) {
-        Cursor decoded = CursorCodec.decode(cursor);
+    private ActionCursor decodeCursor(String cursor, String scope) {
+        Cursor decoded = CursorCodec.decode(cursor, scope);
         if (decoded == null) {
             return new ActionCursor(null, null);
         }

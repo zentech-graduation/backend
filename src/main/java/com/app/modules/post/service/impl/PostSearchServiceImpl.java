@@ -100,20 +100,25 @@ public class PostSearchServiceImpl implements PostSearchService {
                                                                                                                 "status")
                                                                                                         .value(
                                                                                                                 "published")))))
-                        .withPageable(new OffsetPageable(offset, effectiveLimit))
+                        .withPageable(new OffsetPageable(offset, effectiveLimit + 1))
                         .build();
         SearchHits<PostDocument> hits =
                 elasticsearchOperations.search(nativeQuery, PostDocument.class);
-        List<UUID> ids =
+        List<UUID> allIds =
                 hits.getSearchHits().stream()
                         .map(SearchHit::getContent)
                         .map(PostDocument::getId)
                         .map(UUID::fromString)
                         .toList();
+        // Over-fetch by one and use its presence as the hasNextPage signal, rather than inferring
+        // it from a full page, which is indistinguishable from an exhausted result set on the last
+        // page and forces the client into one extra, always-empty request.
+        boolean hasNextPage = allIds.size() > effectiveLimit;
+        List<UUID> ids = hasNextPage ? allIds.subList(0, effectiveLimit) : allIds;
         List<PostResponse> content = hydrateVisible(viewerId, ids);
-        // The next-page cursor advances by the ES hit count, not the post-filter count, so hidden
-        // hits are never re-fetched.
-        return toPage(content, offset, effectiveLimit, ids.size());
+        // The next-page cursor advances by the (trimmed) ES hit count, not the post-filter count,
+        // so hidden hits are never re-fetched.
+        return toPage(content, offset, hasNextPage, ids.size());
     }
 
     // Resilience4j fallback: invoked when the primary throws OR the circuit is open. Returns an
@@ -177,9 +182,9 @@ public class PostSearchServiceImpl implements PostSearchService {
     }
 
     private CursorPageResponse<PostResponse> toPage(
-            List<PostResponse> content, int offset, int limit, int esHitCount) {
+            List<PostResponse> content, int offset, boolean hasNextPage, int esHitCount) {
         String start = content.isEmpty() ? null : OffsetCursorCodec.encode(offset);
         String end = content.isEmpty() ? null : OffsetCursorCodec.encode(offset + esHitCount);
-        return CursorPageResponse.of(content, content.size() == limit, start, end, offset > 0);
+        return CursorPageResponse.of(content, hasNextPage, start, end, offset > 0);
     }
 }

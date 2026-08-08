@@ -11,8 +11,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.SQLRestriction;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.generator.EventType;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -76,8 +77,11 @@ public class Comment {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    // trg_comments_updated_at (V16) is the sole writer of this column; Hibernate never sends it in
+    // an INSERT or UPDATE and instead re-selects it afterward so the entity reflects the
+    // trigger-written value instead of a stale application-side guess the trigger would discard.
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
 
     /** Set by application code on soft delete; {@code null} for live rows (GLOBAL_RULES §6). */
