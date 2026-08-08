@@ -18,7 +18,6 @@ import org.springframework.web.client.RestClientResponseException;
 
 import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.inbox.service.ProcessedMessageService;
-import com.app.common.messaging.DeadLetterPublisher;
 import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.messaging.exception.PermanentMessageException;
@@ -39,7 +38,11 @@ import com.rabbitmq.client.Channel;
  * PostgreSQL alone.
  *
  * <p>Uses manual acknowledgement: ack after idempotent duplicate detection or successful side
- * effect, route poison messages to DLQ, and nack with requeue if DLQ publishing itself fails.
+ * effect. A permanently failing message is nacked without requeue; {@code
+ * recommendation.feedback.queue} declares {@code x-dead-letter-exchange} / {@code
+ * x-dead-letter-routing-key} in {@link RabbitMqTopologyConfig}, so the broker itself routes the
+ * rejected message to {@code recommendation.feedback.dlq} — no application-level DLQ publish is
+ * needed, and none is attempted, so a poison message cannot loop back onto this queue.
  */
 @Component
 @ConditionalOnProperty(
@@ -55,7 +58,6 @@ public class RecommendationFeedbackConsumer {
 
     private final DomainEventMessageParser parser;
     private final ProcessedMessageService processedMessageService;
-    private final DeadLetterPublisher deadLetterPublisher;
     private final ConsumerRetryProperties retryProperties;
     private final UserEventJdbcRepository userEventJdbcRepository;
     private final GorseClient gorseClient;
@@ -65,14 +67,12 @@ public class RecommendationFeedbackConsumer {
     public RecommendationFeedbackConsumer(
             DomainEventMessageParser parser,
             ProcessedMessageService processedMessageService,
-            DeadLetterPublisher deadLetterPublisher,
             ConsumerRetryProperties retryProperties,
             UserEventJdbcRepository userEventJdbcRepository,
             GorseClient gorseClient) {
         this(
                 parser,
                 processedMessageService,
-                deadLetterPublisher,
                 retryProperties,
                 userEventJdbcRepository,
                 gorseClient,
@@ -82,14 +82,12 @@ public class RecommendationFeedbackConsumer {
     RecommendationFeedbackConsumer(
             DomainEventMessageParser parser,
             ProcessedMessageService processedMessageService,
-            DeadLetterPublisher deadLetterPublisher,
             ConsumerRetryProperties retryProperties,
             UserEventJdbcRepository userEventJdbcRepository,
             GorseClient gorseClient,
             Sleeper sleeper) {
         this.parser = parser;
         this.processedMessageService = processedMessageService;
-        this.deadLetterPublisher = deadLetterPublisher;
         this.retryProperties = retryProperties;
         this.userEventJdbcRepository = userEventJdbcRepository;
         this.gorseClient = gorseClient;
@@ -103,7 +101,7 @@ public class RecommendationFeedbackConsumer {
      * Consumes an engagement event and applies it idempotently to user_events and Gorse.
      *
      * @param message delivered RabbitMQ message carrying the domain event envelope
-     * @param channel channel used for manual acknowledgement and DLQ routing
+     * @param channel channel used for manual acknowledgement
      */
     @RabbitListener(queues = RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_QUEUE)
     public void consume(Message message, Channel channel) {
@@ -114,7 +112,11 @@ public class RecommendationFeedbackConsumer {
             processWithRetry(event);
             ack(channel, deliveryTag);
         } catch (RuntimeException ex) {
-            routeToDlqOrRequeue(message, channel, deliveryTag, ex);
+            log.warn(
+                    "Recommendation feedback event permanently failed, routing to DLQ via broker"
+                            + " dead-letter binding: {}",
+                    ex.getMessage());
+            nack(channel, deliveryTag);
         }
     }
 
@@ -213,22 +215,6 @@ public class RecommendationFeedbackConsumer {
         }
     }
 
-    private void routeToDlqOrRequeue(
-            Message message, Channel channel, long deliveryTag, RuntimeException failure) {
-        try {
-            deadLetterPublisher.publish(
-                    message,
-                    RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY,
-                    failure.getMessage());
-            ack(channel, deliveryTag);
-        } catch (RuntimeException dlqFailure) {
-            log.warn(
-                    "Failed to publish recommendation feedback event to DLQ; requeueing: {}",
-                    dlqFailure.getMessage());
-            nack(channel, deliveryTag);
-        }
-    }
-
     // channel.basicAck/basicNack declare IOException on a broken/closed AMQP channel; the
     // listener container's own recovery handles that case, so we log and return rather than
     // letting a checked IOException escape this @RabbitListener method uncaught.
@@ -240,9 +226,12 @@ public class RecommendationFeedbackConsumer {
         }
     }
 
+    // requeue=false: the broker routes the rejection to the queue's configured dead-letter
+    // exchange instead of redelivering to this same queue, so a permanently failing message
+    // cannot loop.
     private void nack(Channel channel, long deliveryTag) {
         try {
-            channel.basicNack(deliveryTag, false, true);
+            channel.basicNack(deliveryTag, false, false);
         } catch (IOException ex) {
             log.error("Failed to nack recommendation feedback message: {}", ex.getMessage());
         }

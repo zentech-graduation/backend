@@ -1,14 +1,16 @@
 package com.app.modules.recommendation.consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -31,10 +33,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 
-import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.inbox.enums.ProcessedMessageResult;
 import com.app.common.inbox.service.ProcessedMessageService;
-import com.app.common.messaging.DeadLetterPublisher;
 import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.outbox.model.DomainEventEnvelope;
@@ -55,7 +55,6 @@ class RecommendationFeedbackConsumerTest {
     private static final OffsetDateTime OCCURRED_AT = OffsetDateTime.now(ZoneOffset.UTC);
 
     @Mock private ProcessedMessageService processedMessageService;
-    @Mock private DeadLetterPublisher deadLetterPublisher;
     @Mock private UserEventJdbcRepository userEventJdbcRepository;
     @Mock private GorseClient gorseClient;
     @Mock private Channel channel;
@@ -74,7 +73,6 @@ class RecommendationFeedbackConsumerTest {
                 new RecommendationFeedbackConsumer(
                         new DomainEventMessageParser(),
                         processedMessageService,
-                        deadLetterPublisher,
                         retryProperties,
                         userEventJdbcRepository,
                         gorseClient,
@@ -161,23 +159,21 @@ class RecommendationFeedbackConsumerTest {
     }
 
     @Test
-    void consume_unknownEventType_routesToDlqAndAcks() throws Exception {
+    void consume_unknownEventType_nacksWithoutRequeueForBrokerDeadLettering() throws Exception {
         Message message = message(envelope("unknown.event.type"));
         stubProcessOnce();
 
         consumer.consume(message, channel);
 
-        verify(deadLetterPublisher)
-                .publish(
-                        eq(message),
-                        eq(RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY),
-                        any());
-        verify(channel).basicAck(1L, false);
+        // requeue=false: the queue's own x-dead-letter-exchange routes this to the DLQ; no
+        // application-level publish should happen.
+        verify(channel).basicNack(1L, false, false);
+        verify(channel, never()).basicAck(1L, false);
         verify(gorseClient, never()).insertFeedback(anyList());
     }
 
     @Test
-    void consume_missingPostId_routesToDlqAndAcks() throws Exception {
+    void consume_missingPostId_nacksWithoutRequeue() throws Exception {
         DomainEventEnvelope envelope =
                 new DomainEventEnvelope(
                         EVENT_ID,
@@ -192,16 +188,12 @@ class RecommendationFeedbackConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(deadLetterPublisher)
-                .publish(
-                        eq(message),
-                        eq(RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY),
-                        any());
-        verify(channel).basicAck(1L, false);
+        verify(channel).basicNack(1L, false, false);
+        verify(channel, never()).basicAck(1L, false);
     }
 
     @Test
-    void consume_missingActorId_routesToDlqAndAcks() throws Exception {
+    void consume_missingActorId_nacksWithoutRequeue() throws Exception {
         DomainEventEnvelope envelope =
                 new DomainEventEnvelope(
                         EVENT_ID,
@@ -216,23 +208,14 @@ class RecommendationFeedbackConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(deadLetterPublisher)
-                .publish(
-                        eq(message),
-                        eq(RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY),
-                        any());
-        verify(channel).basicAck(1L, false);
+        verify(channel).basicNack(1L, false, false);
+        verify(channel, never()).basicAck(1L, false);
     }
 
     @Test
-    void consume_gorseTransientFailure_retriesThenDlqs() throws Exception {
+    void consume_gorseTransientFailure_retriesThenNacksWithoutRequeue() throws Exception {
         Message message = message(envelope(PostEventTypes.POST_LIKED_V1));
-        when(processedMessageService.processOnce(any(), any(), any(), any()))
-                .thenAnswer(
-                        inv -> {
-                            inv.getArgument(3, Runnable.class).run();
-                            return ProcessedMessageResult.PROCESSED;
-                        });
+        stubProcessOnce();
         doThrow(
                         HttpServerErrorException.create(
                                 HttpStatus.SERVICE_UNAVAILABLE, "down", null, null, null))
@@ -241,18 +224,14 @@ class RecommendationFeedbackConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(gorseClient, org.mockito.Mockito.times(3)).insertFeedback(anyList());
-        verify(deadLetterPublisher)
-                .publish(
-                        eq(message),
-                        eq(RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY),
-                        any());
-        verify(channel).basicAck(1L, false);
+        verify(gorseClient, times(3)).insertFeedback(anyList());
+        verify(channel).basicNack(1L, false, false);
+        verify(channel, never()).basicAck(1L, false);
         assertThat(sleptMillis).hasSize(1);
     }
 
     @Test
-    void consume_gorsePermanentFailure_dlqsWithoutRetry() throws Exception {
+    void consume_gorsePermanentFailure_nacksWithoutRetry() throws Exception {
         Message message = message(envelope(PostEventTypes.POST_LIKED_V1));
         stubProcessOnce();
         doThrow(HttpClientErrorException.create(HttpStatus.BAD_REQUEST, "bad", null, null, null))
@@ -261,13 +240,9 @@ class RecommendationFeedbackConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(gorseClient, org.mockito.Mockito.times(1)).insertFeedback(anyList());
-        verify(deadLetterPublisher)
-                .publish(
-                        eq(message),
-                        eq(RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY),
-                        any());
-        verify(channel).basicAck(1L, false);
+        verify(gorseClient, times(1)).insertFeedback(anyList());
+        verify(channel).basicNack(1L, false, false);
+        verify(channel, never()).basicAck(1L, false);
     }
 
     @Test
@@ -282,6 +257,15 @@ class RecommendationFeedbackConsumerTest {
                 .insertIgnoreDuplicate(any(), any(), any(), any(), any(), any());
         verify(gorseClient, never()).insertFeedback(anyList());
         verify(channel).basicAck(1L, false);
+    }
+
+    @Test
+    void consume_nackThrowsIOException_doesNotPropagate() throws Exception {
+        Message message = message(envelope("unknown.event.type"));
+        stubProcessOnce();
+        doThrow(new IOException("channel closed")).when(channel).basicNack(1L, false, false);
+
+        assertThatCode(() -> consumer.consume(message, channel)).doesNotThrowAnyException();
     }
 
     private void verifyFeedbackPushed(String feedbackType) {
