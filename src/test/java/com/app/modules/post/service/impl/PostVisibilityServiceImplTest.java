@@ -1,10 +1,17 @@
 package com.app.modules.post.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.social.service.SocialService;
@@ -91,5 +99,67 @@ class PostVisibilityServiceImplTest {
         when(postUserRepository.findByIdAndDeletedAtIsNull(ownerId)).thenReturn(Optional.empty());
 
         assertThat(service.isVisibleTo(viewerId, post())).isFalse();
+    }
+
+    @Test
+    void filterVisibleOwnerIds_emptyInput_returnsEmptyWithoutQuerying() {
+        assertThat(service.filterVisibleOwnerIds(viewerId, Set.of())).isEmpty();
+        verifyNoInteractions(socialService, postUserRepository);
+    }
+
+    @Test
+    void filterVisibleOwnerIds_issuesExactlyTwoBatchedQueriesRegardlessOfCandidateCount() {
+        UUID publicOwner = UUID.randomUUID();
+        UUID privateFollowed = UUID.randomUUID();
+        UUID privateNotFollowed = UUID.randomUUID();
+        UUID blockedEitherDirection = UUID.randomUUID();
+        UUID softDeleted = UUID.randomUUID();
+        Set<UUID> candidates =
+                Set.of(
+                        viewerId,
+                        publicOwner,
+                        privateFollowed,
+                        privateNotFollowed,
+                        blockedEitherDirection,
+                        softDeleted);
+
+        when(socialService.loadRelationships(any(), anyCollection()))
+                .thenReturn(
+                        Map.of(
+                                privateFollowed,
+                                new ViewerRelationshipResponse(true, false, false, false, false),
+                                privateNotFollowed,
+                                new ViewerRelationshipResponse(false, false, false, false, false),
+                                blockedEitherDirection,
+                                new ViewerRelationshipResponse(false, false, false, true, false)));
+        when(postUserRepository.findAllByIdInAndDeletedAtIsNull(candidates))
+                .thenReturn(
+                        List.of(
+                                User.builder().id(publicOwner).isPrivate(false).build(),
+                                User.builder().id(privateFollowed).isPrivate(true).build(),
+                                User.builder().id(privateNotFollowed).isPrivate(true).build()));
+
+        Set<UUID> visible = service.filterVisibleOwnerIds(viewerId, candidates);
+
+        assertThat(visible).containsExactlyInAnyOrder(viewerId, publicOwner, privateFollowed);
+        verify(socialService).loadRelationships(viewerId, candidates);
+        verify(postUserRepository).findAllByIdInAndDeletedAtIsNull(candidates);
+        verify(socialService, never()).isBlockedBetween(any(), any());
+        verify(socialService, never()).hasAcceptedFollow(any(), any());
+        verify(postUserRepository, never()).findByIdAndDeletedAtIsNull(any());
+    }
+
+    @Test
+    void filterVisibleOwnerIds_blockedByOtherDirection_excluded() {
+        UUID blockedBy = UUID.randomUUID();
+        when(socialService.loadRelationships(any(), anyCollection()))
+                .thenReturn(
+                        Map.of(
+                                blockedBy,
+                                new ViewerRelationshipResponse(false, false, false, false, true)));
+        when(postUserRepository.findAllByIdInAndDeletedAtIsNull(Set.of(blockedBy)))
+                .thenReturn(List.of(User.builder().id(blockedBy).isPrivate(false).build()));
+
+        assertThat(service.filterVisibleOwnerIds(viewerId, Set.of(blockedBy))).isEmpty();
     }
 }

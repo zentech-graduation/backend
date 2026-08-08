@@ -114,6 +114,13 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
         Map<UUID, Post> postsById =
                 postLookupService.findActiveByIds(parseIds(scores)).stream()
                         .collect(Collectors.toMap(Post::getId, Function.identity()));
+        // One fixed-cost batched visibility check for every candidate owner in this round, instead
+        // of a separate block/owner/follow query set per candidate post.
+        Set<UUID> candidateOwnerIds =
+                postsById.values().stream().map(Post::getUserId).collect(Collectors.toSet());
+        Set<UUID> visibleOwnerIds =
+                postVisibilityService.filterVisibleOwnerIds(viewerId, candidateOwnerIds);
+
         List<Post> accepted = new ArrayList<>();
         List<Double> acceptedScores = new ArrayList<>();
         int consumed = 0;
@@ -127,7 +134,7 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             if (post == null
                     || post.getStatus() != PostStatus.PUBLISHED
                     || viewerId.equals(post.getUserId())
-                    || !postVisibilityService.isVisibleTo(viewerId, post)) {
+                    || !visibleOwnerIds.contains(post.getUserId())) {
                 continue;
             }
             accepted.add(post);

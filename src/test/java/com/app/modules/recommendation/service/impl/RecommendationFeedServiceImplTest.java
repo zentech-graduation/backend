@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -105,11 +106,13 @@ class RecommendationFeedServiceImplTest {
         // limit=1 so the single returned candidate fills the page exactly - otherwise the
         // pipeline would fetch a second round that this test does not stub.
         UUID postId = UUID.randomUUID();
-        Post post = publishedPost(postId, UUID.randomUUID());
+        UUID ownerId = UUID.randomUUID();
+        Post post = publishedPost(postId, ownerId);
         when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0)))
                 .thenReturn(new SourceBatch('g', List.of(new GorseScore(postId.toString(), 5.0))));
         when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
-        when(postVisibilityService.isVisibleTo(viewerId, post)).thenReturn(true);
+        when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
+                .thenReturn(Set.of(ownerId));
 
         CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
 
@@ -139,10 +142,13 @@ class RecommendationFeedServiceImplTest {
         UUID blockedPost = UUID.randomUUID();
         UUID okPost1 = UUID.randomUUID();
         UUID okPost2 = UUID.randomUUID();
+        UUID blockedOwnerId = UUID.randomUUID();
+        UUID ok1OwnerId = UUID.randomUUID();
+        UUID ok2OwnerId = UUID.randomUUID();
         Post viewerOwned = publishedPost(ownedByViewer, viewerId);
-        Post blocked = publishedPost(blockedPost, UUID.randomUUID());
-        Post ok1 = publishedPost(okPost1, UUID.randomUUID());
-        Post ok2 = publishedPost(okPost2, UUID.randomUUID());
+        Post blocked = publishedPost(blockedPost, blockedOwnerId);
+        Post ok1 = publishedPost(okPost1, ok1OwnerId);
+        Post ok2 = publishedPost(okPost2, ok2OwnerId);
 
         // First round: 3 candidates, but only ok1 survives (owned + blocked filtered) - page of 2
         // is not yet full, so a second round must run.
@@ -156,14 +162,18 @@ class RecommendationFeedServiceImplTest {
                                         new GorseScore(okPost1.toString(), 7.0))));
         when(postLookupService.findActiveByIds(List.of(ownedByViewer, blockedPost, okPost1)))
                 .thenReturn(List.of(viewerOwned, blocked, ok1));
-        when(postVisibilityService.isVisibleTo(viewerId, blocked)).thenReturn(false);
-        when(postVisibilityService.isVisibleTo(viewerId, ok1)).thenReturn(true);
+        // The batch visibility check runs once for the round's distinct owner set; blockedOwnerId
+        // is excluded from the visible result, ok1OwnerId (and the viewer's own id) is included.
+        when(postVisibilityService.filterVisibleOwnerIds(
+                        viewerId, Set.of(viewerId, blockedOwnerId, ok1OwnerId)))
+                .thenReturn(Set.of(viewerId, ok1OwnerId));
 
         // Second round starts at offset 3 (all 3 raw candidates from round 1 were consumed).
         when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(3)))
                 .thenReturn(new SourceBatch('g', List.of(new GorseScore(okPost2.toString(), 6.0))));
         when(postLookupService.findActiveByIds(List.of(okPost2))).thenReturn(List.of(ok2));
-        when(postVisibilityService.isVisibleTo(viewerId, ok2)).thenReturn(true);
+        when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ok2OwnerId)))
+                .thenReturn(Set.of(ok2OwnerId));
 
         CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 2);
 
@@ -192,12 +202,14 @@ class RecommendationFeedServiceImplTest {
     @Test
     void getRecommendedFeed_sourceDegradesToPopular_cursorReflectsPopularSource() {
         UUID postId = UUID.randomUUID();
-        Post post = publishedPost(postId, UUID.randomUUID());
+        UUID ownerId = UUID.randomUUID();
+        Post post = publishedPost(postId, ownerId);
         // Gorse degraded mid-round-trip: RecommendationSource itself flips the tagged source.
         when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0)))
                 .thenReturn(new SourceBatch('p', List.of(new GorseScore(postId.toString(), null))));
         when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
-        when(postVisibilityService.isVisibleTo(viewerId, post)).thenReturn(true);
+        when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
+                .thenReturn(Set.of(ownerId));
 
         CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
 
@@ -208,11 +220,13 @@ class RecommendationFeedServiceImplTest {
     @Test
     void getRecommendedFeed_gorseReturnsNoScore_rankingScoreIsNull() {
         UUID postId = UUID.randomUUID();
-        Post post = publishedPost(postId, UUID.randomUUID());
+        UUID ownerId = UUID.randomUUID();
+        Post post = publishedPost(postId, ownerId);
         when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0)))
                 .thenReturn(new SourceBatch('g', List.of(new GorseScore(postId.toString(), null))));
         when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
-        when(postVisibilityService.isVisibleTo(viewerId, post)).thenReturn(true);
+        when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
+                .thenReturn(Set.of(ownerId));
 
         CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
 
