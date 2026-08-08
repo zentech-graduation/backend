@@ -45,6 +45,7 @@ public final class ApiConstants {
         public static final String LIKES = "/{postId}/likes";
         public static final String SAVE = "/{postId}/save";
         public static final String SAVED = "/saved";
+        public static final String VIEW = "/{postId}/view";
         public static final String SEARCH = "/search";
         public static final String COMMENTS = "/{postId}/comments";
         public static final String FEED = "/feed";
