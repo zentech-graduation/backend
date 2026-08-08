@@ -407,11 +407,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "202",
-                description = "View accepted",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = PostViewResponse.class))),
+                description = "View accepted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Post not found or not visible to the viewer",
@@ -427,6 +423,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Posts.VIEW)
     ResponseEntity<ApiResponse<PostViewResponse>> recordView(@PathVariable("postId") UUID postId);
 

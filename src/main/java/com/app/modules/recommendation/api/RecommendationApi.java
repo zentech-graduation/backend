@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.FeedPostResponse;
@@ -35,11 +36,7 @@ public interface RecommendationApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "One feed page with opaque continuation cursors",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "One feed page with opaque continuation cursors"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -55,6 +52,7 @@ public interface RecommendationApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
     @GetMapping(ApiConstants.Recommendations.FEED)
     ResponseEntity<ApiResponse<CursorPageResponse<FeedPostResponse>>> getRecommendedFeed(
             @Parameter(description = "Opaque cursor from the previous page")

@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
+
 ### Security
 - Closed several remaining ways a blocked party's identity could leak: the live comment feed now filters each subscriber individually instead of broadcasting to everyone watching a post, notification listings and unread counts exclude blocked actors, mentioning a blocked account no longer delivers a notification, and the last few endpoints that confirmed a block's existence now respond identically to a nonexistent account instead.
 - Email uniqueness is now case-insensitive, closing a duplicate-account gap equivalent to the one already closed for usernames.
