@@ -21,6 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Local development containers now persist PostgreSQL and RabbitMQ data across container recreation, declare healthchecks and restart policies, and the RabbitMQ image now ships the management UI bound to loopback.
+- Notification push delivery latency is significantly reduced by polling for new events roughly five times more often.
+- A comment or story WebSocket session established before an account is banned, suspended, or logged out is no longer left open until its access token naturally expires; the session is now terminated shortly after the account status changes.
+- The user object returned by login, register, and refresh is renamed in the API schema from `UserSummaryResponse` to `AuthenticatedUserResponse` to distinguish the authenticated-self object (which carries email and role) from the shared public author summary; the emitted JSON fields are unchanged.
+
+### Fixed
+- A recommendation feedback message that can never be processed no longer redelivers onto the same queue indefinitely; it is dead-lettered directly instead.
+- The personalized feed's per-post visibility check no longer issues additional database queries per post as the page size grows.
+- A clean checkout can now start the full local Docker stack; the PostgreSQL container no longer fails to start on the currently resolved image version.
 
 ### Removed
 - The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
@@ -33,11 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Regression coverage for the personalized feed pipeline, covering pagination, visibility and ownership filtering across multiple candidate rounds, ranking-score attachment, and fallback to the popularity ranking and then the chronological feed.
 - Regression coverage for the recommender REST client, covering request shape, authentication headers, and response parsing for every supported operation.
 - Regression coverage asserting that liking or saving a post enqueues the corresponding recommendation event with the correct payload, and that no event is enqueued on a conflicting or duplicate action.
-
-### Changed
-- Notification push delivery latency is significantly reduced by polling for new events roughly five times more often.
-- A comment or story WebSocket session established before an account is banned, suspended, or logged out is no longer left open until its access token naturally expires; the session is now terminated shortly after the account status changes.
-- The user object returned by login, register, and refresh is renamed in the API schema from `UserSummaryResponse` to `AuthenticatedUserResponse` to distinguish the authenticated-self object (which carries email and role) from the shared public author summary; the emitted JSON fields are unchanged.
+- Regression coverage for the batched post-visibility check used by the personalized feed, and for the recommendation feedback consumer's broker-dead-letter behavior on a permanent failure.
 - The follower, following, and pending follow-request lists now use the shared user summary object; the emitted JSON is unchanged, only the shared shape is reused.
 - Post responses (single post, feed, saved posts, and a user's posts) now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of separate top-level author id, username, display-name, and avatar fields; the post likers endpoint now returns that same user summary shape, and a post caption edit history entry embeds the editor the same way instead of a bare editor id. A post by a deleted author is hidden as before; a deleted liker now appears as a placeholder rather than silently vanishing from the likers list.
 - Comment responses now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of a bare author id; the previous top-level `userId` field is removed, and a comment by a deleted author returns a placeholder author rather than a dangling id. The same author object arrives over the live comment WebSocket feed, so a live-rendered comment shows the same author as one fetched over REST.
