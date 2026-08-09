@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
 
 ### Changed
+- Production now honours `REFRESH_COOKIE_SECURE` and `REFRESH_COOKIE_SAME_SITE`; the production profile previously pinned both values, leaving the environment variables inert in the only profile where they matter.
 - `POST /auth/refresh` and `POST /auth/logout` accept the refresh token from the `luvax_refresh` cookie when the request body omits it; a token supplied in the body always takes precedence.
 - `POST /auth/refresh` now returns `401` rather than `400` when no refresh token is supplied by either the body or the cookie.
 - `POST /auth/logout` clears the refresh cookie and remains idempotent when no token is supplied at all.
