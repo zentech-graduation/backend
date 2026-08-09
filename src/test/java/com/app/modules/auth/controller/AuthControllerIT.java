@@ -842,6 +842,51 @@ class AuthControllerIT {
     }
 
     @Test
+    void refresh_noBodyAtAllWithCookie_returns200AndRotatesTheCookie() {
+        String email = uniqueEmail("nobody_refresh");
+        postJson("/api/v1/auth/register", registerBody("user_nbr", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        ResponseEntity<Map> login =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+        String originalCookieValue = cookieValue(setCookie(login, "luvax_refresh"));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.COOKIE, "luvax_refresh=" + originalCookieValue);
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/refresh", headers);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("accessToken")).asString().isNotBlank();
+        String rotatedCookie = setCookie(response, "luvax_refresh");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(cookieValue(rotatedCookie)).isNotEqualTo(originalCookieValue);
+    }
+
+    @Test
+    void refresh_noBodyAtAllAndNoCookie_returns401() {
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/refresh", new HttpHeaders());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void logout_noBodyAtAllAndNoCookie_returns204AndStillClearsTheCookie() {
+        String email = uniqueEmail("nobody_logout");
+        String access =
+                (String) registerVerifyAndLogin("user_nbl", email, "password1").get("accessToken");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(access);
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/logout", headers);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("Max-Age=0");
+    }
+
+    @Test
     void logout_clearsTheCookieAndTheClearedCookieCannotRefresh() {
         String email = uniqueEmail("ck_logout");
         Map<?, ?> session = registerVerifyAndLogin("user_cklo", email, "password1");
@@ -990,6 +1035,15 @@ class AuthControllerIT {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.add(HttpHeaders.COOKIE, cookiePair);
         return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
+    /**
+     * Issues a POST carrying no request body and no Content-Type at all, which is what an axios
+     * call written as post(url, undefined, { withCredentials: true }) puts on the wire. This is
+     * distinct from posting {}, which does carry a body and a Content-Type.
+     */
+    private ResponseEntity<Map> postWithoutBody(String path, HttpHeaders headers) {
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(headers), Map.class);
     }
 
     private ResponseEntity<Map> postJsonWithAuth(String path, Object body, String accessToken) {
