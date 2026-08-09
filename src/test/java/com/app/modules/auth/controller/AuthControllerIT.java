@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.crypto.SecretKey;
@@ -58,6 +59,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.repository.RefreshTokenRepository;
+import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
@@ -115,6 +117,7 @@ class AuthControllerIT {
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private TokenService tokenService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
     @Test
     void refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked() {
@@ -760,6 +763,247 @@ class AuthControllerIT {
         }
     }
 
+    @Test
+    void refresh_emptyBodyWithCookie_returns200AndRotatesTheCookie() {
+        String email = uniqueEmail("ck_refresh_ok");
+        postJson("/api/v1/auth/register", registerBody("user_ckr", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        ResponseEntity<Map> login =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+        String originalCookieValue = cookieValue(setCookie(login, "luvax_refresh"));
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie(
+                        "/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + originalCookieValue);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("accessToken")).asString().isNotBlank();
+        String rotatedCookie = setCookie(response, "luvax_refresh");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(cookieValue(rotatedCookie)).isNotEqualTo(originalCookieValue);
+        assertThat(cookieValue(rotatedCookie)).isEqualTo(data.get("refreshToken"));
+    }
+
+    @Test
+    void refresh_bodyAndCookieBothPresent_bodyTokenTakesPrecedence() {
+        String emailA = uniqueEmail("ck_prec_a");
+        String emailB = uniqueEmail("ck_prec_b");
+        String bodyToken =
+                (String)
+                        registerVerifyAndLogin("user_ckpa", emailA, "password1")
+                                .get("refreshToken");
+        String cookieToken =
+                (String)
+                        registerVerifyAndLogin("user_ckpb", emailB, "password1")
+                                .get("refreshToken");
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie(
+                        "/api/v1/auth/refresh",
+                        Map.of("refreshToken", bodyToken),
+                        "luvax_refresh=" + cookieToken);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // The body token belongs to user A, so precedence is proved by whose session came back.
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        Map<?, ?> user = (Map<?, ?>) data.get("user");
+        assertThat(user.get("email")).isEqualTo(emailA);
+        // The cookie token was never consumed, so it still rotates successfully afterwards.
+        assertThat(
+                        postJson("/api/v1/auth/refresh", Map.of("refreshToken", cookieToken))
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void refresh_consumedTokenSuppliedByCookie_returns401() {
+        String email = uniqueEmail("ck_reuse");
+        String refresh =
+                (String)
+                        registerVerifyAndLogin("user_ckru", email, "password1").get("refreshToken");
+        postJson("/api/v1/auth/refresh", Map.of("refreshToken", refresh));
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie("/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + refresh);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void refresh_noBodyTokenAndNoCookie_returns401() {
+        ResponseEntity<Map> response = postJson("/api/v1/auth/refresh", Map.of());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void refresh_noBodyAtAllWithCookie_returns200AndRotatesTheCookie() {
+        String email = uniqueEmail("nobody_refresh");
+        postJson("/api/v1/auth/register", registerBody("user_nbr", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        ResponseEntity<Map> login =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+        String originalCookieValue = cookieValue(setCookie(login, "luvax_refresh"));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.COOKIE, "luvax_refresh=" + originalCookieValue);
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/refresh", headers);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("accessToken")).asString().isNotBlank();
+        String rotatedCookie = setCookie(response, "luvax_refresh");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(cookieValue(rotatedCookie)).isNotEqualTo(originalCookieValue);
+    }
+
+    @Test
+    void refresh_noBodyAtAllAndNoCookie_returns401() {
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/refresh", new HttpHeaders());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void logout_noBodyAtAllAndNoCookie_returns204AndStillClearsTheCookie() {
+        String email = uniqueEmail("nobody_logout");
+        String access =
+                (String) registerVerifyAndLogin("user_nbl", email, "password1").get("accessToken");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(access);
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/logout", headers);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("Max-Age=0");
+    }
+
+    @Test
+    void logout_clearsTheCookieAndTheClearedCookieCannotRefresh() {
+        String email = uniqueEmail("ck_logout");
+        Map<?, ?> session = registerVerifyAndLogin("user_cklo", email, "password1");
+        String refresh = (String) session.get("refreshToken");
+        String access = (String) session.get("accessToken");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(access);
+        headers.add(HttpHeaders.COOKIE, "luvax_refresh=" + refresh);
+        ResponseEntity<Map> logout =
+                rest.exchange(
+                        "/api/v1/auth/logout",
+                        HttpMethod.POST,
+                        new HttpEntity<>(Map.of(), headers),
+                        Map.class);
+
+        assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        String cleared = setCookie(logout, "luvax_refresh");
+        assertThat(cleared).isNotNull();
+        assertThat(cleared).contains("Max-Age=0");
+        assertThat(cleared).contains("Path=/api/v1/auth");
+
+        ResponseEntity<Map> afterLogout =
+                postJsonWithCookie("/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + refresh);
+        assertThat(afterLogout.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(afterLogout.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void logout_noBodyTokenAndNoCookie_returns204AndStillClearsTheCookie() {
+        // Logout is documented as idempotent. A client that lost its token value on reload must
+        // still be able to clear its own cookie and blacklist its access token.
+        String email = uniqueEmail("ck_logout_bare");
+        String access =
+                (String) registerVerifyAndLogin("user_cklb", email, "password1").get("accessToken");
+
+        ResponseEntity<Map> response = postJsonWithAuth("/api/v1/auth/logout", Map.of(), access);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("Max-Age=0");
+    }
+
+    @Test
+    void login_returnsHttpOnlyRefreshCookieScopedToTheAuthPath() {
+        String email = uniqueEmail("cookie_login");
+        postJson("/api/v1/auth/register", registerBody("user_ckl", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+
+        String cookie = setCookie(response, "luvax_refresh");
+        assertThat(cookie).isNotNull();
+        assertThat(cookie).contains("HttpOnly");
+        assertThat(cookie).contains("Path=/api/v1/auth");
+        assertThat(cookie).contains("Max-Age=3600");
+        assertThat(cookie).contains("SameSite=Lax");
+        // The dev profile serves plain HTTP, where a Secure cookie would never be stored.
+        assertThat(cookie).doesNotContain("Secure");
+    }
+
+    @Test
+    void login_stillReturnsRefreshTokenInTheResponseBody() {
+        String email = uniqueEmail("cookie_body");
+        Map<?, ?> data = registerVerifyAndLogin("user_ckb", email, "password1");
+
+        assertThat(data.get("refreshToken")).asString().isNotBlank();
+    }
+
+    @Test
+    void login_cookieValueMatchesTheResponseBodyToken() {
+        String email = uniqueEmail("cookie_match");
+        postJson("/api/v1/auth/register", registerBody("user_ckm", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(cookieValue(setCookie(response, "luvax_refresh")))
+                .isEqualTo(data.get("refreshToken"));
+    }
+
+    @Test
+    void verifyEmail_returnsRefreshCookieBecauseItIssuesASession() {
+        String email = uniqueEmail("cookie_verify");
+        postJson("/api/v1/auth/register", registerBody("user_ckv", email, "password1"));
+
+        ResponseEntity<Map> response =
+                rest.getForEntity(
+                        "/api/v1/auth/verify-email?token=" + createVerificationToken(email),
+                        Map.class);
+
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("HttpOnly");
+    }
+
+    @Test
+    void exchangeOAuth2Code_returnsRefreshCookie() {
+        String email = uniqueEmail("cookie_oauth");
+        postJson("/api/v1/auth/register", registerBody("user_cko", email, "password1"));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        String code = oauth2ExchangeCodeService.storeExchangeCode(userId);
+
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/oauth2/exchange", Map.of("code", code));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("HttpOnly");
+    }
+
     private ResponseEntity<Map> postJson(String path, Object body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -771,6 +1015,35 @@ class AuthControllerIT {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Forwarded-For", forwardedIp);
         return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
+    private static String setCookie(ResponseEntity<?> response, String name) {
+        List<String> headers = response.getHeaders().get(HttpHeaders.SET_COOKIE);
+        if (headers == null) {
+            return null;
+        }
+        return headers.stream().filter(h -> h.startsWith(name + "=")).findFirst().orElse(null);
+    }
+
+    private static String cookieValue(String setCookieHeader) {
+        String nameValuePair = setCookieHeader.split(";", 2)[0];
+        return nameValuePair.substring(nameValuePair.indexOf('=') + 1);
+    }
+
+    private ResponseEntity<Map> postJsonWithCookie(String path, Object body, String cookiePair) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.add(HttpHeaders.COOKIE, cookiePair);
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
+    /**
+     * Issues a POST carrying no request body and no Content-Type at all, which is what an axios
+     * call written as post(url, undefined, { withCredentials: true }) puts on the wire. This is
+     * distinct from posting {}, which does carry a body and a Content-Type.
+     */
+    private ResponseEntity<Map> postWithoutBody(String path, HttpHeaders headers) {
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(headers), Map.class);
     }
 
     private ResponseEntity<Map> postJsonWithAuth(String path, Object body, String accessToken) {

@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
-import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
@@ -37,18 +36,20 @@ public interface AuthService {
     /**
      * Rotates the supplied refresh token, mints a new access token, and returns both.
      *
-     * @param request payload containing the raw refresh token
+     * @param rawRefreshToken raw refresh token already resolved from the request body or cookie; an
+     *     empty value is rejected as an invalid token rather than treated specially
      * @param httpRequest underlying servlet request, used to capture the new IP
      * @return new access + refresh tokens with the user summary
      */
-    AuthResponse refresh(RefreshRequest request, HttpServletRequest httpRequest);
+    AuthResponse refresh(String rawRefreshToken, HttpServletRequest httpRequest);
 
     /**
-     * Revokes the supplied refresh token. The operation is idempotent.
+     * Revokes the supplied refresh token. The operation is idempotent, including when no token is
+     * supplied at all.
      *
-     * @param request payload containing the raw refresh token
+     * @param rawRefreshToken raw refresh token already resolved from the request body or cookie
      */
-    void logout(RefreshRequest request);
+    void logout(String rawRefreshToken);
 
     /**
      * Consumes the email-verification token, marks the credential as verified, and issues the first
