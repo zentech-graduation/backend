@@ -41,6 +41,8 @@ import com.app.modules.users.repository.UserRepository;
 @AutoConfigureTestRestTemplate
 class UserControllerIT {
 
+    private static final String TEST_PASSWORD = "S3cur3P@ssword";
+
     private static final String TEST_JWT_SECRET = "integration-test-secret-32-chars-minimum-len!!";
     private static final String TEST_JWT_ISSUER = "https://it.test.local";
     private static final String TEST_JWT_AUDIENCE = "App";
@@ -84,7 +86,8 @@ class UserControllerIT {
     @Test
     void getMyProfile_withValidToken_returns200() {
         String email = uniqueEmail("me_ok");
-        String access = registerVerifyAndLogin("user_me_ok", email, "password1").get("accessToken");
+        String access =
+                registerVerifyAndLogin("user_me_ok", email, TEST_PASSWORD).get("accessToken");
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/users/me", access);
 
@@ -106,7 +109,7 @@ class UserControllerIT {
     void updateMyProfile_withValidToken_returns200() {
         String email = uniqueEmail("patch_ok");
         String access =
-                registerVerifyAndLogin("user_patch_ok", email, "password1").get("accessToken");
+                registerVerifyAndLogin("user_patch_ok", email, TEST_PASSWORD).get("accessToken");
 
         ResponseEntity<Map> response =
                 patchWithAuth("/api/v1/users/me", Map.of("displayName", "Updated Name"), access);
@@ -120,9 +123,9 @@ class UserControllerIT {
     void updateMyProfile_takenUsername_returns409() {
         String email1 = uniqueEmail("cnfl1");
         String email2 = uniqueEmail("cnfl2");
-        registerVerifyAndLogin("user_cnfl1", email1, "password1");
+        registerVerifyAndLogin("user_cnfl1", email1, TEST_PASSWORD);
         String access2 =
-                registerVerifyAndLogin("user_cnfl2", email2, "password1").get("accessToken");
+                registerVerifyAndLogin("user_cnfl2", email2, TEST_PASSWORD).get("accessToken");
 
         ResponseEntity<Map> response =
                 patchWithAuth("/api/v1/users/me", Map.of("username", "user_cnfl1"), access2);
@@ -134,14 +137,14 @@ class UserControllerIT {
     @Test
     void updateMyProfile_usernameHeldBySoftDeletedAccount_returnsConsistentConflict() {
         String softDeletedEmail = uniqueEmail("softdel");
-        registerVerifyAndLogin("user_softdel", softDeletedEmail, "password1");
+        registerVerifyAndLogin("user_softdel", softDeletedEmail, TEST_PASSWORD);
         User softDeleted =
                 userRepository.findByEmailAndDeletedAtIsNull(softDeletedEmail).orElseThrow();
         softDeleted.setDeletedAt(java.time.OffsetDateTime.now());
         userRepository.save(softDeleted);
 
         String access =
-                registerVerifyAndLogin("user_live", uniqueEmail("live"), "password1")
+                registerVerifyAndLogin("user_live", uniqueEmail("live"), TEST_PASSWORD)
                         .get("accessToken");
 
         ResponseEntity<Map> response =
@@ -156,7 +159,7 @@ class UserControllerIT {
         // Finding F-1: spec says 422 but VALIDATION_ERROR maps to HttpStatus.BAD_REQUEST (400)
         String email = uniqueEmail("val_fail");
         String access =
-                registerVerifyAndLogin("user_val_fail", email, "password1").get("accessToken");
+                registerVerifyAndLogin("user_val_fail", email, TEST_PASSWORD).get("accessToken");
         String tooLong = "a".repeat(31);
 
         ResponseEntity<Map> response =
@@ -179,7 +182,7 @@ class UserControllerIT {
     @Test
     void getUserProfile_publicAccount_unauthenticated_returns200WithNullCounts() {
         String email = uniqueEmail("pub_unauth");
-        registerVerifyAndLogin("user_pub_unauth", email, "password1");
+        registerVerifyAndLogin("user_pub_unauth", email, TEST_PASSWORD);
         UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
 
         ResponseEntity<Map> response = getNoAuth("/api/v1/users/" + userId);
@@ -194,13 +197,13 @@ class UserControllerIT {
     @Test
     void getUserProfile_publicAccount_authenticated_returns200WithCounts() {
         String targetEmail = uniqueEmail("pub_target");
-        registerVerifyAndLogin("user_pub_target", targetEmail, "password1");
+        registerVerifyAndLogin("user_pub_target", targetEmail, TEST_PASSWORD);
         UUID targetId =
                 userRepository.findByEmailAndDeletedAtIsNull(targetEmail).orElseThrow().getId();
 
         String callerEmail = uniqueEmail("pub_caller");
         String callerAccess =
-                registerVerifyAndLogin("user_pub_caller", callerEmail, "password1")
+                registerVerifyAndLogin("user_pub_caller", callerEmail, TEST_PASSWORD)
                         .get("accessToken");
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/users/" + targetId, callerAccess);
@@ -214,7 +217,7 @@ class UserControllerIT {
     void getUserProfile_privateAccount_unauthenticated_returns200WithMaskedCounts() {
         String email = uniqueEmail("priv_target");
         String access =
-                registerVerifyAndLogin("user_priv_target", email, "password1").get("accessToken");
+                registerVerifyAndLogin("user_priv_target", email, TEST_PASSWORD).get("accessToken");
         UUID targetId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
 
         patchWithAuth("/api/v1/users/me", Map.of("isPrivate", true), access);
@@ -232,7 +235,7 @@ class UserControllerIT {
     void getUserProfile_privateAccount_authenticatedNonFollower_returns200WithMaskedCounts() {
         String targetEmail = uniqueEmail("priv_target2");
         String targetAccess =
-                registerVerifyAndLogin("user_priv_target2", targetEmail, "password1")
+                registerVerifyAndLogin("user_priv_target2", targetEmail, TEST_PASSWORD)
                         .get("accessToken");
         UUID targetId =
                 userRepository.findByEmailAndDeletedAtIsNull(targetEmail).orElseThrow().getId();
@@ -240,7 +243,7 @@ class UserControllerIT {
 
         String callerEmail = uniqueEmail("priv_caller");
         String callerAccess =
-                registerVerifyAndLogin("user_priv_caller", callerEmail, "password1")
+                registerVerifyAndLogin("user_priv_caller", callerEmail, TEST_PASSWORD)
                         .get("accessToken");
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/users/" + targetId, callerAccess);
@@ -265,7 +268,7 @@ class UserControllerIT {
     void getMySettings_withValidToken_returns200() {
         String email = uniqueEmail("sett_ok");
         String access =
-                registerVerifyAndLogin("user_sett_ok", email, "password1").get("accessToken");
+                registerVerifyAndLogin("user_sett_ok", email, TEST_PASSWORD).get("accessToken");
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/users/me/settings", access);
 
@@ -287,7 +290,7 @@ class UserControllerIT {
     void updateMySettings_partialUpdate_nullFieldsPreserved() {
         String email = uniqueEmail("sett_patch");
         String access =
-                registerVerifyAndLogin("user_sett_patch", email, "password1").get("accessToken");
+                registerVerifyAndLogin("user_sett_patch", email, TEST_PASSWORD).get("accessToken");
 
         ResponseEntity<Map> response =
                 patchWithAuth("/api/v1/users/me/settings", Map.of("notifyLikes", false), access);
