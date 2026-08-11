@@ -25,6 +25,29 @@ docker compose up -d
 
 The application starts with the `dev` profile. Swagger UI is available at `http://localhost:8080/swagger-ui`.
 
+### Local email
+
+The `dev` profile sends every outbound email over SMTP to [Mailpit](https://mailpit.axllent.org/), a local mail sink that `docker compose up -d` starts alongside the database.
+Mailpit accepts any message, delivers none of them onward, and shows each one in a web UI at `http://localhost:8025`.
+Nothing reaches the production mail provider from a development machine, so no provider credential is needed and no provider quota is consumed.
+
+This is what makes a fresh clone usable.
+Registration is only half of creating an account: login stays blocked until the address is verified, and the verification link exists nowhere except inside the outbound email.
+With Mailpit that link is one click away.
+
+1. Register an account through `POST /api/v1/auth/register`. Any address works, including `@example.com`.
+2. Open `http://localhost:8025` and open the message titled "Verify your email address".
+3. Follow the verification link in the message.
+4. Log in.
+
+Password reset works the same way: request it, then pick the message up in the same inbox.
+
+Mailpit is published on the loopback interface only.
+Its web UI has no authentication and would otherwise expose every message it holds to the rest of the network.
+
+To send through the real provider from a development machine instead, set `APP_MAIL_TRANSPORT=resend` together with a valid `RESEND_API_KEY`.
+The reverse is refused: the SMTP sink is permitted only while the `dev` profile is active, and the application will not start with it selected anywhere else.
+
 ### Troubleshooting: startup fails with a Flyway validation error mentioning version 99
 
 Flyway used to apply a dev-only seed script, `V99__seed_feed_test_data.sql`, from `classpath:db/dev-seed`.

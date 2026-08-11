@@ -52,6 +52,9 @@ app:
   mail:
     consumer:
       enabled: true
+    # Local development delivers to the Mailpit sink from docker-compose, so no message ever
+    # reaches the production provider and no provider credential is required.
+    transport: smtp
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:

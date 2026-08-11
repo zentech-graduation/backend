@@ -43,6 +43,7 @@ app:
   mail:
     consumer:
       enabled: true
+    transport: resend
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:
