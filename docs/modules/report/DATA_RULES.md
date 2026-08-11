@@ -40,7 +40,7 @@ This table cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| A user may not report the same entity more than once | `ReportServiceImpl.validateDuplicateReport` — enforced via `ReportRepository.existsByReporterIdAndReportTypeAndEntityId` |
+| A user may not report the same entity more than once | `ReportServiceImpl.validateDuplicateReport` — enforced via `ReportRepository.existsByReporterIdAndReportTypeAndEntityId`, with the unique index `uq_reports_reporter_type_entity` (V30) as the authoritative guard against a concurrent double-submit |
 | A user may not report their own content | `ReportServiceImpl.submitReport` — throws `REPORT_SELF_NOT_ALLOWED` when `reporterId` equals the entity owner |
 | `entity_id` must correspond to an existing entity of the declared `report_type`; validate before insert | `ReportServiceImpl.validateEntityExists` — resolves owner via `ReportRepository.findOwnerId`; throws `REPORT_TARGET_NOT_FOUND` if absent |
 | Transitioning `status` to `'reviewing'` must record `reviewed_by` and `reviewed_at` | `ReportServiceImpl.updateStatus` — sets both fields on every valid transition |
@@ -50,7 +50,7 @@ This table cannot be rebuilt from any other source if lost.
 
 ### C. Scope Simplifications
 
-- No deduplication constraint in the database; the application must prevent duplicate reports from the same user on the same entity.
+- The application pre-check cannot close the race between two concurrent submissions; the unique index added in V30 is what actually rejects the second one, surfaced as `REPORT_DUPLICATE`.
 - `entity_id` has no FK enforcement — if the reported entity is deleted before the report is reviewed, the `entity_id` will reference a non-existent row.
 - No automatic escalation or SLA on report review time.
 
@@ -66,3 +66,4 @@ This table cannot be rebuilt from any other source if lost.
 | `story` | inbound | Reports with `report_type = 'story'` target a `stories.id` |
 | `message` | inbound | Reports with `report_type = 'message'` target a `messages.id` |
 | `admin` | outbound | Resolved reports reference `admin_actions.report_id` for audit trail |
+| `post`, `comment`, `social` | outbound | Each reads `ReportedTargetService` to embed `hasReported` in its viewer state. This is the only Java-level dependency any module has on `report`, and `report` itself imports no other module: its target-existence check reaches `posts`, `comments`, `users`, `stories`, and `messages` through native SQL in `ReportTargetRepositoryImpl`, not through their services. The dependency graph around `report` is therefore acyclic |

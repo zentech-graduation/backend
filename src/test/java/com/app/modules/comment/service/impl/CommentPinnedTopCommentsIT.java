@@ -338,14 +338,14 @@ class CommentPinnedTopCommentsIT {
         list(viewer, post, cursor, 4);
         long laterPage = stats.getPrepareStatementCount();
 
-        // Every page issues the same eight statements: the read path (post lookup, visibility
-        // gate, body query, author batch, viewer-like batch) plus the pinned ranking. A later
-        // page runs the ranking too, not to prepend a block but to obtain the ids it must exclude
-        // from its body; without that a pinned comment old enough to land on this page would be
-        // returned a second time. Absolute counts are pinned, not just the relationship between
-        // them, so an extra round trip anywhere on this path fails here.
-        assertThat(firstPage).isEqualTo(8);
-        assertThat(laterPage).isEqualTo(8);
+        // Every page issues the same nine statements: the read path (post lookup, visibility
+        // gate, body query, author batch, viewer-like batch, viewer-reported batch) plus the
+        // pinned ranking. A later page runs the ranking too, not to prepend a block but to obtain
+        // the ids it must exclude from its body; without that a pinned comment old enough to land
+        // on this page would be returned a second time. Absolute counts are pinned, not just the
+        // relationship between them, so an extra round trip anywhere on this path fails here.
+        assertThat(firstPage).isEqualTo(9);
+        assertThat(laterPage).isEqualTo(9);
     }
 
     private CursorPageResponse<CommentResponse> list(

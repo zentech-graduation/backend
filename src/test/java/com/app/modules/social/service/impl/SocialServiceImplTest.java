@@ -28,6 +28,7 @@ import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.report.service.ReportedTargetService;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 import com.app.modules.social.entity.Block;
@@ -50,6 +51,7 @@ class SocialServiceImplTest {
     @Mock private SocialUserRepository socialUserRepository;
     @Mock private SocialEventService socialEventService;
     @Mock private UserSummaryService userSummaryService;
+    @Mock private ReportedTargetService reportedTargetService;
 
     private SocialServiceImpl service;
 
@@ -61,7 +63,8 @@ class SocialServiceImplTest {
                         blockRepository,
                         socialUserRepository,
                         socialEventService,
-                        userSummaryService);
+                        userSummaryService,
+                        reportedTargetService);
     }
 
     @Test

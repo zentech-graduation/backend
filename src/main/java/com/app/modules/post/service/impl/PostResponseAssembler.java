@@ -81,7 +81,8 @@ public class PostResponseAssembler {
                             media,
                             authors.get(post.getUserId()),
                             viewerState.isLiked(post.getId()),
-                            viewerState.isSaved(post.getId())));
+                            viewerState.isSaved(post.getId()),
+                            viewerState.hasReported(post.getId())));
         }
         return result;
     }
@@ -124,7 +125,8 @@ public class PostResponseAssembler {
                             media,
                             authors.get(post.getUserId()),
                             viewerState.isLiked(post.getId()),
-                            viewerState.isSaved(post.getId())));
+                            viewerState.isSaved(post.getId()),
+                            viewerState.hasReported(post.getId())));
         }
         return result;
     }
@@ -135,7 +137,7 @@ public class PostResponseAssembler {
         return userSummaryService.loadSummaries(posts.stream().map(Post::getUserId).toList());
     }
 
-    // One batched like/save lookup for every post on the page instead of one probe per row.
+    // One batched like/save/report lookup for every post on the page instead of one probe per row.
     private PostViewerState batchFetchViewerState(UUID viewerId, List<Post> posts) {
         return postViewerStateService.load(viewerId, posts.stream().map(Post::getId).toList());
     }

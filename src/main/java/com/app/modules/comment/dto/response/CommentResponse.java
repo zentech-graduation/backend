@@ -26,6 +26,18 @@ public record CommentResponse(
         @Schema(description = "Comment body.") String content,
         @Schema(description = "Trigger-maintained like count.") int likeCount,
         @Schema(description = "Whether the viewer has liked this comment.") boolean isLiked,
+        @Schema(
+                        description =
+                                "Whether the viewer has already reported this comment. True"
+                                        + " exactly when a new report from this viewer against"
+                                        + " this comment would be rejected as a duplicate, so a"
+                                        + " client can disable the report control instead of"
+                                        + " submitting and handling the rejection. Remains true"
+                                        + " after a moderator resolves or dismisses the report,"
+                                        + " because that does not permit reporting the comment"
+                                        + " again. Always false for an anonymous viewer.",
+                        example = "false")
+                boolean hasReported,
         @Schema(description = "Trigger-maintained direct reply count.") int replyCount,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
         @Schema(
@@ -66,6 +78,7 @@ public record CommentResponse(
                 content,
                 likeCount,
                 isLiked,
+                hasReported,
                 replyCount,
                 createdAt,
                 updatedAt,

@@ -1,6 +1,7 @@
 package com.app.modules.report.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,6 +19,29 @@ public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTar
 
     boolean existsByReporterIdAndReportTypeAndEntityId(
             UUID reporterId, ReportType reportType, UUID entityId);
+
+    /**
+     * Target ids among {@code entityIds} that this reporter has already reported under the given
+     * type, for batched viewer-state flags.
+     *
+     * <p>Carries no status predicate on purpose. The uniqueness key that rejects a duplicate
+     * submission is the unique index {@code uq_reports_reporter_type_entity}, which is not partial,
+     * so a report in any status - including a resolved or dismissed one - still blocks a new report
+     * on the same target. Adding a status filter here would report a target as un-reported while a
+     * fresh submission would still be rejected.
+     *
+     * @param reporterId the requesting viewer
+     * @param reportType target family shared by every id on the current page
+     * @param entityIds candidate target ids on the current page
+     * @return the subset the reporter has already reported, in no particular order
+     */
+    @Query(
+            "SELECT r.entityId FROM Report r WHERE r.reporterId = :reporterId"
+                    + " AND r.reportType = :reportType AND r.entityId IN :entityIds")
+    List<UUID> findReportedEntityIds(
+            @Param("reporterId") UUID reporterId,
+            @Param("reportType") ReportType reportType,
+            @Param("entityIds") Collection<UUID> entityIds);
 
     /**
      * Finds the newest reports up to the requested limit.

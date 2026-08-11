@@ -69,7 +69,8 @@ class PostResponseAssemblerTest {
         assembler.assemble(viewerId, post);
 
         verify(postMediaAssetRepository, never()).findAllById(any());
-        verify(postMapper).toResponse(eq(post), eq(List.of()), eq(author), eq(false), eq(false));
+        verify(postMapper)
+                .toResponse(eq(post), eq(List.of()), eq(author), eq(false), eq(false), eq(false));
     }
 
     @Test
@@ -93,7 +94,7 @@ class PostResponseAssemblerTest {
         verify(postMediaAssetRepository).findAllById(Set.of(assetId));
         // Asset map is empty, so the media row hydrates against a null asset.
         verify(postMapper).toMediaResponse(eq(media), isNull());
-        verify(postMapper).toResponse(eq(post), any(), eq(author), eq(false), eq(false));
+        verify(postMapper).toResponse(eq(post), any(), eq(author), eq(false), eq(false), eq(false));
     }
 
     @Test
@@ -116,11 +117,12 @@ class PostResponseAssemblerTest {
         assembler.assemble(viewerId, post);
 
         verify(userSummaryService).loadSummaries(List.of(authorId));
-        verify(postMapper).toResponse(eq(post), eq(List.of()), eq(author), eq(false), eq(false));
+        verify(postMapper)
+                .toResponse(eq(post), eq(List.of()), eq(author), eq(false), eq(false), eq(false));
     }
 
     @Test
-    void assemble_viewerLikedAndSavedPost_flagsTrue() {
+    void assemble_viewerLikedSavedAndReportedPost_flagsTrue() {
         UUID viewerId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
         UUID postId = UUID.randomUUID();
@@ -130,10 +132,11 @@ class PostResponseAssemblerTest {
         when(userSummaryService.loadSummaries(anyCollection()))
                 .thenReturn(Map.of(authorId, author));
         when(postViewerStateService.load(eq(viewerId), anyCollection()))
-                .thenReturn(new PostViewerState(Set.of(postId), Set.of(postId)));
+                .thenReturn(new PostViewerState(Set.of(postId), Set.of(postId), Set.of(postId)));
 
         assembler.assemble(viewerId, post);
 
-        verify(postMapper).toResponse(eq(post), eq(List.of()), eq(author), eq(true), eq(true));
+        verify(postMapper)
+                .toResponse(eq(post), eq(List.of()), eq(author), eq(true), eq(true), eq(true));
     }
 }
