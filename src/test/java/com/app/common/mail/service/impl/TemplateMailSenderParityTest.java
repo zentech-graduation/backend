@@ -1,0 +1,134 @@
+package com.app.common.mail.service.impl;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mail.javamail.JavaMailSender;
+
+import com.app.modules.mail.config.MailProperties;
+import com.app.modules.mail.enums.MailTemplate;
+import com.app.modules.mail.service.MailSender;
+import com.app.modules.mail.service.impl.ResendMailSender;
+import com.app.modules.mail.service.impl.SmtpMailSender;
+import com.app.modules.mail.util.MailTemplateRenderer;
+import com.resend.Resend;
+import com.resend.services.emails.Emails;
+import com.resend.services.emails.model.CreateEmailOptions;
+import com.resend.services.emails.model.CreateEmailResponse;
+
+/**
+ * Pins the two transports to the shared rendering layer: whatever a template needs, both transports
+ * ask for it identically and deliver the identical result.
+ */
+@ExtendWith(MockitoExtension.class)
+class TemplateMailSenderParityTest {
+
+    private static final String FROM_ADDRESS = "noreply@example.com";
+    private static final String FROM_NAME = "Social";
+    private static final String TO_EMAIL = "user@example.com";
+    private static final String TO_NAME = "Jane Doe";
+    private static final String VERIFICATION_URL = "https://app.local/verify?t=xyz";
+    private static final String RESET_URL = "https://app.local/reset?t=abc";
+    private static final int TEMPLATE_COUNT = 5;
+
+    @Mock private Resend resend;
+
+    @Mock private Emails emails;
+
+    @Mock private JavaMailSender javaMailSender;
+
+    @Mock private MailTemplateRenderer mailTemplateRenderer;
+
+    private ResendMailSender resendMailSender;
+    private SmtpMailSender smtpMailSender;
+
+    @BeforeEach
+    void setUp() {
+        MailProperties properties = new MailProperties();
+        properties.setFromAddress(FROM_ADDRESS);
+        properties.setFromName(FROM_NAME);
+        properties.setAppName("Social");
+        properties.setFrontendBaseUrl("http://localhost:3000");
+        resendMailSender = new ResendMailSender(resend, properties, mailTemplateRenderer);
+        smtpMailSender = new SmtpMailSender(javaMailSender, properties, mailTemplateRenderer);
+        when(resend.emails()).thenReturn(emails);
+        when(javaMailSender.createMimeMessage())
+                .thenAnswer(invocation -> new MimeMessage(Session.getInstance(new Properties())));
+        when(mailTemplateRenderer.render(any(MailTemplate.class), any()))
+                .thenAnswer(invocation -> "<html>" + invocation.getArgument(0) + "</html>");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void bothTransportsRequestTheSameTemplatesWithTheSameVariables() throws Exception {
+        when(emails.send(any(CreateEmailOptions.class)))
+                .thenReturn(mock(CreateEmailResponse.class));
+
+        sendEveryMessage(resendMailSender);
+        sendEveryMessage(smtpMailSender);
+
+        ArgumentCaptor<MailTemplate> templateCaptor = ArgumentCaptor.forClass(MailTemplate.class);
+        ArgumentCaptor<Map<String, Object>> varCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(mailTemplateRenderer, times(TEMPLATE_COUNT * 2))
+                .render(templateCaptor.capture(), varCaptor.capture());
+
+        List<MailTemplate> templates = templateCaptor.getAllValues();
+        List<Map<String, Object>> variables = varCaptor.getAllValues();
+        assertThat(templates.subList(0, TEMPLATE_COUNT))
+                .isEqualTo(templates.subList(TEMPLATE_COUNT, TEMPLATE_COUNT * 2));
+        assertThat(variables.subList(0, TEMPLATE_COUNT))
+                .isEqualTo(variables.subList(TEMPLATE_COUNT, TEMPLATE_COUNT * 2));
+    }
+
+    @Test
+    void bothTransportsDeliverTheSameSenderRecipientSubjectAndBody() throws Exception {
+        when(emails.send(any(CreateEmailOptions.class)))
+                .thenReturn(mock(CreateEmailResponse.class));
+
+        sendEveryMessage(resendMailSender);
+        sendEveryMessage(smtpMailSender);
+
+        ArgumentCaptor<CreateEmailOptions> resendCaptor =
+                ArgumentCaptor.forClass(CreateEmailOptions.class);
+        verify(emails, times(TEMPLATE_COUNT)).send(resendCaptor.capture());
+        ArgumentCaptor<MimeMessage> smtpCaptor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(javaMailSender, times(TEMPLATE_COUNT)).send(smtpCaptor.capture());
+
+        List<CreateEmailOptions> viaResend = resendCaptor.getAllValues();
+        List<MimeMessage> viaSmtp = smtpCaptor.getAllValues();
+        for (int i = 0; i < TEMPLATE_COUNT; i++) {
+            CreateEmailOptions expected = viaResend.get(i);
+            MimeMessage actual = viaSmtp.get(i);
+            assertThat(actual.getFrom()[0].toString()).isEqualTo(expected.getFrom());
+            assertThat(actual.getAllRecipients()[0].toString())
+                    .isEqualTo(expected.getTo().getFirst());
+            assertThat(actual.getSubject()).isEqualTo(expected.getSubject());
+            assertThat(actual.getContent()).isEqualTo(expected.getHtml());
+        }
+    }
+
+    private void sendEveryMessage(MailSender mailSender) {
+        mailSender.sendEmailVerification(TO_EMAIL, TO_NAME, VERIFICATION_URL);
+        mailSender.sendPasswordReset(TO_EMAIL, TO_NAME, RESET_URL);
+        mailSender.sendWelcome(TO_EMAIL, TO_NAME);
+        mailSender.sendPasswordChanged(TO_EMAIL, TO_NAME);
+        mailSender.sendOAuthAccountNoPassword(TO_EMAIL, TO_NAME);
+    }
+}

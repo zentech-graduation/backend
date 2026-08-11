@@ -123,8 +123,16 @@ app:
   mail:
     consumer:
       enabled: ${MAIL_CONSUMER_ENABLED:false}
+    # Deliberately literal, not an environment placeholder. An APP_MAIL_TRANSPORT environment
+    # variable still outranks this, and MailTransportGuard is what closes the dangerous direction.
+    transport: resend
     resend:
-      api-key: ${RESEND_API_KEY}
+      # Defaulted to empty so a developer running the smtp transport needs no Resend credential.
+      # ResendMailConfig rejects a blank key, so selecting resend without one still fails at startup.
+      api-key: ${RESEND_API_KEY:}
+    smtp:
+      host: ${MAIL_SMTP_HOST:localhost}
+      port: ${MAIL_SMTP_PORT:1025}
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
     app-name: ${MAIL_APP_NAME}
@@ -241,6 +249,11 @@ management:
   health:
     elasticsearch:
       enabled: true
+    # The mail starter contributes an indicator that opens an SMTP connection on every health
+    # probe. Outbound mail is asynchronous and already retried through the outbox, so a sink that
+    # is briefly unreachable must not make the application itself report unhealthy.
+    mail:
+      enabled: false
   endpoint:
     health:
       show-details: when-authorized
