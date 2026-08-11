@@ -123,6 +123,8 @@ app:
   mail:
     consumer:
       enabled: ${MAIL_CONSUMER_ENABLED:false}
+    resend:
+      api-key: ${RESEND_API_KEY}
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
     app-name: ${MAIL_APP_NAME}

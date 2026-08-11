@@ -1,8 +1,5 @@
 package com.app.modules.mail.service.impl;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -10,8 +7,6 @@ import org.springframework.stereotype.Component;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.modules.mail.config.MailProperties;
-import com.app.modules.mail.enums.MailTemplate;
-import com.app.modules.mail.service.MailSender;
 import com.app.modules.mail.util.MailTemplateRenderer;
 import com.resend.Resend;
 import com.resend.services.emails.model.CreateEmailOptions;
@@ -23,82 +18,25 @@ import com.resend.services.emails.model.CreateEmailOptions;
  * message. Raw tokens must only appear inside the final recipient URL and must never be logged.
  */
 @Component
-public class ResendMailSender implements MailSender {
-
-    private static final int EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
-    private static final int PASSWORD_RESET_EXPIRY_MINUTES = 15;
+public class ResendMailSender extends AbstractTemplateMailSender {
 
     private static final Logger log = LoggerFactory.getLogger(ResendMailSender.class);
 
     private final Resend resend;
-    private final MailProperties mailProperties;
-    private final MailTemplateRenderer mailTemplateRenderer;
 
     public ResendMailSender(
             Resend resend,
             MailProperties mailProperties,
             MailTemplateRenderer mailTemplateRenderer) {
+        super(mailProperties, mailTemplateRenderer);
         this.resend = resend;
-        this.mailProperties = mailProperties;
-        this.mailTemplateRenderer = mailTemplateRenderer;
     }
 
     @Override
-    public void sendEmailVerification(String toEmail, String toName, String verificationUrl) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("toName", toName);
-        variables.put("appName", mailProperties.getAppName());
-        variables.put("verificationUrl", verificationUrl);
-        variables.put("expiryHours", EMAIL_VERIFICATION_EXPIRY_HOURS);
-        String html = mailTemplateRenderer.render(MailTemplate.EMAIL_VERIFICATION, variables);
-        send(toEmail, MailTemplate.EMAIL_VERIFICATION.getDefaultSubject(), html);
-    }
-
-    @Override
-    public void sendPasswordReset(String toEmail, String toName, String resetUrl) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("toName", toName);
-        variables.put("appName", mailProperties.getAppName());
-        variables.put("resetUrl", resetUrl);
-        variables.put("expiryMinutes", PASSWORD_RESET_EXPIRY_MINUTES);
-        String html = mailTemplateRenderer.render(MailTemplate.PASSWORD_RESET, variables);
-        send(toEmail, MailTemplate.PASSWORD_RESET.getDefaultSubject(), html);
-    }
-
-    @Override
-    public void sendWelcome(String toEmail, String toName) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("toName", toName);
-        variables.put("appName", mailProperties.getAppName());
-        String html = mailTemplateRenderer.render(MailTemplate.WELCOME, variables);
-        send(toEmail, MailTemplate.WELCOME.getDefaultSubject(), html);
-    }
-
-    @Override
-    public void sendPasswordChanged(String toEmail, String toName) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("toName", toName);
-        variables.put("appName", mailProperties.getAppName());
-        String html = mailTemplateRenderer.render(MailTemplate.PASSWORD_CHANGED, variables);
-        send(toEmail, MailTemplate.PASSWORD_CHANGED.getDefaultSubject(), html);
-    }
-
-    @Override
-    public void sendOAuthAccountNoPassword(String toEmail, String displayName) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("toName", displayName);
-        variables.put("appName", mailProperties.getAppName());
-        variables.put("frontendBaseUrl", mailProperties.getFrontendBaseUrl());
-        String html =
-                mailTemplateRenderer.render(MailTemplate.OAUTH_ACCOUNT_NO_PASSWORD, variables);
-        send(toEmail, MailTemplate.OAUTH_ACCOUNT_NO_PASSWORD.getDefaultSubject(), html);
-    }
-
-    private void send(String toEmail, String subject, String htmlBody) {
-        String from = mailProperties.getFromName() + " <" + mailProperties.getFromAddress() + ">";
+    protected void deliver(String toEmail, String subject, String htmlBody) {
         CreateEmailOptions options =
                 CreateEmailOptions.builder()
-                        .from(from)
+                        .from(fromHeader())
                         .to(toEmail)
                         .subject(subject)
                         .html(htmlBody)
