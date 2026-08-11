@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `app.security.refresh-cookie` configuration group controls the cookie's name, path, `Secure` flag, and `SameSite` policy per environment.
 
 ### Security
+- Registration and password reset now enforce a password policy: 8 to 64 characters, at most 72 bytes when encoded as UTF-8, at least one uppercase letter, at least one digit or special character, and no whitespace or invisible characters. Login is deliberately unbounded, so accounts created under the previous rules continue to work and the policy is not disclosed to an attacker probing the login endpoint.
 - A deployment that did not set `APP_COOKIE_SIGNING_SECRET` previously started successfully and signed OAuth2 authorization-state cookies with the unresolved placeholder text as its HMAC key, voiding the tamper-evidence those cookies are meant to provide; declared constraints on security configuration are now enforced at startup, so such a deployment fails to start instead of running with a publicly known key.
 - Closed several remaining ways a blocked party's identity could leak: the live comment feed now filters each subscriber individually instead of broadcasting to everyone watching a post, notification listings and unread counts exclude blocked actors, mentioning a blocked account no longer delivers a notification, and the last few endpoints that confirmed a block's existence now respond identically to a nonexistent account instead.
 - Email uniqueness is now case-insensitive, closing a duplicate-account gap equivalent to the one already closed for usernames.
@@ -33,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- A registration or password-reset request whose password exceeded 72 bytes returned 500 Internal Server Error from the password hasher instead of a validation failure; such a request is now rejected with a field-keyed 400 naming the rule it broke.
 - Login, token refresh, password reset, and OAuth2 code exchange all reject a banned, suspended, deactivated, or unverified account with 403, but none of them documented it, so a client had no documented contract to branch on. All four now declare it, including which error code corresponds to which account state.
 - Every endpoint that accepts a request body now documents the 415 it returns for an unsupported content type, along with four further statuses that were reachable but undeclared (a malformed id in the path, an invalid token sent to an otherwise-anonymous endpoint, and removing a group's last admin).
 - Timestamps delivered over WebSocket rendered in the server's local offset while the same field over REST rendered in UTC; both now render in UTC.
@@ -55,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Closed a latent inconsistency between the case-insensitive username uniqueness constraint and the documented soft-delete retention policy; no application code path could reach the affected state, but the database now enforces the same rule the application already assumed.
 
 ### Tests
+- Added coverage for every password policy rule on both the registration and the password-reset payload, including the no-break space and zero-width space cases that a whitespace regex does not catch, plus end-to-end coverage proving an over-long password no longer produces a server error.
 - Added regression coverage for the blocked-party disclosure fixes, the case-insensitive email constraint, the five conditional-delete race fixes, the conversation cursor bound, the page size bound on every newly-covered endpoint, the single-writer `updated_at` fix, the notification `isRead` fix, the WebSocket handshake 401 fix, and the UTC timestamp rendering fix.
 - Added a contract test asserting that every request-body endpoint declares its 415, derived from the published document rather than a fixed list, so a new endpoint that omits it fails the build.
 - Added regression coverage proving cursor pagination for notifications, reports, admin actions, and conversations does not drop or duplicate rows when many items share the same sort timestamp, matching coverage already in place for other paginated lists.
