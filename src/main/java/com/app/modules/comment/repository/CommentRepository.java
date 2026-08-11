@@ -254,4 +254,47 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
 					""",
             nativeQuery = true)
     int softDeleteSubtree(@Param("commentId") UUID commentId, @Param("now") OffsetDateTime now);
+
+    /**
+     * Counts the comments a {@link #softDeleteSubtree} call on the same target would soft-delete.
+     *
+     * <p>Returns the target plus every descendant at any depth, excluding rows already soft-deleted
+     * - the same set the delete's final predicate keeps. Like the delete, the walk itself does not
+     * filter on {@code deleted_at}, so a live comment restored beneath a still-deleted parent is
+     * reached rather than cut off.
+     *
+     * <p>The search space is bounded to the target's own thread before the walk begins: every
+     * descendant carries the top-level ancestor's id in {@code root_id}, so {@code
+     * idx_comments_root} yields the candidate rows in one index scan and the recursion runs over
+     * that materialised set rather than over {@code comments}. Recursion is additionally capped at
+     * eleven levels by {@code CHECK (depth BETWEEN 0 AND 10)}.
+     *
+     * @param commentId root of the subtree to measure
+     * @return number of comments that are not already soft-deleted in that subtree; zero when the
+     *     comment does not exist
+     */
+    @Query(
+            value =
+                    """
+					WITH RECURSIVE anchor AS (
+						SELECT id, coalesce(root_id, id) AS thread_id
+						FROM comments WHERE id = :commentId
+					),
+					thread AS (
+						SELECT c.id, c.parent_id, c.deleted_at
+						FROM comments c JOIN anchor a ON c.id = a.thread_id
+						UNION ALL
+						SELECT c.id, c.parent_id, c.deleted_at
+						FROM comments c JOIN anchor a ON c.root_id = a.thread_id
+					),
+					subtree AS (
+						SELECT t.id, t.deleted_at FROM thread t JOIN anchor a ON t.id = a.id
+						UNION ALL
+						SELECT t.id, t.deleted_at
+						FROM thread t JOIN subtree s ON t.parent_id = s.id
+					)
+					SELECT count(*) FROM subtree WHERE deleted_at IS NULL
+					""",
+            nativeQuery = true)
+    int countSubtree(@Param("commentId") UUID commentId);
 }

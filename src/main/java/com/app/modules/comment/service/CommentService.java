@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
 import com.app.modules.comment.dto.request.EditCommentRequest;
+import com.app.modules.comment.dto.response.CommentDeletionScopeResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 
 /** Comment creation, editing, soft deletion, likes, and threaded listing. */
@@ -39,12 +40,32 @@ public interface CommentService {
 
     /**
      * Soft-deletes a comment and its entire subtree. Allowed for the comment owner or an admin.
-     * Enqueues a {@code comment.deleted.v1} event.
+     * Enqueues a {@code comment.deleted.v1} event carrying the same count it returns.
      *
      * @param actorId authenticated user; must own the comment or be an admin
      * @param commentId root of the subtree to delete
+     * @return how many comments were soft-deleted, counting the target itself
      */
-    void deleteComment(UUID actorId, UUID commentId);
+    CommentDeletionScopeResponse deleteComment(UUID actorId, UUID commentId);
+
+    /**
+     * Reports how many comments a deletion of this comment would soft-delete, without deleting
+     * anything.
+     *
+     * <p>Answers the confirmation dialogue that precedes a delete. The number is an estimate: the
+     * subtree can grow or shrink between this call and the delete, and no lock is taken to prevent
+     * that. The delete's own return value is the authoritative figure.
+     *
+     * <p>Requires the same authority as the delete it precedes - the comment owner or an admin.
+     * Anything the caller may not delete, including a comment hidden by a block and a comment that
+     * is already soft-deleted, is reported as not found rather than forbidden, so the endpoint
+     * cannot be used to probe for comments.
+     *
+     * @param actorId authenticated user; must own the comment or be an admin
+     * @param commentId root of the subtree to measure
+     * @return how many comments the deletion would cover, counting the target itself
+     */
+    CommentDeletionScopeResponse getDeletionScope(UUID actorId, UUID commentId);
 
     /**
      * Likes a comment. Liking one's own comment is permitted, matching post likes; a duplicate like

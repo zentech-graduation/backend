@@ -58,6 +58,7 @@ public final class ApiConstants {
         public static final String BY_ID = "/{commentId}";
         public static final String LIKE = "/{commentId}/like";
         public static final String REPLIES = "/{commentId}/replies";
+        public static final String DELETION_SCOPE = "/{commentId}/deletion-scope";
     }
 
     public static final class Stories {
