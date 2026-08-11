@@ -72,8 +72,10 @@ public interface MediaApi {
     @Operation(
             summary = "Confirm media upload",
             description =
-                    "Persists client-submitted metadata for an object already uploaded directly to"
-                            + " storage and records a media uploaded event through the outbox.",
+                    "Verifies that storage already holds an object under the submitted storage key"
+                            + " whose size and content type match the submitted metadata, then"
+                            + " persists the metadata and records a media uploaded event through"
+                            + " the outbox.",
             security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -108,8 +110,19 @@ public interface MediaApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "422",
+                description =
+                        "No object exists under the storage key, or its size or content type"
+                                + " differs from the submitted metadata",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "503",
-                description = "CDN configuration is missing",
+                description =
+                        "CDN configuration is missing, or object storage could not be reached to"
+                                + " verify the upload",
                 content =
                         @Content(
                                 mediaType = "application/json",

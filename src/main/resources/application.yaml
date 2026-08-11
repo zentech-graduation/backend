@@ -143,6 +143,9 @@ app:
       bucket: ${R2_BUCKET:}
       region: ${R2_REGION:auto}
       upload-url-ttl: ${R2_UPLOAD_URL_TTL:PT10M}
+      connect-timeout: ${R2_CONNECT_TIMEOUT:PT2S}
+      read-timeout: ${R2_READ_TIMEOUT:PT5S}
+      api-call-timeout: ${R2_API_CALL_TIMEOUT:PT10S}
     allowed-image-mime-types:
       - image/jpeg
       - image/png

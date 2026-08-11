@@ -39,5 +39,14 @@ public class MediaProperties {
         private String region = "auto";
 
         private Duration uploadUrlTtl = Duration.ofMinutes(10);
+
+        // Upload confirmation blocks on a HEAD against R2, so these bound how long a storage
+        // slowdown can hold an upload-complete request before it fails closed with a 503.
+        private Duration connectTimeout = Duration.ofSeconds(2);
+
+        private Duration readTimeout = Duration.ofSeconds(5);
+
+        // Ceiling across all SDK retry attempts; without it the per-attempt timeouts above stack.
+        private Duration apiCallTimeout = Duration.ofSeconds(10);
     }
 }

@@ -113,6 +113,13 @@
             <artifactId>s3</artifactId>
             <version>${aws-sdk.version}</version>
         </dependency>
+        <!-- Already present transitively as the SDK's default sync HTTP client; declared
+             explicitly so connect and read timeouts can be set at compile time. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+            <version>${aws-sdk.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>

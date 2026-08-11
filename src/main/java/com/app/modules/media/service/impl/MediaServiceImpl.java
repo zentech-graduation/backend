@@ -2,6 +2,7 @@ package com.app.modules.media.service.impl;
 
 import java.net.URI;
 import java.sql.SQLException;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -24,6 +25,7 @@ import com.app.modules.media.repository.MediaAssetRepository;
 import com.app.modules.media.service.MediaEventService;
 import com.app.modules.media.service.MediaService;
 import com.app.modules.media.storage.MediaStorageKeyGenerator;
+import com.app.modules.media.storage.ObjectStorageMetadataService;
 import com.app.modules.media.storage.ObjectStoragePresignService;
 import com.app.modules.media.validation.MediaMetadataValidator;
 import com.app.modules.media.validation.ValidatedMediaMetadata;
@@ -44,6 +46,7 @@ public class MediaServiceImpl implements MediaService {
     private final MediaProperties mediaProperties;
     private final MediaStorageKeyGenerator storageKeyGenerator;
     private final ObjectStoragePresignService objectStoragePresignService;
+    private final ObjectStorageMetadataService objectStorageMetadataService;
 
     public MediaServiceImpl(
             MediaAssetRepository mediaAssetRepository,
@@ -53,7 +56,8 @@ public class MediaServiceImpl implements MediaService {
             MediaAssetMapper mediaAssetMapper,
             MediaProperties mediaProperties,
             MediaStorageKeyGenerator storageKeyGenerator,
-            ObjectStoragePresignService objectStoragePresignService) {
+            ObjectStoragePresignService objectStoragePresignService,
+            ObjectStorageMetadataService objectStorageMetadataService) {
         this.mediaAssetRepository = mediaAssetRepository;
         this.metadataValidator = metadataValidator;
         this.systemSettingService = systemSettingService;
@@ -62,6 +66,7 @@ public class MediaServiceImpl implements MediaService {
         this.mediaProperties = mediaProperties;
         this.storageKeyGenerator = storageKeyGenerator;
         this.objectStoragePresignService = objectStoragePresignService;
+        this.objectStorageMetadataService = objectStorageMetadataService;
     }
 
     @Override
@@ -99,6 +104,8 @@ public class MediaServiceImpl implements MediaService {
             throw new AppException(ApiErrorCode.MEDIA_STORAGE_KEY_ALREADY_EXISTS);
         }
 
+        verifyUploadedObjectMatches(metadata);
+
         MediaAsset mediaAsset =
                 MediaAsset.builder()
                         .userId(currentUserId)
@@ -123,6 +130,46 @@ public class MediaServiceImpl implements MediaService {
             }
             throw ex;
         }
+    }
+
+    /**
+     * Rejects the registration unless storage already holds an object matching the submitted
+     * metadata.
+     *
+     * <p>Fails closed: a storage outage propagates as a retryable 503 rather than allowing the row.
+     * A media_assets row is permanent and every reader treats its existence as proof the object is
+     * live, so a phantom row is undetectable afterwards while a rejected upload can be retried.
+     */
+    private void verifyUploadedObjectMatches(ValidatedMediaMetadata metadata) {
+        ObjectStorageMetadataService.StoredObjectMetadata storedObject =
+                objectStorageMetadataService
+                        .findObjectMetadata(metadata.storageKey())
+                        .orElseThrow(
+                                () -> new AppException(ApiErrorCode.MEDIA_OBJECT_NOT_UPLOADED));
+
+        if (storedObject.contentLength() != metadata.fileSize()) {
+            throw new AppException(
+                    ApiErrorCode.MEDIA_OBJECT_METADATA_MISMATCH,
+                    "Uploaded object size does not match the submitted file size");
+        }
+        if (!baseMimeType(storedObject.contentType()).equals(metadata.mimeType())) {
+            throw new AppException(
+                    ApiErrorCode.MEDIA_OBJECT_METADATA_MISMATCH,
+                    "Uploaded object content type does not match the submitted MIME type");
+        }
+    }
+
+    /**
+     * Reduces a stored Content-Type to a bare type/subtype for comparison against validated
+     * metadata, which is already trimmed and lower-cased.
+     */
+    private static String baseMimeType(String contentType) {
+        if (contentType == null) {
+            return "";
+        }
+        int parameterStart = contentType.indexOf(';');
+        String bare = parameterStart < 0 ? contentType : contentType.substring(0, parameterStart);
+        return bare.trim().toLowerCase(Locale.ROOT);
     }
 
     private static void validateStorageKeyOwnership(String storageKey, UUID userId) {

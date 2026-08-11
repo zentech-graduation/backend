@@ -417,16 +417,18 @@ class OpenApiContractIT {
     }
 
     @Test
-    void only422IsCommentModerationRejection() {
+    void only422IsDocumentedForAKnownUnprocessableOutcome() {
         JsonNode doc = document();
-        // Every operation that documents 422 does so for exactly one reason in this codebase:
-        // COMMENT_MODERATION_REJECTED is the only ApiErrorCode carrying HttpStatus.
-        // UNPROCESSABLE_ENTITY. A 422 documented for anything else (e.g. generic bean-validation
-        // failure, which the server answers with 400) is a contract defect, not a valid outcome.
+        // 422 is reserved for a well-formed request whose content cannot be satisfied. Two
+        // outcomes qualify: COMMENT_MODERATION_REJECTED, and the media upload confirmation
+        // rejecting a storage key with no matching stored object. A 422 documented for anything
+        // else (e.g. generic bean-validation failure, which the server answers with 400) is a
+        // contract defect, not a valid outcome.
         Set<String> allowed422 =
                 Set.of(
                         "POST /api/v1/posts/{postId}/comments",
-                        "PATCH /api/v1/comments/{commentId}");
+                        "PATCH /api/v1/comments/{commentId}",
+                        "POST /api/v1/media/upload-complete");
 
         List<String> offenders = new ArrayList<>();
         forEachOperation(
@@ -439,7 +441,7 @@ class OpenApiContractIT {
                 });
 
         assertThat(offenders)
-                .as("422 must only be documented for comment-moderation rejection")
+                .as("422 must only be documented for a known unprocessable outcome")
                 .isEmpty();
     }
 

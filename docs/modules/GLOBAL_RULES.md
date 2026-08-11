@@ -126,9 +126,14 @@ Flow:
 2. Backend validates the request, generates a Cloudflare R2 pre-signed URL, and returns it to the client.
 3. Client performs a `PUT` request directly to R2 using the pre-signed URL.
 4. After upload completes, client sends an "upload complete" notification to the backend, including: `storage_key`, `cdn_url`, `media_type`, `mime_type`, `file_size`, `width`, `height`, `duration` (video only), `blurhash`.
-5. Backend creates the `media_assets` record using the provided metadata.
+5. Backend issues a head-object request to R2 for that `storage_key` and rejects the notification unless an object exists there whose size and content type match the submitted metadata.
+6. Backend creates the `media_assets` record using the provided metadata.
 
 **Rule**: All media metadata (`width`, `height`, `duration`, `mime_type`, `file_size`, `blurhash`) is collected client-side and submitted by the client. The server does not perform server-side media inspection at upload time.
+
+The existence check in step 5 is not media inspection. The server reads the object's response headers; it never fetches or decodes the file body, so `width`, `height`, `duration`, and `blurhash` remain client-supplied and unverified.
+
+**Rule**: Upload confirmation fails closed. If object storage cannot be reached, the notification is rejected as retryable and no `media_assets` row is written. A row must never exist for an object that is absent, because every reader of `media_assets` treats the row's existence as proof the object is live.
 
 ---
 
