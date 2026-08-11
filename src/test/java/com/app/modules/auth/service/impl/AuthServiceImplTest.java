@@ -76,6 +76,8 @@ import ch.qos.logback.core.read.ListAppender;
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
 
+    private static final String TEST_PASSWORD = "S3cur3P@ssword";
+
     @Mock private UserRepository userRepository;
     @Mock private UserCredentialRepository credentialRepository;
     @Mock private UserSettingsRepository settingsRepository;
@@ -166,7 +168,7 @@ class AuthServiceImplTest {
     @Test
     void register_duplicateEmail_throwsConflict() {
         when(userRepository.existsByEmail("a@b.c")).thenReturn(true);
-        RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
+        RegisterRequest req = new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null);
 
         assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
@@ -179,7 +181,7 @@ class AuthServiceImplTest {
     void register_duplicateUsername_throwsConflict() {
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(userRepository.existsByUsername("user1")).thenReturn(true);
-        RegisterRequest req = new RegisterRequest("user1", "a@b.c", "password1", null);
+        RegisterRequest req = new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null);
 
         assertThatThrownBy(() -> service.register(req))
                 .isInstanceOf(AppException.class)
@@ -198,9 +200,9 @@ class AuthServiceImplTest {
                             u.setId(newId);
                             return u;
                         });
-        when(passwordEncoder.encode("password1")).thenReturn("HASH");
+        when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn("HASH");
 
-        service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
+        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
 
         verify(userRepository).save(any(User.class));
         verify(credentialRepository).save(any(UserCredential.class));
@@ -219,7 +221,7 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(anyString())).thenReturn("HASH");
 
-        service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
+        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
 
         verify(authMailEventService).publishUserRegistered(any(User.class));
         verify(authMailEventService).publishEmailVerificationRequested(any(User.class), eq(newId));
@@ -243,7 +245,7 @@ class AuthServiceImplTest {
         appender.start();
         logger.addAppender(appender);
         try {
-            service.register(new RegisterRequest("user1", "a@b.c", "password1", null));
+            service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
         } finally {
             logger.detachAppender(appender);
         }
@@ -264,7 +266,8 @@ class AuthServiceImplTest {
         assertThatThrownBy(
                         () ->
                                 service.login(
-                                        new LoginRequest("nobody@x.y", "password1"), stubRequest()))
+                                        new LoginRequest("nobody@x.y", TEST_PASSWORD),
+                                        stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
@@ -368,7 +371,7 @@ class AuthServiceImplTest {
         UserCredential cred = credential(u.getId(), "STORED-HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
         doThrow(new AppException(ApiErrorCode.AUTH_EMAIL_NOT_VERIFIED))
                 .when(userStateValidator)
                 .enforceEmailVerified(cred);
@@ -376,7 +379,8 @@ class AuthServiceImplTest {
         assertThatThrownBy(
                         () ->
                                 service.login(
-                                        new LoginRequest(u.getEmail(), "password1"), stubRequest()))
+                                        new LoginRequest(u.getEmail(), TEST_PASSWORD),
+                                        stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.AUTH_EMAIL_NOT_VERIFIED);
@@ -388,12 +392,12 @@ class AuthServiceImplTest {
         UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp =
-                service.login(new LoginRequest(u.getEmail(), "password1"), stubRequest());
+                service.login(new LoginRequest(u.getEmail(), TEST_PASSWORD), stubRequest());
 
         assertThat(resp.accessToken()).isEqualTo("ACCESS");
         assertThat(resp.refreshToken()).isEqualTo("REFRESH");
@@ -406,7 +410,7 @@ class AuthServiceImplTest {
         UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
@@ -415,7 +419,7 @@ class AuthServiceImplTest {
         appender.start();
         logger.addAppender(appender);
         try {
-            service.login(new LoginRequest(u.getEmail(), "password1"), stubRequest());
+            service.login(new LoginRequest(u.getEmail(), TEST_PASSWORD), stubRequest());
         } finally {
             logger.detachAppender(appender);
         }
@@ -435,11 +439,11 @@ class AuthServiceImplTest {
         UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
         when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
-        AuthResponse resp = service.login(new LoginRequest("alice", "password1"), stubRequest());
+        AuthResponse resp = service.login(new LoginRequest("alice", TEST_PASSWORD), stubRequest());
 
         assertThat(resp.accessToken()).isEqualTo("ACCESS");
         assertThat(resp.refreshToken()).isEqualTo("REFRESH");
@@ -452,7 +456,9 @@ class AuthServiceImplTest {
         when(userRepository.findByUsernameAndDeletedAtIsNull("ghost")).thenReturn(Optional.empty());
 
         assertThatThrownBy(
-                        () -> service.login(new LoginRequest("ghost", "password1"), stubRequest()))
+                        () ->
+                                service.login(
+                                        new LoginRequest("ghost", TEST_PASSWORD), stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 // Identical code to the wrong-password path so the two are indistinguishable.
@@ -481,11 +487,11 @@ class AuthServiceImplTest {
         // which compares lower(username) on both sides, not in a toLowerCase() before the call.
         when(userRepository.findByUsernameAndDeletedAtIsNull("ALICE")).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
-        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
-        AuthResponse resp = service.login(new LoginRequest("ALICE", "password1"), stubRequest());
+        AuthResponse resp = service.login(new LoginRequest("ALICE", TEST_PASSWORD), stubRequest());
 
         assertThat(resp.accessToken()).isEqualTo("ACCESS");
         assertThat(resp.user().id()).isEqualTo(u.getId());
@@ -503,9 +509,9 @@ class AuthServiceImplTest {
                             u.setId(newId);
                             return u;
                         });
-        when(passwordEncoder.encode("password1")).thenReturn("HASH");
+        when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn("HASH");
 
-        service.register(new RegisterRequest("MixedCase", "a@b.c", "password1", null));
+        service.register(new RegisterRequest("MixedCase", "a@b.c", TEST_PASSWORD, null));
 
         // Deliberate inversion: this asserted the stored value was lowercased. Identity is
         // case-insensitive via idx_users_username_lower, so the column no longer has to carry a
