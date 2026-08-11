@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Comments now carry an `editedAt` timestamp, on both the REST response and the live broadcast payload, which is null until the author changes the content and is never moved by anything else. Comparing `createdAt` against `updatedAt` was the only way to guess at this before, and it never worked: a single like moves `updatedAt`, and the two values are not equal even on a comment that has just been created.
 - `GET /comments/{commentId}/deletion-scope` reports how many comments deleting a comment would remove, so a confirmation dialogue can state the real scope of a subtree removal instead of the direct-reply count. The number is an estimate; the delete's own response is authoritative.
 - A tracked seed script creates a fixed set of local development accounts, a follow graph, and published posts, so a fresh clone no longer produces a running application with no way to log in; it writes only to the local compose database and refuses to run against any other.
 - `CONTRIBUTING.md` now documents how to seed a fresh environment and which accounts that leaves you with.

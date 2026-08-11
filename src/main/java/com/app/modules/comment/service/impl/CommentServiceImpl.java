@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -247,6 +248,13 @@ public class CommentServiceImpl implements CommentService {
                 throw new AppException(ApiErrorCode.COMMENT_MODERATION_REJECTED);
             }
             comment.setContent(content);
+            // The only place edited_at is written. Set before save so the response and the
+            // broadcast projection built from it below carry the new value rather than the
+            // pre-edit one, which is what updated_at does here since its trigger writes it after
+            // this method has already read the entity. Truncated to the microsecond resolution
+            // TIMESTAMPTZ stores, so the value returned here is byte-identical to the one a
+            // subsequent read returns rather than carrying JVM nanoseconds the column drops.
+            comment.setEditedAt(OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS));
             Comment saved = commentRepository.save(comment);
             CommentResponse response =
                     mapper.toResponse(

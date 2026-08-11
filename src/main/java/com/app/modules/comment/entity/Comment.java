@@ -26,8 +26,9 @@ import lombok.Setter;
  *
  * <p>Maps to the {@code comments} table. The denormalized counters ({@code like_count}, {@code
  * reply_count}) are maintained by Postgres triggers (V16) and are never written from application
- * code. {@code content} is the only mutable column. Soft delete sets {@code deleted_at} — never
- * hard-delete; {@code @SQLRestriction} excludes deleted rows from every query.
+ * code. {@code content} is the only mutable column, and changing it also stamps {@code edited_at}.
+ * Soft delete sets {@code deleted_at} — never hard-delete; {@code @SQLRestriction} excludes deleted
+ * rows from every query.
  */
 @Entity
 @Table(name = "comments")
@@ -83,6 +84,13 @@ public class Comment {
     @Generated(event = {EventType.INSERT, EventType.UPDATE})
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
+
+    // Set by application code on a content edit only (V45); null means the content has never
+    // changed. Deliberately not a trigger column: updated_at already covers "this row changed",
+    // and its trigger fires for a like or a reply too, which is why it cannot answer whether the
+    // author edited anything.
+    @Column(name = "edited_at")
+    private OffsetDateTime editedAt;
 
     /** Set by application code on soft delete; {@code null} for live rows (GLOBAL_RULES §6). */
     @Column(name = "deleted_at")

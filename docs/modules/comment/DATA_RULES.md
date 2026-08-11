@@ -9,7 +9,7 @@ Threaded comment CRUD (create with HTTP idempotency, edit, soft-delete subtree),
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `comments` | `id`, `post_id`, `user_id`, `parent_id`, `root_id`, `depth`, `content`, `moderation_status`, `deleted_at` | Core comment entity. Adjacency list with `root_id` and `depth` for efficient subtree queries. Soft-deleted via `deleted_at`. |
+| `comments` | `id`, `post_id`, `user_id`, `parent_id`, `root_id`, `depth`, `content`, `moderation_status`, `edited_at`, `deleted_at` | Core comment entity. Adjacency list with `root_id` and `depth` for efficient subtree queries. Soft-deleted via `deleted_at`. `edited_at` records when the content was last changed (V45). |
 | `comment_likes` | `user_id`, `comment_id`, `created_at` | One row per (user, comment) pair; compound PK prevents duplicate likes. Canonical like signal for comments. |
 | `comment_write_idempotency` | `id`, `user_id`, `idempotency_key`, `request_hash`, `response_body`, `created_at` | Caches the first response for a `(user_id, idempotency_key)` pair so a retried create returns the original result instead of a duplicate comment (V27). |
 
@@ -63,6 +63,8 @@ This is a deliberate departure from the enum-as-constraint-layer rule in `GLOBAL
 | A caller without the authority to delete a comment cannot read its deletion scope | `CommentServiceImpl.getDeletionScope` — owner or admin, answering `COMMENT_NOT_FOUND` (404) rather than 403 to anyone else |
 | Soft-deleted comments are excluded from every query | `@SQLRestriction("deleted_at IS NULL")` on the `Comment` entity |
 | Only the comment owner may edit their comment | `CommentServiceImpl.edit` — throws `COMMENT_FORBIDDEN` (403) |
+| An edit stamps `edited_at`; nothing else ever writes it | `CommentServiceImpl.editComment`, the only caller of `Comment.setContent` in `src/main` |
+| `updated_at` is not an edit signal and must never be compared against `created_at` to derive one | `trg_comments_updated_at` (V16) fires on any row change, including the counter updates `trg_comment_like_count` and `trg_comment_reply_count` issue |
 | Only the comment owner **or an admin** may soft-delete a comment | `CommentServiceImpl.delete` — owner check with an admin override |
 | Content is normalized before moderation and persistence | `CommentContentNormalizer` |
 | Content failing a blocked-word rule is rejected on create and on edit | `CommentModerationServiceImpl.check` — throws `COMMENT_MODERATION_REJECTED` (422) |
@@ -110,8 +112,9 @@ Pinning a fixed-size block to the first page is what keeps the ranking visible w
   The cap is enforced both by the database `CHECK` constraint and at the service layer before the insert, so a rejected reply returns `COMMENT_DEPTH_EXCEEDED` rather than a constraint violation.
 - Instagram-style UI shows only two levels (top-level plus direct replies).
   Deeper nesting is stored; rendering depth is a client concern.
-- No comment edit history is stored; only the current `content` is retained.
+- No comment edit history is stored; only the current `content` and the `edited_at` timestamp of the most recent change are retained.
   This differs from the `post` module, which has a `post_edit_history` table (V22).
+  A client can tell that a comment was edited and when, but not what it used to say.
 - Moderation is blocked-word matching only.
   There is no classifier, no review queue, and no appeal path; `moderation_status` exists to support one later without a schema change.
 - The Redis recent-comment cache is best-effort.

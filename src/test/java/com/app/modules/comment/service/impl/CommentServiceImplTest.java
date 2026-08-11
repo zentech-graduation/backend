@@ -380,6 +380,50 @@ class CommentServiceImplTest {
     }
 
     @Test
+    void editComment_stampsEditedAtBeforeSaving() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(moderationService.check(any())).thenReturn(ModerationResult.approved());
+        when(commentRepository.save(any())).thenReturn(comment);
+        when(mapper.toResponse(eq(comment), any(), anyBoolean())).thenReturn(sampleResponse());
+
+        service.editComment(actorId, commentId, new EditCommentRequest("updated"));
+
+        ArgumentCaptor<Comment> saved = ArgumentCaptor.forClass(Comment.class);
+        verify(commentRepository).save(saved.capture());
+        assertThat(saved.getValue().getEditedAt()).isNotNull();
+        assertThat(saved.getValue().getContent()).isEqualTo("updated");
+    }
+
+    @Test
+    void likeComment_doesNotStampEditedAt() {
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
+        when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
+                .thenReturn(false);
+
+        service.likeComment(actorId, commentId);
+
+        assertThat(comment.getEditedAt()).isNull();
+    }
+
+    @Test
+    void deleteComment_doesNotStampEditedAt() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+
+        service.deleteComment(actorId, commentId);
+
+        assertThat(comment.getEditedAt()).isNull();
+    }
+
+    @Test
     void deleteComment_notOwner_throwsForbidden() {
         Comment comment =
                 Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
@@ -885,6 +929,7 @@ class CommentServiceImplTest {
                 0,
                 null,
                 null,
+                null,
                 false);
     }
 
@@ -902,6 +947,7 @@ class CommentServiceImplTest {
                 0,
                 false,
                 0,
+                null,
                 null,
                 null,
                 false);
