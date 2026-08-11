@@ -17,6 +17,8 @@ import com.app.common.security.websocket.SessionTrackingWebSocketHandlerDecorato
 import com.app.modules.comment.live.CommentLiveBlockFilterInterceptor;
 import com.app.modules.comment.live.CommentWebSocketAuthInterceptor;
 import com.app.modules.notification.live.NotificationWebSocketAuthInterceptor;
+import com.app.modules.post.live.PostLiveBlockFilterInterceptor;
+import com.app.modules.post.live.PostWebSocketAuthInterceptor;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -38,7 +40,8 @@ import tools.jackson.databind.json.JsonMapper;
 @Configuration
 @EnableWebSocketMessageBroker
 @ConditionalOnExpression(
-        "${app.comment.live.enabled:false} or ${app.notification.live.enabled:false}")
+        "${app.comment.live.enabled:false} or ${app.notification.live.enabled:false}"
+                + " or ${app.post.live.enabled:false}")
 public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
 
     private final BrokerSendGuardInterceptor brokerSendGuardInterceptor;
@@ -46,6 +49,8 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
     private final NotificationWebSocketAuthInterceptor notificationAuthInterceptor;
     private final SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory;
     private final CommentLiveBlockFilterInterceptor commentLiveBlockFilterInterceptor;
+    private final PostWebSocketAuthInterceptor postAuthInterceptor;
+    private final PostLiveBlockFilterInterceptor postLiveBlockFilterInterceptor;
     private final JsonMapper jsonMapper;
 
     public WebSocketBrokerConfig(
@@ -54,12 +59,16 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
             NotificationWebSocketAuthInterceptor notificationAuthInterceptor,
             SessionTrackingWebSocketHandlerDecoratorFactory sessionTrackingDecoratorFactory,
             CommentLiveBlockFilterInterceptor commentLiveBlockFilterInterceptor,
+            PostWebSocketAuthInterceptor postAuthInterceptor,
+            PostLiveBlockFilterInterceptor postLiveBlockFilterInterceptor,
             JsonMapper jsonMapper) {
         this.brokerSendGuardInterceptor = brokerSendGuardInterceptor;
         this.commentAuthInterceptor = commentAuthInterceptor;
         this.notificationAuthInterceptor = notificationAuthInterceptor;
         this.sessionTrackingDecoratorFactory = sessionTrackingDecoratorFactory;
         this.commentLiveBlockFilterInterceptor = commentLiveBlockFilterInterceptor;
+        this.postAuthInterceptor = postAuthInterceptor;
+        this.postLiveBlockFilterInterceptor = postLiveBlockFilterInterceptor;
         this.jsonMapper = jsonMapper;
     }
 
@@ -93,12 +102,16 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
         // brokerSendGuardInterceptor runs first so a forged SEND at a /topic/** destination is
         // rejected before any module-specific interceptor logic runs.
         registration.interceptors(
-                brokerSendGuardInterceptor, commentAuthInterceptor, notificationAuthInterceptor);
+                brokerSendGuardInterceptor,
+                commentAuthInterceptor,
+                notificationAuthInterceptor,
+                postAuthInterceptor);
     }
 
     @Override
     public void configureClientOutboundChannel(ChannelRegistration registration) {
-        registration.interceptors(commentLiveBlockFilterInterceptor);
+        registration.interceptors(
+                commentLiveBlockFilterInterceptor, postLiveBlockFilterInterceptor);
     }
 
     @Override
