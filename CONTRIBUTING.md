@@ -68,6 +68,58 @@ docker compose rm -f -s postgres
 docker compose up -d postgres
 ```
 
+## Seeding a fresh environment
+
+A fresh clone gives you a running application with an empty database: no accounts, no content, nothing to log in as.
+`scripts/seed-dev-data.sh` creates a small fixed set of accounts and content so you have something to work against.
+
+Bring up the infrastructure and start the application once, so Flyway migrates the schema:
+
+```bash
+docker compose up -d
+./mvnw spring-boot:run
+```
+
+Then, from the repository root, run the seed script:
+
+```bash
+bash scripts/seed-dev-data.sh
+```
+
+It writes directly to the compose PostgreSQL service through `docker compose exec`, so it needs no `psql` binary on your host and no application container.
+It is safe to run repeatedly: every write is guarded by a natural key, so a second run inserts nothing and reports zero rows affected.
+It refuses to run unless `POSTGRES_URL` points at localhost and your Docker context is a local socket, so it cannot be aimed at a shared or production database.
+
+You end up with five accounts, all sharing the password `SeedPass123!`:
+
+| Username | Email | Role | Notes |
+|----------|-------|------|-------|
+| `seed_alice` | `alice@seed.local` | `user` | Public account, two published posts, mutual follow with `seed_carol`, one pending follow request against `seed_bob` |
+| `seed_bob` | `bob@seed.local` | `user` | Private account, so follow requests against it stay pending |
+| `seed_carol` | `carol@seed.local` | `user` | Public account, one published post |
+| `seed_mod` | `mod@seed.local` | `moderator` | For the moderation surfaces |
+| `seed_admin` | `admin@seed.local` | `admin` | For the admin surfaces |
+
+Log in with any of them at `POST /api/v1/auth/login`.
+The credential field is named `identifier` and accepts either the email or the username:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"identifier":"alice@seed.local","password":"SeedPass123!"}'
+```
+
+The seeded accounts are written pre-verified, so they can be logged into immediately.
+
+The script writes SQL rather than registering through the public API, which is a deliberate choice rather than a workaround.
+Registering through the API would work: the local email flow described under [Local email](#local-email) delivers the verification link to Mailpit, and following it verifies the account.
+But that route needs the application, RabbitMQ, and Mailpit all running and healthy before a single account exists, and it cannot be made idempotent, because a second registration of the same address is a conflict rather than a no-op.
+Writing to the database directly needs only the compose PostgreSQL service, which is the one thing that must be up regardless.
+
+Register your own account through the API when you want to exercise the real signup path.
+Use the seeded accounts when you just want something to log in as.
+Neither route requires a hand-written `UPDATE user_credentials SET email_verified = TRUE`, and that is not a supported procedure.
+
 ## Branch naming convention
 
 ```

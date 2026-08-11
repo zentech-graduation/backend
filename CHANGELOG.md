@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- A tracked seed script creates a fixed set of local development accounts, a follow graph, and published posts, so a fresh clone no longer produces a running application with no way to log in; it writes only to the local compose database and refuses to run against any other.
+- `CONTRIBUTING.md` now documents how to seed a fresh environment and which accounts that leaves you with.
 - Outbound email can now be delivered over SMTP as well as through the hosted provider, selected by the `app.mail.transport` setting.
 - Local development now sends every message to a Mailpit inbox started by `docker compose`, so a fresh clone can register an account, open the verification link, and log in without a provider credential or a manual database edit.
 - The application refuses to start when the SMTP transport is selected outside the development profile, so an environment variable cannot silently divert production mail into a local sink.
