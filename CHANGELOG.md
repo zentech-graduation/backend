@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
 
 ### Changed
+- Liking your own comment is now permitted and returns 200, matching the existing behaviour of post likes; it previously returned 403 with a message describing a permission failure when the real reason was a product rule. A self-like still produces no notification.
 - The mail provider credential moved from a root-level setting into the provider's own configuration group; the `RESEND_API_KEY` environment variable is unchanged.
 - Selecting no mail transport, or an unrecognised one, now fails at startup instead of resolving to a default.
 - The mail health indicator is disabled, so a briefly unreachable mail server no longer makes the application report itself unhealthy.

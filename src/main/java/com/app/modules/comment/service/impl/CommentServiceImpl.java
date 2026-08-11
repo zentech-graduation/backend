@@ -327,9 +327,6 @@ public class CommentServiceImpl implements CommentService {
                             .findById(comment.getPostId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
             assertCanRead(actorId, post);
-            if (comment.getUserId().equals(actorId)) {
-                throw new AppException(ApiErrorCode.COMMENT_FORBIDDEN);
-            }
             if (commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId)) {
                 throw new AppException(ApiErrorCode.COMMENT_ALREADY_LIKED);
             }

@@ -56,7 +56,7 @@ This is a deliberate departure from the enum-as-constraint-layer rule in `GLOBAL
 | `root_id` is set to the top-level ancestor's `id` for replies at any depth | `CommentServiceImpl.create` — `parent.getRootId() != null ? parent.getRootId() : parent.getId()` |
 | `depth` is set to `parent.depth + 1` when creating a reply | `CommentServiceImpl.create` |
 | A comment whose `depth` would exceed 10 is rejected before the database call | `CommentServiceImpl.create` — throws `COMMENT_DEPTH_EXCEEDED` (400) |
-| A user cannot like their own comment | `CommentServiceImpl.like` — throws `COMMENT_FORBIDDEN` (403) |
+| A user may like their own comment, matching post likes | `CommentServiceImpl.likeComment` — no owner check |
 | Soft delete sets `deleted_at` on the comment **and its whole subtree** in one statement | `CommentRepository.softDeleteSubtree`, called by `CommentServiceImpl.delete` |
 | Soft-deleted comments are excluded from every query | `@SQLRestriction("deleted_at IS NULL")` on the `Comment` entity |
 | Only the comment owner may edit their comment | `CommentServiceImpl.edit` — throws `COMMENT_FORBIDDEN` (403) |
@@ -72,6 +72,7 @@ This is a deliberate departure from the enum-as-constraint-layer rule in `GLOBAL
 | Replying to a comment generates a `reply_comment` notification for the parent comment owner | `CommentNotificationConsumer`, from `comment.created.v1` |
 | User mentions in comment `content` generate `mention_comment` notifications | `CommentNotificationConsumer`, from the `mentionedUserIds` event field |
 | Liking a comment generates a `like_comment` notification | `CommentNotificationConsumer`, from `comment.liked.v1` |
+| No notification is created when the actor is also the recipient | `NotificationServiceImpl.create` — a single general guard covering every notification type, so a self-like or a self-reply produces no row |
 | A user may only comment on a post that is visible to them | `CommentAccessPolicyServiceImpl.assertCanComment` — delegates to `PostVisibilityService.isVisibleTo`, throws `POST_COMMENTING_RESTRICTED` |
 | The viewer's per-row like state is batch-resolved, never per row | `CommentViewerStateServiceImpl` |
 

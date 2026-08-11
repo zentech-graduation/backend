@@ -245,14 +245,18 @@ public interface CommentApi {
     @DeleteMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.BY_ID)
     ResponseEntity<ApiResponse<Void>> deleteComment(@PathVariable("commentId") UUID commentId);
 
-    @Operation(summary = "Like a comment", description = "Adds the caller's like to a comment.")
+    @Operation(
+            summary = "Like a comment",
+            description =
+                    "Adds the caller's like to a comment. Self-like is permitted and produces no"
+                            + " notification.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Comment liked"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "Cannot like your own comment",
+                description = "Post hidden by a block or a private account",
                 content =
                         @Content(
                                 mediaType = "application/json",

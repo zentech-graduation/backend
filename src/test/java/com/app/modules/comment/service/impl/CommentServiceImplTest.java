@@ -427,16 +427,26 @@ class CommentServiceImplTest {
     }
 
     @Test
-    void likeComment_ownComment_throwsForbidden() {
+    void likeComment_ownComment_persistsAndEnqueues() {
         Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        assertThatThrownBy(() -> service.likeComment(actorId, commentId))
-                .isInstanceOf(AppException.class)
-                .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.COMMENT_FORBIDDEN);
+        when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
+                .thenReturn(false);
+
+        service.likeComment(actorId, commentId);
+
+        verify(commentLikeRepository).saveAndFlush(any());
+        verify(outboxService)
+                .enqueue(
+                        eq(CommentEventTypes.COMMENT_LIKED_V1),
+                        any(),
+                        any(),
+                        eq(commentId),
+                        eq(actorId),
+                        anyMap());
     }
 
     @Test

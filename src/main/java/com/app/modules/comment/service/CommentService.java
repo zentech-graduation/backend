@@ -47,8 +47,11 @@ public interface CommentService {
     void deleteComment(UUID actorId, UUID commentId);
 
     /**
-     * Likes a comment. Self-likes are rejected; a duplicate like is a conflict. Enqueues a {@code
-     * comment.liked.v1} event.
+     * Likes a comment. Liking one's own comment is permitted, matching post likes; a duplicate like
+     * is a conflict. Enqueues a {@code comment.liked.v1} event.
+     *
+     * <p>A self-like produces no notification: {@code NotificationService.create} discards any
+     * notification whose actor is also its recipient.
      *
      * @param actorId authenticated user
      * @param commentId comment to like

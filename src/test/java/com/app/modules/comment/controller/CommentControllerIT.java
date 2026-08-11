@@ -326,6 +326,46 @@ class CommentControllerIT {
         assertThat(contentOf(replies)).isEmpty();
     }
 
+    @Test
+    void likeComment_ownComment_succeedsAndIncrementsLikeCount() {
+        TestUser author = registerUser("selflike_author");
+        UUID postId = createImagePost(author, "self-like post");
+        UUID commentId = createComment(author, postId, null, "my own comment", null);
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/comments/" + commentId + "/like",
+                        HttpMethod.POST,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(likeCount(commentId)).isEqualTo(1);
+    }
+
+    @Test
+    void likeComment_ownCommentTwice_returnsConflict() {
+        TestUser author = registerUser("selflike_twice");
+        UUID postId = createImagePost(author, "self-like twice post");
+        UUID commentId = createComment(author, postId, null, "my own comment", null);
+        rest.exchange(
+                "/api/v1/comments/" + commentId + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(author)),
+                Map.class);
+
+        ResponseEntity<Map> second =
+                rest.exchange(
+                        "/api/v1/comments/" + commentId + "/like",
+                        HttpMethod.POST,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(second.getBody().get("code")).isEqualTo("COMMENT_ALREADY_LIKED");
+        assertThat(likeCount(commentId)).isEqualTo(1);
+    }
+
     private UUID createComment(
             TestUser user, UUID postId, UUID parentId, String content, String idempotencyKey) {
         Map<String, Object> body = new HashMap<>();
