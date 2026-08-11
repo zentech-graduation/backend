@@ -111,12 +111,19 @@ public interface CommentApi {
     @Operation(
             summary = "List top-level comments for a post",
             description =
-                    "Cursor-paginated approved top-level comments, newest first. The first page"
-                            + " only is preceded by up to three top comments ranked by like count,"
-                            + " each flagged with `pinned: true` and additional to the requested"
-                            + " page size; a pinned comment is not repeated in the same page's"
-                            + " newest-first body. Requires authentication; private posts are"
-                            + " visible only to the owner and accepted followers.")
+                    "Cursor-paginated approved top-level comments, newest first in both sort"
+                            + " modes. `sort=top`, the default, precedes the first page with up to"
+                            + " three top comments ranked by like count, each flagged with"
+                            + " `pinned: true` and additional to the requested page size; those"
+                            + " comments are excluded from the chronological body of every page,"
+                            + " so each is returned exactly once. `sort=newest` suppresses the"
+                            + " block entirely: nothing is prepended, nothing is excluded, and"
+                            + " `pinned` is false on every row. Neither mode ranks the paginated"
+                            + " stream by like count. A cursor is bound to the mode that issued"
+                            + " it and is rejected under the other, because the two modes return"
+                            + " different row sets for the same position. Requires"
+                            + " authentication; private posts are visible only to the owner and"
+                            + " accepted followers.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -134,7 +141,23 @@ public interface CommentApi {
     @GetMapping(ApiConstants.Posts.ROOT + ApiConstants.Posts.COMMENTS)
     ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listTopLevelComments(
             @PathVariable("postId") UUID postId,
-            @Parameter(description = "Opaque cursor from the previous page")
+            @Parameter(
+                            description =
+                                    "Sort mode. `top` prepends the pinned block of most-liked"
+                                            + " comments to the first page; `newest` suppresses"
+                                            + " it. Both order the body newest first. An"
+                                            + " unrecognised value is rejected rather than"
+                                            + " falling back to the default.",
+                            schema =
+                                    @Schema(
+                                            allowableValues = {"top", "newest"},
+                                            defaultValue = "top"))
+                    @RequestParam(value = "sort", required = false)
+                    String sort,
+            @Parameter(
+                            description =
+                                    "Opaque cursor from the previous page, valid only under the"
+                                            + " sort mode that issued it")
                     @RequestParam(value = "cursor", required = false)
                     String cursor,
             @Parameter(description = "Page size (1–100, default 20)")

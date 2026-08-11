@@ -54,31 +54,6 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
             @Param("commentId") UUID commentId, @Param("deletedAt") OffsetDateTime deletedAt);
 
     /**
-     * First keyset page of approved top-level comments for a post, newest first, excluding any
-     * commenter in a block relationship with the viewer.
-     *
-     * <p>Paired with {@link #findTopLevelBefore}; the no-cursor variant avoids binding an untyped
-     * null timestamp.
-     *
-     * @param postId post whose comments are listed
-     * @param viewerId the requesting viewer; commenters in a block relationship with this user are
-     *     excluded
-     * @param pageable page size carrier (page number is always 0 for keyset paging)
-     * @return top-level approved comments ordered by the {@code (created_at, id)} tuple descending
-     */
-    @Query(
-            value =
-                    "SELECT * FROM comments WHERE post_id = :postId AND parent_id IS NULL "
-                            + "AND moderation_status = 'approved' AND deleted_at IS NULL "
-                            + "AND NOT EXISTS (SELECT 1 FROM blocks b"
-                            + " WHERE (b.blocker_id = :viewerId AND b.blocked_id = comments.user_id)"
-                            + " OR (b.blocker_id = comments.user_id AND b.blocked_id = :viewerId)) "
-                            + "ORDER BY created_at DESC, id DESC",
-            nativeQuery = true)
-    List<Comment> findFirstTopLevel(
-            @Param("postId") UUID postId, @Param("viewerId") UUID viewerId, Pageable pageable);
-
-    /**
      * Most-liked approved top-level comments for a post, for the pinned first-page block, excluding
      * any commenter in a block relationship with the viewer.
      *
@@ -140,13 +115,19 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
 
     /**
      * Keyset page of approved top-level comments strictly after the cursor tuple, newest first,
-     * excluding any commenter in a block relationship with the viewer.
+     * excluding the pinned comments and any commenter in a block relationship with the viewer.
      *
      * <p>The {@code (created_at, id)} row-value comparison seeks directly to the cursor position
      * and never drops comments sharing a boundary {@code created_at}. Served exactly by {@code
      * idx_comments_post_root_id} (V36).
      *
+     * <p>Carries the same {@code excludedIds} filter as {@link #findFirstTopLevelExcluding}, for
+     * the same reason and with the same effect on {@code LIMIT}. Without it a pinned comment old
+     * enough to fall on a later page is returned twice: once at the head of page one and again in
+     * its own chronological position further down the stream.
+     *
      * @param postId post whose comments are listed
+     * @param excludedIds ids returned in the pinned block; empty excludes nothing
      * @param viewerId the requesting viewer; commenters in a block relationship with this user are
      *     excluded
      * @param cursorTime {@code created_at} of the cursor row; never null
@@ -158,6 +139,7 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
             value =
                     "SELECT * FROM comments WHERE post_id = :postId AND parent_id IS NULL "
                             + "AND moderation_status = 'approved' AND deleted_at IS NULL "
+                            + "AND id <> ALL(CAST(:excludedIds AS uuid[])) "
                             + "AND (created_at, id) < (:cursorTime, :cursorId) "
                             + "AND NOT EXISTS (SELECT 1 FROM blocks b"
                             + " WHERE (b.blocker_id = :viewerId AND b.blocked_id = comments.user_id)"
@@ -166,6 +148,7 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
             nativeQuery = true)
     List<Comment> findTopLevelBefore(
             @Param("postId") UUID postId,
+            @Param("excludedIds") UUID[] excludedIds,
             @Param("viewerId") UUID viewerId,
             @Param("cursorTime") OffsetDateTime cursorTime,
             @Param("cursorId") UUID cursorId,

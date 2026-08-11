@@ -13,6 +13,7 @@ public final class CursorScope {
     public static final String ADMIN_ACTIONS = "adma";
     public static final String ADMIN_ACTIONS_FOR_USER = "admu";
     public static final String COMMENTS_TOP_LEVEL = "cmt";
+    public static final String COMMENTS_TOP_LEVEL_NEWEST = "cmtn";
     public static final String COMMENT_REPLIES = "rpl";
     public static final String CONVERSATIONS = "cnv";
     public static final String NOTIFICATIONS = "ntf";

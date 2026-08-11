@@ -94,17 +94,21 @@ The cursor is the opaque base64url encoding of that tuple and carries no other f
 |------|-------------|
 | Replies are ordered newest-first by `(created_at, id)` on every page, with no pinned block | `CommentRepository.findFirstReplies`, `findRepliesBefore` |
 | Top-level comments are ordered newest-first by `(created_at, id)` on every page | `CommentRepository.findFirstTopLevelExcluding`, `findTopLevelBefore` |
-| The **first page only** of a post's top-level comments is preceded by up to three pinned comments, ordered by `(like_count, created_at, id)` descending | `CommentRepository.findTopLikedTopLevel`, capped by `CommentServiceImpl.PINNED_COMMENT_COUNT` |
+| The **first page only** of a post's top-level comments is preceded by up to three pinned comments, ordered by `(like_count, created_at, id)` descending, in the default `top` sort mode | `CommentRepository.findTopLikedTopLevel`, capped by `CommentServiceImpl.PINNED_COMMENT_COUNT` |
+| `sort=newest` suppresses the pinned block entirely: nothing is prepended and nothing is excluded, so the comments `top` would have pinned appear in their chronological position | `CommentSortOrder.NEWEST` resolves to an empty pinned list and an empty exclusion array; the same two queries serve both modes |
+| An unrecognised `sort` value is rejected rather than falling back to the default | `CommentSortOrder.from` throws `BAD_REQUEST` (400) naming the accepted values |
+| A cursor is bound to the sort mode that issued it and is rejected under the other | Separate `CursorScope` tags, `cmt` for `top` and `cmtn` for `newest`; a cross-mode replay fails the scope check with `INVALID_CURSOR` (400) |
 | A comment needs at least one like to be pinned | `like_count > 0` in `findTopLikedTopLevel` |
 | A pinned comment must be top-level, approved, and not soft-deleted | The eligibility predicate of `findTopLikedTopLevel`, matching the partial predicate of `idx_comments_post_top_liked` (V41) |
-| A pinned comment never also appears in the same page's newest-first body | `findFirstTopLevelExcluding` filters the pinned ids in SQL, so `LIMIT` still yields a full body page |
+| A pinned comment appears exactly once across the whole paginated stream | The pinned ids are resolved on every page and filtered in SQL by `findFirstTopLevelExcluding` and `findTopLevelBefore`, so `LIMIT` still yields a full body page and a pinned comment old enough to fall on a later page is not returned a second time |
 | The pinned block is additional to the requested `limit`, not counted against it | `CommentServiceImpl.toPage` - the first page returns up to `limit + 3` items |
 | `startCursor` and `endCursor` are derived from the newest-first body only | `CommentServiceImpl.toPage` - deriving them from the pinned block would seek the next page to an arbitrary position |
-| `CommentResponse.pinned` marks membership of the pinned block; it is never true on page two or on a single-comment response | `CommentResponse.asPinned`, applied only to the pinned rows of the first page |
+| `CommentResponse.pinned` marks membership of the pinned block; it is never true on page two, on a single-comment response, or anywhere under `sort=newest` | `CommentResponse.asPinned`, applied only to the pinned rows of the first page, and there is no pinned block at all under `newest` |
 
-`like_count` is deliberately absent from the cursor.
+`like_count` is deliberately absent from the cursor, in both sort modes.
 It is mutable, so a keyset over it would let rows cross a page boundary between requests and be lost or repeated.
 Pinning a fixed-size block to the first page is what keeps the ranking visible without putting a mutable column in the sort key of the paginated stream.
+The two sort modes therefore differ only in whether that block is computed, never in the ordering of the stream itself.
 
 ### D. Scope Simplifications
 
@@ -119,6 +123,10 @@ Pinning a fixed-size block to the first page is what keeps the ranking visible w
   There is no classifier, no review queue, and no appeal path; `moderation_status` exists to support one later without a schema change.
 - The Redis recent-comment cache is best-effort.
   A cache failure degrades to a database read; it never fails the request.
+- The pinned exclusion set is recomputed on every page rather than carried in the cursor.
+  If a like arrives between two page requests and changes which comments are pinned, a comment can be missed or repeated once across that boundary.
+  The alternative was to carry the pinned ids in the cursor, which would change its wire format for a window bounded to three rows and only while a like lands mid-pagination.
+  The recompute costs one index seek per page, which `CommentPinnedTopCommentsIT` pins at an exact statement count.
 - The pre-delete deletion scope is an estimate, not a reservation.
   The subtree can grow or shrink between the scope call and the delete, and no lock is taken to prevent that.
   The confirmation dialogue shows the estimate; the delete's own return value is authoritative.

@@ -41,6 +41,7 @@ import com.app.modules.comment.entity.Comment;
 import com.app.modules.comment.entity.CommentLike;
 import com.app.modules.comment.entity.CommentLikeId;
 import com.app.modules.comment.entity.CommentWriteIdempotency;
+import com.app.modules.comment.enums.CommentSortOrder;
 import com.app.modules.comment.mapper.CommentMapper;
 import com.app.modules.comment.messaging.CommentEventTypes;
 import com.app.modules.comment.observability.CommentMetrics;
@@ -430,33 +431,44 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<CommentResponse> listTopLevelComments(
-            UUID viewerId, UUID postId, String cursor, int limit) {
+            UUID viewerId, UUID postId, String sort, String cursor, int limit) {
         Post post =
                 postRepository
                         .findById(postId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
+        CommentSortOrder order = CommentSortOrder.from(sort);
+        String scope = order.cursorScope();
         int pageSize = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor, CursorScope.COMMENTS_TOP_LEVEL);
+        Cursor decoded = decodeCursor(cursor, scope);
         PageRequest page = PageRequest.of(0, pageSize + 1);
-        // Page two onward is the unchanged pure keyset stream: no pinned block, no exclusion.
+        // Resolved on every page, not only the first. The block itself is prepended to page one
+        // alone, but its ids must be excluded from the chronological body of every page: a pinned
+        // comment old enough to fall on a later page would otherwise be returned twice, once at
+        // the head of page one and again in its own chronological position.
+        //
+        // In the newest mode the block is not computed at all and the exclusion array is empty,
+        // so the same two queries serve both modes and neither carries a mode-specific clause.
+        List<Comment> pinned =
+                order.pinsTopComments()
+                        ? commentRepository.findTopLikedTopLevel(
+                                postId, viewerId, PageRequest.of(0, PINNED_COMMENT_COUNT))
+                        : List.of();
+        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         if (decoded != null) {
             List<Comment> comments =
                     commentRepository.findTopLevelBefore(
                             postId,
+                            pinnedIds,
                             viewerId,
                             TimeCursors.fromMicros(decoded.sortValueMicros()),
                             decoded.id(),
                             page);
-            return toPage(viewerId, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
+            return toPage(viewerId, comments, pageSize, cursor, scope);
         }
-        List<Comment> pinned =
-                commentRepository.findTopLikedTopLevel(
-                        postId, viewerId, PageRequest.of(0, PINNED_COMMENT_COUNT));
-        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         List<Comment> comments =
                 commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, viewerId, page);
-        return toPage(viewerId, pinned, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
+        return toPage(viewerId, pinned, comments, pageSize, cursor, scope);
     }
 
     @Override
