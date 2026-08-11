@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -62,24 +61,16 @@ public class R2ObjectStoragePresignService implements ObjectStoragePresignServic
                     flattenHeaders(presignedRequest.signedHeaders()),
                     presignedRequest.expiration());
         } catch (RuntimeException ex) {
-            // This is the only call into the R2/S3 SDK in the module; without this log, an R2
-            // outage is indistinguishable from a client-input error in the logs.
+            // Without this log an R2 outage is indistinguishable from a client-input error in the
+            // logs. The module's other SDK call is the head-object check in
+            // R2ObjectStorageMetadataService, which logs on the same rationale.
             log.error("R2 presign request failed", ex);
             throw new AppException(ApiErrorCode.MEDIA_UPLOAD_URL_FAILED);
         }
     }
 
     private MediaProperties.R2 validatedR2Properties() {
-        MediaProperties.R2 r2 = mediaProperties.getR2();
-        if (r2 == null
-                || !StringUtils.hasText(r2.getEndpoint())
-                || !StringUtils.hasText(r2.getAccessKeyId())
-                || !StringUtils.hasText(r2.getSecretAccessKey())
-                || !StringUtils.hasText(r2.getBucket())
-                || !StringUtils.hasText(r2.getRegion())) {
-            throw new AppException(ApiErrorCode.MEDIA_STORAGE_NOT_CONFIGURED);
-        }
-        return r2;
+        return R2StorageSupport.validatedR2Properties(mediaProperties);
     }
 
     private S3Presigner buildPresigner(MediaProperties.R2 r2) {
