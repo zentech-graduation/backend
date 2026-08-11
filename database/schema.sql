@@ -299,6 +299,9 @@ CREATE TABLE comments (
     -- Timestamps
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    -- Set by application code on a content edit only; NULL means never edited. Distinct from
+    -- updated_at, which the row-level trigger moves whenever a counter changes.
+    edited_at           TIMESTAMPTZ,
     deleted_at          TIMESTAMPTZ
 );
 

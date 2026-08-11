@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Comments now carry an `editedAt` timestamp, on both the REST response and the live broadcast payload, which is null until the author changes the content and is never moved by anything else. Comparing `createdAt` against `updatedAt` was the only way to guess at this before, and it never worked: a single like moves `updatedAt`, and the two values are not equal even on a comment that has just been created.
 - `GET /comments/{commentId}/deletion-scope` reports how many comments deleting a comment would remove, so a confirmation dialogue can state the real scope of a subtree removal instead of the direct-reply count. The number is an estimate; the delete's own response is authoritative.
 - A tracked seed script creates a fixed set of local development accounts, a follow graph, and published posts, so a fresh clone no longer produces a running application with no way to log in; it writes only to the local compose database and refuses to run against any other.
 - `CONTRIBUTING.md` now documents how to seed a fresh environment and which accounts that leaves you with.
@@ -47,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- A comment's `createdAt` and `updatedAt` are now equal on a comment that has just been created. They were taken from two different clocks, one in the application and one in the database, so they never matched and every comment looked modified from the moment it existed.
 - The project map's mechanically derived sections had drifted from the tree: it recorded 43 migrations against 44, 162 test classes against 176, and Flyway as accepting out-of-order migrations after that setting was reverted. The migration table, the test roster, and the Flyway note now match the repository.
 - `POST /media/upload-complete` created a media asset and returned a CDN URL without checking that the object had actually been uploaded, so a post, story, or message could reference an asset whose file was never transferred. Confirmation now returns 422 when no object exists under the submitted storage key, or when the stored object's size or content type differs from the submitted metadata, and 503 when storage cannot be reached to check; no asset is recorded in any of those cases.
 - A registration or password-reset request whose password exceeded 72 bytes returned 500 Internal Server Error from the password hasher instead of a validation failure; such a request is now rejected with a field-keyed 400 naming the rule it broke.

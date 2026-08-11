@@ -39,4 +39,19 @@ public record CommentBroadcastResponse(
         @Schema(description = "Trigger-maintained like count.") int likeCount,
         @Schema(description = "Trigger-maintained direct reply count.") int replyCount,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
-        @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt) {}
+        @Schema(
+                        description =
+                                "Timestamp of the last change to the row, including changes made"
+                                        + " by the like and reply counters. Do not derive an"
+                                        + " edited marker from this; use editedAt.")
+                OffsetDateTime updatedAt,
+        @Schema(
+                        description =
+                                "When the author last changed the content, or null if it has"
+                                        + " never been edited. Unlike isLiked and pinned, this is"
+                                        + " a property of the comment itself and is therefore"
+                                        + " identical for every subscriber, so it is carried"
+                                        + " here.",
+                        example = "2026-08-11T11:52:41.512961Z",
+                        nullable = true)
+                OffsetDateTime editedAt) {}

@@ -2,6 +2,7 @@ package com.app.modules.comment.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -560,6 +561,234 @@ class CommentControllerIT {
     private static Map<?, ?> dataOf(ResponseEntity<Map> response) {
         assertThat(response.getBody()).isNotNull();
         return (Map<?, ?>) response.getBody().get("data");
+    }
+
+    @Test
+    void createComment_timestampsAgreeAtInsert() {
+        TestUser author = registerUser("ts_agree");
+        UUID postId = createImagePost(author, "timestamp agreement post");
+        UUID commentId = createComment(author, postId, null, "untouched since insert", null);
+
+        // Both columns default to NOW(), which is the transaction timestamp, so a freshly
+        // inserted row must carry the same value in each. They previously disagreed because
+        // created_at came from the JVM clock and updated_at from Postgres, which made every
+        // comment look edited from the moment it existed.
+        assertThat(createdAt(commentId)).isEqualTo(updatedAt(commentId));
+
+        Map<?, ?> body = commentFromList(author, postId, commentId);
+        assertThat(body.get("createdAt")).isEqualTo(body.get("updatedAt"));
+    }
+
+    @Test
+    void createComment_neverEdited_reportsNoEditSignal() {
+        TestUser author = registerUser("edit_fresh");
+        UUID postId = createImagePost(author, "fresh comment post");
+        UUID commentId = createComment(author, postId, null, "never touched", null);
+
+        assertThat(editedAt(commentId)).isNull();
+        assertThat(commentFromList(author, postId, commentId).get("editedAt")).isNull();
+    }
+
+    @Test
+    void editComment_setsTheEditSignal() {
+        TestUser author = registerUser("edit_sets");
+        UUID postId = createImagePost(author, "edit sets post");
+        UUID commentId = createComment(author, postId, null, "before", null);
+
+        ResponseEntity<Map> edited = editComment(author, commentId, "after");
+
+        assertThat(edited.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(editedAt(commentId)).isNotNull();
+        assertThat(dataOf(edited).get("editedAt")).isNotNull();
+        assertThat(commentFromList(author, postId, commentId).get("editedAt")).isNotNull();
+    }
+
+    @Test
+    void editComment_secondEdit_advancesTheEditSignal() {
+        TestUser author = registerUser("edit_twice");
+        UUID postId = createImagePost(author, "edit twice post");
+        UUID commentId = createComment(author, postId, null, "first", null);
+
+        editComment(author, commentId, "second");
+        OffsetDateTime afterFirst = editedAt(commentId);
+        editComment(author, commentId, "third");
+        OffsetDateTime afterSecond = editedAt(commentId);
+
+        assertThat(afterFirst).isNotNull();
+        assertThat(afterSecond).isNotNull();
+        assertThat(afterSecond).isAfterOrEqualTo(afterFirst);
+    }
+
+    @Test
+    void likeComment_movesUpdatedAtButLeavesTheEditSignalAbsent() {
+        TestUser author = registerUser("edit_liked_author");
+        TestUser liker = registerUser("edit_liked_liker");
+        UUID postId = createImagePost(author, "liked comment post");
+        UUID commentId = createComment(author, postId, null, "unedited but likeable", null);
+        OffsetDateTime updatedAtBefore = updatedAt(commentId);
+
+        rest.exchange(
+                "/api/v1/comments/" + commentId + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(liker)),
+                Map.class);
+
+        // The whole point of the column: the row changed, so updated_at moved, but the content
+        // did not, so the edit signal must stay absent. Comparing the two timestamps to derive
+        // an edited marker is exactly the defect this asserts against.
+        assertThat(updatedAt(commentId)).isAfter(updatedAtBefore);
+        assertThat(likeCount(commentId)).isEqualTo(1);
+        assertThat(editedAt(commentId)).isNull();
+        assertThat(commentFromList(author, postId, commentId).get("editedAt")).isNull();
+    }
+
+    @Test
+    void createReply_movesParentUpdatedAtButLeavesItsEditSignalAbsent() {
+        TestUser author = registerUser("edit_replied_author");
+        TestUser replier = registerUser("edit_replied_replier");
+        UUID postId = createImagePost(author, "replied comment post");
+        UUID parentId = createComment(author, postId, null, "unedited but replyable", null);
+        OffsetDateTime updatedAtBefore = updatedAt(parentId);
+
+        createComment(replier, postId, parentId, "a reply", null);
+
+        assertThat(updatedAt(parentId)).isAfter(updatedAtBefore);
+        assertThat(replyCount(parentId)).isEqualTo(1);
+        assertThat(editedAt(parentId)).isNull();
+    }
+
+    @Test
+    void deleteComment_doesNotSetTheEditSignal() {
+        TestUser author = registerUser("edit_deleted");
+        UUID postId = createImagePost(author, "deleted comment post");
+        UUID commentId = createComment(author, postId, null, "about to go", null);
+
+        rest.exchange(
+                "/api/v1/comments/" + commentId,
+                HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders(author)),
+                Map.class);
+
+        assertThat(deletedAt(commentId)).isNotNull();
+        assertThat(editedAt(commentId)).isNull();
+    }
+
+    @Test
+    void adminModeration_removeAndRestore_doesNotSetTheEditSignal() {
+        TestUser author = registerUser("edit_moderated");
+        TestUser moderator = registerUser("edit_moderator");
+        jdbcTemplate.update(
+                "UPDATE users SET role = CAST(? AS user_role) WHERE id = ?",
+                "admin",
+                moderator.id());
+        UUID postId = createImagePost(author, "moderated comment post");
+        UUID commentId = createComment(author, postId, null, "flagged content", null);
+
+        // A fresh token is required: the role is embedded in the access token issued at login.
+        TestUser admin = reLogin("edit_moderator");
+        ResponseEntity<Map> removed =
+                rest.exchange(
+                        "/api/v1/admin/comments/" + commentId + "/remove",
+                        HttpMethod.PATCH,
+                        new HttpEntity<>(Map.of("reason", "test"), authHeaders(admin)),
+                        Map.class);
+        assertThat(removed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(deletedAt(commentId)).isNotNull();
+        assertThat(editedAt(commentId)).isNull();
+
+        ResponseEntity<Map> restored =
+                rest.exchange(
+                        "/api/v1/admin/comments/" + commentId + "/restore",
+                        HttpMethod.PATCH,
+                        new HttpEntity<>(Map.of("reason", "test"), authHeaders(admin)),
+                        Map.class);
+        assertThat(restored.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(deletedAt(commentId)).isNull();
+        assertThat(editedAt(commentId)).isNull();
+        assertThat(contentOf(commentId)).isEqualTo("flagged content");
+    }
+
+    @Test
+    void editComment_broadcastPayloadCarriesTheEditSignal() {
+        TestUser author = registerUser("edit_broadcast");
+        UUID postId = createImagePost(author, "broadcast post");
+        UUID commentId = createComment(author, postId, null, "before broadcast", null);
+
+        editComment(author, commentId, "after broadcast");
+
+        String payload =
+                jdbcTemplate.queryForObject(
+                        "SELECT payload::text FROM outbox_events WHERE aggregate_id = ? AND"
+                                + " event_type = 'comment.edited.v1'",
+                        String.class,
+                        commentId);
+        assertThat(payload).contains("\"editedAt\"");
+        assertThat(payload).doesNotContain("\"editedAt\": null");
+    }
+
+    private ResponseEntity<Map> editComment(TestUser user, UUID commentId, String content) {
+        return rest.exchange(
+                "/api/v1/comments/" + commentId,
+                HttpMethod.PATCH,
+                new HttpEntity<>(Map.of("content", content), authHeaders(user)),
+                Map.class);
+    }
+
+    private Map<?, ?> commentFromList(TestUser viewer, UUID postId, UUID commentId) {
+        ResponseEntity<Map> response = getWithAuth("/api/v1/posts/" + postId + "/comments", viewer);
+        return contentOf(response).stream()
+                .filter(c -> commentId.toString().equals(c.get("id")))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private OffsetDateTime editedAt(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT edited_at FROM comments WHERE id = ?", OffsetDateTime.class, commentId);
+    }
+
+    private OffsetDateTime createdAt(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT created_at FROM comments WHERE id = ?", OffsetDateTime.class, commentId);
+    }
+
+    private OffsetDateTime updatedAt(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT updated_at FROM comments WHERE id = ?", OffsetDateTime.class, commentId);
+    }
+
+    private OffsetDateTime deletedAt(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT deleted_at FROM comments WHERE id = ?", OffsetDateTime.class, commentId);
+    }
+
+    private String contentOf(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT content FROM comments WHERE id = ?", String.class, commentId);
+    }
+
+    private TestUser reLogin(String username) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Forwarded-For", uniqueIp());
+        ResponseEntity<Map> login =
+                rest.exchange(
+                        "/api/v1/auth/login",
+                        HttpMethod.POST,
+                        new HttpEntity<>(
+                                Map.of(
+                                        "identifier",
+                                        username + "@test.local",
+                                        "password",
+                                        "S3cur3P@ssword!"),
+                                headers),
+                        Map.class);
+        assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) login.getBody().get("data");
+        UUID id =
+                jdbcTemplate.queryForObject(
+                        "SELECT id FROM users WHERE username = ?", UUID.class, username);
+        return new TestUser(id, (String) data.get("accessToken"));
     }
 
     private UUID createComment(
