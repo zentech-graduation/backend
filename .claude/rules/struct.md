@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V43 SQL migrations
+│   │       ├── db/migration/       # Flyway V01–V44 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -90,7 +90,6 @@ app/
 | `common/base/` | `BaseController` |
 | `common/config/app/` | `AppProperties` |
 | `common/config/elasticsearch/` | `ElasticsearchConfig`, `ElasticsearchProperties` |
-| `common/config/mail/` | `MailConfig` |
 | `common/config/openapi/` | `OpenApiConfig` |
 | `common/config/rabbit/` | `RabbitMqPublisherConfig`, `RabbitMqTopologyConfig` |
 | `common/config/redis/` | `RedisConfig`, `RateLimitProperties` |
@@ -158,7 +157,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | Module | Status | Sub-packages |
 |--------|--------|--------------|
 | `auth` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, exception, mapper, messaging, oauth2, repository, service/impl, validation |
-| `mail` | **Implemented** | config, dto, enums, service/impl, util |
+| `mail` | **Implemented** | config, config/resend, config/smtp, enums, service/impl, util |
 | `users` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `social` | **Implemented** | api, controller, converter, dto/response, entity, enums, mapper, messaging, repository, service/impl |
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
@@ -206,21 +205,23 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
-Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 162 test classes total.
+Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 176 test classes total.
 
 | Package | Test Classes |
 |---------|-------------|
 | `(root)` | `ApplicationTests` |
-| `common` | `ApiConstantsSocialTest`, `ApiConstantsUnroutedFieldsTest` |
+| `common` | `ApiConstantsSocialTest`, `ApiConstantsUnroutedFieldsTest`, `UpdatedAtSingleWriterIT` |
 | `common/base` | `BaseControllerTest` |
 | `common/config` | `ProdProfileConsumerActivationIT` |
 | `common/config/elasticsearch` | `ElasticsearchConfigTest`, `ElasticsearchHealthIT` |
 | `common/config/openapi` | `OpenApiContractIT` |
 | `common/config/rabbit` | `RabbitMqTopologyConfigTest` |
-| `common/exception` | `ApiExceptionTest`, `AppExceptionTest`, `GlobalExceptionHandlerTest`, `MalformedRequestBodyIT` |
+| `common/config/security` | `RefreshCookiePropertiesTest`, `SecurityPropertiesValidationTest` |
+| `common/enums` | `ApiErrorCodeMessageTest` |
+| `common/exception` | `ApiExceptionTest`, `AppExceptionTest`, `GlobalExceptionHandlerTest`, `HttpNegotiationExceptionHandlersIT`, `MalformedRequestBodyIT` |
 | `common/inbox/service/impl` | `ProcessedMessageServiceImplIT` |
-| `common/mail/config` | `MailPropertiesBindingTest` |
-| `common/mail/service/impl` | `MailServiceImplTest`, `ResendMailSenderTest` |
+| `common/mail/config` | `MailPropertiesBindingTest`, `MailTransportSelectionTest` |
+| `common/mail/service/impl` | `MailServiceImplTest`, `ResendMailSenderTest`, `SmtpMailSenderTest`, `TemplateMailSenderParityTest` |
 | `common/mail/util` | `MailTemplateRendererTest` |
 | `common/messaging` | `DeadLetterPublisherTest` |
 | `common/outbox/repository` | `OutboxEventRepositoryIT` |
@@ -233,29 +234,31 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `common/security/service/impl` | `RateLimiterServiceImplTest`, `RefreshTokenServiceImplTest`, `TokenBlacklistServiceImplTest`, `TokenPrincipalResolverImplTest` |
 | `common/security/user` | `UserPrincipalTest` |
 | `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest`, `SecurityUtilsTest` |
-| `common/security/websocket` | `JwtHandshakeInterceptorTest`, `WebSocketHandshakeRateLimitIT`, `WebSocketRevocationIT`, `WebSocketRevocationSweepServiceTest` |
+| `common/security/websocket` | `BrokerTopicSendGuardIT`, `JwtHandshakeInterceptorTest`, `WebSocketHandshakeRateLimitIT`, `WebSocketRevocationIT`, `WebSocketRevocationSweepServiceTest` |
 | `common/settings/service/impl` | `SystemSettingServiceImplTest` |
 | `modules/admin/controller` | `AdminControllerIT` |
 | `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest` |
 | `modules/admin/service/impl` | `AdminServiceImplTest` |
-| `modules/auth/controller` | `AuthControllerIT` |
+| `modules/auth/controller` | `AuthControllerIT`, `PasswordPolicyIT` |
 | `modules/auth/converter` | `OAuthProviderConverterTest` |
+| `modules/auth/cookie` | `RefreshTokenCookieManagerTest` |
 | `modules/auth/dto/request` | `RegisterRequestDeserializationTest`, `ResetPasswordRequestDeserializationTest` |
 | `modules/auth/messaging` | `AuthMailEventConsumerRabbitMqIT`, `AuthMailEventConsumerTest`, `AuthMailEventHandlerTest` |
 | `modules/auth/oauth2` | `CookieOAuth2AuthorizationRequestRepositoryTest`, `CustomOidcUserServiceTest`, `CustomOidcUserTest`, `OAuth2AuthenticationFailureHandlerTest` |
 | `modules/auth/service/impl` | `AuthForgotPasswordEventServiceImplTest`, `AuthMailEventServiceImplTest`, `AuthResendVerificationEventServiceImplTest`, `AuthServiceImplTest`, `ForgotPasswordTimingEqualizerTest`, `OAuth2ExchangeCodeServiceImplTest`, `RefreshTokenPurgeJobTest`, `TokenServiceImplTest` |
-| `modules/auth/validation` | `UserStateValidatorTest` |
+| `modules/auth/validation` | `PasswordPolicyValidatorTest`, `UserStateValidatorTest` |
 | `modules/comment/config` | `CommentWebSocketConfigTest` |
 | `modules/comment/consumer` | `CommentNotificationConsumerIT` |
 | `modules/comment/controller` | `CommentControllerIT` |
-| `modules/comment/live` | `CommentStompSendAuthIT`, `CommentWebSocketAccountStatusIT`, `CommentWebSocketHandshakeRejectionIT`, `CommentWebSocketLiveDeliveryIT` |
+| `modules/comment/live` | `CommentLiveBlockFilterIT`, `CommentStompSendAuthIT`, `CommentWebSocketAccountStatusIT`, `CommentWebSocketHandshakeRejectionIT`, `CommentWebSocketLiveDeliveryIT` |
 | `modules/comment/repository` | `CommentKeysetRowLossIT`, `CommentTopLikedQueryIT` |
-| `modules/comment/service/impl` | `CommentAuthorEmbeddingIT`, `CommentCacheServiceImplTest`, `CommentModerationServiceImplTest`, `CommentPinnedTopCommentsIT`, `CommentServiceImplTest`, `CommentViewerStateIT`, `CommentViewerStateServiceImplTest` |
+| `modules/comment/service/impl` | `CommentAuthorEmbeddingIT`, `CommentModerationServiceImplTest`, `CommentPinnedTopCommentsIT`, `CommentServiceImplTest`, `CommentViewerStateIT`, `CommentViewerStateServiceImplTest` |
 | `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT`, `HashtagIndexSyncConsumerTest` |
 | `modules/hashtag/controller` | `HashtagControllerIT` |
 | `modules/hashtag/service/impl` | `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT` |
+| `modules/media/controller` | `MediaControllerIT` |
 | `modules/media/repository` | `MediaAssetRepositoryIT` |
-| `modules/media/service/impl` | `MediaEventServiceImplTest`, `MediaServiceImplTest` |
+| `modules/media/service/impl` | `MediaAssetRegistrarTest`, `MediaEventServiceImplTest`, `MediaServiceImplTest` |
 | `modules/media/storage` | `MediaStorageKeyGeneratorTest`, `R2ObjectStoragePresignServiceTest` |
 | `modules/media/validation` | `MediaMetadataValidatorTest` |
 | `modules/message/config` | `MessagePropertiesTest` |
@@ -298,7 +301,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: true`); 43 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: false`); 44 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -345,6 +348,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | V41 | add_comment_top_liked_index |
 | V42 | add_username_case_insensitive_index |
 | V43 | align_username_index_with_soft_delete_policy |
+| V44 | add_email_case_insensitive_index |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
