@@ -226,7 +226,8 @@ class CommentServiceImplTest {
                         .depth((short) 0)
                         .build();
         when(commentRepository.saveAndFlush(any())).thenReturn(saved);
-        when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(saved), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CommentResponse response = service.createComment(actorId, createRequest(null), null);
 
@@ -255,7 +256,8 @@ class CommentServiceImplTest {
                         .depth((short) 0)
                         .build();
         when(commentRepository.saveAndFlush(any())).thenReturn(saved);
-        when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(saved), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
         when(commentUserRepository.findByUsernameAndDeletedAtIsNull("unrelated"))
                 .thenReturn(
                         Optional.of(
@@ -365,7 +367,8 @@ class CommentServiceImplTest {
                 .thenReturn(Optional.of(comment));
         when(moderationService.check(any())).thenReturn(ModerationResult.approved());
         when(commentRepository.save(any())).thenReturn(comment);
-        when(mapper.toResponse(eq(comment), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(comment), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         service.editComment(actorId, commentId, new EditCommentRequest("updated"));
 
@@ -386,7 +389,8 @@ class CommentServiceImplTest {
                 .thenReturn(Optional.of(comment));
         when(moderationService.check(any())).thenReturn(ModerationResult.approved());
         when(commentRepository.save(any())).thenReturn(comment);
-        when(mapper.toResponse(eq(comment), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(comment), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         service.editComment(actorId, commentId, new EditCommentRequest("updated"));
 
@@ -714,7 +718,8 @@ class CommentServiceImplTest {
                 .thenReturn(List.of());
         when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(rows);
-        when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, null, null, limit);
@@ -738,7 +743,8 @@ class CommentServiceImplTest {
                 .thenReturn(List.of());
         when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(rows);
-        when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, null, null, limit);
@@ -831,7 +837,8 @@ class CommentServiceImplTest {
                 .thenReturn(pinned);
         when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any(), any()))
                 .thenReturn(comments(2));
-        when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, null, SECOND_PAGE_CURSOR, 5);
@@ -915,7 +922,7 @@ class CommentServiceImplTest {
         when(commentRepository.findTopLikedTopLevel(eq(postId), any(), any())).thenReturn(pinned);
         when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(body);
-        when(mapper.toResponse(any(), any(), anyBoolean()))
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
                 .thenAnswer(
                         invocation -> {
                             Comment c = invocation.getArgument(0);
@@ -936,6 +943,7 @@ class CommentServiceImplTest {
                 "hello world",
                 0,
                 false,
+                false,
                 0,
                 null,
                 null,
@@ -955,6 +963,7 @@ class CommentServiceImplTest {
                 (short) 0,
                 "hello world",
                 0,
+                false,
                 false,
                 0,
                 null,

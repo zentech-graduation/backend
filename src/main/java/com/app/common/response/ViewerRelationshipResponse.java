@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * The requesting viewer's relationship to another user, embedded wherever a response renders a
  * follow or block control for that user.
  *
- * <p>All four fields are always present and never null; an anonymous viewer or a self-reference
+ * <p>All five fields are always present and never null; an anonymous viewer or a self-reference
  * resolves to every field {@code false} rather than the field being omitted, so a client never has
  * to branch on presence. {@code isFollowing} and {@code isFollowRequested} are mutually exclusive:
  * the {@code follows} row for a pair is either {@code accepted} or {@code pending}, never both.
@@ -26,10 +26,20 @@ public record ViewerRelationshipResponse(
                 boolean isFollowRequested,
         @Schema(description = "This user has an accepted follow of the viewer", example = "false")
                 boolean isFollowedBy,
-        @Schema(description = "Viewer has blocked this user", example = "false")
-                boolean isBlocking) {
+        @Schema(description = "Viewer has blocked this user", example = "false") boolean isBlocking,
+        @Schema(
+                        description =
+                                "Viewer has already reported this user. True exactly when a new"
+                                        + " report from this viewer against this user would be"
+                                        + " rejected as a duplicate, so a client can disable the"
+                                        + " report control instead of submitting and handling the"
+                                        + " rejection. Remains true after a moderator resolves or"
+                                        + " dismisses the report, because that does not permit"
+                                        + " reporting the user again.",
+                        example = "false")
+                boolean hasReported) {
 
     /** Shared all-false instance for an anonymous viewer or a self-reference. */
     public static final ViewerRelationshipResponse NONE =
-            new ViewerRelationshipResponse(false, false, false, false);
+            new ViewerRelationshipResponse(false, false, false, false, false);
 }

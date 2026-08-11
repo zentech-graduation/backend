@@ -31,6 +31,8 @@ public interface PostMapper {
      *     service
      * @param isSaved whether the requesting viewer has saved this post, batch-resolved by the
      *     service
+     * @param hasReported whether the requesting viewer has already reported this post,
+     *     batch-resolved by the service
      * @return the post response with media, the embedded author, and viewer state
      */
     @Mapping(source = "post.id", target = "id")
@@ -41,12 +43,14 @@ public interface PostMapper {
     @Mapping(source = "author", target = "author")
     @Mapping(source = "isLiked", target = "isLiked")
     @Mapping(source = "isSaved", target = "isSaved")
+    @Mapping(source = "hasReported", target = "hasReported")
     PostResponse toResponse(
             Post post,
             List<PostMediaResponse> media,
             UserSummaryResponse author,
             boolean isLiked,
-            boolean isSaved);
+            boolean isSaved,
+            boolean hasReported);
 
     /**
      * Builds the feed-specific post response from the entity, the separately hydrated media items,
@@ -60,6 +64,8 @@ public interface PostMapper {
      *     service
      * @param isSaved whether the requesting viewer has saved this post, batch-resolved by the
      *     service
+     * @param hasReported whether the requesting viewer has already reported this post,
+     *     batch-resolved by the service
      * @return the feed post response with media, the embedded author, viewer state, and ranking
      *     score reserved as null
      */
@@ -71,13 +77,15 @@ public interface PostMapper {
     @Mapping(source = "author", target = "author")
     @Mapping(source = "isLiked", target = "isLiked")
     @Mapping(source = "isSaved", target = "isSaved")
+    @Mapping(source = "hasReported", target = "hasReported")
     @Mapping(target = "rankingScore", ignore = true)
     FeedPostResponse toFeedResponse(
             Post post,
             List<PostMediaResponse> media,
             UserSummaryResponse author,
             boolean isLiked,
-            boolean isSaved);
+            boolean isSaved,
+            boolean hasReported);
 
     /**
      * Combines a post media row with its referenced media asset for rendering.

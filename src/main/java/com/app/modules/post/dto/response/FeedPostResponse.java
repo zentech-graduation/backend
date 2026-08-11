@@ -29,6 +29,18 @@ public record FeedPostResponse(
         @Schema(description = "Number of saves; trigger-maintained.") int saveCount,
         @Schema(description = "Whether the viewer has liked this post.") boolean isLiked,
         @Schema(description = "Whether the viewer has saved this post.") boolean isSaved,
+        @Schema(
+                        description =
+                                "Whether the viewer has already reported this post. True exactly"
+                                        + " when a new report from this viewer against this post"
+                                        + " would be rejected as a duplicate, so a client can"
+                                        + " disable the report control instead of submitting and"
+                                        + " handling the rejection. Remains true after a"
+                                        + " moderator resolves or dismisses the report, because"
+                                        + " that does not permit reporting the post again. Always"
+                                        + " false for an anonymous viewer.",
+                        example = "false")
+                boolean hasReported,
         @Schema(description = "Number of views; updated by a background job and may lag.")
                 int viewCount,
         @Schema(description = "Free-form location label.", nullable = true) String locationName,

@@ -14,15 +14,18 @@ class ViewerRelationshipResponseTest {
         assertThat(none.isFollowRequested()).isFalse();
         assertThat(none.isFollowedBy()).isFalse();
         assertThat(none.isBlocking()).isFalse();
+        assertThat(none.hasReported()).isFalse();
     }
 
     @Test
     void construction_setsEachFieldIndependently() {
-        ViewerRelationshipResponse state = new ViewerRelationshipResponse(true, false, true, false);
+        ViewerRelationshipResponse state =
+                new ViewerRelationshipResponse(true, false, true, false, true);
 
         assertThat(state.isFollowing()).isTrue();
         assertThat(state.isFollowRequested()).isFalse();
         assertThat(state.isFollowedBy()).isTrue();
         assertThat(state.isBlocking()).isFalse();
+        assertThat(state.hasReported()).isTrue();
     }
 }

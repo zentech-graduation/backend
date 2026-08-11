@@ -15,17 +15,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.modules.comment.repository.CommentLikeRepository;
+import com.app.modules.report.service.ReportedTargetService;
 
 @ExtendWith(MockitoExtension.class)
 class CommentViewerStateServiceImplTest {
 
     @Mock private CommentLikeRepository commentLikeRepository;
+    @Mock private ReportedTargetService reportedTargetService;
 
     private CommentViewerStateServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new CommentViewerStateServiceImpl(commentLikeRepository);
+        service = new CommentViewerStateServiceImpl(commentLikeRepository, reportedTargetService);
     }
 
     @Test

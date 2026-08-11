@@ -213,9 +213,14 @@ public class CommentServiceImpl implements CommentService {
                                 .build());
         MDC.put("commentId", saved.getId().toString());
 
+        // hasReported is false without a lookup: the actor is the author of the comment just
+        // created, and self-reporting is rejected, so no report by them against it can exist.
         CommentResponse response =
                 mapper.toResponse(
-                        saved, loadAuthor(saved.getUserId()), loadIsLiked(actorId, saved.getId()));
+                        saved,
+                        loadAuthor(saved.getUserId()),
+                        loadIsLiked(actorId, saved.getId()),
+                        false);
 
         if (idempotencyKey != null) {
             idempotencyRepository.updateResponseBody(
@@ -257,11 +262,14 @@ public class CommentServiceImpl implements CommentService {
             // subsequent read returns rather than carrying JVM nanoseconds the column drops.
             comment.setEditedAt(OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS));
             Comment saved = commentRepository.save(comment);
+            // hasReported is false without a lookup: only the author may edit, and self-reporting
+            // is rejected, so no report by them against this comment can exist.
             CommentResponse response =
                     mapper.toResponse(
                             saved,
                             loadAuthor(saved.getUserId()),
-                            loadIsLiked(actorId, saved.getId()));
+                            loadIsLiked(actorId, saved.getId()),
+                            false);
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", saved.getPostId().toString());
@@ -528,16 +536,21 @@ public class CommentServiceImpl implements CommentService {
         List<Comment> all = new ArrayList<>(pinned.size() + page.size());
         all.addAll(pinned);
         all.addAll(page);
-        // Both batch loaders are called once over the pinned block and the body together, so the
+        // Every batch loader is called once over the pinned block and the body together, so the
         // pinned block adds no query and the query count stays flat in page size.
         Map<UUID, UserSummaryResponse> authors =
                 userSummaryService.loadSummaries(all.stream().map(Comment::getUserId).toList());
-        Set<UUID> likedCommentIds =
-                commentViewerStateService.loadLikedCommentIds(
-                        viewerId, all.stream().map(Comment::getId).toList());
+        List<UUID> allIds = all.stream().map(Comment::getId).toList();
+        Set<UUID> likedCommentIds = commentViewerStateService.loadLikedCommentIds(viewerId, allIds);
+        Set<UUID> reportedCommentIds =
+                commentViewerStateService.loadReportedCommentIds(viewerId, allIds);
         List<CommentResponse> content = new ArrayList<>(all.size());
-        pinned.forEach(c -> content.add(toResponse(c, authors, likedCommentIds).asPinned()));
-        page.forEach(c -> content.add(toResponse(c, authors, likedCommentIds)));
+        pinned.forEach(
+                c ->
+                        content.add(
+                                toResponse(c, authors, likedCommentIds, reportedCommentIds)
+                                        .asPinned()));
+        page.forEach(c -> content.add(toResponse(c, authors, likedCommentIds, reportedCommentIds)));
         // Cursors describe the newest-first body only. Deriving them from the pinned block would
         // seek the next page to an arbitrary position in the stream.
         Comment first = page.isEmpty() ? null : page.get(0);
@@ -559,11 +572,15 @@ public class CommentServiceImpl implements CommentService {
     }
 
     private CommentResponse toResponse(
-            Comment comment, Map<UUID, UserSummaryResponse> authors, Set<UUID> likedCommentIds) {
+            Comment comment,
+            Map<UUID, UserSummaryResponse> authors,
+            Set<UUID> likedCommentIds,
+            Set<UUID> reportedCommentIds) {
         return mapper.toResponse(
                 comment,
                 authors.get(comment.getUserId()),
-                likedCommentIds.contains(comment.getId()));
+                likedCommentIds.contains(comment.getId()),
+                reportedCommentIds.contains(comment.getId()));
     }
 
     // Resolves a single author's public summary; the create and edit paths return exactly one
