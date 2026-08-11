@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `GET /comments/{commentId}/deletion-scope` reports how many comments deleting a comment would remove, so a confirmation dialogue can state the real scope of a subtree removal instead of the direct-reply count. The number is an estimate; the delete's own response is authoritative.
 - A tracked seed script creates a fixed set of local development accounts, a follow graph, and published posts, so a fresh clone no longer produces a running application with no way to log in; it writes only to the local compose database and refuses to run against any other.
 - `CONTRIBUTING.md` now documents how to seed a fresh environment and which accounts that leaves you with.
 - Outbound email can now be delivered over SMTP as well as through the hosted provider, selected by the `app.mail.transport` setting.
@@ -31,6 +32,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
 
 ### Changed
+- Deleting a comment now returns how many comments were removed, counting the comment itself plus every descendant at any depth. The response body previously carried no data at all, so a client had no way to tell that deleting a comment with one visible reply had removed eleven.
+- `comment.deleted.v1` now carries the same count, so a live subscriber can remove the whole subtree instead of leaving its descendants rendered as orphans.
+- Liking your own comment is now permitted and returns 200, matching the existing behaviour of post likes; it previously returned 403 with a message describing a permission failure when the real reason was a product rule. A self-like still produces no notification.
 - The mail provider credential moved from a root-level setting into the provider's own configuration group; the `RESEND_API_KEY` environment variable is unchanged.
 - Selecting no mail transport, or an unrecognised one, now fails at startup instead of resolving to a default.
 - The mail health indicator is disabled, so a briefly unreachable mail server no longer makes the application report itself unhealthy.

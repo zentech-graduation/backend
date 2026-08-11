@@ -34,6 +34,7 @@ import com.app.common.security.util.SecurityUtils;
 import com.app.modules.comment.config.CommentProperties;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
 import com.app.modules.comment.dto.request.EditCommentRequest;
+import com.app.modules.comment.dto.response.CommentDeletionScopeResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.entity.Comment;
 import com.app.modules.comment.entity.CommentLike;
@@ -277,7 +278,7 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public void deleteComment(UUID actorId, UUID commentId) {
+    public CommentDeletionScopeResponse deleteComment(UUID actorId, UUID commentId) {
         putWriteMdc(commentId, actorId);
         try {
             Comment comment =
@@ -288,7 +289,10 @@ public class CommentServiceImpl implements CommentService {
                 throw new AppException(ApiErrorCode.COMMENT_FORBIDDEN);
             }
             MDC.put("postId", comment.getPostId().toString());
-            commentRepository.softDeleteSubtree(commentId, OffsetDateTime.now());
+            // The statement's own affected-row count is the authoritative figure for how many
+            // comments this delete removed; no second query can match it without a race.
+            int deletedCommentCount =
+                    commentRepository.softDeleteSubtree(commentId, OffsetDateTime.now());
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", comment.getPostId().toString());
@@ -297,6 +301,9 @@ public class CommentServiceImpl implements CommentService {
             // comment, and the fan-out filter must key off who authored the content, not who
             // performed this action.
             data.put("commentOwnerId", comment.getUserId().toString());
+            // A single delete event stands for a whole subtree, so a live subscriber that removed
+            // only the named comment would leave its descendants rendered as orphans.
+            data.put("deletedCommentCount", deletedCommentCount);
             if (comment.getRootId() != null) {
                 data.put("rootId", comment.getRootId().toString());
             }
@@ -307,9 +314,30 @@ public class CommentServiceImpl implements CommentService {
                     comment.getId(),
                     actorId,
                     data);
+            return new CommentDeletionScopeResponse(deletedCommentCount);
         } finally {
             clearWriteMdc();
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CommentDeletionScopeResponse getDeletionScope(UUID actorId, UUID commentId) {
+        Comment comment =
+                commentRepository
+                        .findByIdAndDeletedAtIsNull(commentId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
+        // The delete this previews answers a non-owner with 403, which confirms the comment
+        // exists. A read-only preview has no reason to concede that, so every caller without the
+        // authority to delete gets the same answer as one asking about a comment that is not
+        // there.
+        // Deliberately no post-visibility gate: the delete has none either, so a user whose comment
+        // sits on a post that has since become invisible to them can still delete it, and a
+        // preview that refused would block a dialogue for an action that goes on to succeed.
+        if (!comment.getUserId().equals(actorId) && !isCurrentUserAdmin()) {
+            throw new AppException(ApiErrorCode.COMMENT_NOT_FOUND);
+        }
+        return new CommentDeletionScopeResponse(commentRepository.countSubtree(commentId));
     }
 
     @Override
@@ -327,9 +355,6 @@ public class CommentServiceImpl implements CommentService {
                             .findById(comment.getPostId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
             assertCanRead(actorId, post);
-            if (comment.getUserId().equals(actorId)) {
-                throw new AppException(ApiErrorCode.COMMENT_FORBIDDEN);
-            }
             if (commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId)) {
                 throw new AppException(ApiErrorCode.COMMENT_ALREADY_LIKED);
             }

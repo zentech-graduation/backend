@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -45,6 +46,7 @@ import com.app.common.security.user.UserPrincipal;
 import com.app.modules.comment.config.CommentProperties;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
 import com.app.modules.comment.dto.request.EditCommentRequest;
+import com.app.modules.comment.dto.response.CommentDeletionScopeResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.entity.Comment;
 import com.app.modules.comment.entity.CommentWriteIdempotency;
@@ -409,6 +411,80 @@ class CommentServiceImplTest {
     }
 
     @Test
+    void deleteComment_success_returnsAndPublishesTheAffectedRowCount() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(commentRepository.softDeleteSubtree(eq(commentId), any())).thenReturn(11);
+
+        CommentDeletionScopeResponse response = service.deleteComment(actorId, commentId);
+
+        assertThat(response.deletedCommentCount()).isEqualTo(11);
+        ArgumentCaptor<java.util.Map<String, Object>> data = ArgumentCaptor.forClass(Map.class);
+        verify(outboxService)
+                .enqueue(
+                        eq(CommentEventTypes.COMMENT_DELETED_V1),
+                        any(),
+                        any(),
+                        eq(commentId),
+                        eq(actorId),
+                        data.capture());
+        assertThat(data.getValue()).containsEntry("deletedCommentCount", 11);
+    }
+
+    @Test
+    void getDeletionScope_owner_returnsTheSubtreeCount() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(commentRepository.countSubtree(commentId)).thenReturn(11);
+
+        assertThat(service.getDeletionScope(actorId, commentId).deletedCommentCount())
+                .isEqualTo(11);
+    }
+
+    @Test
+    void getDeletionScope_notOwner_throwsNotFoundRatherThanForbidden() {
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+
+        assertThatThrownBy(() -> service.getDeletionScope(actorId, commentId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.COMMENT_NOT_FOUND);
+        verify(commentRepository, never()).countSubtree(any());
+    }
+
+    @Test
+    void getDeletionScope_admin_isAllowedOnAnotherUsersComment() {
+        UUID adminId = UUID.randomUUID();
+        UserPrincipal admin = new UserPrincipal(adminId, "admin@test", "ADMIN", "ACTIVE");
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken(
+                                admin, null, admin.getAuthorities()));
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(commentRepository.countSubtree(commentId)).thenReturn(4);
+
+        assertThat(service.getDeletionScope(adminId, commentId).deletedCommentCount()).isEqualTo(4);
+    }
+
+    @Test
+    void getDeletionScope_missingComment_throwsNotFound() {
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getDeletionScope(actorId, commentId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.COMMENT_NOT_FOUND);
+    }
+
+    @Test
     void deleteComment_admin_allowed() {
         UUID adminId = UUID.randomUUID();
         UserPrincipal admin = new UserPrincipal(adminId, "admin@test", "ADMIN", "ACTIVE");
@@ -427,16 +503,26 @@ class CommentServiceImplTest {
     }
 
     @Test
-    void likeComment_ownComment_throwsForbidden() {
+    void likeComment_ownComment_persistsAndEnqueues() {
         Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        assertThatThrownBy(() -> service.likeComment(actorId, commentId))
-                .isInstanceOf(AppException.class)
-                .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.COMMENT_FORBIDDEN);
+        when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
+                .thenReturn(false);
+
+        service.likeComment(actorId, commentId);
+
+        verify(commentLikeRepository).saveAndFlush(any());
+        verify(outboxService)
+                .enqueue(
+                        eq(CommentEventTypes.COMMENT_LIKED_V1),
+                        any(),
+                        any(),
+                        eq(commentId),
+                        eq(actorId),
+                        anyMap());
     }
 
     @Test

@@ -326,6 +326,242 @@ class CommentControllerIT {
         assertThat(contentOf(replies)).isEmpty();
     }
 
+    @Test
+    void likeComment_ownComment_succeedsAndIncrementsLikeCount() {
+        TestUser author = registerUser("selflike_author");
+        UUID postId = createImagePost(author, "self-like post");
+        UUID commentId = createComment(author, postId, null, "my own comment", null);
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/comments/" + commentId + "/like",
+                        HttpMethod.POST,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(likeCount(commentId)).isEqualTo(1);
+    }
+
+    @Test
+    void likeComment_ownCommentTwice_returnsConflict() {
+        TestUser author = registerUser("selflike_twice");
+        UUID postId = createImagePost(author, "self-like twice post");
+        UUID commentId = createComment(author, postId, null, "my own comment", null);
+        rest.exchange(
+                "/api/v1/comments/" + commentId + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(author)),
+                Map.class);
+
+        ResponseEntity<Map> second =
+                rest.exchange(
+                        "/api/v1/comments/" + commentId + "/like",
+                        HttpMethod.POST,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(second.getBody().get("code")).isEqualTo("COMMENT_ALREADY_LIKED");
+        assertThat(likeCount(commentId)).isEqualTo(1);
+    }
+
+    @Test
+    void deleteComment_subtree_reportsTheNumberOfCommentsRemoved() {
+        TestUser author = registerUser("delcount_author");
+        UUID postId = createImagePost(author, "delete count post");
+        Tree tree = buildTree(author, postId);
+
+        ResponseEntity<Map> deleted =
+                rest.exchange(
+                        "/api/v1/comments/" + tree.target() + "",
+                        HttpMethod.DELETE,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+
+        assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(deleted).get("deletedCommentCount")).isEqualTo(5);
+        assertThat(softDeletedCount(postId)).isEqualTo(5);
+        // The sibling outside the subtree is untouched.
+        assertThat(topLevelCount(postId)).isEqualTo(1);
+    }
+
+    @Test
+    void deleteComment_subtree_postCommentCountDropsByTheReportedCount() {
+        TestUser author = registerUser("delcount_counter");
+        UUID postId = createImagePost(author, "delete counter post");
+        Tree tree = buildTree(author, postId);
+        int before = commentCount(postId);
+
+        ResponseEntity<Map> deleted =
+                rest.exchange(
+                        "/api/v1/comments/" + tree.target(),
+                        HttpMethod.DELETE,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+
+        int reported = (Integer) dataOf(deleted).get("deletedCommentCount");
+        assertThat(before).isEqualTo(6);
+        assertThat(commentCount(postId)).isEqualTo(before - reported);
+    }
+
+    @Test
+    void deletionScope_matchesWhatTheDeleteActuallyRemoves() {
+        TestUser author = registerUser("scope_author");
+        UUID postId = createImagePost(author, "scope post");
+        Tree tree = buildTree(author, postId);
+
+        ResponseEntity<Map> scope =
+                getWithAuth("/api/v1/comments/" + tree.target() + "/deletion-scope", author);
+        assertThat(scope.getStatusCode()).isEqualTo(HttpStatus.OK);
+        int estimated = (Integer) dataOf(scope).get("deletedCommentCount");
+
+        // The estimate is not the direct-reply count; that is the confusion this endpoint exists
+        // to remove.
+        assertThat(replyCount(tree.target())).isEqualTo(2);
+        assertThat(estimated).isEqualTo(5);
+
+        ResponseEntity<Map> deleted =
+                rest.exchange(
+                        "/api/v1/comments/" + tree.target(),
+                        HttpMethod.DELETE,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+        assertThat(dataOf(deleted).get("deletedCommentCount")).isEqualTo(estimated);
+    }
+
+    @Test
+    void deletionScope_excludesAlreadySoftDeletedDescendants() {
+        TestUser author = registerUser("scope_predeleted");
+        UUID postId = createImagePost(author, "scope predeleted post");
+        Tree tree = buildTree(author, postId);
+
+        // Removing branch B first leaves T with A, A1, A2 live and B soft-deleted.
+        rest.exchange(
+                "/api/v1/comments/" + tree.b(),
+                HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders(author)),
+                Map.class);
+
+        ResponseEntity<Map> scope =
+                getWithAuth("/api/v1/comments/" + tree.target() + "/deletion-scope", author);
+
+        assertThat(scope.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(scope).get("deletedCommentCount")).isEqualTo(4);
+
+        ResponseEntity<Map> deleted =
+                rest.exchange(
+                        "/api/v1/comments/" + tree.target(),
+                        HttpMethod.DELETE,
+                        new HttpEntity<>(authHeaders(author)),
+                        Map.class);
+        assertThat(dataOf(deleted).get("deletedCommentCount")).isEqualTo(4);
+    }
+
+    @Test
+    void deletionScope_leafComment_returnsOne() {
+        TestUser author = registerUser("scope_leaf");
+        UUID postId = createImagePost(author, "scope leaf post");
+        UUID leaf = createComment(author, postId, null, "a leaf", null);
+
+        ResponseEntity<Map> scope =
+                getWithAuth("/api/v1/comments/" + leaf + "/deletion-scope", author);
+
+        assertThat(scope.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(scope).get("deletedCommentCount")).isEqualTo(1);
+    }
+
+    @Test
+    void deletionScope_callerIsNotTheOwner_returnsNotFound() {
+        TestUser author = registerUser("scope_owner");
+        TestUser stranger = registerUser("scope_stranger");
+        UUID postId = createImagePost(author, "scope ownership post");
+        UUID commentId = createComment(author, postId, null, "not yours", null);
+
+        ResponseEntity<Map> scope =
+                getWithAuth("/api/v1/comments/" + commentId + "/deletion-scope", stranger);
+
+        assertThat(scope.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(scope.getBody().get("code")).isEqualTo("COMMENT_NOT_FOUND");
+    }
+
+    @Test
+    void deletionScope_deletedComment_returnsNotFound() {
+        TestUser author = registerUser("scope_gone");
+        UUID postId = createImagePost(author, "scope gone post");
+        UUID commentId = createComment(author, postId, null, "about to go", null);
+        rest.exchange(
+                "/api/v1/comments/" + commentId,
+                HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders(author)),
+                Map.class);
+
+        ResponseEntity<Map> scope =
+                getWithAuth("/api/v1/comments/" + commentId + "/deletion-scope", author);
+
+        assertThat(scope.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void deleteComment_subtree_deletedEventCarriesTheCount() {
+        TestUser author = registerUser("delevent_author");
+        UUID postId = createImagePost(author, "delete event post");
+        Tree tree = buildTree(author, postId);
+
+        rest.exchange(
+                "/api/v1/comments/" + tree.target(),
+                HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders(author)),
+                Map.class);
+
+        String payload =
+                jdbcTemplate.queryForObject(
+                        "SELECT payload::text FROM outbox_events WHERE aggregate_id = ? AND"
+                                + " event_type = 'comment.deleted.v1'",
+                        String.class,
+                        tree.target());
+        assertThat(payload).contains("\"deletedCommentCount\": 5");
+    }
+
+    private record Tree(UUID sibling, UUID target, UUID a, UUID b, UUID a1, UUID a2) {}
+
+    /**
+     * Builds a tree of a fixed, explicitly recorded shape on the supplied post.
+     *
+     * <pre>
+     * S1            depth 0   sibling of the target, must survive the delete
+     * T             depth 0   delete target
+     *   A           depth 1
+     *     A1        depth 2
+     *     A2        depth 2
+     *   B           depth 1
+     * </pre>
+     *
+     * Post total 6. Target subtree 5 (1 at depth 0, 2 at depth 1, 2 at depth 2). {@code
+     * T.reply_count} is 2, which is deliberately different from the subtree size.
+     */
+    private Tree buildTree(TestUser user, UUID postId) {
+        UUID sibling = createComment(user, postId, null, "sibling S1", null);
+        UUID target = createComment(user, postId, null, "target T", null);
+        UUID a = createComment(user, postId, target, "branch A", null);
+        UUID b = createComment(user, postId, target, "branch B", null);
+        UUID a1 = createComment(user, postId, a, "leaf A1", null);
+        UUID a2 = createComment(user, postId, a, "leaf A2", null);
+        return new Tree(sibling, target, a, b, a1, a2);
+    }
+
+    private int softDeletedCount(UUID postId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM comments WHERE post_id = ? AND deleted_at IS NOT NULL",
+                Integer.class,
+                postId);
+    }
+
+    private static Map<?, ?> dataOf(ResponseEntity<Map> response) {
+        assertThat(response.getBody()).isNotNull();
+        return (Map<?, ?>) response.getBody().get("data");
+    }
+
     private UUID createComment(
             TestUser user, UUID postId, UUID parentId, String content, String idempotencyKey) {
         Map<String, Object> body = new HashMap<>();

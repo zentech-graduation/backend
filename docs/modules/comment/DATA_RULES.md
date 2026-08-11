@@ -56,8 +56,11 @@ This is a deliberate departure from the enum-as-constraint-layer rule in `GLOBAL
 | `root_id` is set to the top-level ancestor's `id` for replies at any depth | `CommentServiceImpl.create` — `parent.getRootId() != null ? parent.getRootId() : parent.getId()` |
 | `depth` is set to `parent.depth + 1` when creating a reply | `CommentServiceImpl.create` |
 | A comment whose `depth` would exceed 10 is rejected before the database call | `CommentServiceImpl.create` — throws `COMMENT_DEPTH_EXCEEDED` (400) |
-| A user cannot like their own comment | `CommentServiceImpl.like` — throws `COMMENT_FORBIDDEN` (403) |
-| Soft delete sets `deleted_at` on the comment **and its whole subtree** in one statement | `CommentRepository.softDeleteSubtree`, called by `CommentServiceImpl.delete` |
+| A user may like their own comment, matching post likes | `CommentServiceImpl.likeComment` — no owner check |
+| Soft delete sets `deleted_at` on the comment **and its whole subtree** in one statement | `CommentRepository.softDeleteSubtree`, called by `CommentServiceImpl.deleteComment` |
+| The delete reports how many comments it removed, counting the target itself | `CommentServiceImpl.deleteComment` returns the statement's own affected-row count as `deletedCommentCount`, and puts the same number in `comment.deleted.v1` |
+| The same number is available before the delete, under the same name and the same definition | `CommentServiceImpl.getDeletionScope` via `CommentRepository.countSubtree` |
+| A caller without the authority to delete a comment cannot read its deletion scope | `CommentServiceImpl.getDeletionScope` — owner or admin, answering `COMMENT_NOT_FOUND` (404) rather than 403 to anyone else |
 | Soft-deleted comments are excluded from every query | `@SQLRestriction("deleted_at IS NULL")` on the `Comment` entity |
 | Only the comment owner may edit their comment | `CommentServiceImpl.edit` — throws `COMMENT_FORBIDDEN` (403) |
 | Only the comment owner **or an admin** may soft-delete a comment | `CommentServiceImpl.delete` — owner check with an admin override |
@@ -72,6 +75,7 @@ This is a deliberate departure from the enum-as-constraint-layer rule in `GLOBAL
 | Replying to a comment generates a `reply_comment` notification for the parent comment owner | `CommentNotificationConsumer`, from `comment.created.v1` |
 | User mentions in comment `content` generate `mention_comment` notifications | `CommentNotificationConsumer`, from the `mentionedUserIds` event field |
 | Liking a comment generates a `like_comment` notification | `CommentNotificationConsumer`, from `comment.liked.v1` |
+| No notification is created when the actor is also the recipient | `NotificationServiceImpl.create` — a single general guard covering every notification type, so a self-like or a self-reply produces no row |
 | A user may only comment on a post that is visible to them | `CommentAccessPolicyServiceImpl.assertCanComment` — delegates to `PostVisibilityService.isVisibleTo`, throws `POST_COMMENTING_RESTRICTED` |
 | The viewer's per-row like state is batch-resolved, never per row | `CommentViewerStateServiceImpl` |
 
@@ -112,6 +116,12 @@ Pinning a fixed-size block to the first page is what keeps the ranking visible w
   There is no classifier, no review queue, and no appeal path; `moderation_status` exists to support one later without a schema change.
 - The Redis recent-comment cache is best-effort.
   A cache failure degrades to a database read; it never fails the request.
+- The pre-delete deletion scope is an estimate, not a reservation.
+  The subtree can grow or shrink between the scope call and the delete, and no lock is taken to prevent that.
+  The confirmation dialogue shows the estimate; the delete's own return value is authoritative.
+  Closing the gap would mean locking a subtree across two requests, which costs more than the discrepancy it prevents.
+- The deletion scope counts every comment the delete would remove, including replies by users the caller has blocked.
+  Filtering those out would make the number disagree with what the delete does, which is the defect the endpoint exists to close.
 - Top comments are pinned to the first page only, rather than the whole list being ranked by like count.
   A full ranking would put a mutable column in the keyset sort key, which is the defect class the `(created_at, id)` cursor exists to prevent.
   The accepted degradation is that a highly-liked comment is not surfaced anywhere on page two onward.

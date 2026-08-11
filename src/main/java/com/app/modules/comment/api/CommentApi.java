@@ -24,6 +24,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
 import com.app.modules.comment.dto.request.EditCommentRequest;
+import com.app.modules.comment.dto.response.CommentDeletionScopeResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -218,14 +219,47 @@ public interface CommentApi {
             @Valid @RequestBody EditCommentRequest request);
 
     @Operation(
-            summary = "Delete a comment",
+            summary = "Count the comments a deletion would remove",
             description =
-                    "Soft-deletes a comment and its entire subtree. Owner or admin only; returns"
-                            + " 200 with an empty body.")
+                    "Reports how many comments deleting this comment would soft-delete, counting"
+                            + " the comment itself plus every descendant at any depth and excluding"
+                            + " descendants already soft-deleted. Intended for the confirmation"
+                            + " dialogue shown before the delete, because `replyCount` counts only"
+                            + " direct replies and understates the scope of a subtree removal."
+                            + " The number is an estimate, not a reservation: the subtree can"
+                            + " change between this call and the delete, and no lock is taken to"
+                            + " prevent that, so treat the count returned by the delete itself as"
+                            + " the authoritative figure. Requires the same authority as the"
+                            + " delete; anything the caller may not delete is reported as not"
+                            + " found rather than forbidden.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment soft-deleted"),
+                description = "Number of comments the deletion would cover"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description =
+                        "Comment not found, already deleted, or not deletable by the requester",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.DELETION_SCOPE)
+    ResponseEntity<ApiResponse<CommentDeletionScopeResponse>> getDeletionScope(
+            @PathVariable("commentId") UUID commentId);
+
+    @Operation(
+            summary = "Delete a comment",
+            description =
+                    "Soft-deletes a comment and its entire subtree. Owner or admin only; returns"
+                            + " the number of comments actually removed, counting the comment"
+                            + " itself.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Comment soft-deleted, with the number of comments removed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is neither the owner nor an admin",
@@ -243,16 +277,21 @@ public interface CommentApi {
     })
     @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.BY_ID)
-    ResponseEntity<ApiResponse<Void>> deleteComment(@PathVariable("commentId") UUID commentId);
+    ResponseEntity<ApiResponse<CommentDeletionScopeResponse>> deleteComment(
+            @PathVariable("commentId") UUID commentId);
 
-    @Operation(summary = "Like a comment", description = "Adds the caller's like to a comment.")
+    @Operation(
+            summary = "Like a comment",
+            description =
+                    "Adds the caller's like to a comment. Self-like is permitted and produces no"
+                            + " notification.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Comment liked"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "Cannot like your own comment",
+                description = "Post hidden by a block or a private account",
                 content =
                         @Content(
                                 mediaType = "application/json",
