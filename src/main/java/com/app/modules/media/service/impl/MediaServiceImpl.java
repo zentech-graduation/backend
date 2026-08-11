@@ -1,13 +1,10 @@
 package com.app.modules.media.service.impl;
 
 import java.net.URI;
-import java.sql.SQLException;
 import java.util.Locale;
 import java.util.UUID;
 
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.app.common.enums.ApiErrorCode;
@@ -20,9 +17,6 @@ import com.app.modules.media.dto.request.MediaUploadUrlRequest;
 import com.app.modules.media.dto.response.MediaAssetResponse;
 import com.app.modules.media.dto.response.MediaUploadUrlResponse;
 import com.app.modules.media.entity.MediaAsset;
-import com.app.modules.media.mapper.MediaAssetMapper;
-import com.app.modules.media.repository.MediaAssetRepository;
-import com.app.modules.media.service.MediaEventService;
 import com.app.modules.media.service.MediaService;
 import com.app.modules.media.storage.MediaStorageKeyGenerator;
 import com.app.modules.media.storage.ObjectStorageMetadataService;
@@ -36,37 +30,30 @@ public class MediaServiceImpl implements MediaService {
 
     private static final String MAX_MEDIA_SIZE_SETTING_KEY = "max_media_size_mb";
     private static final String STORAGE_KEY_PREFIX_TEMPLATE = "users/%s/media/";
-    private static final String UNIQUE_VIOLATION_SQL_STATE = "23505";
 
-    private final MediaAssetRepository mediaAssetRepository;
     private final MediaMetadataValidator metadataValidator;
     private final SystemSettingService systemSettingService;
-    private final MediaEventService mediaEventService;
-    private final MediaAssetMapper mediaAssetMapper;
     private final MediaProperties mediaProperties;
     private final MediaStorageKeyGenerator storageKeyGenerator;
     private final ObjectStoragePresignService objectStoragePresignService;
     private final ObjectStorageMetadataService objectStorageMetadataService;
+    private final MediaAssetRegistrar mediaAssetRegistrar;
 
     public MediaServiceImpl(
-            MediaAssetRepository mediaAssetRepository,
             MediaMetadataValidator metadataValidator,
             SystemSettingService systemSettingService,
-            MediaEventService mediaEventService,
-            MediaAssetMapper mediaAssetMapper,
             MediaProperties mediaProperties,
             MediaStorageKeyGenerator storageKeyGenerator,
             ObjectStoragePresignService objectStoragePresignService,
-            ObjectStorageMetadataService objectStorageMetadataService) {
-        this.mediaAssetRepository = mediaAssetRepository;
+            ObjectStorageMetadataService objectStorageMetadataService,
+            MediaAssetRegistrar mediaAssetRegistrar) {
         this.metadataValidator = metadataValidator;
         this.systemSettingService = systemSettingService;
-        this.mediaEventService = mediaEventService;
-        this.mediaAssetMapper = mediaAssetMapper;
         this.mediaProperties = mediaProperties;
         this.storageKeyGenerator = storageKeyGenerator;
         this.objectStoragePresignService = objectStoragePresignService;
         this.objectStorageMetadataService = objectStorageMetadataService;
+        this.mediaAssetRegistrar = mediaAssetRegistrar;
     }
 
     @Override
@@ -91,7 +78,6 @@ public class MediaServiceImpl implements MediaService {
     }
 
     @Override
-    @Transactional
     public MediaAssetResponse completeUpload(MediaUploadCompleteRequest request) {
         UUID currentUserId = SecurityUtils.getCurrentUserId();
         long maxMediaSizeMegabytes =
@@ -99,18 +85,20 @@ public class MediaServiceImpl implements MediaService {
         ValidatedMediaMetadata metadata =
                 metadataValidator.validate(request, maxMediaSizeMegabytes);
         validateStorageKeyOwnership(metadata.storageKey(), currentUserId);
+        String cdnUrl = buildCdnUrl(metadata.storageKey());
 
-        if (mediaAssetRepository.existsByStorageKey(metadata.storageKey())) {
-            throw new AppException(ApiErrorCode.MEDIA_STORAGE_KEY_ALREADY_EXISTS);
-        }
-
+        // Deliberately outside the write transaction. A head-object is a network round trip, and
+        // holding a pooled connection across it would let an R2 latency spike exhaust the pool at
+        // DB_POOL_MAX concurrent uploads, stalling every request in the application rather than
+        // only media ones. The cost is that a duplicate storage key now pays for a probe before
+        // the duplicate check rejects it, which is an edge case, not the hot path.
         verifyUploadedObjectMatches(metadata);
 
         MediaAsset mediaAsset =
                 MediaAsset.builder()
                         .userId(currentUserId)
                         .storageKey(metadata.storageKey())
-                        .cdnUrl(buildCdnUrl(metadata.storageKey()))
+                        .cdnUrl(cdnUrl)
                         .mediaType(metadata.mediaType())
                         .mimeType(metadata.mimeType())
                         .fileSize(metadata.fileSize())
@@ -120,16 +108,7 @@ public class MediaServiceImpl implements MediaService {
                         .blurhash(metadata.blurhash())
                         .build();
 
-        try {
-            MediaAsset saved = mediaAssetRepository.insert(mediaAsset);
-            mediaEventService.publishMediaUploaded(saved);
-            return mediaAssetMapper.toResponse(saved);
-        } catch (DataIntegrityViolationException ex) {
-            if (isUniqueViolation(ex)) {
-                throw new AppException(ApiErrorCode.MEDIA_STORAGE_KEY_ALREADY_EXISTS);
-            }
-            throw ex;
-        }
+        return mediaAssetRegistrar.register(mediaAsset);
     }
 
     /**
@@ -177,18 +156,6 @@ public class MediaServiceImpl implements MediaService {
         if (!storageKey.startsWith(expectedPrefix)) {
             throw new AppException(ApiErrorCode.MEDIA_INVALID_METADATA);
         }
-    }
-
-    private static boolean isUniqueViolation(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof SQLException sqlException
-                    && UNIQUE_VIOLATION_SQL_STATE.equals(sqlException.getSQLState())) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 
     private String buildCdnUrl(String storageKey) {
