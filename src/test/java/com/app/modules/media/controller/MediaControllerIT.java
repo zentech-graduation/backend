@@ -6,6 +6,9 @@ import static org.mockito.Mockito.when;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -32,6 +36,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.modules.mail.service.MailService;
 import com.app.modules.media.storage.ObjectStorageMetadataService;
+import com.zaxxer.hikari.HikariDataSource;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -84,11 +89,13 @@ class MediaControllerIT {
     @Autowired private TestRestTemplate rest;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private JwtTokenProvider jwtTokenProvider;
+    @Autowired private DataSource dataSource;
 
     private record TestUser(UUID id, String token) {}
 
     @AfterEach
     void cleanup() {
+        jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM media_assets");
         jdbcTemplate.update("DELETE FROM users");
     }
@@ -141,6 +148,38 @@ class MediaControllerIT {
     }
 
     @Test
+    void completeUpload_holdsNoDatabaseConnectionWhileTheStorageProbeRuns() {
+        TestUser user = createUser("media_probe_owner");
+        String storageKey = "users/%s/media/probe.jpg".formatted(user.id());
+        AtomicInteger activeConnectionsDuringProbe = new AtomicInteger(-1);
+        AtomicBoolean transactionActiveDuringProbe = new AtomicBoolean(true);
+        when(objectStorageMetadataService.findObjectMetadata(storageKey))
+                .thenAnswer(
+                        invocation -> {
+                            activeConnectionsDuringProbe.set(
+                                    dataSource
+                                            .unwrap(HikariDataSource.class)
+                                            .getHikariPoolMXBean()
+                                            .getActiveConnections());
+                            transactionActiveDuringProbe.set(
+                                    TransactionSynchronizationManager.isActualTransactionActive());
+                            return Optional.of(
+                                    new ObjectStorageMetadataService.StoredObjectMetadata(
+                                            1024L, "image/jpeg"));
+                        });
+
+        ResponseEntity<Map> response = completeUpload(user, storageKey, "image/jpeg", 1024L);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        assertThat(activeConnectionsDuringProbe)
+                .as("the storage round trip must not occupy a pooled database connection")
+                .hasValue(0);
+        assertThat(transactionActiveDuringProbe)
+                .as("the storage probe must complete before the write transaction begins")
+                .isFalse();
+    }
+
+    @Test
     void completeUpload_storedObjectMatchesSubmittedMetadata_returns201AndPersistsRow() {
         TestUser user = createUser("media_match_owner");
         String storageKey = "users/%s/media/present.jpg".formatted(user.id());
@@ -154,6 +193,11 @@ class MediaControllerIT {
 
         assertThat(response.getStatusCode().value()).isEqualTo(201);
         assertThat(countMediaAssets(storageKey)).isEqualTo(1);
+        // OutboxService.enqueue is PROPAGATION.MANDATORY, so it throws unless a transaction is
+        // already active. An outbox row therefore proves the write half still runs transactionally
+        // after the probe was moved out of it, including through the package-private registrar's
+        // CGLIB proxy, where a silently unapplied @Transactional would otherwise go unnoticed.
+        assertThat(countOutboxEvents()).isEqualTo(1);
     }
 
     @SuppressWarnings("rawtypes")
@@ -172,6 +216,10 @@ class MediaControllerIT {
                 HttpMethod.POST,
                 new HttpEntity<>(body, headers),
                 Map.class);
+    }
+
+    private Integer countOutboxEvents() {
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox_events", Integer.class);
     }
 
     private Integer countMediaAssets(String storageKey) {
