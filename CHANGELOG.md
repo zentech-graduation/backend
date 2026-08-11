@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Outbound email can now be delivered over SMTP as well as through the hosted provider, selected by the `app.mail.transport` setting.
+- Local development now sends every message to a Mailpit inbox started by `docker compose`, so a fresh clone can register an account, open the verification link, and log in without a provider credential or a manual database edit.
+- The application refuses to start when the SMTP transport is selected outside the development profile, so an environment variable cannot silently divert production mail into a local sink.
 - Refresh tokens are now also issued as an `HttpOnly`, `SameSite`-scoped cookie on login, email verification, OAuth2 code exchange, and refresh, so browser clients can restore a session after a page reload without persisting a credential to web storage.
 - New `app.security.refresh-cookie` configuration group controls the cookie's name, path, `Secure` flag, and `SameSite` policy per environment.
 
@@ -26,6 +29,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A request body that is malformed, has an unrecognized field, an invalid enum value, invalid JSON, or is missing now returns 400 Bad Request with a dedicated error code instead of 500 Internal Server Error, and the response no longer echoes the rejected field name or any internal class name.
 
 ### Changed
+- The mail provider credential moved from a root-level setting into the provider's own configuration group; the `RESEND_API_KEY` environment variable is unchanged.
+- Selecting no mail transport, or an unrecognised one, now fails at startup instead of resolving to a default.
+- The mail health indicator is disabled, so a briefly unreachable mail server no longer makes the application report itself unhealthy.
 - Production now honours `REFRESH_COOKIE_SECURE` and `REFRESH_COOKIE_SAME_SITE`; the production profile previously pinned both values, leaving the environment variables inert in the only profile where they matter.
 - `POST /auth/refresh` and `POST /auth/logout` accept the refresh token from the `luvax_refresh` cookie when the request body omits it; a token supplied in the body always takes precedence.
 - `POST /auth/refresh` now returns `401` rather than `400` when no refresh token is supplied by either the body or the cookie.

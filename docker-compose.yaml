@@ -25,6 +25,16 @@ services:
     ports:
       - "6379:6379"
 
+  # Local SMTP sink for development. Bound to the loopback interface only, unlike the services
+  # above: Mailpit accepts mail from anyone and serves every message it receives through an
+  # unauthenticated web UI, so publishing it on all interfaces would expose a developer's inbox
+  # to the local network.
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.3
     environment:
