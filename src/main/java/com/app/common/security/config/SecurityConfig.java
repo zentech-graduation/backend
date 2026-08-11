@@ -126,7 +126,10 @@ public class SecurityConfig {
         http.csrf(
                         csrf ->
                                 csrf.ignoringRequestMatchers(
-                                        "/api/**", "/ws/comments/**", "/ws/notifications/**"))
+                                        "/api/**",
+                                        "/ws/comments/**",
+                                        "/ws/notifications/**",
+                                        "/ws/posts/**"))
                 .sessionManagement(
                         sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -258,7 +261,10 @@ public class SecurityConfig {
     private void configureWebSocketEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
-        auth.requestMatchers("/ws/comments/**", "/ws/notifications/**").permitAll();
+        // Authentication for a STOMP endpoint happens in JwtHandshakeInterceptor, which reads
+        // the token from the handshake query string; the filter chain must let the upgrade
+        // request through for that interceptor to run at all.
+        auth.requestMatchers("/ws/comments/**", "/ws/notifications/**", "/ws/posts/**").permitAll();
     }
 
     @Bean

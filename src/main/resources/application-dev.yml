@@ -41,6 +41,8 @@ app:
   post:
     consumer:
       enabled: true
+    live:
+      enabled: true
   comment:
     consumer:
       enabled: true

@@ -184,6 +184,8 @@ app:
       enabled: ${POST_CONSUMER_ENABLED:false}
     seed:
       enabled: ${POST_SEED_ENABLED:true}
+    live:
+      enabled: ${POST_LIVE_ENABLED:false}
   comment:
     slow-mode-seconds: ${COMMENT_SLOW_MODE_SECONDS:0}
     idempotency-ttl-hours: ${COMMENT_IDEMPOTENCY_TTL_HOURS:24}
