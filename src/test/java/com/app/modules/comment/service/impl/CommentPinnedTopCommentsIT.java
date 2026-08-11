@@ -314,7 +314,7 @@ class CommentPinnedTopCommentsIT {
     }
 
     @Test
-    void laterPage_issuesOneFewerStatementThanTheFirstPage() {
+    void laterPage_issuesTheSameStatementCountAsTheFirstPage() {
         UUID owner = insertUser("owner");
         UUID viewer = insertUser("viewer");
         UUID post = insertPublicPost(owner);
@@ -338,14 +338,14 @@ class CommentPinnedTopCommentsIT {
         list(viewer, post, cursor, 4);
         long laterPage = stats.getPrepareStatementCount();
 
-        // The seven statements a later page issues are the pre-existing read path: the post lookup,
-        // the visibility gate, the body query, the author batch, and the viewer-like batch. The
-        // first page adds exactly one, the pinned ranking. Absolute counts are pinned, not just the
-        // delta, so an extra round trip anywhere on this path fails here rather than hiding behind
-        // a preserved difference.
+        // Every page issues the same eight statements: the read path (post lookup, visibility
+        // gate, body query, author batch, viewer-like batch) plus the pinned ranking. A later
+        // page runs the ranking too, not to prepend a block but to obtain the ids it must exclude
+        // from its body; without that a pinned comment old enough to land on this page would be
+        // returned a second time. Absolute counts are pinned, not just the relationship between
+        // them, so an extra round trip anywhere on this path fails here.
         assertThat(firstPage).isEqualTo(8);
-        assertThat(laterPage).isEqualTo(7);
-        assertThat(firstPage - laterPage).isEqualTo(1);
+        assertThat(laterPage).isEqualTo(8);
     }
 
     private CursorPageResponse<CommentResponse> list(

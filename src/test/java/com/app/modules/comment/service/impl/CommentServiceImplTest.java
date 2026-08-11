@@ -823,17 +823,27 @@ class CommentServiceImplTest {
     }
 
     @Test
-    void listTopLevelComments_withCursor_queriesNeitherThePinnedNorTheExcludingStatement() {
+    void listTopLevelComments_withCursor_resolvesPinnedIdsToExcludeButPrependsNoBlock() {
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any()))
+        List<Comment> pinned = comments(3);
+        when(commentRepository.findTopLikedTopLevel(eq(postId), eq(actorId), any()))
+                .thenReturn(pinned);
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any(), any()))
                 .thenReturn(comments(2));
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
 
-        verify(commentRepository, never()).findTopLikedTopLevel(any(), any(), any());
+        // The pinned block is prepended to page one only, but its ids are still needed here: a
+        // pinned comment old enough to fall on this page must be excluded, or it is returned
+        // twice across the stream.
+        ArgumentCaptor<UUID[]> excluded = ArgumentCaptor.forClass(UUID[].class);
+        verify(commentRepository)
+                .findTopLevelBefore(eq(postId), excluded.capture(), any(), any(), any(), any());
+        assertThat(excluded.getValue())
+                .containsExactlyElementsOf(pinned.stream().map(Comment::getId).toList());
         verify(commentRepository, never()).findFirstTopLevelExcluding(any(), any(), any(), any());
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getContent()).noneMatch(CommentResponse::pinned);
@@ -843,14 +853,14 @@ class CommentServiceImplTest {
     void listTopLevelComments_cursorIssuedBeforePinningWasAdded_stillDecodes() {
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any()))
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         CursorPageResponse<CommentResponse> result =
                 service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
 
         assertThat(result.getContent()).isEmpty();
-        verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any(), any());
+        verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any(), any(), any());
     }
 
     @Test

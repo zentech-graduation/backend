@@ -97,7 +97,7 @@ The cursor is the opaque base64url encoding of that tuple and carries no other f
 | The **first page only** of a post's top-level comments is preceded by up to three pinned comments, ordered by `(like_count, created_at, id)` descending | `CommentRepository.findTopLikedTopLevel`, capped by `CommentServiceImpl.PINNED_COMMENT_COUNT` |
 | A comment needs at least one like to be pinned | `like_count > 0` in `findTopLikedTopLevel` |
 | A pinned comment must be top-level, approved, and not soft-deleted | The eligibility predicate of `findTopLikedTopLevel`, matching the partial predicate of `idx_comments_post_top_liked` (V41) |
-| A pinned comment never also appears in the same page's newest-first body | `findFirstTopLevelExcluding` filters the pinned ids in SQL, so `LIMIT` still yields a full body page |
+| A pinned comment appears exactly once across the whole paginated stream | The pinned ids are resolved on every page and filtered in SQL by `findFirstTopLevelExcluding` and `findTopLevelBefore`, so `LIMIT` still yields a full body page and a pinned comment old enough to fall on a later page is not returned a second time |
 | The pinned block is additional to the requested `limit`, not counted against it | `CommentServiceImpl.toPage` - the first page returns up to `limit + 3` items |
 | `startCursor` and `endCursor` are derived from the newest-first body only | `CommentServiceImpl.toPage` - deriving them from the pinned block would seek the next page to an arbitrary position |
 | `CommentResponse.pinned` marks membership of the pinned block; it is never true on page two or on a single-comment response | `CommentResponse.asPinned`, applied only to the pinned rows of the first page |

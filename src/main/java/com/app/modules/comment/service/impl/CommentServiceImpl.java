@@ -439,21 +439,25 @@ public class CommentServiceImpl implements CommentService {
         int pageSize = normalizeLimit(limit);
         Cursor decoded = decodeCursor(cursor, CursorScope.COMMENTS_TOP_LEVEL);
         PageRequest page = PageRequest.of(0, pageSize + 1);
-        // Page two onward is the unchanged pure keyset stream: no pinned block, no exclusion.
+        // Resolved on every page, not only the first. The block itself is prepended to page one
+        // alone, but its ids must be excluded from the chronological body of every page: a pinned
+        // comment old enough to fall on a later page would otherwise be returned twice, once at
+        // the head of page one and again in its own chronological position.
+        List<Comment> pinned =
+                commentRepository.findTopLikedTopLevel(
+                        postId, viewerId, PageRequest.of(0, PINNED_COMMENT_COUNT));
+        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         if (decoded != null) {
             List<Comment> comments =
                     commentRepository.findTopLevelBefore(
                             postId,
+                            pinnedIds,
                             viewerId,
                             TimeCursors.fromMicros(decoded.sortValueMicros()),
                             decoded.id(),
                             page);
             return toPage(viewerId, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
         }
-        List<Comment> pinned =
-                commentRepository.findTopLikedTopLevel(
-                        postId, viewerId, PageRequest.of(0, PINNED_COMMENT_COUNT));
-        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         List<Comment> comments =
                 commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, viewerId, page);
         return toPage(viewerId, pinned, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
