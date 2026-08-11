@@ -564,6 +564,22 @@ class CommentControllerIT {
     }
 
     @Test
+    void createComment_timestampsAgreeAtInsert() {
+        TestUser author = registerUser("ts_agree");
+        UUID postId = createImagePost(author, "timestamp agreement post");
+        UUID commentId = createComment(author, postId, null, "untouched since insert", null);
+
+        // Both columns default to NOW(), which is the transaction timestamp, so a freshly
+        // inserted row must carry the same value in each. They previously disagreed because
+        // created_at came from the JVM clock and updated_at from Postgres, which made every
+        // comment look edited from the moment it existed.
+        assertThat(createdAt(commentId)).isEqualTo(updatedAt(commentId));
+
+        Map<?, ?> body = commentFromList(author, postId, commentId);
+        assertThat(body.get("createdAt")).isEqualTo(body.get("updatedAt"));
+    }
+
+    @Test
     void createComment_neverEdited_reportsNoEditSignal() {
         TestUser author = registerUser("edit_fresh");
         UUID postId = createImagePost(author, "fresh comment post");
@@ -729,6 +745,11 @@ class CommentControllerIT {
     private OffsetDateTime editedAt(UUID commentId) {
         return jdbcTemplate.queryForObject(
                 "SELECT edited_at FROM comments WHERE id = ?", OffsetDateTime.class, commentId);
+    }
+
+    private OffsetDateTime createdAt(UUID commentId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT created_at FROM comments WHERE id = ?", OffsetDateTime.class, commentId);
     }
 
     private OffsetDateTime updatedAt(UUID commentId) {
