@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- A tracked seed script creates a fixed set of local development accounts, a follow graph, and published posts, so a fresh clone no longer produces a running application with no way to log in; it writes only to the local compose database and refuses to run against any other.
+- `CONTRIBUTING.md` now documents how to seed a fresh environment and which accounts that leaves you with.
 - Outbound email can now be delivered over SMTP as well as through the hosted provider, selected by the `app.mail.transport` setting.
 - Local development now sends every message to a Mailpit inbox started by `docker compose`, so a fresh clone can register an account, open the verification link, and log in without a provider credential or a manual database edit.
 - The application refuses to start when the SMTP transport is selected outside the development profile, so an environment variable cannot silently divert production mail into a local sink.
@@ -41,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- The project map's mechanically derived sections had drifted from the tree: it recorded 43 migrations against 44, 162 test classes against 176, and Flyway as accepting out-of-order migrations after that setting was reverted. The migration table, the test roster, and the Flyway note now match the repository.
 - `POST /media/upload-complete` created a media asset and returned a CDN URL without checking that the object had actually been uploaded, so a post, story, or message could reference an asset whose file was never transferred. Confirmation now returns 422 when no object exists under the submitted storage key, or when the stored object's size or content type differs from the submitted metadata, and 503 when storage cannot be reached to check; no asset is recorded in any of those cases.
 - A registration or password-reset request whose password exceeded 72 bytes returned 500 Internal Server Error from the password hasher instead of a validation failure; such a request is now rejected with a field-keyed 400 naming the rule it broke.
 - Login, token refresh, password reset, and OAuth2 code exchange all reject a banned, suspended, deactivated, or unverified account with 403, but none of them documented it, so a client had no documented contract to branch on. All four now declare it, including which error code corresponds to which account state.
