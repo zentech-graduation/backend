@@ -2,6 +2,7 @@ package com.app.modules.post.service.impl;
 
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.common.pagination.Cursor;
 import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.CursorScope;
@@ -26,6 +28,7 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
+import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostLikeService;
@@ -38,30 +41,34 @@ public class PostLikeServiceImpl implements PostLikeService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
+    private static final String AGGREGATE_TYPE = "post";
 
     private final PostRepository postRepository;
     private final PostLikeRepository postLikeRepository;
     private final PostVisibilityService postVisibilityService;
     private final UserSummaryService userSummaryService;
     private final SocialService socialService;
+    private final OutboxService outboxService;
 
     public PostLikeServiceImpl(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
             PostVisibilityService postVisibilityService,
             UserSummaryService userSummaryService,
-            SocialService socialService) {
+            SocialService socialService,
+            OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
         this.postVisibilityService = postVisibilityService;
         this.userSummaryService = userSummaryService;
         this.socialService = socialService;
+        this.outboxService = outboxService;
     }
 
     @Override
     @Transactional
     public LikeActionResponse likePost(UUID userId, UUID postId) {
-        fetchVisiblePublishedPost(userId, postId);
+        Post post = fetchVisiblePublishedPost(userId, postId);
         PostLikeId likeId = new PostLikeId(userId, postId);
         if (postLikeRepository.existsById(likeId)) {
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
@@ -75,6 +82,7 @@ public class PostLikeServiceImpl implements PostLikeService {
             // already recorded the like, so surface the same clean conflict rather than a 500.
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
         }
+        enqueueLiveEvent(PostEventTypes.POST_LIVE_LIKED_V1, post, userId);
         return new LikeActionResponse(postId, true, postRepository.findLikeCount(postId));
     }
 
@@ -105,6 +113,7 @@ public class PostLikeServiceImpl implements PostLikeService {
         if (deleted == 0) {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
+        enqueueLiveEvent(PostEventTypes.POST_LIVE_UNLIKED_V1, post, userId);
         return new LikeActionResponse(postId, false, postRepository.findLikeCount(postId));
     }
 
@@ -153,6 +162,21 @@ public class PostLikeServiceImpl implements PostLikeService {
         String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getUserId());
         String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getUserId());
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
+    }
+
+    // Enqueued inside the caller's transaction: OutboxService.enqueue is PROPAGATION.MANDATORY,
+    // so a like that rolls back cannot leave an event behind announcing it. The payload carries
+    // identifiers only - the like count is re-read by the live consumer at push time, because the
+    // outbox publisher runs after this transaction commits and any count captured here would
+    // already be stale by then.
+    private void enqueueLiveEvent(String eventType, Post post, UUID actorId) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("postId", post.getId().toString());
+        // Consumed by the live tier to resolve the post owner's block counterparties; the actor is
+        // deliberately absent from the broadcast payload, since every subscriber of the post would
+        // otherwise learn who liked it.
+        data.put("postOwnerId", post.getUserId().toString());
+        outboxService.enqueue(eventType, eventType, AGGREGATE_TYPE, post.getId(), actorId, data);
     }
 
     private Post fetchVisiblePublishedPost(UUID viewerId, UUID postId) {
