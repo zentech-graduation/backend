@@ -70,11 +70,12 @@ public class CommentController extends BaseController implements CommentApi {
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listTopLevelComments(
             @PathVariable("postId") UUID postId,
+            @RequestParam(value = "sort", required = false) String sort,
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "limit", defaultValue = "20") int limit) {
         CursorPageResponse<CommentResponse> body =
                 commentService.listTopLevelComments(
-                        SecurityUtils.getCurrentUserId(), postId, cursor, limit);
+                        SecurityUtils.getCurrentUserId(), postId, sort, cursor, limit);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 

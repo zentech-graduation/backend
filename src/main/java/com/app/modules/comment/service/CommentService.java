@@ -97,13 +97,17 @@ public interface CommentService {
      *
      * @param viewerId authenticated viewer, or null for anonymous access
      * @param postId post whose comments are listed
-     * @param cursor opaque cursor from a previous page; null for the first page
+     * @param sort {@code top} for the pinned block, {@code newest} for pure chronology; null or
+     *     blank defaults to {@code top}, any other value is rejected
+     * @param cursor opaque cursor from a previous page; null for the first page. A cursor issued
+     *     under one sort mode is rejected under the other, because the two return different row
+     *     sets for the same position
      * @param limit maximum number of comments to return in the newest-first body, excluding the
      *     pinned block
      * @return a cursor page of top-level comments
      */
     CursorPageResponse<CommentResponse> listTopLevelComments(
-            UUID viewerId, UUID postId, String cursor, int limit);
+            UUID viewerId, UUID postId, String sort, String cursor, int limit);
 
     /**
      * Lists approved direct replies to a comment, newest first, using keyset pagination.

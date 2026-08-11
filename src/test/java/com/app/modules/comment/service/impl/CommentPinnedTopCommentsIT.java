@@ -350,7 +350,7 @@ class CommentPinnedTopCommentsIT {
 
     private CursorPageResponse<CommentResponse> list(
             UUID viewer, UUID post, String cursor, int limit) {
-        return commentService.listTopLevelComments(viewer, post, cursor, limit);
+        return commentService.listTopLevelComments(viewer, post, null, cursor, limit);
     }
 
     private Statistics statistics() {

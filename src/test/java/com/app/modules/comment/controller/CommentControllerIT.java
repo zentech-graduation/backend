@@ -824,6 +824,137 @@ class CommentControllerIT {
                 .containsOnly(1);
     }
 
+    @Test
+    void listComments_newest_returnsPureChronologyWithNoPinnedBlock() {
+        TestUser author = registerUser("sort_newest_author");
+        TestUser liker = registerUser("sort_newest_liker");
+        UUID postId = createImagePost(author, "newest mode post");
+        SortFixture f = buildSortFixture(author, liker, postId);
+
+        List<PagedRow> all = pageEverything(author, postId, "newest", 2);
+
+        assertThat(all).noneMatch(PagedRow::pinned);
+        // Newest first, and the two comments top would have pinned appear in their chronological
+        // position rather than at the head.
+        assertThat(all)
+                .extracting(PagedRow::id)
+                .containsExactly(f.t6(), f.t5(), f.t4(), f.t3(), f.t2(), f.t1());
+    }
+
+    @Test
+    void listComments_cursorFromDefaultModeReplayedUnderNewest_returns400() {
+        TestUser author = registerUser("sort_xcursor_author");
+        TestUser liker = registerUser("sort_xcursor_liker");
+        UUID postId = createImagePost(author, "cross cursor post");
+        buildSortFixture(author, liker, postId);
+
+        ResponseEntity<Map> first =
+                getWithAuth("/api/v1/posts/" + postId + "/comments?limit=2", author);
+        String cursor = endCursorOf(first);
+        assertThat(cursor).isNotNull();
+
+        ResponseEntity<Map> replayed =
+                getWithAuth(
+                        "/api/v1/posts/"
+                                + postId
+                                + "/comments?limit=2&sort=newest&cursor="
+                                + cursor,
+                        author);
+
+        assertThat(replayed.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(replayed.getBody().get("code")).isEqualTo("INVALID_CURSOR");
+    }
+
+    @Test
+    void listComments_cursorFromNewestReplayedUnderDefaultMode_returns400() {
+        TestUser author = registerUser("sort_xcursor2_author");
+        TestUser liker = registerUser("sort_xcursor2_liker");
+        UUID postId = createImagePost(author, "cross cursor back post");
+        buildSortFixture(author, liker, postId);
+
+        ResponseEntity<Map> first =
+                getWithAuth("/api/v1/posts/" + postId + "/comments?limit=2&sort=newest", author);
+        String cursor = endCursorOf(first);
+        assertThat(cursor).isNotNull();
+
+        ResponseEntity<Map> replayed =
+                getWithAuth(
+                        "/api/v1/posts/" + postId + "/comments?limit=2&cursor=" + cursor, author);
+
+        assertThat(replayed.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(replayed.getBody().get("code")).isEqualTo("INVALID_CURSOR");
+    }
+
+    @Test
+    void listComments_unrecognisedSortValue_returns400NamingTheAcceptedValues() {
+        TestUser author = registerUser("sort_bogus");
+        UUID postId = createImagePost(author, "bogus sort post");
+        createComment(author, postId, null, "a comment", null);
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/" + postId + "/comments?sort=oldest", author);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat((String) response.getBody().get("message")).contains("top").contains("newest");
+    }
+
+    @Test
+    void listComments_fewerCommentsThanThePinnedBlock_behavesInBothModes() {
+        TestUser author = registerUser("sort_small_author");
+        TestUser liker = registerUser("sort_small_liker");
+        UUID postId = createImagePost(author, "small post");
+        UUID only = createComment(author, postId, null, "the only one", null);
+        rest.exchange(
+                "/api/v1/comments/" + only + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(liker)),
+                Map.class);
+
+        List<PagedRow> top = pageEverything(author, postId, "top", 10);
+        List<PagedRow> newest = pageEverything(author, postId, "newest", 10);
+
+        // One comment, one like, so it is eligible for the pinned block and is also the whole
+        // chronological body. It must still be returned exactly once.
+        assertThat(top).extracting(PagedRow::id).containsExactly(only);
+        assertThat(top.get(0).pinned()).isTrue();
+        assertThat(newest).extracting(PagedRow::id).containsExactly(only);
+        assertThat(newest.get(0).pinned()).isFalse();
+    }
+
+    @Test
+    void listComments_noComments_behavesInBothModes() {
+        TestUser author = registerUser("sort_empty");
+        UUID postId = createImagePost(author, "empty post");
+
+        assertThat(pageEverything(author, postId, "top", 10)).isEmpty();
+        assertThat(pageEverything(author, postId, "newest", 10)).isEmpty();
+    }
+
+    @Test
+    void listReplies_ignoresTheSortParameter() {
+        TestUser author = registerUser("sort_replies_author");
+        TestUser liker = registerUser("sort_replies_liker");
+        UUID postId = createImagePost(author, "replies unaffected post");
+        UUID parent = createComment(author, postId, null, "parent", null);
+        UUID r1 = createComment(author, postId, parent, "reply one", null);
+        UUID r2 = createComment(author, postId, parent, "reply two", null);
+        rest.exchange(
+                "/api/v1/comments/" + r1 + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(liker)),
+                Map.class);
+
+        ResponseEntity<Map> replies =
+                getWithAuth("/api/v1/comments/" + parent + "/replies?limit=10", author);
+
+        // The reply list has no pinned block, so a liked reply stays in its chronological place
+        // and nothing is prepended.
+        assertThat(replies.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(contentOf(replies).stream().map(c -> (String) c.get("id")).toList())
+                .containsExactly(r2.toString(), r1.toString());
+        assertThat(contentOf(replies)).allMatch(c -> Boolean.FALSE.equals(c.get("pinned")));
+    }
+
     private record PagedRow(UUID id, boolean pinned, int page) {}
 
     private record SortFixture(UUID t1, UUID t2, UUID t3, UUID t4, UUID t5, UUID t6) {}

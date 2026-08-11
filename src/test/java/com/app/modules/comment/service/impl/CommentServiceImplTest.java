@@ -717,7 +717,7 @@ class CommentServiceImplTest {
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, limit);
+                service.listTopLevelComments(actorId, postId, null, null, limit);
 
         assertThat(result.getPageInfo().isHasNextPage()).isFalse();
         assertThat(result.getContent()).hasSize(3);
@@ -741,7 +741,7 @@ class CommentServiceImplTest {
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, limit);
+                service.listTopLevelComments(actorId, postId, null, null, limit);
 
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
         assertThat(result.getContent()).hasSize(3);
@@ -754,7 +754,7 @@ class CommentServiceImplTest {
         stubFirstPage(pinned, body);
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(5);
         assertThat(result.getContent().subList(0, 3))
@@ -768,7 +768,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(2), comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(6);
         assertThat(result.getContent().stream().filter(CommentResponse::pinned)).hasSize(2);
@@ -779,7 +779,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(1), comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(5);
         assertThat(result.getContent().stream().filter(CommentResponse::pinned)).hasSize(1);
@@ -790,7 +790,7 @@ class CommentServiceImplTest {
         stubFirstPage(List.of(), comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(4);
         assertThat(result.getContent()).noneMatch(CommentResponse::pinned);
@@ -802,7 +802,7 @@ class CommentServiceImplTest {
         stubFirstPage(pinned, comments(2));
         ArgumentCaptor<UUID[]> excluded = ArgumentCaptor.forClass(UUID[].class);
 
-        service.listTopLevelComments(actorId, postId, null, 5);
+        service.listTopLevelComments(actorId, postId, null, null, 5);
 
         verify(commentRepository)
                 .findFirstTopLevelExcluding(eq(postId), excluded.capture(), any(), any());
@@ -815,7 +815,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(3), comments(6));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         // Body is trimmed to the requested limit of 5; the three pinned rows sit on top of it.
         assertThat(result.getContent()).hasSize(8);
@@ -834,7 +834,7 @@ class CommentServiceImplTest {
         when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
+                service.listTopLevelComments(actorId, postId, null, SECOND_PAGE_CURSOR, 5);
 
         // The pinned block is prepended to page one only, but its ids are still needed here: a
         // pinned comment old enough to fall on this page must be excluded, or it is returned
@@ -857,7 +857,7 @@ class CommentServiceImplTest {
                 .thenReturn(List.of());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
+                service.listTopLevelComments(actorId, postId, null, SECOND_PAGE_CURSOR, 5);
 
         assertThat(result.getContent()).isEmpty();
         verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any(), any(), any());
@@ -870,7 +870,7 @@ class CommentServiceImplTest {
         stubFirstPage(pinned, comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).extracting(CommentResponse::id).doesNotHaveDuplicates();
     }
@@ -881,7 +881,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(3), body);
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getPageInfo().getStartCursor())
                 .isEqualTo(
