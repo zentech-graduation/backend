@@ -11,7 +11,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
@@ -91,8 +90,14 @@ public class User {
     @Column(name = "post_count", insertable = false, updatable = false)
     private int postCount;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
+    // Database-generated like updated_at, rather than @CreationTimestamp. The column's DEFAULT
+    // NOW() and the sibling updated_at default both resolve to the same transaction timestamp, so
+    // the two agree exactly at insert. Under @CreationTimestamp this value came from the JVM
+    // clock while updated_at came from Postgres, leaving them permanently unequal on a user
+    // nobody had touched. Hibernate already re-reads updated_at after every insert, so reading
+    // this one back costs no extra round trip.
+    @Generated(event = EventType.INSERT)
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
     // trg_users_updated_at (V16) is the sole writer of this column; Hibernate never sends it in an
