@@ -143,6 +143,27 @@ class PostKeysetRowLossIT {
     }
 
     @Test
+    void postLikes_userScopedKeysetIndex_coversTheFullOrderingTuple() {
+        // The user-scoped like listing orders by (created_at DESC, post_id DESC). An index stopping
+        // at created_at leaves the tiebreaker to a sort, which for a large tie-group degrades a
+        // single page into a full scan of the group. post_saves already has the equivalent index.
+        String definition =
+                jdbcClient
+                        .sql(
+                                "SELECT indexdef FROM pg_indexes"
+                                        + " WHERE tablename = 'post_likes'"
+                                        + " AND indexdef LIKE '%(user_id, created_at DESC, post_id"
+                                        + " DESC)%'")
+                        .query(String.class)
+                        .optional()
+                        .orElse(null);
+
+        assertThat(definition)
+                .as("post_likes needs the (user_id, created_at DESC, post_id DESC) keyset index")
+                .isNotNull();
+    }
+
+    @Test
     void saves_tieGroupOnCreatedAt_pagesEveryRowExactlyOnce() {
         UUID saver = insertUser("saver");
         List<UUID> expected = new ArrayList<>();

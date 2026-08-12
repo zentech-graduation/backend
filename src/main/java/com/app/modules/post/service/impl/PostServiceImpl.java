@@ -49,6 +49,7 @@ import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostService;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.post.validation.PostTypeFilter;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.service.UserSummaryService;
@@ -301,7 +302,7 @@ public class PostServiceImpl implements PostService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<PostResponse> listUserPosts(
-            UUID viewerId, UUID targetUserId, String cursor, int size) {
+            UUID viewerId, UUID targetUserId, PostTypeFilter typeFilter, String cursor, int size) {
         User target =
                 postUserRepository
                         .findByIdAndDeletedAtIsNull(targetUserId)
@@ -319,16 +320,34 @@ public class PostServiceImpl implements PostService {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
         int pageSize = normalizeLimit(size);
-        Cursor decoded = decodeCursor(cursor, CursorScope.POST_USER_POSTS);
+        // The filter is bound into the cursor scope, so a cursor cannot be carried across filters.
+        // The ordering is identical either way, which is exactly why a replay would otherwise
+        // succeed while silently omitting the rows the other filter excludes before this position.
+        String scope = typeFilter.cursorScope();
+        Cursor decoded = decodeCursor(cursor, scope);
         PageRequest page = PageRequest.of(0, pageSize + 1);
-        List<Post> posts =
-                decoded == null
-                        ? postRepository.findFirstUserPosts(targetUserId, page)
-                        : postRepository.findUserPostsBefore(
-                                targetUserId,
-                                TimeCursors.fromMicros(decoded.sortValueMicros()),
-                                decoded.id(),
-                                page);
+        List<Post> posts;
+        if (typeFilter.isEmpty()) {
+            posts =
+                    decoded == null
+                            ? postRepository.findFirstUserPosts(targetUserId, page)
+                            : postRepository.findUserPostsBefore(
+                                    targetUserId,
+                                    TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                    decoded.id(),
+                                    page);
+        } else {
+            String types = typeFilter.asDelimitedTypes();
+            posts =
+                    decoded == null
+                            ? postRepository.findFirstUserPostsByType(targetUserId, types, page)
+                            : postRepository.findUserPostsByTypeBefore(
+                                    targetUserId,
+                                    types,
+                                    TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                    decoded.id(),
+                                    page);
+        }
         boolean hasNextPage = posts.size() > pageSize;
         if (hasNextPage) {
             posts = posts.subList(0, pageSize);
@@ -340,10 +359,8 @@ public class PostServiceImpl implements PostService {
         List<PostResponse> content = postResponseAssembler.assemble(viewerId, posts);
         Post first = posts.get(0);
         Post last = posts.get(posts.size() - 1);
-        String startCursor =
-                encodeCursor(first.getCreatedAt(), first.getId(), CursorScope.POST_USER_POSTS);
-        String endCursor =
-                encodeCursor(last.getCreatedAt(), last.getId(), CursorScope.POST_USER_POSTS);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId(), scope);
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId(), scope);
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 

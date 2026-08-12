@@ -20,6 +20,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
+import com.app.modules.post.dto.response.LikedPostResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -137,6 +138,39 @@ public interface PostLikeApi {
     @GetMapping(ApiConstants.Posts.LIKES)
     ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> listLikers(
             @PathVariable("postId") UUID postId,
+            @Parameter(description = "Opaque cursor from the previous page")
+                    @RequestParam(value = "cursor", required = false)
+                    String cursor,
+            @Parameter(description = "Page size (1–100, default 20)")
+                    @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
+                    int limit);
+
+    @Operation(
+            summary = "List the posts the current user has liked",
+            description =
+                    "Cursor-paginated posts the authenticated user has liked, newest like first."
+                            + " Self-only: the subject is always the caller, so one user cannot list"
+                            + " another's likes. Posts that are no longer published or visible are"
+                            + " filtered out, which can return fewer entries than the requested"
+                            + " limit.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Cursor page of liked posts"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Posts.LIKED)
+    ResponseEntity<ApiResponse<CursorPageResponse<LikedPostResponse>>> listLikedPosts(
             @Parameter(description = "Opaque cursor from the previous page")
                     @RequestParam(value = "cursor", required = false)
                     String cursor,

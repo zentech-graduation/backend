@@ -161,7 +161,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `users` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `social` | **Implemented** | api, controller, converter, dto/response, entity, enums, mapper, messaging, repository, service/impl |
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
-| `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, mapper, messaging, repository, runner, search, service/impl |
+| `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, live, mapper, messaging, repository, runner, search, service/impl, validation |
 | `hashtag` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, event, mapper, messaging, repository, runner, search, service/impl |
 | `notification` | **Implemented** | api, config, controller, dto/response, entity, entity/converter, entity/enums, live, mapper, messaging, repository, service/impl |
 | `comment` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, live, mapper, messaging, observability, repository, service/impl, util |
@@ -205,7 +205,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
-Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 176 test classes total.
+Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 185 test classes total.
 
 | Package | Test Classes |
 |---------|-------------|
@@ -228,6 +228,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `common/outbox/service/impl` | `OutboxPublisherRabbitMqIT`, `OutboxPublisherServiceImplTest`, `OutboxServiceImplTest` |
 | `common/pagination` | `CursorCodecTest`, `KeysetPageTest`, `OffsetCursorCodecTest`, `OffsetPageableTest`, `TimeCursorsTest` |
 | `common/response` | `ApiResponseTest`, `CursorPageResponseTest`, `ViewerRelationshipResponseTest` |
+| `common/web` | `StrictQueryParameterInterceptorTest` |
 | `common/security/config` | `CorsPropertiesTest` |
 | `common/security/filter` | `AuthRateLimitFilterTest`, `JwtAuthenticationFilterTest` |
 | `common/security/jwt` | `JwtTokenProviderTest` |
@@ -274,6 +275,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `modules/notification/repository` | `NotificationKeysetRowLossIT` |
 | `modules/notification/service/impl` | `NotificationAuthorEmbeddingIT`, `NotificationServiceImplTest` |
 | `modules/post/consumer` | `PostIndexSyncConsumerIT`, `PostIndexSyncConsumerTest` |
+| `modules/post/live` | `PostLikeLiveDeliveryIT`, `PostOnlyWebSocketConfigIT` |
 | `modules/post/controller` | `PostControllerIT` |
 | `modules/post/repository` | `PostKeysetRowLossIT` |
 | `modules/post/service/impl` | `PostAuthorEmbeddingIT`, `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostViewerStateIT`, `PostViewerStateServiceImplTest`, `PostVisibilityServiceImplTest` |
@@ -301,7 +303,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 44 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: false`); 46 migrations at `src/main/resources/db/migration/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -349,6 +351,8 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | V42 | add_username_case_insensitive_index |
 | V43 | align_username_index_with_soft_delete_policy |
 | V44 | add_email_case_insensitive_index |
+| V45 | add_comment_edited_at |
+| V46 | add_post_likes_user_keyset_index |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -360,7 +364,7 @@ PostgreSQL enum types:
 | `user_role` | `user`, `moderator`, `admin` |
 | `user_status` | `active`, `suspended`, `deactivated`, `banned` |
 | `post_status` | `draft`, `published`, `archived`, `removed` |
-| `post_type` | `image`, `video`, `carousel` |
+| `post_type` | `image`, `video`, `carousel`, `text` |
 | `media_type` | `image`, `video` |
 | `follow_status` | `pending`, `accepted` |
 | `story_type` | `image`, `video` |
@@ -402,6 +406,7 @@ PostgreSQL enum types:
 | `social.events.dlx` | Topic | yes | Dead-letter exchange for failed messages |
 | `comment.live.events` | Fanout | yes | Live comment fanout tier; receives all `comment.*` events via exchange-to-exchange binding from `social.events` |
 | `notification.live.events` | Fanout | yes | Live notification fanout tier; receives all `notification.*` events via exchange-to-exchange binding from `social.events` |
+| `post.live.events` | Fanout | yes | Live post fanout tier; receives all `post.live.*` events via exchange-to-exchange binding from `social.events` |
 
 **Queues and DLQs (all durable):**
 
@@ -432,6 +437,7 @@ PostgreSQL enum types:
 | `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
+| `post.live.events` (exchange) | `post.live.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 
 **RabbitMQ configuration (application.yaml):**
 - `publisher-confirm-type: correlated` — broker confirms wired to outbox acknowledge logic

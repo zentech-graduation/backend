@@ -36,4 +36,31 @@ class CursorPageResponseTest {
         assertThat(response.getPageInfo().getStartCursor()).isEqualTo("s");
         assertThat(response.getPageInfo().getEndCursor()).isEqualTo("e");
     }
+
+    @Test
+    void of_neverClaimsDegradation() {
+        // Every existing caller uses of(), so a complete result must keep reporting itself
+        // complete.
+        assertThat(CursorPageResponse.of(List.of("a"), false, null, null, false).isDegraded())
+                .isFalse();
+    }
+
+    @Test
+    void of_emptyGenuineNoMatch_isNotDegraded() {
+        // The case the flag exists to separate: an empty page that is a real answer, not an outage.
+        assertThat(CursorPageResponse.of(List.of(), false, null, null, false).isDegraded())
+                .isFalse();
+    }
+
+    @Test
+    void degraded_isEmptyCursorlessAndFlagged() {
+        CursorPageResponse<String> response = CursorPageResponse.degraded();
+
+        assertThat(response.isDegraded()).isTrue();
+        assertThat(response.getContent()).isEmpty();
+        assertThat(response.getPageInfo().isHasNextPage()).isFalse();
+        assertThat(response.getPageInfo().isHasPreviousPage()).isFalse();
+        assertThat(response.getPageInfo().getStartCursor()).isNull();
+        assertThat(response.getPageInfo().getEndCursor()).isNull();
+    }
 }

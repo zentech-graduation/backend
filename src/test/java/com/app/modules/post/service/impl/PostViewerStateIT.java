@@ -31,6 +31,7 @@ import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.dto.response.SavedPostResponse;
 import com.app.modules.post.service.PostSaveService;
 import com.app.modules.post.service.PostService;
+import com.app.modules.post.validation.PostTypeFilter;
 
 /**
  * Proves the viewer's like/save state is resolved with a constant query count across page size, and
@@ -143,18 +144,18 @@ class PostViewerStateIT {
         }
 
         Statistics stats = statistics();
-        postService.listUserPosts(viewer, owner, null, 2);
+        postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 2);
 
         stats.clear();
-        postService.listUserPosts(viewer, owner, null, 2);
+        postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 2);
         long size2 = stats.getPrepareStatementCount();
 
         stats.clear();
-        postService.listUserPosts(viewer, owner, null, 6);
+        postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 6);
         long size6 = stats.getPrepareStatementCount();
 
         stats.clear();
-        postService.listUserPosts(viewer, owner, null, 12);
+        postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 12);
         long size12 = stats.getPrepareStatementCount();
 
         assertThat(size6).isEqualTo(size2);

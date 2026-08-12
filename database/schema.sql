@@ -811,6 +811,8 @@ CREATE INDEX idx_post_likes_post        ON post_likes (post_id, created_at DESC)
 CREATE INDEX idx_post_likes_user        ON post_likes (user_id, created_at DESC);
 CREATE INDEX idx_post_likes_post_created_user
     ON post_likes (post_id, created_at DESC, user_id DESC);
+CREATE INDEX idx_post_likes_user_created_post
+    ON post_likes (user_id, created_at DESC, post_id DESC);
 
 -- post_saves
 CREATE INDEX idx_post_saves_user        ON post_saves (user_id, created_at DESC);

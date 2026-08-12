@@ -9,6 +9,7 @@ import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
+import com.app.modules.post.validation.PostTypeFilter;
 
 /** Domain API for post creation, retrieval, lifecycle, and caption edit history. */
 public interface PostService {
@@ -88,14 +89,20 @@ public interface PostService {
      * private and the viewer holds no accepted follow. Drafts and archived posts are never listed,
      * including for the owner.
      *
+     * <p>The type filter is bound into the cursor scope, so a cursor issued under one filter is
+     * rejected by another. Without that binding a replay would succeed and silently omit every row
+     * the other filter excludes that sits before the cursor position, because the ordering does not
+     * depend on the filter.
+     *
      * @param viewerId authenticated viewer
      * @param targetUserId profile owner
+     * @param typeFilter normalized post types to include; empty means no filter
      * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
      * @param size requested page size, normalized to 1–100 with a default of 20
      * @return cursor page of posts
      */
     CursorPageResponse<PostResponse> listUserPosts(
-            UUID viewerId, UUID targetUserId, String cursor, int size);
+            UUID viewerId, UUID targetUserId, PostTypeFilter typeFilter, String cursor, int size);
 
     /**
      * Cursor-paginated chronological feed of published posts from accounts the viewer follows.

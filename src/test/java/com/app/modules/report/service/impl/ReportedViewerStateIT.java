@@ -29,6 +29,7 @@ import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.service.CommentService;
 import com.app.modules.mail.service.MailService;
 import com.app.modules.post.service.PostService;
+import com.app.modules.post.validation.PostTypeFilter;
 import com.app.modules.users.service.UserService;
 
 import tools.jackson.databind.ObjectMapper;
@@ -206,14 +207,14 @@ class ReportedViewerStateIT {
         }
 
         Statistics stats = statistics();
-        postService.listUserPosts(viewer, owner, null, 1);
+        postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 1);
 
         stats.clear();
-        postService.listUserPosts(viewer, owner, null, 1);
+        postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 1);
         long onePage = stats.getPrepareStatementCount();
 
         stats.clear();
-        postService.listUserPosts(viewer, owner, null, 20);
+        postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 20);
         long twentyPage = stats.getPrepareStatementCount();
 
         // Eight before this change, nine after: exactly one added batch lookup, independent of

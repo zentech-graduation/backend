@@ -20,6 +20,7 @@ import com.app.common.response.UserListItemResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.post.api.PostLikeApi;
 import com.app.modules.post.dto.response.LikeActionResponse;
+import com.app.modules.post.dto.response.LikedPostResponse;
 import com.app.modules.post.service.PostLikeService;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -54,6 +55,18 @@ public class PostLikeController extends BaseController implements PostLikeApi {
             @PathVariable("postId") UUID postId) {
         LikeActionResponse body =
                 postLikeService.unlikePost(SecurityUtils.getCurrentUserId(), postId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /** Lists the posts the authenticated user has liked, newest like first. */
+    @Override
+    @GetMapping(ApiConstants.Posts.LIKED)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<LikedPostResponse>>> listLikedPosts(
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "20") int limit) {
+        CursorPageResponse<LikedPostResponse> body =
+                postLikeService.listLikedPosts(SecurityUtils.getCurrentUserId(), cursor, limit);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 

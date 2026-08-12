@@ -39,6 +39,7 @@ class PostLikeServiceImplTest {
     @Mock private PostRepository postRepository;
     @Mock private PostLikeRepository postLikeRepository;
     @Mock private PostVisibilityService postVisibilityService;
+    @Mock private PostResponseAssembler postResponseAssembler;
     @Mock private UserSummaryService userSummaryService;
     @Mock private SocialService socialService;
     @Mock private OutboxService outboxService;
@@ -59,6 +60,7 @@ class PostLikeServiceImplTest {
                         postRepository,
                         postLikeRepository,
                         postVisibilityService,
+                        postResponseAssembler,
                         userSummaryService,
                         socialService,
                         outboxService);

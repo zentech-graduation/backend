@@ -1,5 +1,6 @@
 package com.app.modules.post.controller;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -21,6 +22,7 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.post.api.PostApi;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
@@ -30,6 +32,7 @@ import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.service.PostSearchService;
 import com.app.modules.post.service.PostService;
+import com.app.modules.post.validation.PostTypeFilter;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 
@@ -114,13 +117,20 @@ public class PostController extends BaseController implements PostApi {
     /** Lists a user's published posts visible to the authenticated viewer. */
     @Override
     @GetMapping(ApiConstants.Posts.USER_POSTS)
+    @StrictQueryParameters
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<PostResponse>>> listUserPosts(
             @PathVariable("userId") UUID userId,
+            @RequestParam(value = "type", required = false) List<String> type,
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "limit", defaultValue = "20") int limit) {
         CursorPageResponse<PostResponse> body =
-                postService.listUserPosts(SecurityUtils.getCurrentUserId(), userId, cursor, limit);
+                postService.listUserPosts(
+                        SecurityUtils.getCurrentUserId(),
+                        userId,
+                        PostTypeFilter.parse(type),
+                        cursor,
+                        limit);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
