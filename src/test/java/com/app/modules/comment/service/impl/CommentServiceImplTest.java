@@ -366,7 +366,7 @@ class CommentServiceImplTest {
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
         when(moderationService.check(any())).thenReturn(ModerationResult.approved());
-        when(commentRepository.save(any())).thenReturn(comment);
+        when(commentRepository.saveAndFlush(any())).thenReturn(comment);
         when(mapper.toResponse(eq(comment), any(), anyBoolean(), anyBoolean()))
                 .thenReturn(sampleResponse());
 
@@ -388,14 +388,14 @@ class CommentServiceImplTest {
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
         when(moderationService.check(any())).thenReturn(ModerationResult.approved());
-        when(commentRepository.save(any())).thenReturn(comment);
+        when(commentRepository.saveAndFlush(any())).thenReturn(comment);
         when(mapper.toResponse(eq(comment), any(), anyBoolean(), anyBoolean()))
                 .thenReturn(sampleResponse());
 
         service.editComment(actorId, commentId, new EditCommentRequest("updated"));
 
         ArgumentCaptor<Comment> saved = ArgumentCaptor.forClass(Comment.class);
-        verify(commentRepository).save(saved.capture());
+        verify(commentRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getEditedAt()).isNotNull();
         assertThat(saved.getValue().getContent()).isEqualTo("updated");
     }

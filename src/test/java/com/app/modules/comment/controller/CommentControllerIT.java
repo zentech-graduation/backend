@@ -2,6 +2,7 @@ package com.app.modules.comment.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +33,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.modules.mail.service.MailService;
+
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -617,6 +620,43 @@ class CommentControllerIT {
         assertThat(afterFirst).isNotNull();
         assertThat(afterSecond).isNotNull();
         assertThat(afterSecond).isAfterOrEqualTo(afterFirst);
+    }
+
+    @Test
+    void editComment_secondEdit_responseAndBroadcastCarryTheCurrentUpdatedAt() {
+        TestUser author = registerUser("edit_stale_ts");
+        UUID postId = createImagePost(author, "stale timestamp post");
+        UUID commentId = createComment(author, postId, null, "first", null);
+
+        editComment(author, commentId, "second");
+        ResponseEntity<Map> secondEdit = editComment(author, commentId, "third");
+
+        // The trigger writes updated_at during the flush, so a response assembled from the entity
+        // before that flush carries the value the previous edit left behind - one edit behind the
+        // row, and behind this response's own editedAt, which the author's clock had already
+        // advanced. Compared as instants because the row carries the database session's offset
+        // while the JSON carries UTC.
+        Instant rowUpdatedAt = updatedAt(commentId).toInstant();
+        assertThat(instantOf(dataOf(secondEdit).get("updatedAt"))).isEqualTo(rowUpdatedAt);
+        assertThat(instantOf(editedCommentBroadcast(commentId).get("updatedAt")))
+                .isEqualTo(rowUpdatedAt);
+    }
+
+    private static Instant instantOf(Object isoTimestamp) {
+        return OffsetDateTime.parse((String) isoTimestamp).toInstant();
+    }
+
+    /** The embedded comment projection of the most recent {@code comment.edited.v1} event. */
+    private Map<?, ?> editedCommentBroadcast(UUID commentId) {
+        String payload =
+                jdbcTemplate.queryForObject(
+                        "SELECT payload::text FROM outbox_events WHERE aggregate_id = ? AND"
+                                + " event_type = 'comment.edited.v1' ORDER BY created_at DESC"
+                                + " LIMIT 1",
+                        String.class,
+                        commentId);
+        Map<?, ?> envelope = new ObjectMapper().readValue(payload, Map.class);
+        return (Map<?, ?>) ((Map<?, ?>) envelope.get("data")).get("comment");
     }
 
     @Test
