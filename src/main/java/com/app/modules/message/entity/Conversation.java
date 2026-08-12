@@ -11,6 +11,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -69,7 +71,11 @@ public class Conversation {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    /** Maintained exclusively by Postgres triggers (V16); never written from application code. */
-    @Column(name = "updated_at", insertable = false, updatable = false)
+    // trg_conversations_updated_at (V16) is the sole writer of this column; Hibernate never sends
+    // it in an INSERT or UPDATE and instead re-selects it afterward so the entity reflects the
+    // trigger-written value. Without @Generated it was never re-read at all, so the entity held
+    // null after an insert while the NOT NULL column always carried a value.
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
 }
