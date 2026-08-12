@@ -254,14 +254,16 @@ public class CommentServiceImpl implements CommentService {
                 throw new AppException(ApiErrorCode.COMMENT_MODERATION_REJECTED);
             }
             comment.setContent(content);
-            // The only place edited_at is written. Set before save so the response and the
-            // broadcast projection built from it below carry the new value rather than the
-            // pre-edit one, which is what updated_at does here since its trigger writes it after
-            // this method has already read the entity. Truncated to the microsecond resolution
+            // The only place edited_at is written. Truncated to the microsecond resolution
             // TIMESTAMPTZ stores, so the value returned here is byte-identical to the one a
             // subsequent read returns rather than carrying JVM nanoseconds the column drops.
             comment.setEditedAt(OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS));
-            Comment saved = commentRepository.save(comment);
+            // Flush forces the UPDATE (and its trg_comments_updated_at trigger) before the
+            // response and the broadcast projection are assembled from the entity below. Under
+            // save() alone the flush happened after this method had already read updated_at, so
+            // both carried the value the previous edit left behind, one edit behind the row and
+            // behind the edited_at set just above it.
+            Comment saved = commentRepository.saveAndFlush(comment);
             // hasReported is false without a lookup: only the author may edit, and self-reporting
             // is rejected, so no report by them against this comment can exist.
             CommentResponse response =

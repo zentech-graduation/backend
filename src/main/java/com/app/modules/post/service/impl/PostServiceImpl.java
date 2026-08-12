@@ -132,8 +132,8 @@ public class PostServiceImpl implements PostService {
                             .latitude(request.latitude())
                             .longitude(request.longitude())
                             .build();
-            // Flush so the DB-assigned id and @CreationTimestamp createdAt are populated before
-            // the index-upsert event payload reads them.
+            // Flush so the DB-assigned id and the database-generated createdAt are populated
+            // before the index-upsert event payload reads them.
             postRepository.saveAndFlush(post);
             if (initialStatus == PostStatus.PUBLISHED) {
                 upsertCaptionHashtags(post.getId(), post.getCaption());

@@ -53,24 +53,37 @@ class MailTransportSelectionTest {
     }
 
     @Test
-    void absentTransport_failsTheContext() {
+    void absentTransport_failsNamingThePropertyAndTheAcceptedValues() {
         runner.withPropertyValues("spring.profiles.active=dev")
                 .run(
                         context -> {
                             assertThat(context).hasFailed();
+                            // Asserting only that startup failed would pass on the defect being
+                            // fixed here: absence used to reach Spring's generic "no qualifying
+                            // bean of type MailSender" message, which gives an operator no reason
+                            // to suspect the mail transport property.
                             assertThat(context.getStartupFailure())
-                                    .hasMessageContaining(MailSender.class.getSimpleName());
+                                    .rootCause()
+                                    .isInstanceOf(IllegalStateException.class)
+                                    .hasMessageContaining("app.mail.transport")
+                                    .hasMessageContaining("resend")
+                                    .hasMessageContaining("smtp");
                         });
     }
 
     @Test
-    void unrecognisedTransport_failsTheContext() {
+    void unrecognisedTransport_failsNamingTheValueItFoundAndTheAcceptedValues() {
         runner.withPropertyValues("spring.profiles.active=dev", "app.mail.transport=sendgrid")
                 .run(
                         context -> {
                             assertThat(context).hasFailed();
                             assertThat(context.getStartupFailure())
-                                    .hasMessageContaining(MailSender.class.getSimpleName());
+                                    .rootCause()
+                                    .isInstanceOf(IllegalStateException.class)
+                                    .hasMessageContaining("app.mail.transport")
+                                    .hasMessageContaining("sendgrid")
+                                    .hasMessageContaining("resend")
+                                    .hasMessageContaining("smtp");
                         });
     }
 

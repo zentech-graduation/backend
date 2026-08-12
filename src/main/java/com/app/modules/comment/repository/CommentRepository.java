@@ -212,10 +212,23 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
     /**
      * Soft-deletes a comment and every descendant in its subtree in a single statement.
      *
-     * <p>The recursive CTE walks {@code parent_id} edges from the target down. FK {@code ON DELETE
-     * CASCADE} only fires on a hard delete, so descendants must be soft-deleted explicitly here.
-     * Each affected row's {@code AFTER UPDATE} trigger fires, so {@code posts.comment_count} and
-     * the parent {@code reply_count} decrement correctly.
+     * <p>FK {@code ON DELETE CASCADE} only fires on a hard delete, so descendants must be
+     * soft-deleted explicitly here. Each affected row's {@code AFTER UPDATE} trigger fires, so
+     * {@code posts.comment_count} and the parent {@code reply_count} decrement correctly.
+     *
+     * <p>Bounded to the target's own thread before the walk begins, exactly as {@link
+     * #countSubtree} is and for the same reason: every descendant carries the top-level ancestor's
+     * id in {@code root_id}, so {@code idx_comments_root} yields the candidate rows in one index
+     * scan and the recursion runs over that materialised set. Walking {@code parent_id} across
+     * {@code comments} instead cost a sequential scan of the whole table once per subtree level,
+     * because both partial indexes on {@code parent_id} carry a {@code deleted_at IS NULL}
+     * predicate this walk deliberately cannot use.
+     *
+     * <p>That the walk does not filter {@code deleted_at} is load-bearing. {@code
+     * AdminServiceImpl.moderateComment} restores one row at a time, so a live comment can sit
+     * beneath a soft-deleted one; pruning at the deleted parent would leave the live descendant
+     * alive and orphaned. The filter therefore applies only in the final predicate, which is also
+     * what keeps the count reported here equal to {@link #countSubtree}.
      *
      * @param commentId root of the subtree to soft-delete
      * @param now soft-delete timestamp applied to every affected row
@@ -225,11 +238,22 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
     @Query(
             value =
                     """
-					WITH RECURSIVE subtree AS (
-						SELECT id FROM comments WHERE id = :commentId
+					WITH RECURSIVE anchor AS (
+						SELECT id, coalesce(root_id, id) AS thread_id
+						FROM comments WHERE id = :commentId
+					),
+					thread AS (
+						SELECT c.id, c.parent_id
+						FROM comments c JOIN anchor a ON c.id = a.thread_id
 						UNION ALL
-						SELECT c.id FROM comments c
-						JOIN subtree s ON c.parent_id = s.id
+						SELECT c.id, c.parent_id
+						FROM comments c JOIN anchor a ON c.root_id = a.thread_id
+					),
+					subtree AS (
+						SELECT t.id FROM thread t JOIN anchor a ON t.id = a.id
+						UNION ALL
+						SELECT t.id
+						FROM thread t JOIN subtree s ON t.parent_id = s.id
 					)
 					UPDATE comments
 					SET deleted_at = :now
