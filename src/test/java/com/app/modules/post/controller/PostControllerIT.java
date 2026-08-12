@@ -953,6 +953,71 @@ class PostControllerIT {
         assertThat(byId.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
+    @Test
+    @Order(34)
+    void listUserPosts_typeFilter_selectsOnlyTheRequestedTypes() {
+        TestUser author = registerUser("type_filter_author");
+        UUID image = createImagePost(author, "an image", insertMediaAsset(author.id(), "image"));
+        UUID video = createVideoPost(author, "a video", insertMediaAsset(author.id(), "video"));
+        UUID text = createTextPost(author, "some text");
+        String base = "/api/v1/posts/user/" + author.id();
+
+        // Absent means no filter, so the unfiltered response is unchanged by this feature.
+        assertThat(idsOf(getWithAuth(base, author)))
+                .containsExactlyInAnyOrder(image.toString(), video.toString(), text.toString());
+
+        assertThat(idsOf(getWithAuth(base + "?type=image", author)))
+                .containsExactly(image.toString());
+
+        // The photos tab sends every media-bearing type, which is why type is multi-valued.
+        assertThat(idsOf(getWithAuth(base + "?type=image&type=video&type=carousel", author)))
+                .containsExactlyInAnyOrder(image.toString(), video.toString());
+
+        assertThat(idsOf(getWithAuth(base + "?type=text", author)))
+                .containsExactly(text.toString());
+    }
+
+    @Test
+    @Order(35)
+    void listUserPosts_unrecognisedType_isRejectedNamingTheAcceptedValues() {
+        TestUser author = registerUser("type_reject_author");
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/user/" + author.id() + "?type=photo", author);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat((String) response.getBody().get("message"))
+                .contains("image")
+                .contains("video")
+                .contains("carousel")
+                .contains("text");
+    }
+
+    @Test
+    @Order(36)
+    void listUserPosts_filteredCursorReplayedUnfiltered_isRejected() {
+        TestUser author = registerUser("type_cursor_author");
+        createImagePost(author, "img one", insertMediaAsset(author.id(), "image"));
+        createImagePost(author, "img two", insertMediaAsset(author.id(), "image"));
+        String base = "/api/v1/posts/user/" + author.id();
+
+        ResponseEntity<Map> filtered = getWithAuth(base + "?type=image&limit=1", author);
+        assertThat(filtered.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String cursor = endCursorOf(filtered);
+        assertThat(cursor).isNotNull();
+
+        // Replaying the same cursor unfiltered would silently omit every non-image post that sits
+        // before this position, so the filter is bound into the cursor scope and the replay fails.
+        ResponseEntity<Map> replayed = getWithAuth(base + "?cursor=" + cursor, author);
+        assertThat(replayed.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(replayed.getBody().get("code")).isEqualTo("INVALID_CURSOR");
+
+        // A differently ordered but equal filter set normalises to the same scope, so it is
+        // accepted.
+        ResponseEntity<Map> reordered = getWithAuth(base + "?type=image&cursor=" + cursor, author);
+        assertThat(reordered.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
     private TestUser registerUser(String username) {
         String email = username + "@test.local";
         String password = "S3cur3P@ssword!";
@@ -1096,5 +1161,43 @@ class PostControllerIT {
         assertThat(response.getBody()).isNotNull();
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         return (List<Map<?, ?>>) data.get("content");
+    }
+
+    private static List<String> idsOf(ResponseEntity<Map> response) {
+        return contentOf(response).stream().map(entry -> (String) entry.get("id")).toList();
+    }
+
+    private static String endCursorOf(ResponseEntity<Map> response) {
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        return (String) ((Map<?, ?>) data.get("pageInfo")).get("endCursor");
+    }
+
+    private UUID createVideoPost(TestUser author, String caption, UUID mediaId) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("caption", caption);
+        payload.put("postType", "video");
+        payload.put("mediaIds", List.of(mediaId.toString()));
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        return UUID.fromString((String) ((Map<?, ?>) response.getBody().get("data")).get("id"));
+    }
+
+    private UUID createTextPost(TestUser author, String caption) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("caption", caption);
+        payload.put("postType", "text");
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        return UUID.fromString((String) ((Map<?, ?>) response.getBody().get("data")).get("id"));
     }
 }
