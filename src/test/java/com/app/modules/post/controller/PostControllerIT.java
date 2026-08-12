@@ -878,6 +878,81 @@ class PostControllerIT {
         assertThat(createdAtOnCreate).endsWith("Z");
     }
 
+    @Test
+    @Order(32)
+    void listLikedPosts_returnsOwnLikesAndFiltersEveryInvisibilityCase() {
+        TestUser liker = registerUser("liked_tab_viewer");
+        TestUser author = registerUser("liked_tab_author");
+        TestUser blocker = registerUser("liked_tab_blocker");
+        TestUser privateAuthor = registerUser("liked_tab_private");
+
+        UUID visible = createImagePost(author, "visible", insertMediaAsset(author.id(), "image"));
+        UUID softDeleted =
+                createImagePost(author, "soft deleted", insertMediaAsset(author.id(), "image"));
+        UUID archived = createImagePost(author, "archived", insertMediaAsset(author.id(), "image"));
+        UUID blocked = createImagePost(blocker, "blocked", insertMediaAsset(blocker.id(), "image"));
+        UUID privatePost =
+                createImagePost(
+                        privateAuthor, "private", insertMediaAsset(privateAuthor.id(), "image"));
+
+        for (UUID postId : List.of(visible, softDeleted, archived, blocked, privatePost)) {
+            ResponseEntity<Map> liked =
+                    rest.exchange(
+                            "/api/v1/posts/" + postId + "/like",
+                            HttpMethod.POST,
+                            new HttpEntity<>(authHeaders(liker)),
+                            Map.class);
+            assertThat(liked.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        }
+
+        // Each of the four invisibility cases is applied only after the like exists, so the like
+        // row
+        // survives and the filtering is what removes the post from the list.
+        transition(author, softDeleted, "removed");
+        transition(author, archived, "archived");
+        insertBlock(blocker.id(), liker.id());
+        jdbcTemplate.update("UPDATE users SET is_private = TRUE WHERE id = ?", privateAuthor.id());
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/posts/liked", liker);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<?, ?>> content = contentOf(response);
+        assertThat(content).hasSize(1);
+        Map<?, ?> onlyEntry = content.get(0);
+        assertThat(onlyEntry.get("likedAt")).isNotNull();
+        assertThat(((Map<?, ?>) onlyEntry.get("post")).get("id")).isEqualTo(visible.toString());
+
+        // Every like row is still present; only the projection filtered them.
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM post_likes WHERE user_id = ?",
+                                Integer.class,
+                                liker.id()))
+                .isEqualTo(5);
+    }
+
+    @Test
+    @Order(33)
+    void listLikedPosts_isSelfOnlyAndLeavesPostByIdResolvable() {
+        TestUser owner = registerUser("liked_self_owner");
+        TestUser other = registerUser("liked_self_other");
+        UUID postId = createImagePost(owner, "mine", insertMediaAsset(owner.id(), "image"));
+        rest.exchange(
+                "/api/v1/posts/" + postId + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(owner)),
+                Map.class);
+
+        // The listing takes its subject from the security context, so a second account paging the
+        // same path sees its own likes rather than the owner's.
+        assertThat(contentOf(getWithAuth("/api/v1/posts/liked", owner))).hasSize(1);
+        assertThat(contentOf(getWithAuth("/api/v1/posts/liked", other))).isEmpty();
+
+        // The literal /liked segment must not shadow the /{postId} template.
+        ResponseEntity<Map> byId = getWithAuth("/api/v1/posts/" + postId, owner);
+        assertThat(byId.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
     private TestUser registerUser(String username) {
         String email = username + "@test.local";
         String password = "S3cur3P@ssword!";

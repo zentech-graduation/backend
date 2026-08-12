@@ -109,4 +109,49 @@ public interface PostLikeRepository extends JpaRepository<PostLike, PostLikeId> 
             @Param("cursorTime") OffsetDateTime cursorTime,
             @Param("cursorUserId") UUID cursorUserId,
             Pageable pageable);
+
+    /**
+     * First keyset page of the posts one user has liked, newest like first.
+     *
+     * <p>Paired with {@link #findLikesBefore}; the no-cursor variant avoids binding an untyped null
+     * cursor. Native so the sibling can use a row-value tuple comparison for an exact index seek,
+     * which JPQL cannot express. The tiebreaker is {@code post_id}, the unique like key within a
+     * user.
+     *
+     * @param userId the liking user
+     * @param pageable page size carrier (page number is always 0 for keyset paging)
+     * @return likes ordered by the {@code (created_at, post_id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM post_likes WHERE user_id = :userId "
+                            + "ORDER BY created_at DESC, post_id DESC",
+            nativeQuery = true)
+    List<PostLike> findFirstLikes(@Param("userId") UUID userId, Pageable pageable);
+
+    /**
+     * Keyset page of one user's likes strictly after the cursor tuple, newest like first.
+     *
+     * <p>The {@code (created_at, post_id)} row-value comparison seeks directly to the cursor
+     * position and never drops likes sharing a boundary {@code created_at}. Served exactly by
+     * {@code idx_post_likes_user_created_post} (V46).
+     *
+     * @param userId the liking user
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorPostId liked-post id of the cursor row, breaking ties on equal {@code
+     *     created_at}
+     * @param pageable page size carrier
+     * @return likes ordered by the {@code (created_at, post_id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM post_likes WHERE user_id = :userId "
+                            + "AND (created_at, post_id) < (:cursorTime, :cursorPostId) "
+                            + "ORDER BY created_at DESC, post_id DESC",
+            nativeQuery = true)
+    List<PostLike> findLikesBefore(
+            @Param("userId") UUID userId,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorPostId") UUID cursorPostId,
+            Pageable pageable);
 }

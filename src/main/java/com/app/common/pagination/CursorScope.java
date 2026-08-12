@@ -21,6 +21,7 @@ public final class CursorScope {
     public static final String POST_FEED = "feed";
     public static final String POST_EDIT_HISTORY = "edh";
     public static final String POST_LIKERS = "lik";
+    public static final String POST_LIKED_POSTS = "lkd";
     public static final String POST_SAVES = "sav";
     public static final String REPORTS = "rpt";
     public static final String PENDING_REPORTS = "prpt";

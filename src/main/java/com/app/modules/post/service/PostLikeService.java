@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
+import com.app.modules.post.dto.response.LikedPostResponse;
 
 /** Domain API for post like actions and liker listings. */
 public interface PostLikeService {
@@ -48,4 +49,18 @@ public interface PostLikeService {
      */
     CursorPageResponse<UserListItemResponse> listLikers(
             UUID viewerId, UUID postId, String cursor, int size);
+
+    /**
+     * Cursor-paginated posts the authenticated user has liked, newest like first.
+     *
+     * <p>Self-only: the subject is the caller, so there is no target user and no target-user
+     * visibility rule. Posts that are soft-deleted, no longer published, or no longer visible to
+     * the caller are omitted, which can return fewer entries than requested.
+     *
+     * @param userId authenticated user whose likes are listed
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param size requested page size, normalized to 1–100 with a default of 20
+     * @return cursor page of liked posts paired with the timestamp of each like
+     */
+    CursorPageResponse<LikedPostResponse> listLikedPosts(UUID userId, String cursor, int size);
 }
