@@ -1018,6 +1018,40 @@ class PostControllerIT {
         assertThat(reordered.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
+    @Test
+    @Order(37)
+    void listUserPosts_undeclaredQueryParameter_isRejectedOnTheOptedInHandler() {
+        TestUser author = registerUser("strict_param_author");
+        String base = "/api/v1/posts/user/" + author.id();
+
+        // The three parameters below are the ones a client actually tried against this endpoint
+        // while it silently returned an unfiltered page, which is why this handler opts in.
+        for (String param : List.of("mediaType=IMAGE", "hasMedia=true", "postType=image")) {
+            ResponseEntity<Map> response = getWithAuth(base + "?" + param, author);
+            assertThat(response.getStatusCode())
+                    .as("undeclared parameter %s must not be silently ignored", param)
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat((String) response.getBody().get("message")).contains(param.split("=")[0]);
+        }
+
+        // Declared parameters are unaffected.
+        assertThat(getWithAuth(base + "?type=image&limit=5", author).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(getWithAuth(base, author).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @Order(38)
+    void undeclaredQueryParameter_onAHandlerThatDidNotOptIn_isStillIgnored() {
+        TestUser viewer = registerUser("lenient_param_viewer");
+
+        // Strictness is opt-in per handler, so the other endpoints keep their existing behaviour.
+        assertThat(getWithAuth("/api/v1/posts/saved?bogus=1", viewer).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(getWithAuth("/api/v1/posts/feed?bogus=1", viewer).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
     private TestUser registerUser(String username) {
         String email = username + "@test.local";
         String password = "S3cur3P@ssword!";

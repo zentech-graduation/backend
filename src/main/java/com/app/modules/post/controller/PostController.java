@@ -22,6 +22,7 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.post.api.PostApi;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
@@ -116,6 +117,7 @@ public class PostController extends BaseController implements PostApi {
     /** Lists a user's published posts visible to the authenticated viewer. */
     @Override
     @GetMapping(ApiConstants.Posts.USER_POSTS)
+    @StrictQueryParameters
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<PostResponse>>> listUserPosts(
             @PathVariable("userId") UUID userId,
