@@ -261,6 +261,8 @@ class MediaServiceImplTest {
         verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
     }
 
+    // The invalid example used to be image/gif. GIF is an accepted image type now, so this pins
+    // HEIC instead, which is deliberately refused and therefore still rejects before the probe.
     @Test
     void completeUpload_invalidMetadataRejectsBeforeProbingStorage() {
         when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
@@ -268,7 +270,7 @@ class MediaServiceImplTest {
                 new MediaUploadCompleteRequest(
                         VALID_STORAGE_KEY,
                         MediaType.IMAGE,
-                        "image/gif",
+                        "image/heic",
                         1024L,
                         800,
                         600,

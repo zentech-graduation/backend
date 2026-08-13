@@ -16,9 +16,11 @@ public class MediaProperties {
 
     private String cdnBaseUrl;
 
-    private List<String> allowedImageMimeTypes = List.of("image/jpeg", "image/png", "image/webp");
+    private List<String> allowedImageMimeTypes =
+            List.of("image/jpeg", "image/png", "image/webp", "image/gif");
 
-    private List<String> allowedVideoMimeTypes = List.of("video/mp4", "video/webm");
+    private List<String> allowedVideoMimeTypes =
+            List.of("video/mp4", "video/webm", "video/quicktime");
 
     private String storageKeyPattern = "^[a-zA-Z0-9][a-zA-Z0-9/_.-]{1,511}$";
 

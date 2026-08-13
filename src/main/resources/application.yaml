@@ -160,9 +160,11 @@ app:
       - image/jpeg
       - image/png
       - image/webp
+      - image/gif
     allowed-video-mime-types:
       - video/mp4
       - video/webm
+      - video/quicktime
     storage-key-pattern: ${MEDIA_STORAGE_KEY_PATTERN:^[a-zA-Z0-9][a-zA-Z0-9/_.-]{1,511}$}
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}

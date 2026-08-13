@@ -78,13 +78,16 @@ class MediaMetadataValidatorTest {
                 .hasMessage("Image duration must be null");
     }
 
+    // The unsupported example used to be image/gif. GIF is an accepted image type now, so this
+    // pins HEIC instead, which is deliberately refused because the CDN serves what was stored and
+    // Chrome and Firefox cannot render it.
     @Test
     void validateRejectsUnsupportedMimeType() {
         MediaUploadCompleteRequest request =
                 new MediaUploadCompleteRequest(
-                        "users/123/media/image.gif",
+                        "users/123/media/image.heic",
                         MediaType.IMAGE,
-                        "image/gif",
+                        "image/heic",
                         1024L,
                         800,
                         600,
@@ -92,6 +95,34 @@ class MediaMetadataValidatorTest {
                         null);
 
         assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Media MIME type is not allowed");
+    }
+
+    @Test
+    void validateUploadUrlRequest_gifImage_isAccepted() {
+        ValidatedMediaUploadRequest request =
+                validator.validateUploadUrlRequest(
+                        new MediaUploadUrlRequest(MediaType.IMAGE, "image/gif", 1024L), 100);
+
+        assertThat(request.mimeType()).isEqualTo("image/gif");
+    }
+
+    @Test
+    void validateUploadUrlRequest_quicktimeVideo_isAccepted() {
+        ValidatedMediaUploadRequest request =
+                validator.validateUploadUrlRequest(
+                        new MediaUploadUrlRequest(MediaType.VIDEO, "video/quicktime", 1024L), 100);
+
+        assertThat(request.mimeType()).isEqualTo("video/quicktime");
+    }
+
+    @Test
+    void validateUploadUrlRequest_heifImage_isRejected() {
+        MediaUploadUrlRequest request =
+                new MediaUploadUrlRequest(MediaType.IMAGE, "image/heif", 1024L);
+
+        assertThatThrownBy(() -> validator.validateUploadUrlRequest(request, 100))
                 .isInstanceOf(AppException.class)
                 .hasMessage("Media MIME type is not allowed");
     }

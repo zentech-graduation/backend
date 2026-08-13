@@ -79,6 +79,13 @@ class MediaControllerIT {
         r.add("spring.datasource.hikari.data-source-properties.stringtype", () -> "unspecified");
         r.add("app.outbox.publisher.enabled", () -> false);
         r.add("app.media.cdn-base-url", () -> "https://cdn.it.local");
+        // Presigning is local signature computation, never a call to R2, so dummy credentials
+        // produce a real presigned URL offline and let the presign path be exercised here.
+        r.add("app.media.r2.endpoint", () -> "https://r2.it.local");
+        r.add("app.media.r2.access-key-id", () -> "it-access-key");
+        r.add("app.media.r2.secret-access-key", () -> "it-secret-key");
+        r.add("app.media.r2.bucket", () -> "it-bucket");
+        r.add("app.media.r2.region", () -> "auto");
     }
 
     @MockitoBean private MailService mailService;
@@ -198,6 +205,123 @@ class MediaControllerIT {
         // after the probe was moved out of it, including through the package-private registrar's
         // CGLIB proxy, where a silently unapplied @Transactional would otherwise go unnoticed.
         assertThat(countOutboxEvents()).isEqualTo(1);
+    }
+
+    @Test
+    void createUploadUrl_gifImage_returns200AndAGifStorageKey() {
+        TestUser user = createUser("media_gif_owner");
+
+        ResponseEntity<Map> response = createUploadUrl(user, "IMAGE", "image/gif", 1024L);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(storageKeyOf(response)).endsWith(".gif");
+    }
+
+    @Test
+    void createUploadUrl_quicktimeVideo_returns200AndAMovStorageKey() {
+        TestUser user = createUser("media_mov_owner");
+
+        ResponseEntity<Map> response = createUploadUrl(user, "VIDEO", "video/quicktime", 1024L);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(storageKeyOf(response)).endsWith(".mov");
+    }
+
+    // Pins the decision to refuse HEIC. The CDN serves exactly what was stored and performs no
+    // transcoding, so an accepted HEIC would upload cleanly and then fail to render in Chrome and
+    // Firefox. Widening the allowlist to include it must break this test.
+    @Test
+    void createUploadUrl_heicImage_returns400() {
+        TestUser user = createUser("media_heic_owner");
+
+        ResponseEntity<Map> response = createUploadUrl(user, "IMAGE", "image/heic", 1024L);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(response.getBody()).containsEntry("code", "MEDIA_INVALID_METADATA");
+    }
+
+    @Test
+    void createUploadUrl_heifImage_returns400() {
+        TestUser user = createUser("media_heif_owner");
+
+        ResponseEntity<Map> response = createUploadUrl(user, "IMAGE", "image/heif", 1024L);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(response.getBody()).containsEntry("code", "MEDIA_INVALID_METADATA");
+    }
+
+    @Test
+    void completeUpload_gifImage_returns201AndPersistsRow() {
+        TestUser user = createUser("media_gif_complete_owner");
+        String storageKey = "users/%s/media/animated.gif".formatted(user.id());
+        when(objectStorageMetadataService.findObjectMetadata(storageKey))
+                .thenReturn(
+                        Optional.of(
+                                new ObjectStorageMetadataService.StoredObjectMetadata(
+                                        1024L, "image/gif")));
+
+        ResponseEntity<Map> response = completeUpload(user, storageKey, "image/gif", 1024L);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        assertThat(countMediaAssets(storageKey)).isEqualTo(1);
+    }
+
+    @Test
+    void completeUpload_quicktimeVideo_returns201AndPersistsRow() {
+        TestUser user = createUser("media_mov_complete_owner");
+        String storageKey = "users/%s/media/capture.mov".formatted(user.id());
+        when(objectStorageMetadataService.findObjectMetadata(storageKey))
+                .thenReturn(
+                        Optional.of(
+                                new ObjectStorageMetadataService.StoredObjectMetadata(
+                                        2048L, "video/quicktime")));
+
+        ResponseEntity<Map> response =
+                completeUploadVideo(user, storageKey, "video/quicktime", 2048L, 12);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        assertThat(countMediaAssets(storageKey)).isEqualTo(1);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static String storageKeyOf(ResponseEntity<Map> response) {
+        Object data = response.getBody().get("data");
+        return (String) ((Map<?, ?>) data).get("storageKey");
+    }
+
+    @SuppressWarnings("rawtypes")
+    private ResponseEntity<Map> createUploadUrl(
+            TestUser user, String mediaType, String mimeType, long fileSize) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(user.token());
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String body =
+                """
+				{"mediaType":"%s","mimeType":"%s","fileSize":%d}"""
+                        .formatted(mediaType, mimeType, fileSize);
+        return rest.exchange(
+                "/api/v1/media/upload",
+                HttpMethod.POST,
+                new HttpEntity<>(body, headers),
+                Map.class);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private ResponseEntity<Map> completeUploadVideo(
+            TestUser user, String storageKey, String mimeType, long fileSize, int duration) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(user.token());
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String body =
+                """
+				{"storageKey":"%s","mediaType":"VIDEO","mimeType":"%s","fileSize":%d,\
+				"width":1920,"height":1080,"duration":%d}"""
+                        .formatted(storageKey, mimeType, fileSize, duration);
+        return rest.exchange(
+                "/api/v1/media/upload-complete",
+                HttpMethod.POST,
+                new HttpEntity<>(body, headers),
+                Map.class);
     }
 
     @SuppressWarnings("rawtypes")
