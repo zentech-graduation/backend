@@ -3,6 +3,7 @@ package com.app.modules.media.api;
 import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,6 +13,7 @@ import com.app.common.response.ApiResponse;
 import com.app.modules.media.dto.request.MediaUploadCompleteRequest;
 import com.app.modules.media.dto.request.MediaUploadUrlRequest;
 import com.app.modules.media.dto.response.MediaAssetResponse;
+import com.app.modules.media.dto.response.MediaConstraintsResponse;
 import com.app.modules.media.dto.response.MediaUploadUrlResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -131,4 +133,35 @@ public interface MediaApi {
     @PostMapping(ApiConstants.Media.UPLOAD_COMPLETE)
     ResponseEntity<ApiResponse<MediaAssetResponse>> completeUpload(
             @Valid @RequestBody MediaUploadCompleteRequest request);
+
+    @Operation(
+            summary = "Get media upload constraints",
+            description =
+                    "Returns the accepted image and video MIME types, the maximum upload size, and"
+                            + " the maximum declared video duration. Served from the same"
+                            + " configuration the upload validator reads, so a client never needs"
+                            + " its own copy of these values. The duration ceiling is advisory:"
+                            + " duration is client-supplied and the server never reads the file.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Upload constraints returned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "503",
+                description = "The media size system setting is missing or unusable",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Media.CONSTRAINTS)
+    ResponseEntity<ApiResponse<MediaConstraintsResponse>> getUploadConstraints();
 }

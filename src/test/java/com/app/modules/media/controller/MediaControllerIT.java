@@ -3,6 +3,7 @@ package com.app.modules.media.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +21,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,8 +36,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.common.settings.service.SystemSettingService;
 import com.app.modules.mail.service.MailService;
+import com.app.modules.media.config.MediaProperties;
 import com.app.modules.media.storage.ObjectStorageMetadataService;
+import com.app.modules.media.validation.MediaMetadataValidator;
 import com.zaxxer.hikari.HikariDataSource;
 
 @SpringBootTest(
@@ -97,6 +102,9 @@ class MediaControllerIT {
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private DataSource dataSource;
+    @Autowired private MediaMetadataValidator metadataValidator;
+    @Autowired private MediaProperties mediaProperties;
+    @Autowired private SystemSettingService systemSettingService;
 
     private record TestUser(UUID id, String token) {}
 
@@ -330,6 +338,71 @@ class MediaControllerIT {
 
         assertThat(response.getStatusCode().value()).isEqualTo(201);
         assertThat(countMediaAssets(storageKey)).isEqualTo(1);
+    }
+
+    @Test
+    void constraints_requiresAuthentication() {
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/media/constraints",
+                        HttpMethod.GET,
+                        new HttpEntity<>(new HttpHeaders()),
+                        Map.class);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+    }
+
+    // Driven from the configuration the validator reads, never from literals. A literal here would
+    // pass while the endpoint and the enforcement drifted apart, which is the one failure this
+    // endpoint exists to prevent.
+    @Test
+    void constraints_publishTheValuesTheValidatorEnforces() {
+        TestUser user = createUser("media_constraints_owner");
+
+        ResponseEntity<Map> response = getConstraints(user);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("acceptedImageMimeTypes"))
+                .isEqualTo(
+                        List.copyOf(
+                                metadataValidator.acceptedMimeTypes(
+                                        com.app.modules.media.enums.MediaType.IMAGE)));
+        assertThat(data.get("acceptedVideoMimeTypes"))
+                .isEqualTo(
+                        List.copyOf(
+                                metadataValidator.acceptedMimeTypes(
+                                        com.app.modules.media.enums.MediaType.VIDEO)));
+        assertThat(((Number) data.get("maxVideoDurationSeconds")).intValue())
+                .isEqualTo(mediaProperties.getMaxVideoDurationSeconds());
+        assertThat(((Number) data.get("maxFileSizeBytes")).longValue())
+                .isEqualTo(
+                        systemSettingService.getRequiredLong("max_media_size_mb") * 1024L * 1024L);
+    }
+
+    // The published list is only trustworthy if the enforcement actually refuses everything absent
+    // from it, so this drives a rejected type straight from the endpoint's own answer.
+    @Test
+    @SuppressWarnings("unchecked")
+    void constraints_everyPublishedImageTypeIsAcceptedAndAnAbsentOneIsNot() {
+        TestUser user = createUser("media_constraints_agree_owner");
+        Map<?, ?> data = (Map<?, ?>) getConstraints(user).getBody().get("data");
+        List<String> publishedImageTypes = (List<String>) data.get("acceptedImageMimeTypes");
+
+        for (String mimeType : publishedImageTypes) {
+            assertThat(createUploadUrl(user, "IMAGE", mimeType, 1024L).getStatusCode())
+                    .as("published image type %s must be accepted by presign", mimeType)
+                    .isEqualTo(HttpStatus.OK);
+        }
+        assertThat(publishedImageTypes).doesNotContain("image/heic", "image/heif");
+    }
+
+    @SuppressWarnings("rawtypes")
+    private ResponseEntity<Map> getConstraints(TestUser user) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(user.token());
+        return rest.exchange(
+                "/api/v1/media/constraints", HttpMethod.GET, new HttpEntity<>(headers), Map.class);
     }
 
     @SuppressWarnings("rawtypes")

@@ -15,8 +15,10 @@ import com.app.modules.media.config.MediaProperties;
 import com.app.modules.media.dto.request.MediaUploadCompleteRequest;
 import com.app.modules.media.dto.request.MediaUploadUrlRequest;
 import com.app.modules.media.dto.response.MediaAssetResponse;
+import com.app.modules.media.dto.response.MediaConstraintsResponse;
 import com.app.modules.media.dto.response.MediaUploadUrlResponse;
 import com.app.modules.media.entity.MediaAsset;
+import com.app.modules.media.enums.MediaType;
 import com.app.modules.media.service.MediaService;
 import com.app.modules.media.storage.MediaStorageKeyGenerator;
 import com.app.modules.media.storage.ObjectStorageMetadataService;
@@ -30,6 +32,7 @@ public class MediaServiceImpl implements MediaService {
 
     private static final String MAX_MEDIA_SIZE_SETTING_KEY = "max_media_size_mb";
     private static final String STORAGE_KEY_PREFIX_TEMPLATE = "users/%s/media/";
+    private static final long BYTES_PER_MEGABYTE = 1024L * 1024L;
 
     private final MediaMetadataValidator metadataValidator;
     private final SystemSettingService systemSettingService;
@@ -109,6 +112,20 @@ public class MediaServiceImpl implements MediaService {
                         .build();
 
         return mediaAssetRegistrar.register(mediaAsset);
+    }
+
+    @Override
+    public MediaConstraintsResponse getUploadConstraints() {
+        // Read through the validator's own accessor and the same system setting completeUpload
+        // passes it, so the published constraints are the enforced constraints by construction
+        // rather than by a second list that has to be kept in step.
+        long maxMediaSizeMegabytes =
+                systemSettingService.getRequiredLong(MAX_MEDIA_SIZE_SETTING_KEY);
+        return new MediaConstraintsResponse(
+                metadataValidator.acceptedMimeTypes(MediaType.IMAGE),
+                metadataValidator.acceptedMimeTypes(MediaType.VIDEO),
+                maxMediaSizeMegabytes * BYTES_PER_MEGABYTE,
+                mediaProperties.getMaxVideoDurationSeconds());
     }
 
     /**
