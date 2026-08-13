@@ -189,6 +189,75 @@ class PostControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
+    // Pins the mixed-media carousel allowance. The media type check is scoped to single-asset
+    // posts by contract, not by accident, so a carousel may hold images and video together. Do not
+    // close this as a gap: a client feature is built on it.
+    @Test
+    void createPost_carouselMixingImageAndVideo_returnsCreated() {
+        TestUser author = registerUser("mixed_carousel_author");
+        UUID imageId = insertMediaAsset(author.id(), "image");
+        UUID videoId = insertMediaAsset(author.id(), "video");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "carousel");
+        payload.put("mediaIds", List.of(imageId.toString(), videoId.toString()));
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    // The other half of the allowance: the exemption is scoped to carousels, so a single-asset
+    // post still has to match its declared type. If this ever passes, the carousel behaviour has
+    // stopped being an exemption and become an absent check.
+    @Test
+    void createPost_imagePostWithVideoAsset_returnsBadRequest() {
+        TestUser author = registerUser("mismatched_image_author");
+        UUID videoId = insertMediaAsset(author.id(), "video");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "image");
+        payload.put("mediaIds", List.of(videoId.toString()));
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    // Upper bound accepted side. createPost_mediaIdsAboveMax_returnsBadRequest covers 11 rejected,
+    // and createPost_carouselWithOneMedia_returnsBadRequest covers the lower bound.
+    @Test
+    void createPost_carouselWithExactlyMaxMedia_returnsCreated() {
+        TestUser author = registerUser("max_carousel_author");
+        List<String> mediaIds = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            mediaIds.add(insertMediaAsset(author.id(), "image").toString());
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "carousel");
+        payload.put("mediaIds", mediaIds);
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
     @Test
     @Order(1)
     void createPost_carouselWithOneMedia_returnsBadRequest() {
