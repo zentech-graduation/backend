@@ -121,6 +121,7 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/media";
         public static final String UPLOAD = "/upload";
         public static final String UPLOAD_COMPLETE = "/upload-complete";
+        public static final String CONSTRAINTS = "/constraints";
     }
 
     public static final class Reports {

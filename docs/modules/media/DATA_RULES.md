@@ -55,6 +55,28 @@ Media records are created after a client-side upload to Cloudflare R2 via pre-si
 | **Stored-object verification before `media_assets` insert**: upload-complete must confirm with object storage that an object exists under the submitted `storage_key` before the row is written. Absent object rejects with 422. The stored object's `Content-Length` must equal the submitted `file_size` and its `Content-Type` must equal the submitted `mime_type`; either mismatch rejects with 422. This is a header check only, never a body fetch, so it does not make the server an inspector of media content. | `MediaServiceImpl`, `ObjectStorageMetadataService` |
 | **Verification fails closed**: if object storage is unreachable or errors, upload-complete rejects with 503 and writes no row. A row is never created on an unverified key, so no lifecycle or status column is needed to represent a pending asset. This also removes the need for a registry of previously issued storage keys, because a key the server never presigned is also a key nothing was uploaded to. | `MediaServiceImpl`, `R2ObjectStorageMetadataService` |
 
+### B1. Video duration is advisory, file size is verified
+
+These two limits look alike and are not, so a reader should not assume one is as strong as the other.
+
+**Video duration is advisory.**
+`app.media.max-video-duration-seconds` (default 180) rejects an upload-complete request whose declared `duration` exceeds it.
+Duration is client-supplied metadata and the server never opens the file, so the limit stops an honest client and does nothing against a dishonest one.
+A client that declares 10 and uploads a 20-minute video is accepted.
+It is still worth enforcing, because it gives the composer a rule to enforce ahead of upload and a message to show, but it must never be described as a guarantee.
+
+Making it enforceable would require the server to read the uploaded bytes and decode the container to extract the real duration, either inline at upload-complete or in a background job that corrects or removes the row afterwards.
+That reverses the decision in `GLOBAL_RULES.md` section 7 that the server performs no server-side media inspection, and is its own project.
+
+**File size is genuinely verified.**
+The stored-object probe compares the object's actual `Content-Length` against the declared `file_size` and rejects a mismatch with 422.
+The presigned URL also signs the content length, so R2 itself refuses a body of any other size.
+A lie about file size is therefore caught; a lie about duration is not.
+
+**The size ceiling is global, not per media type.**
+`system_settings.max_media_size_mb` (default 100) is applied identically to image and video, so a 100MB image is accepted even though the ceiling is sized for video.
+This is a known consequence of a single setting and is recorded here rather than changed.
+
 ### C. Scope Simplifications
 
 - `users.avatar_url` stores the CDN URL as plain `TEXT`, not a FK to `media_assets`. This means avatar assets are not referentially tracked and can become orphaned if not explicitly deleted.
