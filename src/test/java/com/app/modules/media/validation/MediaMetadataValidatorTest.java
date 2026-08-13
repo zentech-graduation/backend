@@ -161,6 +161,47 @@ class MediaMetadataValidatorTest {
                                 + " video/quicktime, video/webm");
     }
 
+    @Test
+    void validate_videoDurationOverConfiguredMaximum_isRejected() {
+        MediaUploadCompleteRequest request = videoRequestWithDuration(181);
+
+        assertThatThrownBy(() -> validator.validate(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Video duration must not exceed 180 seconds");
+    }
+
+    @Test
+    void validate_videoDurationExactlyAtConfiguredMaximum_isAccepted() {
+        ValidatedMediaMetadata metadata = validator.validate(videoRequestWithDuration(180), 100);
+
+        assertThat(metadata.duration()).isEqualTo(180);
+    }
+
+    // Proves the ceiling is read from configuration rather than compiled in, which is what lets
+    // the constraints endpoint publish it without a second literal to keep in step.
+    @Test
+    void validate_videoDurationLimitIsReadFromConfiguration() {
+        MediaProperties properties = new MediaProperties();
+        properties.setMaxVideoDurationSeconds(30);
+        MediaMetadataValidator configuredValidator = new MediaMetadataValidator(properties);
+
+        assertThatThrownBy(() -> configuredValidator.validate(videoRequestWithDuration(31), 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Video duration must not exceed 30 seconds");
+    }
+
+    private static MediaUploadCompleteRequest videoRequestWithDuration(int duration) {
+        return new MediaUploadCompleteRequest(
+                "users/123/media/video.mp4",
+                MediaType.VIDEO,
+                "video/mp4",
+                1024L,
+                800,
+                600,
+                duration,
+                null);
+    }
+
     // The accepted set the endpoint publishes must be the same object the rule consults, so this
     // pins the accessor rather than letting the endpoint build its own copy of the list.
     @Test

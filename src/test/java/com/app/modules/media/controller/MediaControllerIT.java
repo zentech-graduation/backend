@@ -300,6 +300,38 @@ class MediaControllerIT {
         assertThat(countMediaAssets(storageKey)).isEqualTo(1);
     }
 
+    @Test
+    void completeUpload_videoDurationOverTheLimit_returns400AndPersistsNoRow() {
+        TestUser user = createUser("media_long_video_owner");
+        String storageKey = "users/%s/media/toolong.mp4".formatted(user.id());
+
+        ResponseEntity<Map> response =
+                completeUploadVideo(user, storageKey, "video/mp4", 2048L, 181);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(response.getBody()).containsEntry("code", "MEDIA_INVALID_METADATA");
+        assertThat((String) response.getBody().get("message"))
+                .isEqualTo("Video duration must not exceed 180 seconds");
+        assertThat(countMediaAssets(storageKey)).isZero();
+    }
+
+    @Test
+    void completeUpload_videoDurationExactlyAtTheLimit_returns201() {
+        TestUser user = createUser("media_limit_video_owner");
+        String storageKey = "users/%s/media/atlimit.mp4".formatted(user.id());
+        when(objectStorageMetadataService.findObjectMetadata(storageKey))
+                .thenReturn(
+                        Optional.of(
+                                new ObjectStorageMetadataService.StoredObjectMetadata(
+                                        2048L, "video/mp4")));
+
+        ResponseEntity<Map> response =
+                completeUploadVideo(user, storageKey, "video/mp4", 2048L, 180);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        assertThat(countMediaAssets(storageKey)).isEqualTo(1);
+    }
+
     @SuppressWarnings("rawtypes")
     private static String storageKeyOf(ResponseEntity<Map> response) {
         Object data = response.getBody().get("data");

@@ -152,6 +152,13 @@ public class MediaMetadataValidator {
         if (duration != null && duration < 0) {
             reject("Duration must be non-negative");
         }
+        // Advisory. The value is client-supplied and the server never opens the file, so this
+        // bounds an honest client only. Unlike file size, which the stored-object probe verifies
+        // against the real Content-Length, nothing here can be checked against the upload.
+        int maxSeconds = mediaProperties.getMaxVideoDurationSeconds();
+        if (mediaType == MediaType.VIDEO && duration != null && duration > maxSeconds) {
+            reject("Video duration must not exceed %d seconds".formatted(maxSeconds));
+        }
     }
 
     // Sorted rather than hashed so the rejection message and the constraints endpoint list the

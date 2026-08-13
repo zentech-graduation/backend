@@ -22,6 +22,10 @@ public class MediaProperties {
     private List<String> allowedVideoMimeTypes =
             List.of("video/mp4", "video/webm", "video/quicktime");
 
+    // Advisory only. Duration is client-supplied and the server never reads the file, so this
+    // bounds an honest client and is not a guarantee. See media/DATA_RULES.md section 3B.
+    private int maxVideoDurationSeconds = 180;
+
     private String storageKeyPattern = "^[a-zA-Z0-9][a-zA-Z0-9/_.-]{1,511}$";
 
     private R2 r2 = new R2();
