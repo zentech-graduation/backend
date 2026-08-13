@@ -238,6 +238,10 @@ class MediaControllerIT {
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).containsEntry("code", "MEDIA_INVALID_METADATA");
+        assertThat((String) response.getBody().get("message"))
+                .isEqualTo(
+                        "Unsupported image MIME type 'image/heic'. Accepted: image/gif,"
+                                + " image/jpeg, image/png, image/webp");
     }
 
     @Test
@@ -248,6 +252,19 @@ class MediaControllerIT {
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).containsEntry("code", "MEDIA_INVALID_METADATA");
+    }
+
+    @Test
+    void createUploadUrl_typeOutsideEveryList_returns400NamingTheAcceptedVideoTypes() {
+        TestUser user = createUser("media_unknown_owner");
+
+        ResponseEntity<Map> response = createUploadUrl(user, "VIDEO", "video/x-matroska", 1024L);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat((String) response.getBody().get("message"))
+                .isEqualTo(
+                        "Unsupported video MIME type 'video/x-matroska'. Accepted: video/mp4,"
+                                + " video/quicktime, video/webm");
     }
 
     @Test

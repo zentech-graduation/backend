@@ -3,6 +3,8 @@ package com.app.modules.media.validation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -96,7 +98,9 @@ class MediaMetadataValidatorTest {
 
         assertThatThrownBy(() -> validator.validate(request, 100))
                 .isInstanceOf(AppException.class)
-                .hasMessage("Media MIME type is not allowed");
+                .hasMessage(
+                        "Unsupported image MIME type 'image/heic'. Accepted: image/gif,"
+                                + " image/jpeg, image/png, image/webp");
     }
 
     @Test
@@ -124,7 +128,49 @@ class MediaMetadataValidatorTest {
 
         assertThatThrownBy(() -> validator.validateUploadUrlRequest(request, 100))
                 .isInstanceOf(AppException.class)
-                .hasMessage("Media MIME type is not allowed");
+                .hasMessageContaining("Unsupported image MIME type 'image/heif'");
+    }
+
+    // The point of the message is that a client never needs its own copy of the list. Driving the
+    // validator from a non-default configuration proves the message is rendered from the same
+    // property the rule reads, rather than from a second literal that could drift away from it.
+    @Test
+    void validate_rejectionMessageIsRenderedFromTheConfiguredAllowlist() {
+        MediaProperties properties = new MediaProperties();
+        properties.setAllowedImageMimeTypes(List.of("image/png", "image/avif"));
+        MediaMetadataValidator configuredValidator = new MediaMetadataValidator(properties);
+        MediaUploadUrlRequest request =
+                new MediaUploadUrlRequest(MediaType.IMAGE, "image/jpeg", 1024L);
+
+        assertThatThrownBy(() -> configuredValidator.validateUploadUrlRequest(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage(
+                        "Unsupported image MIME type 'image/jpeg'. Accepted: image/avif,"
+                                + " image/png");
+    }
+
+    @Test
+    void validate_videoRejectionMessageNamesTheAcceptedVideoTypes() {
+        MediaUploadUrlRequest request =
+                new MediaUploadUrlRequest(MediaType.VIDEO, "video/x-msvideo", 1024L);
+
+        assertThatThrownBy(() -> validator.validateUploadUrlRequest(request, 100))
+                .isInstanceOf(AppException.class)
+                .hasMessage(
+                        "Unsupported video MIME type 'video/x-msvideo'. Accepted: video/mp4,"
+                                + " video/quicktime, video/webm");
+    }
+
+    // The accepted set the endpoint publishes must be the same object the rule consults, so this
+    // pins the accessor rather than letting the endpoint build its own copy of the list.
+    @Test
+    void acceptedMimeTypes_returnsTheConfiguredAllowlistNormalizedAndSorted() {
+        MediaProperties properties = new MediaProperties();
+        properties.setAllowedImageMimeTypes(List.of(" IMAGE/WEBP ", "image/png", ""));
+        MediaMetadataValidator configuredValidator = new MediaMetadataValidator(properties);
+
+        assertThat(configuredValidator.acceptedMimeTypes(MediaType.IMAGE))
+                .containsExactly("image/png", "image/webp");
     }
 
     @Test
