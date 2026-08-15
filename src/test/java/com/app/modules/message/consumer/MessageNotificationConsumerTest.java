@@ -1,8 +1,9 @@
-package com.app.modules.story.consumer;
+package com.app.modules.message.consumer;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,24 +31,31 @@ import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
+import com.app.modules.message.messaging.MessageEventTypes;
+import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.service.NotificationService;
-import com.app.modules.story.messaging.StoryEventTypes;
 import com.rabbitmq.client.Channel;
 
 @ExtendWith(MockitoExtension.class)
-class StoryNotificationConsumerTest {
+class MessageNotificationConsumerTest {
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID VIEWER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID OWNER_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
-    private static final UUID STORY_ID = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    private static final UUID SENDER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID CONVERSATION_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000003");
+    private static final UUID MESSAGE_ID = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    private static final UUID RECIPIENT1_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000005");
+    private static final UUID RECIPIENT2_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000006");
 
     @Mock private ProcessedMessageService processedMessageService;
+    @Mock private ConversationParticipantRepository participantRepository;
     @Mock private NotificationService notificationService;
     @Mock private Channel channel;
 
-    private StoryNotificationConsumer consumer;
+    private MessageNotificationConsumer consumer;
 
     @BeforeEach
     void setUp() {
@@ -57,15 +65,16 @@ class StoryNotificationConsumerTest {
         retryProperties.setMaxAttempts(1);
         retryProperties.setRetryBackoffs(List.of(Duration.ZERO));
         consumer =
-                new StoryNotificationConsumer(
+                new MessageNotificationConsumer(
                         new DomainEventMessageParser(),
                         processedMessageService,
+                        participantRepository,
                         notificationService,
                         retryProperties);
     }
 
     @Test
-    void consume_storyViewed_createsStoryViewNotification() throws Exception {
+    void consume_messageSent_notifiesActiveParticipantsExceptSender() throws Exception {
         Message message = message(envelope());
         when(processedMessageService.processOnce(any(), any(), any(), any()))
                 .thenAnswer(
@@ -73,11 +82,17 @@ class StoryNotificationConsumerTest {
                             inv.getArgument(3, Runnable.class).run();
                             return ProcessedMessageResult.PROCESSED;
                         });
+        when(participantRepository.findActiveUserIdsByConversationId(CONVERSATION_ID))
+                .thenReturn(List.of(SENDER_ID, RECIPIENT1_ID, RECIPIENT2_ID));
 
         consumer.consume(message, channel);
 
         verify(notificationService)
-                .create(VIEWER_ID, OWNER_ID, NotificationType.STORY_VIEW, "story", STORY_ID);
+                .create(SENDER_ID, RECIPIENT1_ID, NotificationType.MESSAGE, "message", MESSAGE_ID);
+        verify(notificationService)
+                .create(SENDER_ID, RECIPIENT2_ID, NotificationType.MESSAGE, "message", MESSAGE_ID);
+        verify(notificationService, never())
+                .create(eq(SENDER_ID), eq(SENDER_ID), any(), any(), any());
         verify(channel).basicAck(1L, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
@@ -95,17 +110,17 @@ class StoryNotificationConsumerTest {
     }
 
     @Test
-    void consume_missingStoryId_nacksWithoutRequeue() throws Exception {
+    void consume_missingConversationId_nacksWithoutRequeue() throws Exception {
         Message message =
                 message(
                         new DomainEventEnvelope(
                                 EVENT_ID,
-                                StoryEventTypes.STORY_VIEWED_V1,
+                                MessageEventTypes.MESSAGE_SENT_V1,
                                 OffsetDateTime.now(ZoneOffset.UTC),
-                                VIEWER_ID,
-                                "story",
-                                STORY_ID,
-                                Map.of("ownerId", OWNER_ID.toString())));
+                                SENDER_ID,
+                                "message",
+                                MESSAGE_ID,
+                                Map.of("messageId", MESSAGE_ID.toString())));
 
         consumer.consume(message, channel);
 
@@ -117,17 +132,17 @@ class StoryNotificationConsumerTest {
     }
 
     @Test
-    void consume_missingOwnerId_nacksWithoutRequeue() throws Exception {
+    void consume_missingMessageId_nacksWithoutRequeue() throws Exception {
         Message message =
                 message(
                         new DomainEventEnvelope(
                                 EVENT_ID,
-                                StoryEventTypes.STORY_VIEWED_V1,
+                                MessageEventTypes.MESSAGE_SENT_V1,
                                 OffsetDateTime.now(ZoneOffset.UTC),
-                                VIEWER_ID,
-                                "story",
-                                STORY_ID,
-                                Map.of("storyId", STORY_ID.toString())));
+                                SENDER_ID,
+                                "message",
+                                MESSAGE_ID,
+                                Map.of("conversationId", CONVERSATION_ID.toString())));
 
         consumer.consume(message, channel);
 
@@ -157,11 +172,15 @@ class StoryNotificationConsumerTest {
     private DomainEventEnvelope envelope() {
         return new DomainEventEnvelope(
                 EVENT_ID,
-                StoryEventTypes.STORY_VIEWED_V1,
+                MessageEventTypes.MESSAGE_SENT_V1,
                 OffsetDateTime.now(ZoneOffset.UTC),
-                VIEWER_ID,
-                "story",
-                STORY_ID,
-                Map.of("storyId", STORY_ID.toString(), "ownerId", OWNER_ID.toString()));
+                SENDER_ID,
+                "message",
+                MESSAGE_ID,
+                Map.of(
+                        "conversationId",
+                        CONVERSATION_ID.toString(),
+                        "messageId",
+                        MESSAGE_ID.toString()));
     }
 }

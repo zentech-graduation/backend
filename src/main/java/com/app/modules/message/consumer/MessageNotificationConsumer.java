@@ -1,7 +1,8 @@
-package com.app.modules.story.consumer;
+package com.app.modules.message.consumer;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -23,52 +24,55 @@ import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
+import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.service.NotificationService;
 import com.rabbitmq.client.Channel;
 
 /**
- * RabbitMQ consumer that creates {@code STORY_VIEW} notifications from {@code story.viewed.v1}
- * events.
+ * RabbitMQ consumer that creates {@code MESSAGE} notifications from {@code message.sent.v1} events.
  *
- * <p>The single notification producer for the story module. The recipient (story owner) is resolved
- * from the event {@code data} payload, not from the aggregate id. {@code
- * NotificationService.create} already suppresses self-notifications, blocked actors, and
- * toggled-off preferences (though {@code STORY_VIEW} has no toggle), so no extra guards are applied
- * here. Uses manual acknowledgement with bounded retry; a permanent or retry-exhausted failure
- * nacks without requeue so the broker routes the message to the dead-letter queue per the
- * topology's declared policy.
+ * <p>The single notification producer for the message module. Recipients are the conversation's
+ * active participants at consume time, resolved by a fresh repository query rather than a list
+ * embedded in the event payload, excluding the sender. {@code NotificationService.create} already
+ * suppresses self-notifications, blocked actors, and toggled-off preferences ({@code
+ * notify_messages}), so those are defense-in-depth, not the primary gate. Uses manual
+ * acknowledgement with bounded retry; a permanent or retry-exhausted failure nacks without requeue
+ * so the broker routes the message to the dead-letter queue per the topology's declared policy.
  */
 @Component
 @ConditionalOnProperty(
-        prefix = "app.story.consumer",
+        prefix = "app.message.consumer",
         name = "enabled",
         havingValue = "true",
         matchIfMissing = false)
-public class StoryNotificationConsumer {
+public class MessageNotificationConsumer {
 
-    static final String CONSUMER_NAME = "story-notification-consumer";
+    static final String CONSUMER_NAME = "message-notification-consumer";
 
-    private static final Logger log = LoggerFactory.getLogger(StoryNotificationConsumer.class);
-    private static final String ENTITY_TYPE = "story";
+    private static final Logger log = LoggerFactory.getLogger(MessageNotificationConsumer.class);
+    private static final String ENTITY_TYPE = "message";
 
     private final DomainEventMessageParser parser;
     private final ProcessedMessageService processedMessageService;
+    private final ConversationParticipantRepository participantRepository;
     private final NotificationService notificationService;
     private final ConsumerRetryProperties retryProperties;
 
-    public StoryNotificationConsumer(
+    public MessageNotificationConsumer(
             DomainEventMessageParser parser,
             ProcessedMessageService processedMessageService,
+            ConversationParticipantRepository participantRepository,
             NotificationService notificationService,
             ConsumerRetryProperties retryProperties) {
         this.parser = parser;
         this.processedMessageService = processedMessageService;
+        this.participantRepository = participantRepository;
         this.notificationService = notificationService;
         this.retryProperties = retryProperties;
     }
 
-    @RabbitListener(queues = RabbitMqTopologyConfig.STORY_NOTIFICATION_QUEUE)
+    @RabbitListener(queues = RabbitMqTopologyConfig.MESSAGE_NOTIFICATION_QUEUE)
     public void consume(Message message, Channel channel) throws IOException {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
@@ -78,12 +82,12 @@ public class StoryNotificationConsumer {
             channel.basicAck(deliveryTag, false);
         } catch (PermanentMessageException ex) {
             log.warn(
-                    "Story notification event permanently invalid, dead-lettering: {}",
+                    "Message notification event permanently invalid, dead-lettering: {}",
                     ex.getMessage());
             channel.basicNack(deliveryTag, false, false);
         } catch (RuntimeException ex) {
             log.warn(
-                    "Story notification event failed after exhausting retries, dead-lettering: {}",
+                    "Message notification event failed after exhausting retries, dead-lettering: {}",
                     ex.getMessage());
             channel.basicNack(deliveryTag, false, false);
         }
@@ -113,12 +117,18 @@ public class StoryNotificationConsumer {
 
     private void dispatch(DomainEventEnvelope event) {
         Map<String, Object> data = event.data();
-        notificationService.create(
-                event.actorId(),
-                uuid(data.get("ownerId")),
-                NotificationType.STORY_VIEW,
-                ENTITY_TYPE,
-                uuid(data.get("storyId")));
+        UUID senderId = event.actorId();
+        UUID conversationId = uuid(data.get("conversationId"));
+        UUID messageId = uuid(data.get("messageId"));
+        List<UUID> activeParticipantIds =
+                participantRepository.findActiveUserIdsByConversationId(conversationId);
+        for (UUID recipientId : activeParticipantIds) {
+            if (recipientId.equals(senderId)) {
+                continue;
+            }
+            notificationService.create(
+                    senderId, recipientId, NotificationType.MESSAGE, ENTITY_TYPE, messageId);
+        }
     }
 
     private void validateEnvelope(DomainEventEnvelope event) {
@@ -128,11 +138,11 @@ public class StoryNotificationConsumer {
         if (event.eventType() == null || event.eventType().isBlank()) {
             throw new PermanentMessageException("Event type is missing");
         }
-        if (event.data() == null || event.data().get("storyId") == null) {
-            throw new PermanentMessageException("Story id is missing from event data");
+        if (event.data() == null || event.data().get("conversationId") == null) {
+            throw new PermanentMessageException("Conversation id is missing from event data");
         }
-        if (event.data().get("ownerId") == null) {
-            throw new PermanentMessageException("Owner id is missing from event data");
+        if (event.data().get("messageId") == null) {
+            throw new PermanentMessageException("Message id is missing from event data");
         }
     }
 
@@ -145,7 +155,7 @@ public class StoryNotificationConsumer {
             Thread.sleep(backoff.toMillis());
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted during story notification retry backoff", ex);
+            throw new RuntimeException("Interrupted during message notification retry backoff", ex);
         }
     }
 

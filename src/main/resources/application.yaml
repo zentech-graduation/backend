@@ -216,6 +216,10 @@ app:
   recommendation:
     consumer:
       enabled: ${RECOMMENDATION_CONSUMER_ENABLED:false}
+    consumer:
+      enabled: ${MESSAGE_CONSUMER_ENABLED:false}
+    live:
+      enabled: ${MESSAGE_LIVE_ENABLED:false}
   websocket:
     revocation:
       interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}

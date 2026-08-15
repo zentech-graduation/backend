@@ -20,4 +20,10 @@ public record ConversationSummaryResponse(
         @Schema(
                         description = "Creation time of the newest message; null if none yet.",
                         nullable = true)
-                OffsetDateTime lastMessageAt) {}
+                OffsetDateTime lastMessageAt,
+        @Schema(
+                        description =
+                                "Preview of the newest message, including a tombstoned one; null"
+                                        + " if the conversation has no message yet.",
+                        nullable = true)
+                MessageResponse lastMessage) {}

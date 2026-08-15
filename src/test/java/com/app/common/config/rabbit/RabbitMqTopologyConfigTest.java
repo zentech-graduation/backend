@@ -48,8 +48,9 @@ class RabbitMqTopologyConfigTest {
                                     RabbitMqTopologyConfig.STORY_NOTIFICATION_QUEUE,
                                     RabbitMqTopologyConfig.STORY_NOTIFICATION_DEAD_LETTER_QUEUE,
                                     RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_QUEUE,
-                                    RabbitMqTopologyConfig
-                                            .RECOMMENDATION_FEEDBACK_DEAD_LETTER_QUEUE);
+                                    RabbitMqTopologyConfig.RECOMMENDATION_FEEDBACK_DEAD_LETTER_QUEUE);
+                                    RabbitMqTopologyConfig.MESSAGE_NOTIFICATION_QUEUE,
+                                    RabbitMqTopologyConfig.MESSAGE_NOTIFICATION_DEAD_LETTER_QUEUE);
                     assertThat(queueNames)
                             .doesNotContain(
                                     RabbitMqTopologyConfig.AUDIT_LOG_QUEUE,

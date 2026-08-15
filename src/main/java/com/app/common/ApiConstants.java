@@ -94,9 +94,13 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/conversations";
         public static final String BY_ID = "/{conversationId}";
         public static final String GROUP = "/group";
+        public static final String CONVERSATION_MESSAGES = "/{conversationId}/messages";
+        public static final String MESSAGE_BY_ID = "/{conversationId}/messages/{messageId}";
         public static final String PARTICIPANTS = "/{conversationId}/participants";
         public static final String PARTICIPANT_BY_ID = "/{conversationId}/participants/{userId}";
         public static final String LEAVE = "/{conversationId}/leave";
+        public static final String READ = "/{conversationId}/read";
+        public static final String UNREAD_COUNT = "/unread-count";
     }
 
     public static final class Notifications {

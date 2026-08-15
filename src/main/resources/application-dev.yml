@@ -54,6 +54,11 @@ app:
   recommendation:
     consumer:
       enabled: true
+  message:
+    consumer:
+      enabled: true
+    live:
+      enabled: true
   mail:
     consumer:
       enabled: true
