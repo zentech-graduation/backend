@@ -284,7 +284,9 @@ public class MessageServiceImpl implements MessageService {
                         .findFirst()
                         .orElse(null);
         if (otherId != null && socialService.isBlockedBetween(actorId, otherId)) {
-            throw new AppException(ApiErrorCode.SOCIAL_BLOCKED);
+            // Stealth block model: matches ConversationServiceImpl.assertNotBlocked - a block in
+            // either direction must not be distinguishable from the conversation itself vanishing.
+            throw new AppException(ApiErrorCode.CONVERSATION_NOT_FOUND);
         }
     }
 

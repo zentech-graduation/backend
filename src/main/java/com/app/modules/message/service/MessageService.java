@@ -21,11 +21,12 @@ public interface MessageService {
      * @param request the message payload; required fields depend on {@code messageType}
      * @param idempotencyKey client-supplied replay key, or null to skip idempotency
      * @return the created (or replayed) message
-     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
-     *     CONVERSATION_FORBIDDEN when the caller is not an active participant; SOCIAL_BLOCKED for a
-     *     1-1 conversation with a block relationship; MESSAGE_INVALID_PAYLOAD when the payload does
-     *     not match {@code messageType} or a referenced media/post/story/reply does not exist;
-     *     MESSAGE_IDEMPOTENCY_CONFLICT when the key is reused with a different payload
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing or, for a
+     *     1-1 conversation with a block relationship, stealthed as not-found;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant;
+     *     MESSAGE_INVALID_PAYLOAD when the payload does not match {@code messageType} or a
+     *     referenced media/post/story/reply does not exist; MESSAGE_IDEMPOTENCY_CONFLICT when the
+     *     key is reused with a different payload
      */
     MessageResponse sendMessage(
             UUID actorId, UUID conversationId, SendMessageRequest request, String idempotencyKey);

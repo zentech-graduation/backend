@@ -172,7 +172,9 @@ class MessageControllerIT {
     }
 
     @Test
-    void createDirectConversation_blockedTarget_returnsForbidden() {
+    void createDirectConversation_blockedTarget_returnsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one,
+        // so this is NOT_FOUND rather than a status that confirms the block relationship exists.
         TestUser alice = registerUser("block_alice");
         TestUser bob = registerUser("block_bob");
         jdbcTemplate.update(
@@ -180,8 +182,8 @@ class MessageControllerIT {
 
         ResponseEntity<Map> response = createDirect(alice, bob.id());
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(response.getBody().get("code")).isEqualTo("SOCIAL_BLOCKED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("NOT_FOUND");
     }
 
     @Test
@@ -295,6 +297,59 @@ class MessageControllerIT {
                         (String) firstContent.get(0).get("id"),
                         (String) secondContent.get(0).get("id"));
         assertThat(seenIds).containsExactlyInAnyOrder(conv1.toString(), conv2.toString());
+    }
+
+    @Test
+    void listMyConversations_extremeCursorValue_neverReturns500() {
+        TestUser alice = registerUser("forged_cursor_alice");
+
+        // A hand-crafted cursor carrying Long.MAX_VALUE microseconds, the most extreme value the
+        // scoped codec's long sort field can carry, the same bound the other 17
+        // CursorCodec-backed endpoints already rely on. Under the previous free-text
+        // OffsetDateTime.parse cursor, a comparably extreme year overflowed at JDBC bind time
+        // ("date/time field value out of range", 500). Bounding the value to a long keeps the
+        // decoded instant within PostgreSQL's representable range, so this resolves to a clean,
+        // empty page instead - never a 500.
+        String extreme =
+                com.app.common.pagination.CursorCodec.encode(
+                        new com.app.common.pagination.Cursor(
+                                Long.MAX_VALUE, java.util.UUID.randomUUID()),
+                        com.app.common.pagination.CursorScope.CONVERSATIONS);
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/conversations?cursor=" + extreme, alice);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat((List<?>) data.get("content")).isEmpty();
+    }
+
+    @Test
+    void listMyConversations_garbledCursor_returns400NotServerError() {
+        TestUser alice = registerUser("garbled_cursor_alice");
+
+        String garbled =
+                java.util.Base64.getUrlEncoder()
+                        .withoutPadding()
+                        .encodeToString(
+                                "garbage-not-a-real-cursor-payload"
+                                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/conversations?cursor=" + garbled, alice);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("INVALID_CURSOR");
+    }
+
+    @Test
+    void listMyConversations_limitZero_returns400() {
+        TestUser alice = registerUser("conversations_limitzero_alice");
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/conversations?limit=0", alice);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("VALIDATION_ERROR");
     }
 
     @Test
@@ -531,7 +586,7 @@ class MessageControllerIT {
     }
 
     @Test
-    void sendMessage_image_withAnotherUsersMediaAsset_returnsUnprocessableEntity() {
+    void sendMessage_image_withAnotherUsersMediaAsset_returnsBadRequest() {
         TestUser alice = registerUser("send_image_owner_alice");
         TestUser bob = registerUser("send_image_spoof_bob");
         UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
@@ -548,12 +603,12 @@ class MessageControllerIT {
                                 aliceMediaAssetId.toString()),
                         null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
     }
 
     @Test
-    void sendMessage_postShare_withDraftPost_returnsUnprocessableEntity() {
+    void sendMessage_postShare_withDraftPost_returnsBadRequest() {
         TestUser alice = registerUser("send_draft_post_alice");
         TestUser bob = registerUser("send_draft_post_bob");
         UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
@@ -566,12 +621,12 @@ class MessageControllerIT {
                         Map.of("messageType", "post_share", "sharedPostId", postId.toString()),
                         null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
     }
 
     @Test
-    void sendMessage_storyShare_withExpiredStory_returnsUnprocessableEntity() {
+    void sendMessage_storyShare_withExpiredStory_returnsBadRequest() {
         TestUser alice = registerUser("send_expired_story_alice");
         TestUser bob = registerUser("send_expired_story_bob");
         UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
@@ -587,12 +642,12 @@ class MessageControllerIT {
                         Map.of("messageType", "story_share", "sharedStoryId", storyId.toString()),
                         null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
     }
 
     @Test
-    void sendMessage_textWithoutContent_returnsUnprocessableEntity() {
+    void sendMessage_textWithoutContent_returnsBadRequest() {
         TestUser alice = registerUser("send_invalid_alice");
         TestUser bob = registerUser("send_invalid_bob");
         UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
@@ -600,7 +655,7 @@ class MessageControllerIT {
         ResponseEntity<Map> response =
                 sendMessage(alice, conversationId, Map.of("messageType", "text"), null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody().get("code")).isEqualTo("MESSAGE_INVALID_PAYLOAD");
     }
 
@@ -872,7 +927,8 @@ class MessageControllerIT {
                 rest.exchange(
                         "/api/v1/auth/login",
                         HttpMethod.POST,
-                        new HttpEntity<>(Map.of("email", email, "password", password), headers),
+                        new HttpEntity<>(
+                                Map.of("identifier", email, "password", password), headers),
                         Map.class);
         assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
         Map<?, ?> data = (Map<?, ?>) login.getBody().get("data");

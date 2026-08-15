@@ -5,10 +5,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 import jakarta.servlet.FilterChain;
@@ -18,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
@@ -243,5 +246,86 @@ class AuthRateLimitFilterTest {
                 .isEqualTo(postRule);
         // Unmatched path returns null.
         assertThat(patternFilter.resolveRule("/api/v1/users/me", "GET")).isNull();
+    }
+
+    @Test
+    void doFilterInternal_patternMatchedPaths_shareSameBucketKey() throws Exception {
+        // Two different concrete paths that both match the same wildcard rule, e.g. two distinct
+        // SockJS transport negotiation URLs under /ws/**, must bucket together on the matched
+        // pattern rather than each getting its own fresh bucket keyed on the concrete path.
+        RateLimitProperties wsProps = new RateLimitProperties(Map.of("/ws/**", new Rule(30, 60)));
+        SecurityProperties securityProperties =
+                new SecurityProperties(
+                        java.util.List.of(), 2048, "test-cookie-signing-secret-placeholder-32ch");
+        AuthRateLimitFilter wsFilter =
+                new AuthRateLimitFilter(
+                        rateLimiterService, wsProps, objectMapper, ipExtractor, securityProperties);
+
+        when(ipExtractor.extract(any())).thenReturn("9.9.9.9");
+        when(rateLimiterService.isAllowed(anyString(), anyInt(), anyLong())).thenReturn(true);
+        when(request.getMethod()).thenReturn("GET");
+
+        when(request.getRequestURI()).thenReturn("/ws/comments/server1/session1/websocket");
+        wsFilter.doFilterInternal(request, new MockHttpServletResponse(), chain);
+
+        when(request.getRequestURI()).thenReturn("/ws/comments/server2/session2/websocket");
+        wsFilter.doFilterInternal(request, new MockHttpServletResponse(), chain);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rateLimiterService, times(2)).isAllowed(keyCaptor.capture(), anyInt(), anyLong());
+        List<String> keys = keyCaptor.getAllValues();
+        assertThat(keys.get(0)).isEqualTo(keys.get(1));
+        assertThat(keys.get(0)).contains("/ws/**");
+    }
+
+    @Test
+    void doFilterInternal_exactMatchRule_keepsPathAsBucketKey() throws Exception {
+        // Existing exact-match auth rules must keep bucketing on the concrete path: for an exact
+        // match, matchedKey equals path, so the key is the path plus the IP, with no method.
+        when(request.getRequestURI()).thenReturn(FORGOT_PATH);
+        when(request.getMethod()).thenReturn("POST");
+        when(ipExtractor.extract(any())).thenReturn("5.5.5.5");
+        when(rateLimiterService.isAllowed(anyString(), anyInt(), anyLong())).thenReturn(true);
+
+        filter.doFilterInternal(request, new MockHttpServletResponse(), chain);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rateLimiterService).isAllowed(keyCaptor.capture(), anyInt(), anyLong());
+        assertThat(keyCaptor.getValue()).isEqualTo(FORGOT_PATH + ":5.5.5.5");
+    }
+
+    @Test
+    void differentMethodsSamePath_shareOneBucket() throws Exception {
+        // A rule's configured budget is for the endpoint as a whole. GET and POST reaching the
+        // same matched key (e.g. /api/v1/conversations, or SockJS handshake vs xhr transport under
+        // /ws/**) must consume the same bucket rather than each getting its own, which would
+        // silently double the effective allowance.
+        RateLimitProperties conversationsProps =
+                new RateLimitProperties(Map.of("/api/v1/conversations", new Rule(30, 60)));
+        SecurityProperties securityProperties =
+                new SecurityProperties(
+                        java.util.List.of(), 2048, "test-cookie-signing-secret-placeholder-32ch");
+        AuthRateLimitFilter conversationsFilter =
+                new AuthRateLimitFilter(
+                        rateLimiterService,
+                        conversationsProps,
+                        objectMapper,
+                        ipExtractor,
+                        securityProperties);
+
+        when(ipExtractor.extract(any())).thenReturn("7.7.7.7");
+        when(rateLimiterService.isAllowed(anyString(), anyInt(), anyLong())).thenReturn(true);
+        when(request.getRequestURI()).thenReturn("/api/v1/conversations");
+
+        when(request.getMethod()).thenReturn("GET");
+        conversationsFilter.doFilterInternal(request, new MockHttpServletResponse(), chain);
+
+        when(request.getMethod()).thenReturn("POST");
+        conversationsFilter.doFilterInternal(request, new MockHttpServletResponse(), chain);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rateLimiterService, times(2)).isAllowed(keyCaptor.capture(), anyInt(), anyLong());
+        List<String> keys = keyCaptor.getAllValues();
+        assertThat(keys.get(0)).isEqualTo(keys.get(1));
     }
 }

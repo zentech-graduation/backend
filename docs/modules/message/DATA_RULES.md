@@ -48,16 +48,16 @@ These tables cannot be rebuilt from any other source if lost.
 | Rule | Service / Component |
 |------|---------------------|
 | A user may only send messages to conversations they are an active participant of (`left_at IS NULL`) | `MessageServiceImpl.sendMessage`, `MessageServiceImpl.listHistory`, `MessageServiceImpl.markRead` |
-| For a 1-1 conversation (`is_group = FALSE`), there must be exactly 2 participants and duplicates are reused | `ConversationServiceImpl.createDirectConversation` |
-| A blocked user may not initiate or reply to messages with the blocker | `ConversationServiceImpl.createDirectConversation` (creation), `MessageServiceImpl.sendMessage` (1-1 send) |
+| For a 1-1 conversation (`is_group = FALSE`), there must be exactly 2 participants; a duplicate request reuses the existing conversation | `ConversationServiceImpl.createDirectConversation` - enforced by construction (the only path that creates a non-group conversation, always inserting the actor plus exactly one target); reactivates the caller's membership if they had left |
+| A blocked user may not initiate or reply to messages with the blocker | Initiation enforced by `ConversationServiceImpl.assertNotBlocked`, called from `createDirectConversation`, `createGroupConversation`, and `addParticipants`; replies enforced by `MessageServiceImpl.assertNotBlockedForDirectMessage`, called from `sendMessage` |
 | Message soft-delete sets `is_deleted = TRUE` and `deleted_at = NOW()`, and clears `content` to a tombstone | `MessageServiceImpl.deleteMessage` |
 | Only the message sender may delete their own message | `MessageServiceImpl.deleteMessage` |
 | `last_read_at` on `conversation_participants` is updated when the user reads the conversation | `MessageServiceImpl.markRead` |
 | A message of type `'post_share'` must have `shared_post_id` set; `'story_share'` must have `shared_story_id` set | `MessageServiceImpl.sendMessage` payload validation |
 | A message of type `'image'` or `'video'` must have `media_asset_id` set | `MessageServiceImpl.sendMessage` payload validation |
-| Group admins may add/remove participants and update `group_name` / `group_avatar_url`; the last active admin leaving promotes the oldest remaining member | `ConversationServiceImpl` |
+| Group admins may add/remove participants and update `group_name` / `group_avatar_url`; the last active admin leaving or being removed promotes the oldest remaining member | `ConversationServiceImpl.addParticipants` / `removeParticipant` / `updateGroup`, all gated by `requireGroupAdmin` |
 | Sending a message generates a `message` notification for every other active participant | `MessageNotificationConsumer` |
-| `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `ConversationServiceImpl.createDirectConversation` |
+| `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `ConversationServiceImpl.assertMessageRequestAllowed`, called from `createDirectConversation` |
 | A live WebSocket SUBSCRIBE to a conversation's topic is rejected unless the subscriber is an active participant | `MessageWebSocketAuthInterceptor` |
 
 **`sender_id` cascade behavior** `[FIXED - V32]`:
@@ -85,5 +85,5 @@ Deleting a user's account preserves their past messages for the remaining partic
 | `post` | outbound | `messages.shared_post_id` references `posts` for shared-post messages |
 | `story` | outbound | `messages.shared_story_id` references `stories` for shared-story messages |
 | `social` | inbound | Block relationships govern messaging permissions |
-| `notification` | outbound | New messages trigger notification creation for participants |
+| `notification` | outbound | Intended: new messages would trigger `MESSAGE` notification creation for participants once a send-message endpoint exists. `notification_type_configs.MESSAGE` and `user_settings.notify_messages` exist for this but have no creation site today. |
 | `report` | inbound | Reports can target a message via polymorphic `entity_id` |

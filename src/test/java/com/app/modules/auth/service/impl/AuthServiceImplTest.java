@@ -25,6 +25,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
@@ -49,7 +50,7 @@ import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
-import com.app.modules.auth.dto.response.UserSummaryResponse;
+import com.app.modules.auth.dto.response.AuthenticatedUserResponse;
 import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.exception.TokenExpiredException;
 import com.app.modules.auth.exception.TokenNotFoundException;
@@ -102,17 +103,17 @@ class AuthServiceImplTest {
                 new JwtProperties("test-secret-32-chars-test-secret-", "iss", "App", 900, 3600);
         lenient().when(ipExtractor.extract(any(HttpServletRequest.class))).thenReturn("4.5.6.7");
         lenient()
-                .when(authMapper.toUserSummaryResponse(any(User.class), anyBoolean()))
+                .when(authMapper.toAuthenticatedUserResponse(any(User.class), anyBoolean()))
                 .thenAnswer(
                         inv -> {
                             User u = inv.getArgument(0);
                             boolean ev = inv.getArgument(1);
-                            return new UserSummaryResponse(
+                            return new AuthenticatedUserResponse(
                                     u.getId(),
                                     u.getUsername(),
                                     u.getEmail(),
                                     u.getDisplayName(),
-                                    u.getRole() == null ? null : u.getRole().name(),
+                                    u.getRole(),
                                     ev);
                         });
         // Execute TransactionTemplate callbacks directly (no real PlatformTransactionManager).
@@ -427,6 +428,91 @@ class AuthServiceImplTest {
                                         && event.getFormattedMessage()
                                                 .contains(u.getId().toString()))
                 .noneMatch(event -> event.getFormattedMessage().contains(u.getEmail()));
+    }
+
+    @Test
+    void login_validUsername_success_returnsTokens() {
+        User u = activeUser();
+        UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
+        when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
+
+        AuthResponse resp = service.login(new LoginRequest("alice", "password1"), stubRequest());
+
+        assertThat(resp.accessToken()).isEqualTo("ACCESS");
+        assertThat(resp.refreshToken()).isEqualTo("REFRESH");
+        assertThat(resp.user().id()).isEqualTo(u.getId());
+        verify(userRepository).findByUsernameAndDeletedAtIsNull("alice");
+    }
+
+    @Test
+    void login_unknownUsername_throwsSameCodeAsWrongPassword() {
+        when(userRepository.findByUsernameAndDeletedAtIsNull("ghost")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () -> service.login(new LoginRequest("ghost", "password1"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                // Identical code to the wrong-password path so the two are indistinguishable.
+                .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_usernameWrongPassword_throwsInvalidCredentials() {
+        User u = activeUser();
+        when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId()))
+                .thenReturn(Optional.of(credential(u.getId(), "STORED-HASH")));
+        when(passwordEncoder.matches(eq("wrong"), eq("STORED-HASH"))).thenReturn(false);
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("alice", "wrong"), stubRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+
+    @Test
+    void login_usernameUpperCase_resolvesCorrectly() {
+        User u = activeUser();
+        UserCredential cred = verifiedCredential(u.getId(), "STORED-HASH");
+        // The identifier is passed through as typed. Case-insensitivity now lives in the query,
+        // which compares lower(username) on both sides, not in a toLowerCase() before the call.
+        when(userRepository.findByUsernameAndDeletedAtIsNull("ALICE")).thenReturn(Optional.of(u));
+        when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
+        when(passwordEncoder.matches(eq("password1"), eq("STORED-HASH"))).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
+
+        AuthResponse resp = service.login(new LoginRequest("ALICE", "password1"), stubRequest());
+
+        assertThat(resp.accessToken()).isEqualTo("ACCESS");
+        assertThat(resp.user().id()).isEqualTo(u.getId());
+        verify(userRepository).findByUsernameAndDeletedAtIsNull("ALICE");
+    }
+
+    @Test
+    void register_username_storedAsSubmitted() {
+        UUID newId = UUID.randomUUID();
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        when(userRepository.save(any(User.class)))
+                .thenAnswer(
+                        inv -> {
+                            User u = inv.getArgument(0);
+                            u.setId(newId);
+                            return u;
+                        });
+        when(passwordEncoder.encode("password1")).thenReturn("HASH");
+
+        service.register(new RegisterRequest("MixedCase", "a@b.c", "password1", null));
+
+        // Deliberate inversion: this asserted the stored value was lowercased. Identity is
+        // case-insensitive via idx_users_username_lower, so the column no longer has to carry a
+        // normalized value, and display is case-preserving.
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getUsername()).isEqualTo("MixedCase");
     }
 
     @Test

@@ -87,6 +87,28 @@ class IpExtractorTest {
     }
 
     @Test
+    void ipv4OnlyTrustedList_ipv6Loopback_notTrusted() {
+        // Reproduces the dev-profile gap directly: a request arriving over IPv6 loopback is not
+        // matched by an IPv4-only trusted-proxy entry, even though both represent "this machine".
+        IpExtractor ex = extractor(List.of("127.0.0.1"));
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.setRemoteAddr("::1");
+        req.addHeader("X-Forwarded-For", "203.0.113.5");
+
+        assertThat(ex.extract(req)).isEqualTo("::1");
+    }
+
+    @Test
+    void ipv6LoopbackEntry_ipv6Loopback_trusted() {
+        IpExtractor ex = extractor(List.of("127.0.0.1", "::1"));
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.setRemoteAddr("::1");
+        req.addHeader("X-Forwarded-For", "203.0.113.5");
+
+        assertThat(ex.extract(req)).isEqualTo("203.0.113.5");
+    }
+
+    @Test
     void malformedEntry_skipped_validEntryStillWorks() {
         // "notanip/99" is invalid and must be skipped at construction; "127.0.0.1" must remain
         // functional.

@@ -307,7 +307,7 @@ class AdminControllerIT {
     void listActions_sizeAboveMax_returnsBadRequest() {
         TestUser actor = createUser("size_moderator", "moderator");
 
-        ResponseEntity<Map> response = get("/api/v1/admin/actions?size=999", actor);
+        ResponseEntity<Map> response = get("/api/v1/admin/actions?limit=999", actor);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }

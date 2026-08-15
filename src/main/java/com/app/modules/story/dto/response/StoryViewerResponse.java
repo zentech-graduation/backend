@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record StoryViewerResponse(
         @Schema(description = "Viewer user identifier.") UUID viewerId,
         @Schema(description = "Unique username.") String username,
-        @Schema(description = "Display name shown on the profile.") String displayName,
-        @Schema(description = "Avatar CDN URL.") String avatarUrl,
+        @Schema(description = "Display name shown on the profile.", nullable = true)
+                String displayName,
+        @Schema(description = "Avatar CDN URL.", nullable = true) String avatarUrl,
         @Schema(description = "When the viewer saw the story.") OffsetDateTime viewedAt) {}

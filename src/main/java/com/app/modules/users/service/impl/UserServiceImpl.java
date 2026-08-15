@@ -1,5 +1,7 @@
 package com.app.modules.users.service.impl;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -8,6 +10,7 @@ import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
@@ -59,12 +62,20 @@ public class UserServiceImpl implements UserService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
 
         if (request.username() != null) {
+            // Stored exactly as submitted: identity is case-insensitive, display is
+            // case-preserving. The availability check below compares case-insensitively, so a
+            // case-only collision surfaces as a 409 rather than a raw constraint violation.
             String newUsername = request.username();
             // The username UNIQUE constraint is table-wide and soft delete does not release a
             // username, so the availability check must span soft-deleted rows too. A partial check
             // would let a collision with a soft-deleted account fall through to a database error
             // whose response differs from the active-collision response and reveals account state.
-            if (!newUsername.equals(user.getUsername())
+            //
+            // The "unchanged" test ignores case because identity is case-insensitive: recasing
+            // your own name is a display change, not a claim on someone else's name. A
+            // case-sensitive test here would send that request into the availability check, where
+            // it would match the caller's own row and be rejected as already taken.
+            if (!newUsername.equalsIgnoreCase(user.getUsername())
                     && userRepository.existsByUsername(newUsername)) {
                 throw new AppException(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
             }
@@ -105,6 +116,25 @@ public class UserServiceImpl implements UserService {
                 userRepository
                         .findByIdAndDeletedAtIsNull(targetUserId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
+        return assemblePublicProfile(viewerId, user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicUserProfileResponse getUserProfileByUsername(UUID viewerId, String username) {
+        // Case-sensitive by necessity: users.username carries a plain UNIQUE on the raw column, so
+        // a case-insensitive match could resolve to more than one legal account.
+        User user =
+                userRepository
+                        .findByUsernameAndDeletedAtIsNull(username)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
+        return assemblePublicProfile(viewerId, user);
+    }
+
+    // Single gating and assembly path for both lookups, so the id and username endpoints cannot
+    // drift apart on block handling, counter masking, or viewer state.
+    private PublicUserProfileResponse assemblePublicProfile(UUID viewerId, User user) {
+        UUID targetUserId = user.getId();
 
         boolean isOwner = viewerId != null && viewerId.equals(targetUserId);
 
@@ -132,7 +162,15 @@ public class UserServiceImpl implements UserService {
         Integer followingCount = detailed ? user.getFollowingCount() : null;
         Integer postCount = detailed ? user.getPostCount() : null;
 
-        return userMapper.toPublicProfileResponse(user, followerCount, followingCount, postCount);
+        // A null viewer short-circuits to NONE without querying; a self-view naturally resolves
+        // to NONE too, since a follow or block row against oneself cannot exist.
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                socialService.loadRelationships(viewerId, List.of(targetUserId));
+        ViewerRelationshipResponse viewerState =
+                relationships.getOrDefault(targetUserId, ViewerRelationshipResponse.NONE);
+
+        return userMapper.toPublicProfileResponse(
+                user, followerCount, followingCount, postCount, viewerState);
     }
 
     @Override

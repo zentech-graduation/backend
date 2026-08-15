@@ -12,7 +12,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 import com.app.modules.users.converter.UserRoleConverter;
 import com.app.modules.users.converter.UserStatusConverter;
@@ -94,8 +95,11 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    // trg_users_updated_at (V16) is the sole writer of this column; Hibernate never sends it in an
+    // INSERT or UPDATE and instead re-selects it afterward so the entity reflects the
+    // trigger-written value instead of a stale application-side guess the trigger would discard.
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
 
     @Column(name = "deleted_at")

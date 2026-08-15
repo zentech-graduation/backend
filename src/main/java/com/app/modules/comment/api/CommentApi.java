@@ -3,6 +3,8 @@ package com.app.modules.comment.api;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,6 +17,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
+import com.app.common.config.openapi.CursorErrorResponses;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
@@ -43,12 +48,15 @@ public interface CommentApi {
                             + " original response on retry.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "201",
-                description = "Comment created",
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = CommentResponse.class))),
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "201",
+                description = "Comment created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure, path/body mismatch, or depth exceeded",
@@ -92,6 +100,7 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Posts.ROOT + ApiConstants.Posts.COMMENTS)
     ResponseEntity<ApiResponse<CommentResponse>> createComment(
             @PathVariable("postId") UUID postId,
@@ -101,18 +110,26 @@ public interface CommentApi {
     @Operation(
             summary = "List top-level comments for a post",
             description =
-                    "Cursor-paginated approved top-level comments, newest first. Requires"
-                            + " authentication; private posts are visible only to the owner and accepted"
-                            + " followers.")
+                    "Cursor-paginated approved top-level comments, newest first. The first page"
+                            + " only is preceded by up to three top comments ranked by like count,"
+                            + " each flagged with `pinned: true` and additional to the requested"
+                            + " page size; a pinned comment is not repeated in the same page's"
+                            + " newest-first body. Requires authentication; private posts are"
+                            + " visible only to the owner and accepted followers.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of comments",
+                description = "Cursor page of comments"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Post hidden by a block or a private account",
                 content =
                         @Content(
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Posts.ROOT + ApiConstants.Posts.COMMENTS)
     ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listTopLevelComments(
             @PathVariable("postId") UUID postId,
@@ -121,6 +138,8 @@ public interface CommentApi {
                     String cursor,
             @Parameter(description = "Page size (1–100, default 20)")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 
     @Operation(
@@ -132,7 +151,10 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of replies",
+                description = "Cursor page of replies"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Post hidden by a block or a private account",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -145,6 +167,8 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.REPLIES)
     ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listReplies(
             @PathVariable("commentId") UUID commentId,
@@ -153,6 +177,8 @@ public interface CommentApi {
                     String cursor,
             @Parameter(description = "Page size (1–100, default 20)")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 
     @Operation(
@@ -161,11 +187,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Updated comment",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CommentResponse.class))),
+                description = "Updated comment"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is not the comment owner",
@@ -188,6 +210,8 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.BY_ID)
     ResponseEntity<ApiResponse<CommentResponse>> editComment(
             @PathVariable("commentId") UUID commentId,
@@ -201,11 +225,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment soft-deleted",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Comment soft-deleted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is neither the owner nor an admin",
@@ -221,6 +241,7 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.BY_ID)
     ResponseEntity<ApiResponse<Void>> deleteComment(@PathVariable("commentId") UUID commentId);
 
@@ -228,11 +249,7 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment liked",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Comment liked"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Cannot like your own comment",
@@ -255,6 +272,7 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.LIKE)
     ResponseEntity<ApiResponse<Void>> likeComment(@PathVariable("commentId") UUID commentId);
 
@@ -264,7 +282,10 @@ public interface CommentApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Comment unliked",
+                description = "Comment unliked"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Post hidden by a block or a private account",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -284,6 +305,7 @@ public interface CommentApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.LIKE)
     ResponseEntity<ApiResponse<Void>> unlikeComment(@PathVariable("commentId") UUID commentId);
 }

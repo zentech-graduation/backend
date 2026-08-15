@@ -41,8 +41,8 @@ public class NotificationController extends BaseController implements Notificati
     @GetMapping
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<NotificationResponse>>> listNotifications(
-            @RequestParam(required = false) UUID cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit) {
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
         UUID userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(
                 ApiResponse.success(

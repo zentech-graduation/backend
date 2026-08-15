@@ -1,5 +1,7 @@
 package com.app.modules.comment.repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +17,20 @@ import com.app.modules.comment.entity.CommentLikeId;
 public interface CommentLikeRepository extends JpaRepository<CommentLike, CommentLikeId> {
 
     boolean existsByIdUserIdAndIdCommentId(UUID userId, UUID commentId);
+
+    /**
+     * Comment ids among {@code commentIds} that the viewer has liked, for a batched {@code isLiked}
+     * flag.
+     *
+     * @param viewerId the requesting viewer
+     * @param commentIds candidate comment ids on the current page
+     * @return the subset the viewer has liked
+     */
+    @Query(
+            "SELECT cl.id.commentId FROM CommentLike cl"
+                    + " WHERE cl.id.userId = :viewerId AND cl.id.commentId IN :commentIds")
+    List<UUID> findLikedCommentIds(
+            @Param("viewerId") UUID viewerId, @Param("commentIds") Collection<UUID> commentIds);
 
     /**
      * Deletes a single like, returning whether a row was removed so the caller can distinguish an

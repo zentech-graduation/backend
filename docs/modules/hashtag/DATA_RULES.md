@@ -1,6 +1,7 @@
 # Hashtag Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Fully implemented.
+Caption hashtag extraction and normalization at publish time, upsert-on-first-use, removal on unpublish or soft delete, trending snapshot generation, and Elasticsearch-backed search with a PostgreSQL trigram fallback are all in place.
 
 ---
 
@@ -44,12 +45,12 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
-| Hashtags are extracted from post `caption` at publish time using `#word` parsing | `[NOT YET IMPLEMENTED]` |
-| Hashtag names must be normalized (lowercase, trimmed) before lookup or insert | `[NOT YET IMPLEMENTED]` |
-| A hashtag row is created if it does not exist (`INSERT ... ON CONFLICT DO NOTHING` or upsert) when a post uses it | `[NOT YET IMPLEMENTED]` |
-| When a post is unpublished or soft-deleted, its `post_hashtags` rows must be deleted (triggering `post_count` decrement) | `[NOT YET IMPLEMENTED]` |
-| Hashtag search uses the `idx_hashtags_name_trgm` GIN index for fuzzy matching | `[NOT YET IMPLEMENTED]` |
-| The trending background job writes to `hashtag_trending` with a `(period_start, period_end)` window and a computed `rank` | `[NOT YET IMPLEMENTED]` |
+| Hashtags are extracted from post `caption` at publish time using `#word` parsing | `PostServiceImpl.extractHashtags` |
+| Hashtag names must be normalized (lowercase, trimmed) before lookup or insert | `HashtagServiceImpl.normalize` |
+| A hashtag row is created if it does not exist (`INSERT ... ON CONFLICT DO NOTHING` or upsert) when a post uses it | `HashtagRepository.upsertByName` |
+| When a post is unpublished or soft-deleted, its `post_hashtags` rows must be deleted (triggering `post_count` decrement) | `HashtagServiceImpl.removeHashtagsForPost`, called from `PostServiceImpl` on archive and on soft delete |
+| Hashtag search uses the `idx_hashtags_name_trgm` GIN index for fuzzy matching | `HashtagRepository.searchByNameTrgm`, the PostgreSQL fallback `HashtagSearchServiceImpl` degrades to when Elasticsearch is unavailable; Elasticsearch is the primary path |
+| The trending background job writes to `hashtag_trending` with a `(period_start, period_end)` window and a computed `rank` | `HashtagTrendingServiceImpl.runTrendingJob` / `snapshotTrending` |
 
 **Normalization before insert**:
 - `hashtags.name` is stored lowercase. The DB UNIQUE constraint is case-sensitive.
@@ -63,7 +64,6 @@ These tables cannot be rebuilt from any other source if lost.
 - `hashtag_trending` is populated by a periodic batch job; trending data may be minutes or hours stale.
 - No real-time trending calculation.
 - No hashtag following (users cannot subscribe to a hashtag).
-- Hashtag names are stored case-sensitively as parsed; normalization must be done in application code before insert.
 
 ---
 

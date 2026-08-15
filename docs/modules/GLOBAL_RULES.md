@@ -10,7 +10,7 @@ Cross-cutting conventions that apply to all modules. Do not duplicate these in p
 |------|------------|------|---------------|
 | Source of Truth | PostgreSQL | Canonical, durable data | No — this IS the source |
 | Cache | Redis | Fast reads, session tokens, rate-limit state | Yes — rebuild from PostgreSQL |
-| Search Index | (future: Elasticsearch) | Full-text search | Yes — rebuild from PostgreSQL |
+| Search Index | Elasticsearch (`posts`, `hashtags` only) | Full-text search | Yes — rebuild from PostgreSQL |
 | Event Stream | RabbitMQ | Async event delivery | No persistence guarantee |
 
 **Conflict resolution rule**: If a data conflict exists between tiers, PostgreSQL is always correct.
@@ -46,13 +46,23 @@ All counter columns have `CHECK (column >= 0)` enforced at the database level. T
 
 Tables that use soft delete via a `deleted_at TIMESTAMPTZ` column:
 
-| Table | Module |
-|-------|--------|
-| `users` | auth / users |
-| `posts` | post |
-| `comments` | comment |
-| `stories` | story |
-| `messages` | message (uses `is_deleted BOOLEAN` + `deleted_at`, not pure soft-delete pattern) |
+| Table | Module | Status |
+|-------|--------|--------|
+| `users` | auth / users | **Column reserved, never written.** See the note below |
+| `posts` | post | Live |
+| `comments` | comment | Live |
+| `stories` | story | Live |
+| `messages` | message (uses `is_deleted BOOLEAN` + `deleted_at`, not pure soft-delete pattern) | Live |
+
+> **`users.deleted_at` is not written by anything in the application.**
+> The column exists and is indexed, but no service, repository, migration, or trigger sets it, and there is no self-service account deletion endpoint.
+> Account removal today is `status = 'deactivated'`, an admin-only action that leaves `deleted_at` null.
+> Every read path already filters `deleted_at IS NULL`, so those filters are correct and should stay; they simply never exclude anything at present.
+>
+> The retention rules in the subsection below are therefore a **specification for when a soft-delete path is added**, not a description of current behaviour.
+> They are correct and worth keeping, but no code exercises them today.
+> Do not reason about soft-deleted user rows as a state the running system can produce.
+> A soft-deleted user can only be created by direct SQL, which is how the one observed during the phase 3 audit came to exist.
 
 Rules:
 - All queries against soft-deleted tables must include `WHERE deleted_at IS NULL` unless explicitly retrieving deleted records.
@@ -64,8 +74,13 @@ Rules:
 
 **Rule**: Soft delete does NOT release a user's `username` or `email`.
 
+Forward-looking, per the note above: no path currently soft-deletes a user, so these rules bind the design of the eventual deletion flow rather than describing behaviour observable today.
+The enforcement they call for is already in place, so adding that flow will not require revisiting them.
+
 - The `UNIQUE` constraints on `users.username` and `users.email` remain enforced regardless of `deleted_at` value.
 - A soft-deleted account continues to hold its username and email.
+- Username identity is case-insensitive and enforced table-wide by the unique functional index `idx_users_username_lower` on `lower(username)` (V43), which deliberately has no `deleted_at` predicate so a soft-deleted account keeps its claim. Stored casing is preserved; see `users/DATA_RULES.md`.
+- Availability checks must therefore be table-wide. `UserRepository.existsByUsername` is the single guard on every write path and spans soft-deleted rows by design.
 - Username and email only become available after a hard delete (permanent row removal via a scheduled purge job).
 - No purge job currently exists. Until one is implemented, soft-deleted accounts hold their username and email permanently.
 - This mirrors the behavior of Instagram, which holds deleted account identifiers for a minimum grace period before releasing them.
@@ -121,11 +136,12 @@ Flow:
 
 | Area | Simplification | Accepted Degradation |
 |------|---------------|----------------------|
-| Notifications | No real-time WebSocket delivery in v1 | Clients must poll for new notifications |
+| Notifications | Real-time delivery is best-effort over a per-user STOMP topic; the REST list remains authoritative | A missed push is recovered on the next `GET /notifications`. Delivery latency is bounded by the outbox publisher's polling interval, not by the socket |
+| Realtime transport | In-memory STOMP broker on a single application instance; the RabbitMQ fanout tier in front of it is multi-instance-safe, the broker itself shares nothing | A second instance delivers correctly but has no shared session state; nothing beyond delivery has been designed or tested for it |
 | Feed / Explore ranking | `post_interaction_scores` updated by a background scheduler, not in real-time | Feed ranking may lag behind actual activity by minutes |
 | Hashtag trending | `hashtag_trending` populated by a scheduled background job | Trending data is a periodic snapshot, not live |
 | Email verification / password reset tokens | Stored in Redis, not PostgreSQL | Tokens are lost on full Redis flush; user must re-request |
-| Full-text search | No Elasticsearch in v1; username/hashtag search uses PostgreSQL `pg_trgm` GIN index | Search ranking is less sophisticated than a dedicated search engine |
+| Full-text search | Two tiers by domain. `posts` and `hashtags` are indexed in Elasticsearch and queried behind the `elasticsearchSearch` circuit breaker; hashtag search falls back to `pg_trgm`, post search falls back to an empty page. `users` has no Elasticsearch index; username search queries the PostgreSQL `pg_trgm` GIN index `idx_users_username_trgm` directly via `ILIKE`, with **no** circuit breaker, because the backend is the source of truth and there is no lower tier to degrade to | User search ranking is popularity-ordered, not relevance-scored. A term matching a large fraction of the table degrades to a parallel sequential scan - measured at 56 ms against 200,000 rows - bounded by a 2-character minimum, a 10,000-row offset cap, a 100-row page cap, and required authentication |
 | Recommendation | `user_similarity` and `post_interaction_scores` populated by external ML jobs | Recommendations may lag behind recent user behavior |
 | Story expiry | Expired stories remain in the database until a cleanup job removes them | `expires_at` must always be checked; do not rely on row absence alone |
 
@@ -160,11 +176,17 @@ Alongside these, the schema includes config tables (`notification_type_configs`,
 
 The following tables store runtime configuration and feature policy. They are NOT business logic source-of-truth tables. They exist to allow policy changes without code deployments.
 
-| Table | Purpose |
-|-------|---------|
-| `system_settings` | System-wide configurable limits and TTL values |
-| `notification_type_configs` | Notification type registry with display and toggle settings |
-| `moderation_action_configs` | Admin moderation action registry |
-| `feature_flags` | Feature enable/disable control per environment |
+| Table | Purpose | Status |
+|-------|---------|--------|
+| `system_settings` | System-wide configurable limits and TTL values | Live |
+| `notification_type_configs` | Notification type registry with display and toggle settings | Live |
+| `moderation_action_configs` | Admin moderation action registry | Live |
+| `feature_flags` | Feature enable/disable control per environment | **Table exists, never read.** See the note below |
+
+> **`feature_flags` has no runtime reader anywhere in `src/main`.**
+> The table is created and seeded with one decorative `group_chat` row by the V18 migration, but no repository, service, `@Query` method, or `JdbcTemplate`/`JdbcClient` call in the application reads it.
+> The actual per-environment feature-toggle mechanism in this codebase today is a per-module `@ConfigurationProperties` boolean — for example `MessageProperties.groupChatEnabled`, whose own Javadoc states plainly that there is no runtime `feature_flags` reader and that this property, not the table's `group_chat` row, is the real switch.
+> The row above is therefore a specification for a feature-flag mechanism that has not been built, not a description of current behaviour.
+> Do not point a new toggle at this table expecting it to be read; wire it through the owning module's own configuration properties instead, or build a general-purpose runtime reader as its own scoped piece of work.
 
 **Rule**: These tables must never store secrets, private keys, OAuth credentials, database URLs, or any sensitive environment-specific values. Those remain in environment variables.

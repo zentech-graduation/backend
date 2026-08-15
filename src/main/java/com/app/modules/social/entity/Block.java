@@ -11,6 +11,13 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import lombok.*;
 
+/**
+ * A directional block from one user to another.
+ *
+ * <p>A single row suppresses interaction and content visibility in both directions between the
+ * pair, even though the row itself records only blocker to blocked. Creating a block deletes any
+ * follow relationship between the pair in either direction.
+ */
 @Entity
 @Table(name = "blocks")
 @Getter

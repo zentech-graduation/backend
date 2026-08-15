@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.report.dto.request.CreateReportRequest;
@@ -44,12 +46,15 @@ public interface ReportApi {
                             + " Duplicate and self-owned targets are rejected.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "201",
-                description = "Report submitted",
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = ReportResponse.class))),
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "201",
+                description = "Report submitted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid payload or self-owned target",
@@ -79,6 +84,7 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping
     ResponseEntity<ApiResponse<ReportResponse>> submitReport(
             @Valid @RequestBody CreateReportRequest request);
@@ -92,11 +98,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Report page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -112,12 +114,14 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping
     ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> listReports(
             @RequestParam(required = false) ReportStatus status,
             @RequestParam(required = false) ReportType reportType,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Lists pending reports in FIFO order for moderator and administrator triage. */
     @Operation(
@@ -128,11 +132,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Pending report page returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = CursorPageResponse.class))),
+                description = "Pending report page returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -148,10 +148,12 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Reports.PENDING)
     ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getPendingReports(
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size);
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Returns one report for moderator or administrator review. */
     @Operation(
@@ -160,11 +162,7 @@ public interface ReportApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Report returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ReportResponse.class))),
+                description = "Report returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Moderator or administrator role required",
@@ -187,6 +185,7 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Reports.BY_ID)
     ResponseEntity<ApiResponse<ReportResponse>> getReport(@PathVariable("reportId") UUID reportId);
 
@@ -199,12 +198,15 @@ public interface ReportApi {
                             + " ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Report status updated",
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = ReportResponse.class))),
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Report status updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Terminal transition lacks a resolution note",
@@ -241,6 +243,7 @@ public interface ReportApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Reports.STATUS)
     ResponseEntity<ApiResponse<ReportResponse>> updateStatus(
             @PathVariable("reportId") UUID reportId,

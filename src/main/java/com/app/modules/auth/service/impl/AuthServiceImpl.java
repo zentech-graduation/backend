@@ -2,6 +2,7 @@ package com.app.modules.auth.service.impl;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -154,6 +155,10 @@ public class AuthServiceImpl implements AuthService {
 
                     User user =
                             User.builder()
+                                    // Stored exactly as submitted: identity is case-insensitive,
+                                    // display is case-preserving. Uniqueness is enforced by the
+                                    // lower(username) index and checked case-insensitively above,
+                                    // so nothing depends on the stored value being lowercase.
                                     .username(request.username())
                                     .email(request.email())
                                     .displayName(displayName)
@@ -184,7 +189,18 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email()).orElse(null);
+        // Usernames cannot contain '@' (enforced by the registration pattern), so an '@' in the
+        // identifier unambiguously marks an email; anything else is a username. The username
+        // lookup normalizes both sides of the comparison itself, so the identifier is passed
+        // through as typed: case-insensitivity comes from the query, not from the stored casing.
+        String rawIdentifier = request.identifier().trim();
+        Optional<User> userOpt;
+        if (rawIdentifier.contains("@")) {
+            userOpt = userRepository.findByEmailAndDeletedAtIsNull(rawIdentifier);
+        } else {
+            userOpt = userRepository.findByUsernameAndDeletedAtIsNull(rawIdentifier);
+        }
+        User user = userOpt.orElse(null);
         UserCredential credential =
                 user == null ? null : credentialRepository.findByUserId(user.getId()).orElse(null);
 
@@ -264,7 +280,7 @@ public class AuthServiceImpl implements AuthService {
                 rotation.newRawToken(),
                 jwtProperties.accessTokenTtl(),
                 AuthResponse.BEARER,
-                authMapper.toUserSummaryResponse(user, emailVerified));
+                authMapper.toAuthenticatedUserResponse(user, emailVerified));
     }
 
     @Override
@@ -435,6 +451,6 @@ public class AuthServiceImpl implements AuthService {
                 refreshToken,
                 jwtProperties.accessTokenTtl(),
                 AuthResponse.BEARER,
-                authMapper.toUserSummaryResponse(user, emailVerified));
+                authMapper.toAuthenticatedUserResponse(user, emailVerified));
     }
 }

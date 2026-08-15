@@ -136,7 +136,7 @@ class MessageServiceImplTest {
     }
 
     @Test
-    void sendMessage_directConversationBlocked_throwsSocialBlocked() {
+    void sendMessage_directConversationBlocked_throwsConversationNotFound() {
         UUID actorId = UUID.randomUUID();
         UUID otherId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -156,7 +156,7 @@ class MessageServiceImplTest {
                         () -> service.sendMessage(actorId, conversationId, textRequest("hi"), null))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+                .isEqualTo(ApiErrorCode.CONVERSATION_NOT_FOUND);
     }
 
     @Test

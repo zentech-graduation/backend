@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
+import com.app.common.config.openapi.CursorErrorResponses;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.request.CreateStoryRequest;
@@ -42,11 +47,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Story created",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = StoryResponse.class))),
+                description = "Story created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Media asset not owned by the caller",
@@ -62,6 +63,8 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Stories.ROOT)
     ResponseEntity<ApiResponse<StoryResponse>> createStory(
             @Valid @RequestBody CreateStoryRequest request);
@@ -76,12 +79,9 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Story feed tray; empty when nobody has active stories",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
+                description = "Story feed tray; empty when nobody has active stories")
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.FEED)
     ResponseEntity<ApiResponse<List<StoryFeedItemResponse>>> getStoryFeed();
 
@@ -94,11 +94,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Active stories of the target user",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Active stories of the target user"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Blocked, or private account without an accepted follow",
@@ -114,6 +110,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.USER_STORIES)
     ResponseEntity<ApiResponse<List<StoryResponse>>> listUserStories(
             @PathVariable("userId") UUID userId);
@@ -127,11 +124,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "The story",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = StoryResponse.class))),
+                description = "The story"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Story not visible to the caller",
@@ -147,6 +140,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.BY_ID)
     ResponseEntity<ApiResponse<StoryResponse>> getStoryById(@PathVariable("storyId") UUID storyId);
 
@@ -158,11 +152,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Story deleted",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Story deleted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Story owned by another user",
@@ -178,6 +168,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.BY_ID)
     ResponseEntity<ApiResponse<Void>> deleteStory(@PathVariable("storyId") UUID storyId);
 
@@ -190,11 +181,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "View recorded (or already present)",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = StoryViewActionResponse.class))),
+                description = "View recorded (or already present)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "Story missing, deleted, expired, or not visible to the caller",
@@ -203,6 +190,7 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.VIEWS)
     ResponseEntity<ApiResponse<StoryViewActionResponse>> recordView(
             @PathVariable("storyId") UUID storyId);
@@ -215,18 +203,7 @@ public interface StoryApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of viewers",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Malformed cursor",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of viewers"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is not the story owner",
@@ -242,6 +219,8 @@ public interface StoryApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.VIEWS)
     ResponseEntity<ApiResponse<CursorPageResponse<StoryViewerResponse>>> listViewers(
             @PathVariable("storyId") UUID storyId,
@@ -250,5 +229,7 @@ public interface StoryApi {
                     String cursor,
             @Parameter(description = "Page size, 1-100, default 20")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 }

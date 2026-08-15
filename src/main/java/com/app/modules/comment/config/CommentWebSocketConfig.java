@@ -2,38 +2,32 @@ package com.app.modules.comment.config;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.messaging.simp.config.ChannelRegistration;
-import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 import com.app.common.security.config.CorsProperties;
-import com.app.modules.comment.live.CommentWebSocketAuthInterceptor;
-import com.app.modules.comment.live.CommentWebSocketJwtHandshakeInterceptor;
+import com.app.common.security.websocket.JwtHandshakeInterceptor;
 
 /**
- * STOMP/SockJS WebSocket configuration for real-time comment delivery.
- *
- * <p>The handshake interceptor authenticates the connection via a JWT query parameter; the channel
- * interceptor authorizes each SUBSCRIBE against post visibility. Active only when {@code
+ * Registers the {@code /ws/comments} STOMP endpoint. Active only when {@code
  * app.comment.live.enabled} is true.
+ *
+ * <p>Broker-wide concerns (message broker, inbound channel interceptors, transport decorators) are
+ * shared across every STOMP endpoint and live in {@link
+ * com.app.common.config.websocket.WebSocketBrokerConfig} instead of here, since Spring aggregates
+ * every {@link WebSocketMessageBrokerConfigurer} bean's callbacks onto the one broker and one
+ * inbound channel the application has.
  */
 @Configuration
-@EnableWebSocketMessageBroker
 @ConditionalOnProperty(prefix = "app.comment.live", name = "enabled", havingValue = "true")
 public class CommentWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    private final CommentWebSocketJwtHandshakeInterceptor handshakeInterceptor;
-    private final CommentWebSocketAuthInterceptor authInterceptor;
+    private final JwtHandshakeInterceptor handshakeInterceptor;
     private final CorsProperties corsProperties;
 
     public CommentWebSocketConfig(
-            CommentWebSocketJwtHandshakeInterceptor handshakeInterceptor,
-            CommentWebSocketAuthInterceptor authInterceptor,
-            CorsProperties corsProperties) {
+            JwtHandshakeInterceptor handshakeInterceptor, CorsProperties corsProperties) {
         this.handshakeInterceptor = handshakeInterceptor;
-        this.authInterceptor = authInterceptor;
         this.corsProperties = corsProperties;
     }
 
@@ -45,22 +39,11 @@ public class CommentWebSocketConfig implements WebSocketMessageBrokerConfigurer 
                 .withSockJS();
     }
 
-    @Override
-    public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/topic");
-        registry.setApplicationDestinationPrefixes("/app");
-    }
-
-    @Override
-    public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(authInterceptor);
-    }
-
-    private String[] allowedOrigins() {
-        String origins = corsProperties.allowedOrigins();
-        if (origins == null || origins.isBlank()) {
-            return new String[] {"http://localhost:*"};
-        }
-        return origins.split("\\s*,\\s*");
+    // Deny-by-default: a blank CORS_ALLOWED_ORIGINS yields an empty array here, matching the
+    // REST surface's fail-closed behaviour, rather than quietly admitting localhost.
+    // Package-private rather than private so the mapping can be unit tested directly, without
+    // mocking the StompEndpointRegistry fluent builder chain.
+    String[] allowedOrigins() {
+        return corsProperties.allowedOriginList().toArray(String[]::new);
     }
 }

@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.users.dto.response.PublicUserProfileResponse;
 import com.app.modules.users.dto.response.UserProfileResponse;
 import com.app.modules.users.dto.response.UserSettingsResponse;
@@ -72,7 +73,8 @@ class UserMapperTest {
                         .isVerified(false)
                         .build();
 
-        PublicUserProfileResponse response = mapper.toPublicProfileResponse(user, 10, 5, 3);
+        PublicUserProfileResponse response =
+                mapper.toPublicProfileResponse(user, 10, 5, 3, ViewerRelationshipResponse.NONE);
 
         assertThat(response.id()).isEqualTo(id);
         assertThat(response.username()).isEqualTo("bob");
@@ -83,6 +85,7 @@ class UserMapperTest {
         assertThat(response.followerCount()).isEqualTo(10);
         assertThat(response.followingCount()).isEqualTo(5);
         assertThat(response.postCount()).isEqualTo(3);
+        assertThat(response.viewerState()).isEqualTo(ViewerRelationshipResponse.NONE);
         // PublicUserProfileResponse record has no email or role fields
     }
 
@@ -98,7 +101,9 @@ class UserMapperTest {
                         .status(UserStatus.ACTIVE)
                         .build();
 
-        PublicUserProfileResponse response = mapper.toPublicProfileResponse(user, null, null, null);
+        PublicUserProfileResponse response =
+                mapper.toPublicProfileResponse(
+                        user, null, null, null, ViewerRelationshipResponse.NONE);
 
         assertThat(response.followerCount()).isNull();
         assertThat(response.followingCount()).isNull();

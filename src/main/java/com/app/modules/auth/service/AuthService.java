@@ -25,7 +25,8 @@ public interface AuthService {
     void register(RegisterRequest request);
 
     /**
-     * Authenticates an existing user by email and password and issues a fresh session pair.
+     * Authenticates an existing user by email or username and password and issues a fresh session
+     * pair.
      *
      * @param request validated login payload
      * @param httpRequest underlying servlet request, used to capture device metadata

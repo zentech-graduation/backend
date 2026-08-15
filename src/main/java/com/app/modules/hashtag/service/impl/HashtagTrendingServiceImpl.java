@@ -1,7 +1,9 @@
 package com.app.modules.hashtag.service.impl;
 
+import java.sql.PreparedStatement;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,14 @@ public class HashtagTrendingServiceImpl implements HashtagTrendingService {
 
     private static final int MAX_TRENDING = 100;
 
+    private static final String UPSERT_SQL =
+            "INSERT INTO hashtag_trending (hashtag_id, period_start, period_end, post_count, rank)"
+                    + " VALUES (?, ?, ?, ?, ?)"
+                    + " ON CONFLICT (hashtag_id, period_start) DO UPDATE SET"
+                    + " period_end = EXCLUDED.period_end,"
+                    + " post_count = EXCLUDED.post_count,"
+                    + " rank = EXCLUDED.rank";
+
     private final HashtagTrendingRepository hashtagTrendingRepository;
     private final HashtagRepository hashtagRepository;
     private final HashtagMapper hashtagMapper;
@@ -60,7 +70,10 @@ public class HashtagTrendingServiceImpl implements HashtagTrendingService {
     @Transactional
     public void runTrendingJob() {
         OffsetDateTime windowEnd = OffsetDateTime.now(ZoneOffset.UTC);
-        OffsetDateTime windowStart = windowEnd.minus(properties.getTrending().getWindow());
+        // Truncated to the hour so repeated runs within the same hour share one period_start,
+        // making the snapshot genuinely periodic instead of growing one row set per invocation.
+        OffsetDateTime windowStart =
+                windowEnd.minus(properties.getTrending().getWindow()).truncatedTo(ChronoUnit.HOURS);
         int written = snapshotTrending(windowStart, windowEnd).size();
         log.info(
                 "Hashtag trending snapshot written: {} rows for window {} to {}",
@@ -104,7 +117,30 @@ public class HashtagTrendingServiceImpl implements HashtagTrendingService {
         // Clean-replace the snapshot for this period so a re-run drops hashtags that
         // fell out of the top ranks rather than leaving stale rows with colliding ranks.
         jdbcTemplate.update("DELETE FROM hashtag_trending WHERE period_start = ?", windowStart);
-        return hashtagTrendingRepository.saveAll(rows);
+        upsertRows(rows);
+        return rows;
+    }
+
+    // Plain INSERT would throw a duplicate-key error when two instances snapshot the same
+    // truncated period_start concurrently. ON CONFLICT DO UPDATE makes concurrent writers converge
+    // on a last-writer-wins result instead: the job is a pure recomputation from post_hashtags and
+    // posts, so two instances computing the same window agree on the answer, and merging is
+    // correct where locking would only be defensive.
+    private void upsertRows(List<HashtagTrending> rows) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.batchUpdate(
+                UPSERT_SQL,
+                rows,
+                rows.size(),
+                (PreparedStatement ps, HashtagTrending row) -> {
+                    ps.setObject(1, row.getId().getHashtagId());
+                    ps.setObject(2, row.getId().getPeriodStart());
+                    ps.setObject(3, row.getPeriodEnd());
+                    ps.setInt(4, row.getPostCount());
+                    ps.setObject(5, row.getRank());
+                });
     }
 
     @Override

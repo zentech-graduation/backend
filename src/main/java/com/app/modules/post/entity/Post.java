@@ -17,9 +17,11 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.SQLRestriction;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.generator.EventType;
 
 import com.app.modules.post.converter.PostStatusConverter;
 import com.app.modules.post.converter.PostTypeConverter;
@@ -99,8 +101,11 @@ public class Post {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    // trg_posts_updated_at (V16) is the sole writer of this column; Hibernate never sends it in an
+    // INSERT or UPDATE and instead re-selects it afterward so the entity reflects the
+    // trigger-written value instead of a stale application-side guess the trigger would discard.
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
 
     /** Set by application code on soft delete; {@code null} for live rows (GLOBAL_RULES §6). */
@@ -109,6 +114,9 @@ public class Post {
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
+    // Batches the lazy media-collection initialization across a page of posts into one IN query,
+    // so a list endpoint issues a single media load instead of one per post.
+    @BatchSize(size = 100)
     @Builder.Default
     private List<PostMedia> media = new ArrayList<>();
 }

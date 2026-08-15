@@ -12,7 +12,6 @@ import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,6 +27,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.response.StoryViewActionResponse;
 import com.app.modules.story.dto.response.StoryViewerResponse;
@@ -188,7 +191,7 @@ class StoryViewServiceImplTest {
     }
 
     @Test
-    void listViewers_invalidCursor_throwsBadRequest() {
+    void listViewers_invalidCursor_throwsInvalidCursor() {
         Story story = story(storyId, ownerId, 0);
         when(storyRepository.findActiveById(eq(storyId), any(OffsetDateTime.class)))
                 .thenReturn(Optional.of(story));
@@ -196,7 +199,7 @@ class StoryViewServiceImplTest {
         assertThatThrownBy(() -> service.listViewers(ownerId, storyId, "not-base64!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test
@@ -247,17 +250,21 @@ class StoryViewServiceImplTest {
         OffsetDateTime cursorTime = OffsetDateTime.now(ZoneOffset.UTC);
         UUID cursorViewerId = UUID.randomUUID();
         String cursor =
-                Base64.getEncoder().encodeToString((cursorTime + "|" + cursorViewerId).getBytes());
+                CursorCodec.encode(
+                        new Cursor(TimeCursors.toMicros(cursorTime), cursorViewerId),
+                        CursorScope.STORY_VIEWERS);
+        // The codec carries microsecond precision; the decoded time round-trips through micros.
+        OffsetDateTime expectedTime = TimeCursors.fromMicros(TimeCursors.toMicros(cursorTime));
         when(storyRepository.findActiveById(eq(storyId), any(OffsetDateTime.class)))
                 .thenReturn(Optional.of(story));
         when(storyViewRepository.findViewersBefore(
-                        eq(storyId), eq(cursorTime), eq(cursorViewerId), any()))
+                        eq(storyId), eq(expectedTime), eq(cursorViewerId), any()))
                 .thenReturn(List.of());
 
         service.listViewers(ownerId, storyId, cursor, 20);
 
         verify(storyViewRepository)
-                .findViewersBefore(eq(storyId), eq(cursorTime), eq(cursorViewerId), any());
+                .findViewersBefore(eq(storyId), eq(expectedTime), eq(cursorViewerId), any());
         verify(storyViewRepository, never()).findFirstViewers(any(), any());
     }
 }

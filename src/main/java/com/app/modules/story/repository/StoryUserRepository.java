@@ -5,8 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.repository.Repository;
 
 import com.app.modules.users.entity.User;
 
@@ -16,8 +15,8 @@ import com.app.modules.users.entity.User;
  * <p>Mirrors the {@code SocialUserRepository} precedent: cross-module data is read through a
  * repository owned by this module instead of injecting another module's repository bean.
  */
-@Repository
-public interface StoryUserRepository extends JpaRepository<User, UUID> {
+@org.springframework.stereotype.Repository
+public interface StoryUserRepository extends Repository<User, UUID> {
 
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
 

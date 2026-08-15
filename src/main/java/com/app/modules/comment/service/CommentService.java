@@ -67,10 +67,15 @@ public interface CommentService {
     /**
      * Lists approved top-level comments for a post, newest first, using keyset pagination.
      *
+     * <p>The first page only is preceded by up to three pinned top comments ranked by like count,
+     * marked with {@code pinned} and additional to {@code limit}, and excluded from that page's
+     * newest-first body so neither is returned twice. Page two onward is the pure keyset stream.
+     *
      * @param viewerId authenticated viewer, or null for anonymous access
      * @param postId post whose comments are listed
      * @param cursor opaque cursor from a previous page; null for the first page
-     * @param limit maximum number of comments to return
+     * @param limit maximum number of comments to return in the newest-first body, excluding the
+     *     pinned block
      * @return a cursor page of top-level comments
      */
     CursorPageResponse<CommentResponse> listTopLevelComments(

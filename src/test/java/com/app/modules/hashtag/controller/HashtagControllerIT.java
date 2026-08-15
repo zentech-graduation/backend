@@ -69,6 +69,7 @@ class HashtagControllerIT {
     static void register(DynamicPropertyRegistry r) {
         r.add("spring.data.redis.host", redis::getHost);
         r.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        r.add("spring.data.redis.password", () -> "");
         r.add("app.elasticsearch.uris", () -> "http://" + elasticsearch.getHttpHostAddress());
         r.add("JWT_SECRET", () -> "hashtag-controller-it-secret-32-chars-min!!!!");
         r.add("JWT_ISSUER", () -> "https://hashtag.it.local");
@@ -208,6 +209,24 @@ class HashtagControllerIT {
         List<Map<?, ?>> content = contentOf(response);
         assertThat(content.stream().map(m -> (String) m.get("name")))
                 .anyMatch(name -> name.contains("integ"));
+    }
+
+    @Test
+    @Order(6)
+    void trending_oversizedSize_returnsBadRequest() {
+        ResponseEntity<Map> response =
+                rest.getForEntity("/api/v1/hashtags/trending?size=2000", Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @Order(7)
+    void trending_negativePage_returnsBadRequest() {
+        ResponseEntity<Map> response =
+                rest.getForEntity("/api/v1/hashtags/trending?page=-1", Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     private void ensureIndexExists() {

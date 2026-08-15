@@ -87,7 +87,7 @@ Forbidden:
 //===================================================
 ```
 
-`hooks/pre-commit-lint.sh` blocks commits containing these patterns.
+Enforced by code review, not by tooling: a mechanical heuristic for this pattern also flags legitimate multi-line explanatory prose, so no pre-commit hook checks for it.
 
 ---
 
@@ -108,7 +108,7 @@ public enum JobStatus {
 
 ## 5. Removed / Commented-Out Code
 
-Dead code must be deleted, not commented out. `hooks/pre-commit-lint.sh` flags 3+ consecutive `//` comment lines as a violation. If reactivation is uncertain, create a Git branch or a tracked issue (`VR-NNN`).
+Dead code must be deleted, not commented out. Enforced by code review, not by tooling: a heuristic flagging 3+ consecutive `//` lines as a violation also fires on legitimate multi-sentence explanatory comments, so no pre-commit hook checks for it. If reactivation is uncertain, create a Git branch or a tracked issue (`VR-NNN`).
 
 ---
 
