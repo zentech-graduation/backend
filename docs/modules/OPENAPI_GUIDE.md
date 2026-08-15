@@ -117,22 +117,33 @@ Each method declaration carries:
 
 **`@ApiResponse` body schema convention:**
 
-Every response that carries a body must include a `@Content` block referencing the payload type.
-All API responses are wrapped in `ApiResponse<T>`. Use the inner payload type (e.g.
-`AuthResponse.class`) for success responses that return data, and `ApiResponse.class` directly for
-void or error responses.
+The rule differs between success and error responses, and getting it the wrong way round is the
+single most common mistake in this pattern.
+
+**Success responses (`2xx`): omit `@Content` entirely.**
+The method already declares `ResponseEntity<ApiResponse<T>>`, and springdoc derives the full
+`ApiResponse<T>` envelope from that return type, with `T` resolved into the `data` property.
+Writing an explicit `@Content` that names the payload type declares the bare payload as the whole
+body, which is factually wrong: the server always wraps it in an envelope.
+`OpenApiContractIT.everySuccessResponseDeclaresTheApiResponseEnvelope` fails on exactly that, and
+also on naming `ApiResponse.class` here, which erases `T` and leaves a generated client with
+`Object` for the payload.
+
+**Error responses (`4xx`, `5xx`): declare `@Content` naming `ApiResponse.class`.**
+The return type describes only the success payload, so an error body has no other way to be
+declared.
+The error envelope carries no typed `data`, so the bare `ApiResponse.class` is correct here.
+
+**No-body responses (`204`): omit the `content` attribute entirely.**
+`OpenApiContractIT.noContentResponsesDeclareNoBody` fails on a `204` that declares one.
 
 ```java
-// Success response returning data — reference the payload type
+// Success response returning data — no content block; the return type carries the schema
 @io.swagger.v3.oas.annotations.responses.ApiResponse(
         responseCode = "201",
-        description = "Account created",
-        content =
-                @Content(
-                        mediaType = "application/json",
-                        schema = @Schema(implementation = AuthResponse.class)))
+        description = "Account created")
 
-// Error or void response — reference ApiResponse directly
+// Error response — reference ApiResponse directly
 @io.swagger.v3.oas.annotations.responses.ApiResponse(
         responseCode = "409",
         description = "Username or email already in use",
@@ -169,11 +180,7 @@ void or error responses.
 @ApiResponses({
     @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "201",
-            description = "Account created",
-            content =
-                    @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = AuthResponse.class))),
+            description = "Account created — verification mail events recorded"),
     @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "409",
             description = "Username or email already in use",
@@ -182,7 +189,7 @@ void or error responses.
                             mediaType = "application/json",
                             schema = @Schema(implementation = ApiResponse.class))),
     @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "422",
+            responseCode = "400",
             description = "Validation failure",
             content =
                     @Content(
@@ -200,6 +207,12 @@ void or error responses.
 ResponseEntity<ApiResponse<AuthResponse>> register(
         @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest);
 ```
+
+The `201` carries no `@Content`, and the `AuthResponse` schema still reaches the document through
+the `ResponseEntity<ApiResponse<AuthResponse>>` return type.
+Bean-validation failures are answered with `400`, not `422`; see
+`OpenApiContractIT.only422IsDocumentedForAKnownUnprocessableOutcome` for the three operations where
+`422` is legitimate.
 
 **Example with `@Parameter` — `verifyEmail` from `AuthApi`:**
 
@@ -421,10 +434,17 @@ Fix: Every controller method that implements an `*Api` interface method must be 
 `@Override`. The compiler will then catch any signature mismatch between the interface declaration
 and the implementing method.
 
-**Mistake: Omitting `@Content` and `@Schema` from a non-204 `@ApiResponse`.**  
-Fix: Every response that returns a body requires a `@Content(mediaType = "application/json",
-schema = @Schema(implementation = ...))` block. Without it, springdoc generates an empty response
-schema and the Swagger UI shows no body structure for that status code.
+**Mistake: Declaring `@Content` on a success response.**  
+Fix: Remove it. A `2xx` response's schema comes from the method's `ResponseEntity<ApiResponse<T>>`
+return type. Naming the payload type in a `@Content` block declares the bare payload as the whole
+body, which the server never sends, and naming `ApiResponse.class` erases `T`. Both fail
+`OpenApiContractIT.everySuccessResponseDeclaresTheApiResponseEnvelope`.
+
+**Mistake: Omitting `@Content` and `@Schema` from an error `@ApiResponse`.**  
+Fix: Every `4xx` and `5xx` response requires a `@Content(mediaType = "application/json",
+schema = @Schema(implementation = ApiResponse.class))` block. The return type describes only the
+success payload, so without this the error body has no declared schema at all and the Swagger UI
+shows no structure for that status code.
 
 ---
 
@@ -434,8 +454,8 @@ A response that is identical across many endpoints — the 400 every cursor endp
 malformed pagination cursor is the first case — is declared **once** as a composed meta-annotation
 under `com.app.common.config.openapi`, rather than hand-written on every `*Api` method. This is a
 deliberate exception to the "one `@ApiResponse` entry per status code, declared individually"
-convention in section 2: identical, repeated declarations are exactly what drifts out of sync one
-hand-edit at a time, which is the defect class this guide exists to prevent.
+convention in section 3, step 2: identical, repeated declarations are exactly what drifts out of
+sync one hand-edit at a time, which is the defect class this guide exists to prevent.
 
 **How it works.** `io.swagger.v3.oas.annotations.responses.ApiResponse` is `@Repeatable`, and
 springdoc resolves repeatable annotations through Spring's meta-annotation composition

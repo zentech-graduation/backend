@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -45,6 +46,7 @@ import com.app.common.security.user.UserPrincipal;
 import com.app.modules.comment.config.CommentProperties;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
 import com.app.modules.comment.dto.request.EditCommentRequest;
+import com.app.modules.comment.dto.response.CommentDeletionScopeResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.entity.Comment;
 import com.app.modules.comment.entity.CommentWriteIdempotency;
@@ -224,7 +226,8 @@ class CommentServiceImplTest {
                         .depth((short) 0)
                         .build();
         when(commentRepository.saveAndFlush(any())).thenReturn(saved);
-        when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(saved), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CommentResponse response = service.createComment(actorId, createRequest(null), null);
 
@@ -253,7 +256,8 @@ class CommentServiceImplTest {
                         .depth((short) 0)
                         .build();
         when(commentRepository.saveAndFlush(any())).thenReturn(saved);
-        when(mapper.toResponse(eq(saved), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(eq(saved), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
         when(commentUserRepository.findByUsernameAndDeletedAtIsNull("unrelated"))
                 .thenReturn(
                         Optional.of(
@@ -362,8 +366,9 @@ class CommentServiceImplTest {
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
         when(moderationService.check(any())).thenReturn(ModerationResult.approved());
-        when(commentRepository.save(any())).thenReturn(comment);
-        when(mapper.toResponse(eq(comment), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(commentRepository.saveAndFlush(any())).thenReturn(comment);
+        when(mapper.toResponse(eq(comment), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         service.editComment(actorId, commentId, new EditCommentRequest("updated"));
 
@@ -375,6 +380,51 @@ class CommentServiceImplTest {
                         eq(commentId),
                         eq(actorId),
                         anyMap());
+    }
+
+    @Test
+    void editComment_stampsEditedAtBeforeSaving() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(moderationService.check(any())).thenReturn(ModerationResult.approved());
+        when(commentRepository.saveAndFlush(any())).thenReturn(comment);
+        when(mapper.toResponse(eq(comment), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
+
+        service.editComment(actorId, commentId, new EditCommentRequest("updated"));
+
+        ArgumentCaptor<Comment> saved = ArgumentCaptor.forClass(Comment.class);
+        verify(commentRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getEditedAt()).isNotNull();
+        assertThat(saved.getValue().getContent()).isEqualTo("updated");
+    }
+
+    @Test
+    void likeComment_doesNotStampEditedAt() {
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
+        when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
+        when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
+                .thenReturn(false);
+
+        service.likeComment(actorId, commentId);
+
+        assertThat(comment.getEditedAt()).isNull();
+    }
+
+    @Test
+    void deleteComment_doesNotStampEditedAt() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+
+        service.deleteComment(actorId, commentId);
+
+        assertThat(comment.getEditedAt()).isNull();
     }
 
     @Test
@@ -409,6 +459,80 @@ class CommentServiceImplTest {
     }
 
     @Test
+    void deleteComment_success_returnsAndPublishesTheAffectedRowCount() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(commentRepository.softDeleteSubtree(eq(commentId), any())).thenReturn(11);
+
+        CommentDeletionScopeResponse response = service.deleteComment(actorId, commentId);
+
+        assertThat(response.deletedCommentCount()).isEqualTo(11);
+        ArgumentCaptor<java.util.Map<String, Object>> data = ArgumentCaptor.forClass(Map.class);
+        verify(outboxService)
+                .enqueue(
+                        eq(CommentEventTypes.COMMENT_DELETED_V1),
+                        any(),
+                        any(),
+                        eq(commentId),
+                        eq(actorId),
+                        data.capture());
+        assertThat(data.getValue()).containsEntry("deletedCommentCount", 11);
+    }
+
+    @Test
+    void getDeletionScope_owner_returnsTheSubtreeCount() {
+        Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(commentRepository.countSubtree(commentId)).thenReturn(11);
+
+        assertThat(service.getDeletionScope(actorId, commentId).deletedCommentCount())
+                .isEqualTo(11);
+    }
+
+    @Test
+    void getDeletionScope_notOwner_throwsNotFoundRatherThanForbidden() {
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+
+        assertThatThrownBy(() -> service.getDeletionScope(actorId, commentId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.COMMENT_NOT_FOUND);
+        verify(commentRepository, never()).countSubtree(any());
+    }
+
+    @Test
+    void getDeletionScope_admin_isAllowedOnAnotherUsersComment() {
+        UUID adminId = UUID.randomUUID();
+        UserPrincipal admin = new UserPrincipal(adminId, "admin@test", "ADMIN", "ACTIVE");
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken(
+                                admin, null, admin.getAuthorities()));
+        Comment comment =
+                Comment.builder().id(commentId).postId(postId).userId(UUID.randomUUID()).build();
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+                .thenReturn(Optional.of(comment));
+        when(commentRepository.countSubtree(commentId)).thenReturn(4);
+
+        assertThat(service.getDeletionScope(adminId, commentId).deletedCommentCount()).isEqualTo(4);
+    }
+
+    @Test
+    void getDeletionScope_missingComment_throwsNotFound() {
+        when(commentRepository.findByIdAndDeletedAtIsNull(commentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getDeletionScope(actorId, commentId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.COMMENT_NOT_FOUND);
+    }
+
+    @Test
     void deleteComment_admin_allowed() {
         UUID adminId = UUID.randomUUID();
         UserPrincipal admin = new UserPrincipal(adminId, "admin@test", "ADMIN", "ACTIVE");
@@ -427,16 +551,26 @@ class CommentServiceImplTest {
     }
 
     @Test
-    void likeComment_ownComment_throwsForbidden() {
+    void likeComment_ownComment_persistsAndEnqueues() {
         Comment comment = Comment.builder().id(commentId).postId(postId).userId(actorId).build();
         when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
                 .thenReturn(Optional.of(comment));
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        assertThatThrownBy(() -> service.likeComment(actorId, commentId))
-                .isInstanceOf(AppException.class)
-                .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.COMMENT_FORBIDDEN);
+        when(commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId))
+                .thenReturn(false);
+
+        service.likeComment(actorId, commentId);
+
+        verify(commentLikeRepository).saveAndFlush(any());
+        verify(outboxService)
+                .enqueue(
+                        eq(CommentEventTypes.COMMENT_LIKED_V1),
+                        any(),
+                        any(),
+                        eq(commentId),
+                        eq(actorId),
+                        anyMap());
     }
 
     @Test
@@ -584,10 +718,11 @@ class CommentServiceImplTest {
                 .thenReturn(List.of());
         when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(rows);
-        when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, limit);
+                service.listTopLevelComments(actorId, postId, null, null, limit);
 
         assertThat(result.getPageInfo().isHasNextPage()).isFalse();
         assertThat(result.getContent()).hasSize(3);
@@ -608,10 +743,11 @@ class CommentServiceImplTest {
                 .thenReturn(List.of());
         when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(rows);
-        when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, limit);
+                service.listTopLevelComments(actorId, postId, null, null, limit);
 
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
         assertThat(result.getContent()).hasSize(3);
@@ -624,7 +760,7 @@ class CommentServiceImplTest {
         stubFirstPage(pinned, body);
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(5);
         assertThat(result.getContent().subList(0, 3))
@@ -638,7 +774,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(2), comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(6);
         assertThat(result.getContent().stream().filter(CommentResponse::pinned)).hasSize(2);
@@ -649,7 +785,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(1), comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(5);
         assertThat(result.getContent().stream().filter(CommentResponse::pinned)).hasSize(1);
@@ -660,7 +796,7 @@ class CommentServiceImplTest {
         stubFirstPage(List.of(), comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).hasSize(4);
         assertThat(result.getContent()).noneMatch(CommentResponse::pinned);
@@ -672,7 +808,7 @@ class CommentServiceImplTest {
         stubFirstPage(pinned, comments(2));
         ArgumentCaptor<UUID[]> excluded = ArgumentCaptor.forClass(UUID[].class);
 
-        service.listTopLevelComments(actorId, postId, null, 5);
+        service.listTopLevelComments(actorId, postId, null, null, 5);
 
         verify(commentRepository)
                 .findFirstTopLevelExcluding(eq(postId), excluded.capture(), any(), any());
@@ -685,7 +821,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(3), comments(6));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         // Body is trimmed to the requested limit of 5; the three pinned rows sit on top of it.
         assertThat(result.getContent()).hasSize(8);
@@ -693,17 +829,28 @@ class CommentServiceImplTest {
     }
 
     @Test
-    void listTopLevelComments_withCursor_queriesNeitherThePinnedNorTheExcludingStatement() {
+    void listTopLevelComments_withCursor_resolvesPinnedIdsToExcludeButPrependsNoBlock() {
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any()))
+        List<Comment> pinned = comments(3);
+        when(commentRepository.findTopLikedTopLevel(eq(postId), eq(actorId), any()))
+                .thenReturn(pinned);
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any(), any()))
                 .thenReturn(comments(2));
-        when(mapper.toResponse(any(), any(), anyBoolean())).thenReturn(sampleResponse());
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(sampleResponse());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
+                service.listTopLevelComments(actorId, postId, null, SECOND_PAGE_CURSOR, 5);
 
-        verify(commentRepository, never()).findTopLikedTopLevel(any(), any(), any());
+        // The pinned block is prepended to page one only, but its ids are still needed here: a
+        // pinned comment old enough to fall on this page must be excluded, or it is returned
+        // twice across the stream.
+        ArgumentCaptor<UUID[]> excluded = ArgumentCaptor.forClass(UUID[].class);
+        verify(commentRepository)
+                .findTopLevelBefore(eq(postId), excluded.capture(), any(), any(), any(), any());
+        assertThat(excluded.getValue())
+                .containsExactlyElementsOf(pinned.stream().map(Comment::getId).toList());
         verify(commentRepository, never()).findFirstTopLevelExcluding(any(), any(), any(), any());
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getContent()).noneMatch(CommentResponse::pinned);
@@ -713,14 +860,14 @@ class CommentServiceImplTest {
     void listTopLevelComments_cursorIssuedBeforePinningWasAdded_stillDecodes() {
         when(postRepository.findById(postId)).thenReturn(Optional.of(publishedPost()));
         when(postVisibilityService.isVisibleTo(eq(actorId), any())).thenReturn(true);
-        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any()))
+        when(commentRepository.findTopLevelBefore(eq(postId), any(), any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, SECOND_PAGE_CURSOR, 5);
+                service.listTopLevelComments(actorId, postId, null, SECOND_PAGE_CURSOR, 5);
 
         assertThat(result.getContent()).isEmpty();
-        verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any(), any());
+        verify(commentRepository).findTopLevelBefore(eq(postId), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -730,7 +877,7 @@ class CommentServiceImplTest {
         stubFirstPage(pinned, comments(4));
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getContent()).extracting(CommentResponse::id).doesNotHaveDuplicates();
     }
@@ -741,7 +888,7 @@ class CommentServiceImplTest {
         stubFirstPage(comments(3), body);
 
         CursorPageResponse<CommentResponse> result =
-                service.listTopLevelComments(actorId, postId, null, 5);
+                service.listTopLevelComments(actorId, postId, null, null, 5);
 
         assertThat(result.getPageInfo().getStartCursor())
                 .isEqualTo(
@@ -775,7 +922,7 @@ class CommentServiceImplTest {
         when(commentRepository.findTopLikedTopLevel(eq(postId), any(), any())).thenReturn(pinned);
         when(commentRepository.findFirstTopLevelExcluding(eq(postId), any(), any(), any()))
                 .thenReturn(body);
-        when(mapper.toResponse(any(), any(), anyBoolean()))
+        when(mapper.toResponse(any(), any(), anyBoolean(), anyBoolean()))
                 .thenAnswer(
                         invocation -> {
                             Comment c = invocation.getArgument(0);
@@ -796,7 +943,9 @@ class CommentServiceImplTest {
                 "hello world",
                 0,
                 false,
+                false,
                 0,
+                null,
                 null,
                 null,
                 false);
@@ -815,7 +964,9 @@ class CommentServiceImplTest {
                 "hello world",
                 0,
                 false,
+                false,
                 0,
+                null,
                 null,
                 null,
                 false);

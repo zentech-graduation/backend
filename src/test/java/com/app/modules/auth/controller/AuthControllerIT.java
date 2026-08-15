@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.crypto.SecretKey;
@@ -58,6 +59,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.auth.entity.RefreshToken;
 import com.app.modules.auth.repository.RefreshTokenRepository;
+import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
@@ -75,6 +77,8 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 @AutoConfigureTestRestTemplate
 @Import(AuthControllerIT.IntegrationTestConfig.class)
 class AuthControllerIT {
+
+    private static final String TEST_PASSWORD = "S3cur3P@ssword";
 
     private static final String TEST_JWT_SECRET = "integration-test-secret-32-chars-minimum-len!!";
     private static final String TEST_JWT_ISSUER = "https://it.test.local";
@@ -115,11 +119,12 @@ class AuthControllerIT {
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private TokenService tokenService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
     @Test
     void refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked() {
         String email = uniqueEmail("refresh_banned");
-        Map<?, ?> sessionData = registerVerifyAndLogin("user_bnnd", email, "password1");
+        Map<?, ?> sessionData = registerVerifyAndLogin("user_bnnd", email, TEST_PASSWORD);
         String oldRefreshToken = (String) sessionData.get("refreshToken");
 
         userRepository
@@ -154,7 +159,7 @@ class AuthControllerIT {
     @Test
     void refresh_suspendedUser_returns403AndOldTokenIsDurablyRevoked() {
         String email = uniqueEmail("refresh_susp");
-        Map<?, ?> sessionData = registerVerifyAndLogin("user_susp", email, "password1");
+        Map<?, ?> sessionData = registerVerifyAndLogin("user_susp", email, TEST_PASSWORD);
         String oldRefreshToken = (String) sessionData.get("refreshToken");
 
         userRepository
@@ -188,7 +193,7 @@ class AuthControllerIT {
     void register_validPayload_returns201WithNoTokens() {
         String email = uniqueEmail("ok");
         ResponseEntity<Map> response =
-                postJson("/api/v1/auth/register", registerBody("user_ok", email, "password1"));
+                postJson("/api/v1/auth/register", registerBody("user_ok", email, TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody().get("data")).isNull();
@@ -212,10 +217,10 @@ class AuthControllerIT {
     @Test
     void register_duplicateEmail_returns409() {
         String email = uniqueEmail("dup");
-        postJson("/api/v1/auth/register", registerBody("user_dup1", email, "password1"));
+        postJson("/api/v1/auth/register", registerBody("user_dup1", email, TEST_PASSWORD));
 
         ResponseEntity<Map> second =
-                postJson("/api/v1/auth/register", registerBody("user_dup2", email, "password1"));
+                postJson("/api/v1/auth/register", registerBody("user_dup2", email, TEST_PASSWORD));
 
         assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
@@ -223,7 +228,7 @@ class AuthControllerIT {
     @Test
     void register_duplicateEmailDifferentCase_returns409() {
         String email = uniqueEmail("dupcase");
-        postJson("/api/v1/auth/register", registerBody("user_dupcase1", email, "password1"));
+        postJson("/api/v1/auth/register", registerBody("user_dupcase1", email, TEST_PASSWORD));
 
         String upperCaseVariant =
                 email.substring(0, email.indexOf('@')).toUpperCase()
@@ -231,7 +236,7 @@ class AuthControllerIT {
         ResponseEntity<Map> second =
                 postJson(
                         "/api/v1/auth/register",
-                        registerBody("user_dupcase2", upperCaseVariant, "password1"));
+                        registerBody("user_dupcase2", upperCaseVariant, TEST_PASSWORD));
 
         assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
@@ -241,7 +246,7 @@ class AuthControllerIT {
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/register",
-                        registerBody("user_invalid", "not-an-email", "password1"));
+                        registerBody("user_invalid", "not-an-email", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
@@ -259,11 +264,12 @@ class AuthControllerIT {
     @Test
     void login_unverifiedEmail_returns403() {
         String email = uniqueEmail("login_unverified");
-        postJson("/api/v1/auth/register", registerBody("user_unverified", email, "password1"));
+        postJson("/api/v1/auth/register", registerBody("user_unverified", email, TEST_PASSWORD));
 
         ResponseEntity<Map> response =
                 postJson(
-                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody().get("code")).isEqualTo("AUTH_EMAIL_NOT_VERIFIED");
@@ -272,13 +278,14 @@ class AuthControllerIT {
     @Test
     void login_correctCredentials_returns200WithTokens() {
         String email = uniqueEmail("login_ok");
-        postJson("/api/v1/auth/register", registerBody("user_login", email, "password1"));
+        postJson("/api/v1/auth/register", registerBody("user_login", email, TEST_PASSWORD));
         String token = createVerificationToken(email);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
         ResponseEntity<Map> response =
                 postJson(
-                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
@@ -289,7 +296,7 @@ class AuthControllerIT {
     @Test
     void login_wrongPassword_returns401() {
         String email = uniqueEmail("wrong_pw");
-        postJson("/api/v1/auth/register", registerBody("user_wpw", email, "password1"));
+        postJson("/api/v1/auth/register", registerBody("user_wpw", email, TEST_PASSWORD));
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/login", Map.of("identifier", email, "password", "WRONG-PW"));
@@ -303,7 +310,7 @@ class AuthControllerIT {
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("identifier", uniqueEmail("ghost"), "password", "password1"));
+                        Map.of("identifier", uniqueEmail("ghost"), "password", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getBody().get("code")).isEqualTo("AUTH_INVALID_CREDENTIALS");
@@ -313,14 +320,14 @@ class AuthControllerIT {
     void login_byUsername_correctCredentials_returns200WithTokens() {
         String email = uniqueEmail("uname_ok");
         String username = uniqueUsername("uok");
-        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+        postJson("/api/v1/auth/register", registerBody(username, email, TEST_PASSWORD));
         String token = createVerificationToken(email);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("identifier", username, "password", "password1"));
+                        Map.of("identifier", username, "password", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
@@ -332,7 +339,7 @@ class AuthControllerIT {
     void login_byUsername_wrongPassword_returns401() {
         String email = uniqueEmail("uname_wpw");
         String username = uniqueUsername("uwpw");
-        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+        postJson("/api/v1/auth/register", registerBody(username, email, TEST_PASSWORD));
 
         ResponseEntity<Map> response =
                 postJson(
@@ -348,7 +355,7 @@ class AuthControllerIT {
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("identifier", uniqueUsername("ughost"), "password", "password1"));
+                        Map.of("identifier", uniqueUsername("ughost"), "password", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getBody().get("code")).isEqualTo("AUTH_INVALID_CREDENTIALS");
@@ -358,7 +365,7 @@ class AuthControllerIT {
     void login_byUsername_upperCaseIdentifier_returns200() {
         String email = uniqueEmail("uname_upper");
         String username = uniqueUsername("uup");
-        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+        postJson("/api/v1/auth/register", registerBody(username, email, TEST_PASSWORD));
         String token = createVerificationToken(email);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
@@ -366,7 +373,7 @@ class AuthControllerIT {
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("identifier", username.toUpperCase(), "password", "password1"));
+                        Map.of("identifier", username.toUpperCase(), "password", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
@@ -378,13 +385,14 @@ class AuthControllerIT {
     void login_byEmail_stillWorksAfterContractChange() {
         String email = uniqueEmail("email_still");
         String username = uniqueUsername("estl");
-        postJson("/api/v1/auth/register", registerBody(username, email, "password1"));
+        postJson("/api/v1/auth/register", registerBody(username, email, TEST_PASSWORD));
         String token = createVerificationToken(email);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + token, Map.class);
 
         ResponseEntity<Map> response =
                 postJson(
-                        "/api/v1/auth/login", Map.of("identifier", email, "password", "password1"));
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Map<?, ?>) response.getBody().get("data")).get("accessToken"))
@@ -395,7 +403,7 @@ class AuthControllerIT {
     @Test
     void refresh_validToken_returns200WithNewPair() {
         String email = uniqueEmail("refresh_ok");
-        Map<?, ?> sessionData = registerVerifyAndLogin("user_refr", email, "password1");
+        Map<?, ?> sessionData = registerVerifyAndLogin("user_refr", email, TEST_PASSWORD);
         String refresh = (String) sessionData.get("refreshToken");
 
         ResponseEntity<Map> response =
@@ -411,7 +419,7 @@ class AuthControllerIT {
     @Test
     void refresh_revokedToken_returns401() {
         String email = uniqueEmail("refresh_revoked");
-        Map<?, ?> regData = registerVerifyAndLogin("user_rrv", email, "password1");
+        Map<?, ?> regData = registerVerifyAndLogin("user_rrv", email, TEST_PASSWORD);
         String refresh = (String) regData.get("refreshToken");
         String access = (String) regData.get("accessToken");
         postJsonWithAuth("/api/v1/auth/logout", Map.of("refreshToken", refresh), access);
@@ -428,7 +436,7 @@ class AuthControllerIT {
         String email = uniqueEmail("refresh_used");
         String firstRefresh =
                 (String)
-                        registerVerifyAndLogin("user_rused", email, "password1")
+                        registerVerifyAndLogin("user_rused", email, TEST_PASSWORD)
                                 .get("refreshToken");
         // First rotation succeeds and revokes the original.
         postJson("/api/v1/auth/refresh", Map.of("refreshToken", firstRefresh));
@@ -444,7 +452,7 @@ class AuthControllerIT {
     @Test
     void logout_returns204() {
         String email = uniqueEmail("logout");
-        Map<?, ?> regData = registerVerifyAndLogin("user_lout", email, "password1");
+        Map<?, ?> regData = registerVerifyAndLogin("user_lout", email, TEST_PASSWORD);
         String refresh = (String) regData.get("refreshToken");
         String access = (String) regData.get("accessToken");
 
@@ -458,7 +466,9 @@ class AuthControllerIT {
     void logout_noAuthHeader_returns401() {
         String email = uniqueEmail("logout_noauth");
         String refresh =
-                (String) registerVerifyAndLogin("user_lna", email, "password1").get("refreshToken");
+                (String)
+                        registerVerifyAndLogin("user_lna", email, TEST_PASSWORD)
+                                .get("refreshToken");
 
         ResponseEntity<Map> response =
                 postJson("/api/v1/auth/logout", Map.of("refreshToken", refresh));
@@ -469,7 +479,7 @@ class AuthControllerIT {
     @Test
     void logout_validBearerToken_returns204() {
         String email = uniqueEmail("logout_auth");
-        Map<?, ?> regData = registerVerifyAndLogin("user_lauth", email, "password1");
+        Map<?, ?> regData = registerVerifyAndLogin("user_lauth", email, TEST_PASSWORD);
         String refresh = (String) regData.get("refreshToken");
         String access = (String) regData.get("accessToken");
 
@@ -484,7 +494,7 @@ class AuthControllerIT {
         ResponseEntity<Map> response =
                 postJson(
                         "/api/v1/auth/login",
-                        Map.of("identifier", uniqueEmail("login_pub"), "password", "password1"));
+                        Map.of("identifier", uniqueEmail("login_pub"), "password", TEST_PASSWORD));
 
         // The endpoint is public; Spring Security must not block with 401-because-no-bearer.
         // A 401 here means bad credentials, not a missing token — that's still acceptable.
@@ -496,7 +506,8 @@ class AuthControllerIT {
     void register_noAuthHeader_isPubliclyReachable() {
         String email = uniqueEmail("reg_pub");
         ResponseEntity<Map> response =
-                postJson("/api/v1/auth/register", registerBody("user_regpub", email, "password1"));
+                postJson(
+                        "/api/v1/auth/register", registerBody("user_regpub", email, TEST_PASSWORD));
 
         assertThat(response.getStatusCode())
                 .isIn(HttpStatus.CREATED, HttpStatus.UNPROCESSABLE_ENTITY);
@@ -506,7 +517,9 @@ class AuthControllerIT {
     void protectedEndpoint_validJwt_returns200() {
         String email = uniqueEmail("prot_ok");
         String access =
-                (String) registerVerifyAndLogin("user_prot", email, "password1").get("accessToken");
+                (String)
+                        registerVerifyAndLogin("user_prot", email, TEST_PASSWORD)
+                                .get("accessToken");
 
         ResponseEntity<Map> response = getWithAuth("/api/v1/test/me", access);
 
@@ -518,7 +531,8 @@ class AuthControllerIT {
         String email = uniqueEmail("prot_banned");
         String access =
                 (String)
-                        registerVerifyAndLogin("user_prtbn", email, "password1").get("accessToken");
+                        registerVerifyAndLogin("user_prtbn", email, TEST_PASSWORD)
+                                .get("accessToken");
 
         userRepository
                 .findByEmailAndDeletedAtIsNull(email)
@@ -569,7 +583,8 @@ class AuthControllerIT {
         String email = uniqueEmail("consumed");
         ResponseEntity<Map> reg =
                 postJson(
-                        "/api/v1/auth/register", registerBody("user_consumed", email, "password1"));
+                        "/api/v1/auth/register",
+                        registerBody("user_consumed", email, TEST_PASSWORD));
         assertThat(reg.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
         String token = createVerificationToken(email);
@@ -597,7 +612,7 @@ class AuthControllerIT {
     @Test
     void verifyEmail_validToken_returns200WithTokens() {
         String email = uniqueEmail("verify_ok");
-        postJson("/api/v1/auth/register", registerBody("user_vok", email, "password1"));
+        postJson("/api/v1/auth/register", registerBody("user_vok", email, TEST_PASSWORD));
         String token = createVerificationToken(email);
 
         ResponseEntity<Map> response =
@@ -613,7 +628,7 @@ class AuthControllerIT {
     @Test
     void login_logout_reuseAccessToken_returns401() {
         String email = uniqueEmail("blacklist");
-        Map<?, ?> data = registerVerifyAndLogin("user_bl", email, "password1");
+        Map<?, ?> data = registerVerifyAndLogin("user_bl", email, TEST_PASSWORD);
         String access = (String) data.get("accessToken");
         String refresh = (String) data.get("refreshToken");
 
@@ -635,7 +650,7 @@ class AuthControllerIT {
         String email = uniqueEmail("rl_login");
         postJson(
                 "/api/v1/auth/register",
-                registerBody("user_rllogin", email, "password1"),
+                registerBody("user_rllogin", email, TEST_PASSWORD),
                 forwardedIp);
 
         for (int i = 0; i < 10; i++) {
@@ -695,7 +710,9 @@ class AuthControllerIT {
         String forwardedIp = uniqueIp();
         String email = uniqueEmail("rl_retry_after");
         postJson(
-                "/api/v1/auth/register", registerBody("user_rra", email, "password1"), forwardedIp);
+                "/api/v1/auth/register",
+                registerBody("user_rra", email, TEST_PASSWORD),
+                forwardedIp);
 
         for (int i = 0; i < 10; i++) {
             postJson(
@@ -760,6 +777,255 @@ class AuthControllerIT {
         }
     }
 
+    @Test
+    void refresh_emptyBodyWithCookie_returns200AndRotatesTheCookie() {
+        String email = uniqueEmail("ck_refresh_ok");
+        postJson("/api/v1/auth/register", registerBody("user_ckr", email, TEST_PASSWORD));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        ResponseEntity<Map> login =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
+        String originalCookieValue = cookieValue(setCookie(login, "luvax_refresh"));
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie(
+                        "/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + originalCookieValue);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("accessToken")).asString().isNotBlank();
+        String rotatedCookie = setCookie(response, "luvax_refresh");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(cookieValue(rotatedCookie)).isNotEqualTo(originalCookieValue);
+        assertThat(cookieValue(rotatedCookie)).isEqualTo(data.get("refreshToken"));
+    }
+
+    @Test
+    void refresh_bodyAndCookieBothPresent_bodyTokenTakesPrecedence() {
+        String emailA = uniqueEmail("ck_prec_a");
+        String emailB = uniqueEmail("ck_prec_b");
+        String bodyToken =
+                (String)
+                        registerVerifyAndLogin("user_ckpa", emailA, TEST_PASSWORD)
+                                .get("refreshToken");
+        String cookieToken =
+                (String)
+                        registerVerifyAndLogin("user_ckpb", emailB, TEST_PASSWORD)
+                                .get("refreshToken");
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie(
+                        "/api/v1/auth/refresh",
+                        Map.of("refreshToken", bodyToken),
+                        "luvax_refresh=" + cookieToken);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // The body token belongs to user A, so precedence is proved by whose session came back.
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        Map<?, ?> user = (Map<?, ?>) data.get("user");
+        assertThat(user.get("email")).isEqualTo(emailA);
+        // The cookie token was never consumed, so it still rotates successfully afterwards.
+        assertThat(
+                        postJson("/api/v1/auth/refresh", Map.of("refreshToken", cookieToken))
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void refresh_consumedTokenSuppliedByCookie_returns401() {
+        String email = uniqueEmail("ck_reuse");
+        String refresh =
+                (String)
+                        registerVerifyAndLogin("user_ckru", email, TEST_PASSWORD)
+                                .get("refreshToken");
+        postJson("/api/v1/auth/refresh", Map.of("refreshToken", refresh));
+
+        ResponseEntity<Map> response =
+                postJsonWithCookie("/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + refresh);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void refresh_noBodyTokenAndNoCookie_returns401() {
+        ResponseEntity<Map> response = postJson("/api/v1/auth/refresh", Map.of());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void refresh_noBodyAtAllWithCookie_returns200AndRotatesTheCookie() {
+        String email = uniqueEmail("nobody_refresh");
+        postJson("/api/v1/auth/register", registerBody("user_nbr", email, TEST_PASSWORD));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        ResponseEntity<Map> login =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
+        String originalCookieValue = cookieValue(setCookie(login, "luvax_refresh"));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.COOKIE, "luvax_refresh=" + originalCookieValue);
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/refresh", headers);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("accessToken")).asString().isNotBlank();
+        String rotatedCookie = setCookie(response, "luvax_refresh");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(cookieValue(rotatedCookie)).isNotEqualTo(originalCookieValue);
+    }
+
+    @Test
+    void refresh_noBodyAtAllAndNoCookie_returns401() {
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/refresh", new HttpHeaders());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void logout_noBodyAtAllAndNoCookie_returns204AndStillClearsTheCookie() {
+        String email = uniqueEmail("nobody_logout");
+        String access =
+                (String)
+                        registerVerifyAndLogin("user_nbl", email, TEST_PASSWORD).get("accessToken");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(access);
+        ResponseEntity<Map> response = postWithoutBody("/api/v1/auth/logout", headers);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("Max-Age=0");
+    }
+
+    @Test
+    void logout_clearsTheCookieAndTheClearedCookieCannotRefresh() {
+        String email = uniqueEmail("ck_logout");
+        Map<?, ?> session = registerVerifyAndLogin("user_cklo", email, TEST_PASSWORD);
+        String refresh = (String) session.get("refreshToken");
+        String access = (String) session.get("accessToken");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(access);
+        headers.add(HttpHeaders.COOKIE, "luvax_refresh=" + refresh);
+        ResponseEntity<Map> logout =
+                rest.exchange(
+                        "/api/v1/auth/logout",
+                        HttpMethod.POST,
+                        new HttpEntity<>(Map.of(), headers),
+                        Map.class);
+
+        assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        String cleared = setCookie(logout, "luvax_refresh");
+        assertThat(cleared).isNotNull();
+        assertThat(cleared).contains("Max-Age=0");
+        assertThat(cleared).contains("Path=/api/v1/auth");
+
+        ResponseEntity<Map> afterLogout =
+                postJsonWithCookie("/api/v1/auth/refresh", Map.of(), "luvax_refresh=" + refresh);
+        assertThat(afterLogout.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(afterLogout.getBody().get("code")).isEqualTo("AUTH_REFRESH_TOKEN_INVALID");
+    }
+
+    @Test
+    void logout_noBodyTokenAndNoCookie_returns204AndStillClearsTheCookie() {
+        // Logout is documented as idempotent. A client that lost its token value on reload must
+        // still be able to clear its own cookie and blacklist its access token.
+        String email = uniqueEmail("ck_logout_bare");
+        String access =
+                (String)
+                        registerVerifyAndLogin("user_cklb", email, TEST_PASSWORD)
+                                .get("accessToken");
+
+        ResponseEntity<Map> response = postJsonWithAuth("/api/v1/auth/logout", Map.of(), access);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("Max-Age=0");
+    }
+
+    @Test
+    void login_returnsHttpOnlyRefreshCookieScopedToTheAuthPath() {
+        String email = uniqueEmail("cookie_login");
+        postJson("/api/v1/auth/register", registerBody("user_ckl", email, TEST_PASSWORD));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
+
+        String cookie = setCookie(response, "luvax_refresh");
+        assertThat(cookie).isNotNull();
+        assertThat(cookie).contains("HttpOnly");
+        assertThat(cookie).contains("Path=/api/v1/auth");
+        assertThat(cookie).contains("Max-Age=3600");
+        assertThat(cookie).contains("SameSite=Lax");
+        // The dev profile serves plain HTTP, where a Secure cookie would never be stored.
+        assertThat(cookie).doesNotContain("Secure");
+    }
+
+    @Test
+    void login_stillReturnsRefreshTokenInTheResponseBody() {
+        String email = uniqueEmail("cookie_body");
+        Map<?, ?> data = registerVerifyAndLogin("user_ckb", email, TEST_PASSWORD);
+
+        assertThat(data.get("refreshToken")).asString().isNotBlank();
+    }
+
+    @Test
+    void login_cookieValueMatchesTheResponseBodyToken() {
+        String email = uniqueEmail("cookie_match");
+        postJson("/api/v1/auth/register", registerBody("user_ckm", email, TEST_PASSWORD));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
+
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(cookieValue(setCookie(response, "luvax_refresh")))
+                .isEqualTo(data.get("refreshToken"));
+    }
+
+    @Test
+    void verifyEmail_returnsRefreshCookieBecauseItIssuesASession() {
+        String email = uniqueEmail("cookie_verify");
+        postJson("/api/v1/auth/register", registerBody("user_ckv", email, TEST_PASSWORD));
+
+        ResponseEntity<Map> response =
+                rest.getForEntity(
+                        "/api/v1/auth/verify-email?token=" + createVerificationToken(email),
+                        Map.class);
+
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("HttpOnly");
+    }
+
+    @Test
+    void exchangeOAuth2Code_returnsRefreshCookie() {
+        String email = uniqueEmail("cookie_oauth");
+        postJson("/api/v1/auth/register", registerBody("user_cko", email, TEST_PASSWORD));
+        rest.getForEntity(
+                "/api/v1/auth/verify-email?token=" + createVerificationToken(email), Map.class);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        String code = oauth2ExchangeCodeService.storeExchangeCode(userId);
+
+        ResponseEntity<Map> response =
+                postJson("/api/v1/auth/oauth2/exchange", Map.of("code", code));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(setCookie(response, "luvax_refresh")).isNotNull().contains("HttpOnly");
+    }
+
     private ResponseEntity<Map> postJson(String path, Object body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -771,6 +1037,35 @@ class AuthControllerIT {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Forwarded-For", forwardedIp);
         return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
+    private static String setCookie(ResponseEntity<?> response, String name) {
+        List<String> headers = response.getHeaders().get(HttpHeaders.SET_COOKIE);
+        if (headers == null) {
+            return null;
+        }
+        return headers.stream().filter(h -> h.startsWith(name + "=")).findFirst().orElse(null);
+    }
+
+    private static String cookieValue(String setCookieHeader) {
+        String nameValuePair = setCookieHeader.split(";", 2)[0];
+        return nameValuePair.substring(nameValuePair.indexOf('=') + 1);
+    }
+
+    private ResponseEntity<Map> postJsonWithCookie(String path, Object body, String cookiePair) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.add(HttpHeaders.COOKIE, cookiePair);
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+    }
+
+    /**
+     * Issues a POST carrying no request body and no Content-Type at all, which is what an axios
+     * call written as post(url, undefined, { withCredentials: true }) puts on the wire. This is
+     * distinct from posting {}, which does carry a body and a Content-Type.
+     */
+    private ResponseEntity<Map> postWithoutBody(String path, HttpHeaders headers) {
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(headers), Map.class);
     }
 
     private ResponseEntity<Map> postJsonWithAuth(String path, Object body, String accessToken) {

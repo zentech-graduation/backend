@@ -32,6 +32,7 @@ import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.service.PostLikeService;
 import com.app.modules.post.service.PostService;
+import com.app.modules.post.validation.PostTypeFilter;
 import com.app.modules.users.service.impl.UserSummaryServiceImpl;
 
 @SpringBootTest(
@@ -191,7 +192,10 @@ class PostAuthorEmbeddingIT {
         UUID owner = insertUser("owner", false);
         insertPublishedPost(owner);
 
-        List<PostResponse> posts = postService.listUserPosts(owner, owner, null, 10).getContent();
+        List<PostResponse> posts =
+                postService
+                        .listUserPosts(owner, owner, PostTypeFilter.empty(), null, 10)
+                        .getContent();
 
         assertThat(posts).hasSize(1);
         assertThat(posts.get(0).author().id()).isEqualTo(owner);

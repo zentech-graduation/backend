@@ -21,6 +21,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.modules.post.dto.response.LikeActionResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
@@ -38,8 +39,10 @@ class PostLikeServiceImplTest {
     @Mock private PostRepository postRepository;
     @Mock private PostLikeRepository postLikeRepository;
     @Mock private PostVisibilityService postVisibilityService;
+    @Mock private PostResponseAssembler postResponseAssembler;
     @Mock private UserSummaryService userSummaryService;
     @Mock private SocialService socialService;
+    @Mock private OutboxService outboxService;
 
     private PostLikeServiceImpl service;
 
@@ -57,8 +60,10 @@ class PostLikeServiceImplTest {
                         postRepository,
                         postLikeRepository,
                         postVisibilityService,
+                        postResponseAssembler,
                         userSummaryService,
-                        socialService);
+                        socialService,
+                        outboxService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
         lenient()

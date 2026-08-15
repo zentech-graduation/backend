@@ -13,6 +13,7 @@ public final class CursorScope {
     public static final String ADMIN_ACTIONS = "adma";
     public static final String ADMIN_ACTIONS_FOR_USER = "admu";
     public static final String COMMENTS_TOP_LEVEL = "cmt";
+    public static final String COMMENTS_TOP_LEVEL_NEWEST = "cmtn";
     public static final String COMMENT_REPLIES = "rpl";
     public static final String CONVERSATIONS = "cnv";
     public static final String NOTIFICATIONS = "ntf";
@@ -20,6 +21,7 @@ public final class CursorScope {
     public static final String POST_FEED = "feed";
     public static final String POST_EDIT_HISTORY = "edh";
     public static final String POST_LIKERS = "lik";
+    public static final String POST_LIKED_POSTS = "lkd";
     public static final String POST_SAVES = "sav";
     public static final String REPORTS = "rpt";
     public static final String PENDING_REPORTS = "prpt";

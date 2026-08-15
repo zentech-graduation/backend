@@ -27,6 +27,7 @@ import com.app.common.security.util.SecurityUtils;
 import com.app.modules.comment.api.CommentApi;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
 import com.app.modules.comment.dto.request.EditCommentRequest;
+import com.app.modules.comment.dto.response.CommentDeletionScopeResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.service.CommentService;
 
@@ -69,11 +70,12 @@ public class CommentController extends BaseController implements CommentApi {
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<CommentResponse>>> listTopLevelComments(
             @PathVariable("postId") UUID postId,
+            @RequestParam(value = "sort", required = false) String sort,
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "limit", defaultValue = "20") int limit) {
         CursorPageResponse<CommentResponse> body =
                 commentService.listTopLevelComments(
-                        SecurityUtils.getCurrentUserId(), postId, cursor, limit);
+                        SecurityUtils.getCurrentUserId(), postId, sort, cursor, limit);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
@@ -103,14 +105,26 @@ public class CommentController extends BaseController implements CommentApi {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
+    /** Reports how many comments deleting this comment would remove; owner or admin only. */
+    @Override
+    @GetMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.DELETION_SCOPE)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CommentDeletionScopeResponse>> getDeletionScope(
+            @PathVariable("commentId") UUID commentId) {
+        CommentDeletionScopeResponse body =
+                commentService.getDeletionScope(SecurityUtils.getCurrentUserId(), commentId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
     /** Soft-deletes a comment and its subtree; owner or admin only. */
     @Override
     @DeleteMapping(ApiConstants.Comments.ROOT + ApiConstants.Comments.BY_ID)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<Void>> deleteComment(
+    public ResponseEntity<ApiResponse<CommentDeletionScopeResponse>> deleteComment(
             @PathVariable("commentId") UUID commentId) {
-        commentService.deleteComment(SecurityUtils.getCurrentUserId(), commentId);
-        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+        CommentDeletionScopeResponse body =
+                commentService.deleteComment(SecurityUtils.getCurrentUserId(), commentId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
     /** Likes a comment for the authenticated user. */

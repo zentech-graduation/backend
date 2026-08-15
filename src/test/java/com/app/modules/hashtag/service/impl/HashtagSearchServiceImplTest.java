@@ -92,6 +92,11 @@ class HashtagSearchServiceImplTest {
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("java");
         verify(hashtagRepository).searchByNameTrgm("java", 21, 0);
+        // Not flagged degraded. This fallback answers from PostgreSQL, the source of truth, so the
+        // results are real and complete for the query; only the ranking differs from Elasticsearch.
+        // Post search is flagged because it returns nothing at all and would otherwise read as a
+        // genuine no-match.
+        assertThat(result.isDegraded()).isFalse();
     }
 
     @Test

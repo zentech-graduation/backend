@@ -138,7 +138,10 @@ public class PostSearchServiceImpl implements PostSearchService {
                 t.getClass().getSimpleName(),
                 t.getMessage(),
                 t);
-        return CursorPageResponse.of(List.of(), false, null, null, false);
+        // Flagged degraded so the empty page is distinguishable from a genuine no-match. The two
+        // were otherwise identical apart from the response timestamp, which left a client unable to
+        // tell an unavailable search tier from a search that legitimately matched nothing.
+        return CursorPageResponse.degraded();
     }
 
     // Clamp the page size so an oversized request cannot force a mass hydration or exceed the

@@ -43,6 +43,7 @@ app:
   mail:
     consumer:
       enabled: true
+    transport: resend
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:
@@ -51,6 +52,10 @@ app:
     # Example: ["10.0.0.0/8", "172.16.0.0/12"]
     trusted-proxy-cidrs: []
     max-login-body-bytes: 2048
+    # refresh-cookie secure and same-site are intentionally not set here. They are the operator's
+    # deployment-time knobs, bound from REFRESH_COOKIE_SECURE and REFRESH_COOKIE_SAME_SITE in
+    # application.yaml, which already defaults them fail-closed to true and Lax. Restating them
+    # at profile level would silently outrank the environment and make both variables inert.
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/register]":

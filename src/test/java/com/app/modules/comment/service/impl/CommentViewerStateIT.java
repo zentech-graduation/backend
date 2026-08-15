@@ -110,18 +110,18 @@ class CommentViewerStateIT {
         }
 
         Statistics stats = statistics();
-        commentService.listTopLevelComments(viewer, post, null, 2);
+        commentService.listTopLevelComments(viewer, post, null, null, 2);
 
         stats.clear();
-        commentService.listTopLevelComments(viewer, post, null, 2);
+        commentService.listTopLevelComments(viewer, post, null, null, 2);
         long size2 = stats.getPrepareStatementCount();
 
         stats.clear();
-        commentService.listTopLevelComments(viewer, post, null, 6);
+        commentService.listTopLevelComments(viewer, post, null, null, 6);
         long size6 = stats.getPrepareStatementCount();
 
         stats.clear();
-        commentService.listTopLevelComments(viewer, post, null, 12);
+        commentService.listTopLevelComments(viewer, post, null, null, 12);
         long size12 = stats.getPrepareStatementCount();
 
         assertThat(size6).isEqualTo(size2);
@@ -170,7 +170,7 @@ class CommentViewerStateIT {
         likeComment(likedComment, viewer);
 
         List<CommentResponse> content =
-                commentService.listTopLevelComments(viewer, post, null, 10).getContent();
+                commentService.listTopLevelComments(viewer, post, null, null, 10).getContent();
 
         assertThat(content).hasSize(2);
         CommentResponse likedResponse =

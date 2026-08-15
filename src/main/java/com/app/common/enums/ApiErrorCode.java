@@ -66,6 +66,9 @@ public enum ApiErrorCode {
     MEDIA_CDN_NOT_CONFIGURED("MEDIA_CDN_NOT_CONFIGURED", "Media CDN is not configured", HttpStatus.SERVICE_UNAVAILABLE),
     MEDIA_STORAGE_NOT_CONFIGURED("MEDIA_STORAGE_NOT_CONFIGURED", "Media object storage is not configured", HttpStatus.SERVICE_UNAVAILABLE),
     MEDIA_UPLOAD_URL_FAILED("MEDIA_UPLOAD_URL_FAILED", "Media upload URL could not be generated", HttpStatus.SERVICE_UNAVAILABLE),
+    MEDIA_OBJECT_NOT_UPLOADED("MEDIA_OBJECT_NOT_UPLOADED", "No uploaded object exists for this storage key", HttpStatus.UNPROCESSABLE_ENTITY),
+    MEDIA_OBJECT_METADATA_MISMATCH("MEDIA_OBJECT_METADATA_MISMATCH", "Submitted metadata does not match the uploaded object", HttpStatus.UNPROCESSABLE_ENTITY),
+    MEDIA_STORAGE_UNAVAILABLE("MEDIA_STORAGE_UNAVAILABLE", "Media object storage is temporarily unavailable. Please try again later.", HttpStatus.SERVICE_UNAVAILABLE),
 
     // Hashtag
     HASHTAG_NOT_FOUND("HASHTAG_NOT_FOUND", "Hashtag not found", HttpStatus.NOT_FOUND),

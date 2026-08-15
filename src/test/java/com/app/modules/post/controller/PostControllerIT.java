@@ -189,6 +189,75 @@ class PostControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
+    // Pins the mixed-media carousel allowance. The media type check is scoped to single-asset
+    // posts by contract, not by accident, so a carousel may hold images and video together. Do not
+    // close this as a gap: a client feature is built on it.
+    @Test
+    void createPost_carouselMixingImageAndVideo_returnsCreated() {
+        TestUser author = registerUser("mixed_carousel_author");
+        UUID imageId = insertMediaAsset(author.id(), "image");
+        UUID videoId = insertMediaAsset(author.id(), "video");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "carousel");
+        payload.put("mediaIds", List.of(imageId.toString(), videoId.toString()));
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    // The other half of the allowance: the exemption is scoped to carousels, so a single-asset
+    // post still has to match its declared type. If this ever passes, the carousel behaviour has
+    // stopped being an exemption and become an absent check.
+    @Test
+    void createPost_imagePostWithVideoAsset_returnsBadRequest() {
+        TestUser author = registerUser("mismatched_image_author");
+        UUID videoId = insertMediaAsset(author.id(), "video");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "image");
+        payload.put("mediaIds", List.of(videoId.toString()));
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    // Upper bound accepted side. createPost_mediaIdsAboveMax_returnsBadRequest covers 11 rejected,
+    // and createPost_carouselWithOneMedia_returnsBadRequest covers the lower bound.
+    @Test
+    void createPost_carouselWithExactlyMaxMedia_returnsCreated() {
+        TestUser author = registerUser("max_carousel_author");
+        List<String> mediaIds = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            mediaIds.add(insertMediaAsset(author.id(), "image").toString());
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("postType", "carousel");
+        payload.put("mediaIds", mediaIds);
+
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
     @Test
     @Order(1)
     void createPost_carouselWithOneMedia_returnsBadRequest() {
@@ -878,6 +947,180 @@ class PostControllerIT {
         assertThat(createdAtOnCreate).endsWith("Z");
     }
 
+    @Test
+    @Order(32)
+    void listLikedPosts_returnsOwnLikesAndFiltersEveryInvisibilityCase() {
+        TestUser liker = registerUser("liked_tab_viewer");
+        TestUser author = registerUser("liked_tab_author");
+        TestUser blocker = registerUser("liked_tab_blocker");
+        TestUser privateAuthor = registerUser("liked_tab_private");
+
+        UUID visible = createImagePost(author, "visible", insertMediaAsset(author.id(), "image"));
+        UUID softDeleted =
+                createImagePost(author, "soft deleted", insertMediaAsset(author.id(), "image"));
+        UUID archived = createImagePost(author, "archived", insertMediaAsset(author.id(), "image"));
+        UUID blocked = createImagePost(blocker, "blocked", insertMediaAsset(blocker.id(), "image"));
+        UUID privatePost =
+                createImagePost(
+                        privateAuthor, "private", insertMediaAsset(privateAuthor.id(), "image"));
+
+        for (UUID postId : List.of(visible, softDeleted, archived, blocked, privatePost)) {
+            ResponseEntity<Map> liked =
+                    rest.exchange(
+                            "/api/v1/posts/" + postId + "/like",
+                            HttpMethod.POST,
+                            new HttpEntity<>(authHeaders(liker)),
+                            Map.class);
+            assertThat(liked.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        }
+
+        // Each of the four invisibility cases is applied only after the like exists, so the like
+        // row
+        // survives and the filtering is what removes the post from the list.
+        transition(author, softDeleted, "removed");
+        transition(author, archived, "archived");
+        insertBlock(blocker.id(), liker.id());
+        jdbcTemplate.update("UPDATE users SET is_private = TRUE WHERE id = ?", privateAuthor.id());
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/posts/liked", liker);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<?, ?>> content = contentOf(response);
+        assertThat(content).hasSize(1);
+        Map<?, ?> onlyEntry = content.get(0);
+        assertThat(onlyEntry.get("likedAt")).isNotNull();
+        assertThat(((Map<?, ?>) onlyEntry.get("post")).get("id")).isEqualTo(visible.toString());
+
+        // Every like row is still present; only the projection filtered them.
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM post_likes WHERE user_id = ?",
+                                Integer.class,
+                                liker.id()))
+                .isEqualTo(5);
+    }
+
+    @Test
+    @Order(33)
+    void listLikedPosts_isSelfOnlyAndLeavesPostByIdResolvable() {
+        TestUser owner = registerUser("liked_self_owner");
+        TestUser other = registerUser("liked_self_other");
+        UUID postId = createImagePost(owner, "mine", insertMediaAsset(owner.id(), "image"));
+        rest.exchange(
+                "/api/v1/posts/" + postId + "/like",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(owner)),
+                Map.class);
+
+        // The listing takes its subject from the security context, so a second account paging the
+        // same path sees its own likes rather than the owner's.
+        assertThat(contentOf(getWithAuth("/api/v1/posts/liked", owner))).hasSize(1);
+        assertThat(contentOf(getWithAuth("/api/v1/posts/liked", other))).isEmpty();
+
+        // The literal /liked segment must not shadow the /{postId} template.
+        ResponseEntity<Map> byId = getWithAuth("/api/v1/posts/" + postId, owner);
+        assertThat(byId.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @Order(34)
+    void listUserPosts_typeFilter_selectsOnlyTheRequestedTypes() {
+        TestUser author = registerUser("type_filter_author");
+        UUID image = createImagePost(author, "an image", insertMediaAsset(author.id(), "image"));
+        UUID video = createVideoPost(author, "a video", insertMediaAsset(author.id(), "video"));
+        UUID text = createTextPost(author, "some text");
+        String base = "/api/v1/posts/user/" + author.id();
+
+        // Absent means no filter, so the unfiltered response is unchanged by this feature.
+        assertThat(idsOf(getWithAuth(base, author)))
+                .containsExactlyInAnyOrder(image.toString(), video.toString(), text.toString());
+
+        assertThat(idsOf(getWithAuth(base + "?type=image", author)))
+                .containsExactly(image.toString());
+
+        // The photos tab sends every media-bearing type, which is why type is multi-valued.
+        assertThat(idsOf(getWithAuth(base + "?type=image&type=video&type=carousel", author)))
+                .containsExactlyInAnyOrder(image.toString(), video.toString());
+
+        assertThat(idsOf(getWithAuth(base + "?type=text", author)))
+                .containsExactly(text.toString());
+    }
+
+    @Test
+    @Order(35)
+    void listUserPosts_unrecognisedType_isRejectedNamingTheAcceptedValues() {
+        TestUser author = registerUser("type_reject_author");
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/posts/user/" + author.id() + "?type=photo", author);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat((String) response.getBody().get("message"))
+                .contains("image")
+                .contains("video")
+                .contains("carousel")
+                .contains("text");
+    }
+
+    @Test
+    @Order(36)
+    void listUserPosts_filteredCursorReplayedUnfiltered_isRejected() {
+        TestUser author = registerUser("type_cursor_author");
+        createImagePost(author, "img one", insertMediaAsset(author.id(), "image"));
+        createImagePost(author, "img two", insertMediaAsset(author.id(), "image"));
+        String base = "/api/v1/posts/user/" + author.id();
+
+        ResponseEntity<Map> filtered = getWithAuth(base + "?type=image&limit=1", author);
+        assertThat(filtered.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String cursor = endCursorOf(filtered);
+        assertThat(cursor).isNotNull();
+
+        // Replaying the same cursor unfiltered would silently omit every non-image post that sits
+        // before this position, so the filter is bound into the cursor scope and the replay fails.
+        ResponseEntity<Map> replayed = getWithAuth(base + "?cursor=" + cursor, author);
+        assertThat(replayed.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(replayed.getBody().get("code")).isEqualTo("INVALID_CURSOR");
+
+        // A differently ordered but equal filter set normalises to the same scope, so it is
+        // accepted.
+        ResponseEntity<Map> reordered = getWithAuth(base + "?type=image&cursor=" + cursor, author);
+        assertThat(reordered.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @Order(37)
+    void listUserPosts_undeclaredQueryParameter_isRejectedOnTheOptedInHandler() {
+        TestUser author = registerUser("strict_param_author");
+        String base = "/api/v1/posts/user/" + author.id();
+
+        // The three parameters below are the ones a client actually tried against this endpoint
+        // while it silently returned an unfiltered page, which is why this handler opts in.
+        for (String param : List.of("mediaType=IMAGE", "hasMedia=true", "postType=image")) {
+            ResponseEntity<Map> response = getWithAuth(base + "?" + param, author);
+            assertThat(response.getStatusCode())
+                    .as("undeclared parameter %s must not be silently ignored", param)
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat((String) response.getBody().get("message")).contains(param.split("=")[0]);
+        }
+
+        // Declared parameters are unaffected.
+        assertThat(getWithAuth(base + "?type=image&limit=5", author).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(getWithAuth(base, author).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @Order(38)
+    void undeclaredQueryParameter_onAHandlerThatDidNotOptIn_isStillIgnored() {
+        TestUser viewer = registerUser("lenient_param_viewer");
+
+        // Strictness is opt-in per handler, so the other endpoints keep their existing behaviour.
+        assertThat(getWithAuth("/api/v1/posts/saved?bogus=1", viewer).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(getWithAuth("/api/v1/posts/feed?bogus=1", viewer).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
     private TestUser registerUser(String username) {
         String email = username + "@test.local";
         String password = "S3cur3P@ssword!";
@@ -1021,5 +1264,43 @@ class PostControllerIT {
         assertThat(response.getBody()).isNotNull();
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         return (List<Map<?, ?>>) data.get("content");
+    }
+
+    private static List<String> idsOf(ResponseEntity<Map> response) {
+        return contentOf(response).stream().map(entry -> (String) entry.get("id")).toList();
+    }
+
+    private static String endCursorOf(ResponseEntity<Map> response) {
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        return (String) ((Map<?, ?>) data.get("pageInfo")).get("endCursor");
+    }
+
+    private UUID createVideoPost(TestUser author, String caption, UUID mediaId) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("caption", caption);
+        payload.put("postType", "video");
+        payload.put("mediaIds", List.of(mediaId.toString()));
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        return UUID.fromString((String) ((Map<?, ?>) response.getBody().get("data")).get("id"));
+    }
+
+    private UUID createTextPost(TestUser author, String caption) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("caption", caption);
+        payload.put("postType", "text");
+        ResponseEntity<Map> response =
+                rest.exchange(
+                        "/api/v1/posts",
+                        HttpMethod.POST,
+                        new HttpEntity<>(payload, authHeaders(author)),
+                        Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        return UUID.fromString((String) ((Map<?, ?>) response.getBody().get("data")).get("id"));
     }
 }

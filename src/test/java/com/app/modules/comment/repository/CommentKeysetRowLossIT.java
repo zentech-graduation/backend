@@ -57,6 +57,8 @@ class CommentKeysetRowLossIT {
         registry.add("spring.flyway.enabled", () -> true);
     }
 
+    private static final UUID[] NOTHING_EXCLUDED = new UUID[0];
+
     @Test
     void topLevelComments_tieGroupOnCreatedAt_pagesEveryRowExactlyOnce() {
         UUID user = insertUser("commenter");
@@ -66,18 +68,49 @@ class CommentKeysetRowLossIT {
             expected.add(insertTopLevelComment(postId, user, SHARED_INSTANT));
         }
 
+        // Empty exclusion array: the shape the newest mode uses, and the shape the top mode
+        // reduces to on a post whose comments carry no likes.
+        List<UUID> seen = pageTopLevel(postId, user, NOTHING_EXCLUDED);
+
+        assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
+    void topLevelComments_pinnedExcluded_pagesEveryRemainingRowExactlyOnce() {
+        UUID user = insertUser("pinned_commenter");
+        UUID postId = insertPost(user);
+        List<UUID> all = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            all.add(insertTopLevelComment(postId, user, SHARED_INSTANT));
+        }
+        // Two of the five stand in for a pinned block; the body must return the other three
+        // exactly once each and must never return the excluded pair.
+        UUID[] excluded = {all.get(0), all.get(1)};
+
+        List<UUID> seen = pageTopLevel(postId, user, excluded);
+
+        assertThat(seen).containsExactlyInAnyOrder(all.get(2), all.get(3), all.get(4));
+        assertThat(seen).doesNotContain(excluded);
+    }
+
+    private List<UUID> pageTopLevel(UUID postId, UUID viewerId, UUID[] excludedIds) {
         List<UUID> seen = new ArrayList<>();
-        List<Comment> page = commentRepository.findFirstTopLevel(postId, user, page());
+        List<Comment> page =
+                commentRepository.findFirstTopLevelExcluding(postId, excludedIds, viewerId, page());
         int guard = 0;
         while (!page.isEmpty() && guard++ < 100) {
             page.forEach(c -> seen.add(c.getId()));
             Comment last = page.get(page.size() - 1);
             page =
                     commentRepository.findTopLevelBefore(
-                            postId, user, last.getCreatedAt(), last.getId(), page());
+                            postId,
+                            excludedIds,
+                            viewerId,
+                            last.getCreatedAt(),
+                            last.getId(),
+                            page());
         }
-
-        assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
+        return seen;
     }
 
     @Test

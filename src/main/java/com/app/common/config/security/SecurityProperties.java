@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Binds security-related configuration from {@code app.security.*}.
@@ -18,7 +19,13 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * proxy trusted). {@code maxLoginBodyBytes}: upper bound on the cached request body size for the
  * login endpoint rate-limiter. {@code cookieSigningSecret}: secret used to compute the HMAC-SHA256
  * signature appended to the OAuth2 authorization-request cookie; must be at least 32 characters.
+ *
+ * <p>{@code @Validated} is required for any of the constraints above to execute. Spring Boot binds
+ * a {@code @ConfigurationProperties} type without validating it unless the type carries that
+ * annotation, so removing it silently disables the 32-character floor on the signing secret rather
+ * than causing a visible failure.
  */
+@Validated
 @ConfigurationProperties(prefix = "app.security")
 public record SecurityProperties(
         @NotNull @DefaultValue List<String> trustedProxyCidrs,

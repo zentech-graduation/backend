@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -34,11 +35,13 @@ import com.app.common.security.util.SecurityUtils;
 import com.app.modules.comment.config.CommentProperties;
 import com.app.modules.comment.dto.request.CreateCommentRequest;
 import com.app.modules.comment.dto.request.EditCommentRequest;
+import com.app.modules.comment.dto.response.CommentDeletionScopeResponse;
 import com.app.modules.comment.dto.response.CommentResponse;
 import com.app.modules.comment.entity.Comment;
 import com.app.modules.comment.entity.CommentLike;
 import com.app.modules.comment.entity.CommentLikeId;
 import com.app.modules.comment.entity.CommentWriteIdempotency;
+import com.app.modules.comment.enums.CommentSortOrder;
 import com.app.modules.comment.mapper.CommentMapper;
 import com.app.modules.comment.messaging.CommentEventTypes;
 import com.app.modules.comment.observability.CommentMetrics;
@@ -210,9 +213,14 @@ public class CommentServiceImpl implements CommentService {
                                 .build());
         MDC.put("commentId", saved.getId().toString());
 
+        // hasReported is false without a lookup: the actor is the author of the comment just
+        // created, and self-reporting is rejected, so no report by them against it can exist.
         CommentResponse response =
                 mapper.toResponse(
-                        saved, loadAuthor(saved.getUserId()), loadIsLiked(actorId, saved.getId()));
+                        saved,
+                        loadAuthor(saved.getUserId()),
+                        loadIsLiked(actorId, saved.getId()),
+                        false);
 
         if (idempotencyKey != null) {
             idempotencyRepository.updateResponseBody(
@@ -246,12 +254,24 @@ public class CommentServiceImpl implements CommentService {
                 throw new AppException(ApiErrorCode.COMMENT_MODERATION_REJECTED);
             }
             comment.setContent(content);
-            Comment saved = commentRepository.save(comment);
+            // The only place edited_at is written. Truncated to the microsecond resolution
+            // TIMESTAMPTZ stores, so the value returned here is byte-identical to the one a
+            // subsequent read returns rather than carrying JVM nanoseconds the column drops.
+            comment.setEditedAt(OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS));
+            // Flush forces the UPDATE (and its trg_comments_updated_at trigger) before the
+            // response and the broadcast projection are assembled from the entity below. Under
+            // save() alone the flush happened after this method had already read updated_at, so
+            // both carried the value the previous edit left behind, one edit behind the row and
+            // behind the edited_at set just above it.
+            Comment saved = commentRepository.saveAndFlush(comment);
+            // hasReported is false without a lookup: only the author may edit, and self-reporting
+            // is rejected, so no report by them against this comment can exist.
             CommentResponse response =
                     mapper.toResponse(
                             saved,
                             loadAuthor(saved.getUserId()),
-                            loadIsLiked(actorId, saved.getId()));
+                            loadIsLiked(actorId, saved.getId()),
+                            false);
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", saved.getPostId().toString());
@@ -277,7 +297,7 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public void deleteComment(UUID actorId, UUID commentId) {
+    public CommentDeletionScopeResponse deleteComment(UUID actorId, UUID commentId) {
         putWriteMdc(commentId, actorId);
         try {
             Comment comment =
@@ -288,7 +308,10 @@ public class CommentServiceImpl implements CommentService {
                 throw new AppException(ApiErrorCode.COMMENT_FORBIDDEN);
             }
             MDC.put("postId", comment.getPostId().toString());
-            commentRepository.softDeleteSubtree(commentId, OffsetDateTime.now());
+            // The statement's own affected-row count is the authoritative figure for how many
+            // comments this delete removed; no second query can match it without a race.
+            int deletedCommentCount =
+                    commentRepository.softDeleteSubtree(commentId, OffsetDateTime.now());
 
             Map<String, Object> data = new HashMap<>();
             data.put("postId", comment.getPostId().toString());
@@ -297,6 +320,9 @@ public class CommentServiceImpl implements CommentService {
             // comment, and the fan-out filter must key off who authored the content, not who
             // performed this action.
             data.put("commentOwnerId", comment.getUserId().toString());
+            // A single delete event stands for a whole subtree, so a live subscriber that removed
+            // only the named comment would leave its descendants rendered as orphans.
+            data.put("deletedCommentCount", deletedCommentCount);
             if (comment.getRootId() != null) {
                 data.put("rootId", comment.getRootId().toString());
             }
@@ -307,9 +333,30 @@ public class CommentServiceImpl implements CommentService {
                     comment.getId(),
                     actorId,
                     data);
+            return new CommentDeletionScopeResponse(deletedCommentCount);
         } finally {
             clearWriteMdc();
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CommentDeletionScopeResponse getDeletionScope(UUID actorId, UUID commentId) {
+        Comment comment =
+                commentRepository
+                        .findByIdAndDeletedAtIsNull(commentId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
+        // The delete this previews answers a non-owner with 403, which confirms the comment
+        // exists. A read-only preview has no reason to concede that, so every caller without the
+        // authority to delete gets the same answer as one asking about a comment that is not
+        // there.
+        // Deliberately no post-visibility gate: the delete has none either, so a user whose comment
+        // sits on a post that has since become invisible to them can still delete it, and a
+        // preview that refused would block a dialogue for an action that goes on to succeed.
+        if (!comment.getUserId().equals(actorId) && !isCurrentUserAdmin()) {
+            throw new AppException(ApiErrorCode.COMMENT_NOT_FOUND);
+        }
+        return new CommentDeletionScopeResponse(commentRepository.countSubtree(commentId));
     }
 
     @Override
@@ -327,9 +374,6 @@ public class CommentServiceImpl implements CommentService {
                             .findById(comment.getPostId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
             assertCanRead(actorId, post);
-            if (comment.getUserId().equals(actorId)) {
-                throw new AppException(ApiErrorCode.COMMENT_FORBIDDEN);
-            }
             if (commentLikeRepository.existsByIdUserIdAndIdCommentId(actorId, commentId)) {
                 throw new AppException(ApiErrorCode.COMMENT_ALREADY_LIKED);
             }
@@ -397,33 +441,44 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<CommentResponse> listTopLevelComments(
-            UUID viewerId, UUID postId, String cursor, int limit) {
+            UUID viewerId, UUID postId, String sort, String cursor, int limit) {
         Post post =
                 postRepository
                         .findById(postId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         assertCanRead(viewerId, post);
+        CommentSortOrder order = CommentSortOrder.from(sort);
+        String scope = order.cursorScope();
         int pageSize = normalizeLimit(limit);
-        Cursor decoded = decodeCursor(cursor, CursorScope.COMMENTS_TOP_LEVEL);
+        Cursor decoded = decodeCursor(cursor, scope);
         PageRequest page = PageRequest.of(0, pageSize + 1);
-        // Page two onward is the unchanged pure keyset stream: no pinned block, no exclusion.
+        // Resolved on every page, not only the first. The block itself is prepended to page one
+        // alone, but its ids must be excluded from the chronological body of every page: a pinned
+        // comment old enough to fall on a later page would otherwise be returned twice, once at
+        // the head of page one and again in its own chronological position.
+        //
+        // In the newest mode the block is not computed at all and the exclusion array is empty,
+        // so the same two queries serve both modes and neither carries a mode-specific clause.
+        List<Comment> pinned =
+                order.pinsTopComments()
+                        ? commentRepository.findTopLikedTopLevel(
+                                postId, viewerId, PageRequest.of(0, PINNED_COMMENT_COUNT))
+                        : List.of();
+        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         if (decoded != null) {
             List<Comment> comments =
                     commentRepository.findTopLevelBefore(
                             postId,
+                            pinnedIds,
                             viewerId,
                             TimeCursors.fromMicros(decoded.sortValueMicros()),
                             decoded.id(),
                             page);
-            return toPage(viewerId, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
+            return toPage(viewerId, comments, pageSize, cursor, scope);
         }
-        List<Comment> pinned =
-                commentRepository.findTopLikedTopLevel(
-                        postId, viewerId, PageRequest.of(0, PINNED_COMMENT_COUNT));
-        UUID[] pinnedIds = pinned.stream().map(Comment::getId).toArray(UUID[]::new);
         List<Comment> comments =
                 commentRepository.findFirstTopLevelExcluding(postId, pinnedIds, viewerId, page);
-        return toPage(viewerId, pinned, comments, pageSize, cursor, CursorScope.COMMENTS_TOP_LEVEL);
+        return toPage(viewerId, pinned, comments, pageSize, cursor, scope);
     }
 
     @Override
@@ -483,16 +538,21 @@ public class CommentServiceImpl implements CommentService {
         List<Comment> all = new ArrayList<>(pinned.size() + page.size());
         all.addAll(pinned);
         all.addAll(page);
-        // Both batch loaders are called once over the pinned block and the body together, so the
+        // Every batch loader is called once over the pinned block and the body together, so the
         // pinned block adds no query and the query count stays flat in page size.
         Map<UUID, UserSummaryResponse> authors =
                 userSummaryService.loadSummaries(all.stream().map(Comment::getUserId).toList());
-        Set<UUID> likedCommentIds =
-                commentViewerStateService.loadLikedCommentIds(
-                        viewerId, all.stream().map(Comment::getId).toList());
+        List<UUID> allIds = all.stream().map(Comment::getId).toList();
+        Set<UUID> likedCommentIds = commentViewerStateService.loadLikedCommentIds(viewerId, allIds);
+        Set<UUID> reportedCommentIds =
+                commentViewerStateService.loadReportedCommentIds(viewerId, allIds);
         List<CommentResponse> content = new ArrayList<>(all.size());
-        pinned.forEach(c -> content.add(toResponse(c, authors, likedCommentIds).asPinned()));
-        page.forEach(c -> content.add(toResponse(c, authors, likedCommentIds)));
+        pinned.forEach(
+                c ->
+                        content.add(
+                                toResponse(c, authors, likedCommentIds, reportedCommentIds)
+                                        .asPinned()));
+        page.forEach(c -> content.add(toResponse(c, authors, likedCommentIds, reportedCommentIds)));
         // Cursors describe the newest-first body only. Deriving them from the pinned block would
         // seek the next page to an arbitrary position in the stream.
         Comment first = page.isEmpty() ? null : page.get(0);
@@ -514,11 +574,15 @@ public class CommentServiceImpl implements CommentService {
     }
 
     private CommentResponse toResponse(
-            Comment comment, Map<UUID, UserSummaryResponse> authors, Set<UUID> likedCommentIds) {
+            Comment comment,
+            Map<UUID, UserSummaryResponse> authors,
+            Set<UUID> likedCommentIds,
+            Set<UUID> reportedCommentIds) {
         return mapper.toResponse(
                 comment,
                 authors.get(comment.getUserId()),
-                likedCommentIds.contains(comment.getId()));
+                likedCommentIds.contains(comment.getId()),
+                reportedCommentIds.contains(comment.getId()));
     }
 
     // Resolves a single author's public summary; the create and edit paths return exactly one

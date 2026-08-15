@@ -25,6 +25,24 @@ public class CursorPageResponse<T> {
     private List<T> content;
     private PageInfo pageInfo;
 
+    /**
+     * True when this page was produced by a degraded backend rather than by a complete query.
+     *
+     * <p>Only the post search fallback sets it. Without it an empty page returned because
+     * Elasticsearch was unreachable is byte-identical to a genuine no-match apart from the response
+     * timestamp, so a client cannot tell "nothing matched" from "the search tier is down" and
+     * cannot honestly word an empty state.
+     *
+     * <p>Defaults to false, and every existing factory path leaves it false, so no response that
+     * was complete before now claims to be degraded.
+     */
+    @Schema(
+            description =
+                    "True when the results are incomplete because a backing service was"
+                            + " unavailable. False on a complete result, including a genuine"
+                            + " no-match.")
+    private boolean degraded;
+
     @Getter
     @Builder
     @NoArgsConstructor
@@ -69,6 +87,30 @@ public class CursorPageResponse<T> {
                                 .startCursor(startCursor)
                                 .endCursor(endCursor)
                                 .build())
+                .build();
+    }
+
+    /**
+     * Build an empty page that declares itself incomplete because a backing service was
+     * unavailable.
+     *
+     * <p>Separate from {@link #of} so that marking a page degraded is always deliberate: no
+     * existing caller can acquire the flag by accident, and a reader of a fallback method can see
+     * the claim being made at the call site.
+     *
+     * @return an empty page with no cursors and {@code degraded} set
+     */
+    public static <T> CursorPageResponse<T> degraded() {
+        return CursorPageResponse.<T>builder()
+                .content(List.of())
+                .pageInfo(
+                        PageInfo.builder()
+                                .hasNextPage(false)
+                                .hasPreviousPage(false)
+                                .startCursor(null)
+                                .endCursor(null)
+                                .build())
+                .degraded(true)
                 .build();
     }
 }

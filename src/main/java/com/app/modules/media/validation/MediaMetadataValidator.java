@@ -1,7 +1,9 @@
 package com.app.modules.media.validation;
 
+import java.util.Collections;
 import java.util.Locale;
-import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
@@ -78,16 +80,37 @@ public class MediaMetadataValidator {
         }
     }
 
+    /**
+     * The MIME types the upload path accepts for a media type, normalized and sorted.
+     *
+     * <p>This is the accessor the constraints endpoint publishes from. Both the rejection message
+     * and the endpoint read it, so neither can describe an allowlist the rule does not enforce.
+     *
+     * @param mediaType the media type whose allowlist is wanted
+     * @return the accepted MIME types, lower-cased and in ascending order
+     */
+    public SortedSet<String> acceptedMimeTypes(MediaType mediaType) {
+        return normalizedAllowed(
+                mediaType == MediaType.IMAGE
+                        ? mediaProperties.getAllowedImageMimeTypes()
+                        : mediaProperties.getAllowedVideoMimeTypes());
+    }
+
     private void validateMimeType(MediaType mediaType, String mimeType) {
         if (mediaType == null) {
             reject("Media type is required");
         }
-        Set<String> allowed =
-                mediaType == MediaType.IMAGE
-                        ? normalizedAllowed(mediaProperties.getAllowedImageMimeTypes())
-                        : normalizedAllowed(mediaProperties.getAllowedVideoMimeTypes());
+        SortedSet<String> allowed = acceptedMimeTypes(mediaType);
         if (!allowed.contains(mimeType)) {
-            reject("Media MIME type is not allowed");
+            // Naming the accepted set is what stops a client keeping its own copy of the list and
+            // drifting from it. Rendered from the same set the check above consults, so the
+            // message cannot disagree with the rule it describes.
+            reject(
+                    "Unsupported %s MIME type '%s'. Accepted: %s"
+                            .formatted(
+                                    mediaType.name().toLowerCase(Locale.ROOT),
+                                    mimeType,
+                                    String.join(", ", allowed)));
         }
     }
 
@@ -129,13 +152,23 @@ public class MediaMetadataValidator {
         if (duration != null && duration < 0) {
             reject("Duration must be non-negative");
         }
+        // Advisory. The value is client-supplied and the server never opens the file, so this
+        // bounds an honest client only. Unlike file size, which the stored-object probe verifies
+        // against the real Content-Length, nothing here can be checked against the upload.
+        int maxSeconds = mediaProperties.getMaxVideoDurationSeconds();
+        if (mediaType == MediaType.VIDEO && duration != null && duration > maxSeconds) {
+            reject("Video duration must not exceed %d seconds".formatted(maxSeconds));
+        }
     }
 
-    private Set<String> normalizedAllowed(java.util.List<String> values) {
-        return values.stream()
-                .filter(StringUtils::hasText)
-                .map(this::normalizeMimeType)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    // Sorted rather than hashed so the rejection message and the constraints endpoint list the
+    // types in one stable order regardless of how the configuration happens to order them.
+    private SortedSet<String> normalizedAllowed(java.util.List<String> values) {
+        return Collections.unmodifiableSortedSet(
+                values.stream()
+                        .filter(StringUtils::hasText)
+                        .map(this::normalizeMimeType)
+                        .collect(java.util.stream.Collectors.toCollection(TreeSet::new)));
     }
 
     private String normalizeStorageKey(String storageKey) {
