@@ -156,6 +156,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A banned or suspended account can no longer complete the comment WebSocket handshake; a still-valid token now authenticates only when the account's status is active, matching the guarantee already enforced on REST requests. An already-open connection from before the status change is now also terminated shortly after, rather than remaining open until its token naturally expires (see Changed).
 
 ### Tests
+- Unit coverage for the comment notification consumer's dead-letter routing on a permanent or retry-exhausted failure, previously exercised only indirectly through integration tests.
 - Regression coverage proving a user cannot subscribe to another user's notification WebSocket topic, including from a session established on the comment WebSocket endpoint.
 - End-to-end coverage proving a notification is delivered to the correct recipient's WebSocket session only, is suppressed correctly (self-action, disabled preference, blocked actor), and is not delivered to an unrelated connected user.
 - Regression coverage proving a WebSocket session is terminated shortly after the underlying account is banned, suspended, or its token is logged out, and that a still-valid session survives the same check.
@@ -176,6 +177,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Coverage for login by username and by email through the identifier field, including uppercase-username resolution and identical failure responses for an unknown identifier and a wrong password.
 
 ### Fixed
+- A story- or comment-notification event that permanently fails or exhausts its retries is now routed to the dead-letter queue by the broker instead of being acknowledged as successfully processed.
 - Comment and story activity (new comments, replies, mentions, comment likes, and story views) now generates notifications in production; these notification types were previously never created outside the development environment because their event consumers were not enabled.
 - Conversation creation, detail, and list responses now correctly report whether a conversation is a group instead of always reporting false.
 - Removing the last active admin from a group conversation (including the admin removing themselves) now automatically promotes a replacement admin, matching the existing behavior when an admin leaves voluntarily.
