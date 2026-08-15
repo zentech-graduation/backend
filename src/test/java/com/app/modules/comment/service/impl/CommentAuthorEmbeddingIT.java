@@ -108,14 +108,14 @@ class CommentAuthorEmbeddingIT {
 
         Statistics stats = statistics();
         // Warm up so one-time metamodel/sequence statements do not skew the first measured call.
-        commentService.listTopLevelComments(viewer, post, null, 2);
+        commentService.listTopLevelComments(viewer, post, null, null, 2);
 
         stats.clear();
-        commentService.listTopLevelComments(viewer, post, null, 2);
+        commentService.listTopLevelComments(viewer, post, null, null, 2);
         long smallPage = stats.getPrepareStatementCount();
 
         stats.clear();
-        commentService.listTopLevelComments(viewer, post, null, 6);
+        commentService.listTopLevelComments(viewer, post, null, null, 6);
         long largePage = stats.getPrepareStatementCount();
 
         assertThat(largePage).isEqualTo(smallPage);
@@ -154,7 +154,7 @@ class CommentAuthorEmbeddingIT {
         insertTopLevelComment(post, ghost, minutesAgo(1));
 
         CursorPageResponse<CommentResponse> page =
-                commentService.listTopLevelComments(viewer, post, null, 10);
+                commentService.listTopLevelComments(viewer, post, null, null, 10);
 
         UserSummaryResponse author = page.getContent().get(0).author();
         assertThat(author.id()).isEqualTo(ghost);
@@ -191,7 +191,7 @@ class CommentAuthorEmbeddingIT {
         insertTopLevelComment(post, alice, minutesAgo(1));
 
         List<CommentResponse> content =
-                commentService.listTopLevelComments(viewer, post, null, 10).getContent();
+                commentService.listTopLevelComments(viewer, post, null, null, 10).getContent();
 
         assertThat(content).hasSize(3);
         // Newest first: alice, bob, alice.

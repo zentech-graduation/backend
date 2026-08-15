@@ -28,7 +28,6 @@ import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
-import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
@@ -248,10 +247,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthResponse refresh(RefreshRequest request, HttpServletRequest httpRequest) {
+    public AuthResponse refresh(String rawRefreshToken, HttpServletRequest httpRequest) {
         RefreshTokenService.RotationResult rotation =
-                refreshTokenService.rotate(
-                        request.refreshToken(), ipExtractor.extract(httpRequest));
+                refreshTokenService.rotate(rawRefreshToken, ipExtractor.extract(httpRequest));
 
         User user =
                 userRepository
@@ -285,7 +283,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public void logout(RefreshRequest request) {
+    public void logout(String rawRefreshToken) {
         // Blacklist the current access token so it cannot authenticate again before its
         // natural expiry. The raw token was placed on the Authentication credentials by
         // JwtAuthenticationFilter; absence (e.g. logout without an Authorization header)
@@ -294,7 +292,7 @@ public class AuthServiceImpl implements AuthService {
         // Revoke the refresh token first so that if the subsequent blacklist call fails the
         // refresh token is already invalidated; failing before revoke would leave neither
         // invalidation applied.
-        refreshTokenService.revoke(request.refreshToken());
+        refreshTokenService.revoke(rawRefreshToken);
 
         // Retained for defensive completeness — public path now requires authentication
         // (SecurityConfig enforces authenticated() on /logout).

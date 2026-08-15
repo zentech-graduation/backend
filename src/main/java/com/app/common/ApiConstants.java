@@ -46,6 +46,7 @@ public final class ApiConstants {
         public static final String SAVE = "/{postId}/save";
         public static final String SAVED = "/saved";
         public static final String VIEW = "/{postId}/view";
+        public static final String LIKED = "/liked";
         public static final String SEARCH = "/search";
         public static final String COMMENTS = "/{postId}/comments";
         public static final String FEED = "/feed";
@@ -59,6 +60,7 @@ public final class ApiConstants {
         public static final String BY_ID = "/{commentId}";
         public static final String LIKE = "/{commentId}/like";
         public static final String REPLIES = "/{commentId}/replies";
+        public static final String DELETION_SCOPE = "/{commentId}/deletion-scope";
     }
 
     public static final class Stories {
@@ -127,6 +129,7 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/media";
         public static final String UPLOAD = "/upload";
         public static final String UPLOAD_COMPLETE = "/upload-complete";
+        public static final String CONSTRAINTS = "/constraints";
     }
 
     public static final class Reports {

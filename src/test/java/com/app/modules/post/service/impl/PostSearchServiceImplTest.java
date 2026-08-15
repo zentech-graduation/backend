@@ -161,6 +161,9 @@ class PostSearchServiceImplTest {
                         new DataAccessResourceFailureException("es down"));
 
         assertThat(page.getContent()).isEmpty();
+        // An empty page from a degraded search must be distinguishable from a genuine no-match,
+        // which it was not: the two responses differed only in their timestamp.
+        assertThat(page.isDegraded()).isTrue();
     }
 
     @Test
@@ -172,6 +175,7 @@ class PostSearchServiceImplTest {
                 service.searchFallback(UUID.randomUUID(), "cats", null, 0, wrapped);
 
         assertThat(page.getContent()).isEmpty();
+        assertThat(page.isDegraded()).isTrue();
     }
 
     @Test

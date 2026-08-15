@@ -57,6 +57,12 @@ class ProdProfileConsumerActivationIT {
         r.add("spring.rabbitmq.username", () -> "guest");
         r.add("spring.rabbitmq.password", () -> "guest");
         r.add("JWT_SECRET", () -> "prod-profile-consumer-it-secret-32-chars-min!!");
+        // Supplied explicitly because this is the only prod-profile test: application-prod.yml
+        // does not override the secret, so without this the binding falls through to the raw
+        // ${APP_COOKIE_SIGNING_SECRET} placeholder text, which fails the 32-character floor.
+        r.add(
+                "APP_COOKIE_SIGNING_SECRET",
+                () -> "prod-profile-consumer-it-cookie-signing-secret-32-min");
         r.add("JWT_ISSUER", () -> "https://prod-profile-consumer-it.test.local");
         r.add("JWT_AUDIENCE", () -> "prod-profile-consumer-it");
         r.add("ACCESS_TOKEN_TTL", () -> 900L);

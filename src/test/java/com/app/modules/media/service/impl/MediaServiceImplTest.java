@@ -2,26 +2,29 @@ package com.app.modules.media.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.settings.service.SystemSettingService;
@@ -33,9 +36,8 @@ import com.app.modules.media.dto.response.MediaUploadUrlResponse;
 import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.media.enums.MediaType;
 import com.app.modules.media.mapper.MediaAssetMapper;
-import com.app.modules.media.repository.MediaAssetRepository;
-import com.app.modules.media.service.MediaEventService;
 import com.app.modules.media.storage.MediaStorageKeyGenerator;
+import com.app.modules.media.storage.ObjectStorageMetadataService;
 import com.app.modules.media.storage.ObjectStoragePresignService;
 import com.app.modules.media.validation.MediaMetadataValidator;
 
@@ -46,11 +48,11 @@ class MediaServiceImplTest {
     private static final UUID MEDIA_ID = UUID.fromString("00000000-0000-0000-0000-000000000456");
     private static final String VALID_STORAGE_KEY = "users/%s/media/image.jpg".formatted(USER_ID);
 
-    @Mock private MediaAssetRepository mediaAssetRepository;
     @Mock private SystemSettingService systemSettingService;
-    @Mock private MediaEventService mediaEventService;
     @Mock private MediaStorageKeyGenerator storageKeyGenerator;
     @Mock private ObjectStoragePresignService objectStoragePresignService;
+    @Mock private ObjectStorageMetadataService objectStorageMetadataService;
+    @Mock private MediaAssetRegistrar mediaAssetRegistrar;
 
     private MediaServiceImpl service;
 
@@ -60,14 +62,13 @@ class MediaServiceImplTest {
         mediaProperties.setCdnBaseUrl("https://cdn.example.com/assets");
         service =
                 new MediaServiceImpl(
-                        mediaAssetRepository,
                         new MediaMetadataValidator(mediaProperties),
                         systemSettingService,
-                        mediaEventService,
-                        new MediaAssetMapper(),
                         mediaProperties,
                         storageKeyGenerator,
-                        objectStoragePresignService);
+                        objectStoragePresignService,
+                        objectStorageMetadataService,
+                        mediaAssetRegistrar);
         SecurityContextHolder.getContext()
                 .setAuthentication(
                         new UsernamePasswordAuthenticationToken(
@@ -102,8 +103,7 @@ class MediaServiceImplTest {
         assertThat(response.storageKey()).isEqualTo(storageKey);
         assertThat(response.method()).isEqualTo("PUT");
         assertThat(response.requiredHeaders()).containsEntry("content-type", "image/jpeg");
-        verify(mediaAssetRepository, never()).insert(org.mockito.ArgumentMatchers.any());
-        verify(mediaEventService, never()).publishMediaUploaded(org.mockito.ArgumentMatchers.any());
+        verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -122,43 +122,126 @@ class MediaServiceImplTest {
     }
 
     @Test
-    void completeUpload_persistsMediaAssetAndPublishesUploadedEvent() {
-        MediaUploadCompleteRequest request = imageRequest();
+    void completeUpload_verifiedObjectIsHandedToTheRegistrarWithADerivedCdnUrl() {
         when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
-        when(mediaAssetRepository.existsByStorageKey(VALID_STORAGE_KEY)).thenReturn(false);
-        when(mediaAssetRepository.insert(org.mockito.ArgumentMatchers.any()))
+        stubStoredObject(1024L, "image/jpeg");
+        when(mediaAssetRegistrar.register(org.mockito.ArgumentMatchers.any()))
                 .thenAnswer(
                         invocation -> {
                             MediaAsset draft = invocation.getArgument(0);
                             draft.setId(MEDIA_ID);
                             draft.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-                            return draft;
+                            return new MediaAssetMapper().toResponse(draft);
                         });
 
-        MediaAssetResponse response = service.completeUpload(request);
+        MediaAssetResponse response = service.completeUpload(imageRequest());
 
-        assertThat(response.id()).isEqualTo(MEDIA_ID);
-        assertThat(response.userId()).isEqualTo(USER_ID);
-        assertThat(response.cdnUrl())
+        ArgumentCaptor<MediaAsset> captor = ArgumentCaptor.forClass(MediaAsset.class);
+        verify(mediaAssetRegistrar).register(captor.capture());
+        assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
+        assertThat(captor.getValue().getStorageKey()).isEqualTo(VALID_STORAGE_KEY);
+        assertThat(captor.getValue().getCdnUrl())
                 .isEqualTo("https://cdn.example.com/assets/" + VALID_STORAGE_KEY);
-        verify(mediaEventService).publishMediaUploaded(org.mockito.ArgumentMatchers.any());
+        assertThat(response.id()).isEqualTo(MEDIA_ID);
     }
 
     @Test
-    void completeUpload_duplicateStorageKeyRejectsBeforeInsertAndEvent() {
+    void completeUpload_probesStorageBeforeHandingTheAssetToTheTransactionalRegistrar() {
         when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
-        when(mediaAssetRepository.existsByStorageKey(VALID_STORAGE_KEY)).thenReturn(true);
+        stubStoredObject(1024L, "image/jpeg");
+
+        service.completeUpload(imageRequest());
+
+        // The registrar owns the only @Transactional method on this path, so a probe that happens
+        // strictly before it is a probe that happens before any transaction opens.
+        InOrder order = inOrder(objectStorageMetadataService, mediaAssetRegistrar);
+        order.verify(objectStorageMetadataService).findObjectMetadata(VALID_STORAGE_KEY);
+        order.verify(mediaAssetRegistrar).register(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void completeUpload_objectAbsentFromStorageRejectsBeforeReachingTheRegistrar() {
+        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
+        when(objectStorageMetadataService.findObjectMetadata(VALID_STORAGE_KEY))
+                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.completeUpload(imageRequest()))
                 .isInstanceOf(AppException.class)
-                .hasMessage("Media storage key already exists");
+                .extracting(throwable -> ((AppException) throwable).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_OBJECT_NOT_UPLOADED);
 
-        verify(mediaAssetRepository, never()).insert(org.mockito.ArgumentMatchers.any());
-        verify(mediaEventService, never()).publishMediaUploaded(org.mockito.ArgumentMatchers.any());
+        verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    void completeUpload_storageKeyOutsideCurrentUserPrefixRejectsBeforeInsertAndEvent() {
+    void completeUpload_storageLookupFailureRejectsBeforeReachingTheRegistrar() {
+        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
+        when(objectStorageMetadataService.findObjectMetadata(VALID_STORAGE_KEY))
+                .thenThrow(new AppException(ApiErrorCode.MEDIA_STORAGE_UNAVAILABLE));
+
+        assertThatThrownBy(() -> service.completeUpload(imageRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(throwable -> ((AppException) throwable).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_STORAGE_UNAVAILABLE);
+
+        verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void completeUpload_storedObjectSizeMismatchRejectsBeforeReachingTheRegistrar() {
+        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
+        stubStoredObject(2048L, "image/jpeg");
+
+        assertThatThrownBy(() -> service.completeUpload(imageRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(throwable -> ((AppException) throwable).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_OBJECT_METADATA_MISMATCH);
+
+        verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void completeUpload_storedObjectContentTypeMismatchRejectsBeforeReachingTheRegistrar() {
+        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
+        stubStoredObject(1024L, "image/png");
+
+        assertThatThrownBy(() -> service.completeUpload(imageRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(throwable -> ((AppException) throwable).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_OBJECT_METADATA_MISMATCH);
+
+        verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void completeUpload_storedObjectContentTypeComparisonIgnoresParametersAndCase() {
+        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
+        stubStoredObject(1024L, "IMAGE/JPEG; charset=binary");
+
+        service.completeUpload(imageRequest());
+
+        verify(mediaAssetRegistrar).register(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void completeUpload_storageIsProbedEvenForAnAlreadyRegisteredStorageKey() {
+        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
+        stubStoredObject(1024L, "image/jpeg");
+        when(mediaAssetRegistrar.register(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new AppException(ApiErrorCode.MEDIA_STORAGE_KEY_ALREADY_EXISTS));
+
+        assertThatThrownBy(() -> service.completeUpload(imageRequest()))
+                .isInstanceOf(AppException.class)
+                .extracting(throwable -> ((AppException) throwable).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEDIA_STORAGE_KEY_ALREADY_EXISTS);
+
+        // Accepted cost of keeping the probe out of the transaction: the duplicate check now sits
+        // behind a network round trip instead of in front of it.
+        verify(objectStorageMetadataService).findObjectMetadata(VALID_STORAGE_KEY);
+    }
+
+    @Test
+    void completeUpload_storageKeyOutsideCurrentUserPrefixRejectsBeforeProbingStorage() {
         when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
         MediaUploadCompleteRequest request =
                 new MediaUploadCompleteRequest(
@@ -173,50 +256,21 @@ class MediaServiceImplTest {
 
         assertThatThrownBy(() -> service.completeUpload(request)).isInstanceOf(AppException.class);
 
-        verify(mediaAssetRepository, never())
-                .existsByStorageKey(org.mockito.ArgumentMatchers.anyString());
-        verify(mediaAssetRepository, never()).insert(org.mockito.ArgumentMatchers.any());
-        verify(mediaEventService, never()).publishMediaUploaded(org.mockito.ArgumentMatchers.any());
+        verify(objectStorageMetadataService, never())
+                .findObjectMetadata(org.mockito.ArgumentMatchers.anyString());
+        verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
     }
 
+    // The invalid example used to be image/gif. GIF is an accepted image type now, so this pins
+    // HEIC instead, which is deliberately refused and therefore still rejects before the probe.
     @Test
-    void completeUpload_uniqueViolationMapsToDuplicateStorageKey() {
-        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
-        when(mediaAssetRepository.existsByStorageKey(VALID_STORAGE_KEY)).thenReturn(false);
-        when(mediaAssetRepository.insert(org.mockito.ArgumentMatchers.any()))
-                .thenThrow(
-                        new DataIntegrityViolationException(
-                                "duplicate", new SQLException("duplicate", "23505")));
-
-        assertThatThrownBy(() -> service.completeUpload(imageRequest()))
-                .isInstanceOf(AppException.class)
-                .hasMessage("Media storage key already exists");
-
-        verify(mediaEventService, never()).publishMediaUploaded(org.mockito.ArgumentMatchers.any());
-    }
-
-    @Test
-    void completeUpload_unknownIntegrityViolationIsNotMaskedAsDuplicateStorageKey() {
-        when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
-        when(mediaAssetRepository.existsByStorageKey(VALID_STORAGE_KEY)).thenReturn(false);
-        DataIntegrityViolationException failure =
-                new DataIntegrityViolationException(
-                        "check violation", new SQLException("check violation", "23514"));
-        when(mediaAssetRepository.insert(org.mockito.ArgumentMatchers.any())).thenThrow(failure);
-
-        assertThatThrownBy(() -> service.completeUpload(imageRequest())).isSameAs(failure);
-
-        verify(mediaEventService, never()).publishMediaUploaded(org.mockito.ArgumentMatchers.any());
-    }
-
-    @Test
-    void completeUpload_invalidMetadataCreatesNoMediaAndNoEvent() {
+    void completeUpload_invalidMetadataRejectsBeforeProbingStorage() {
         when(systemSettingService.getRequiredLong("max_media_size_mb")).thenReturn(100L);
         MediaUploadCompleteRequest request =
                 new MediaUploadCompleteRequest(
                         VALID_STORAGE_KEY,
                         MediaType.IMAGE,
-                        "image/gif",
+                        "image/heic",
                         1024L,
                         800,
                         600,
@@ -225,8 +279,17 @@ class MediaServiceImplTest {
 
         assertThatThrownBy(() -> service.completeUpload(request)).isInstanceOf(AppException.class);
 
-        verify(mediaAssetRepository, never()).insert(org.mockito.ArgumentMatchers.any());
-        verify(mediaEventService, never()).publishMediaUploaded(org.mockito.ArgumentMatchers.any());
+        verify(objectStorageMetadataService, never())
+                .findObjectMetadata(org.mockito.ArgumentMatchers.anyString());
+        verify(mediaAssetRegistrar, never()).register(org.mockito.ArgumentMatchers.any());
+    }
+
+    private void stubStoredObject(long contentLength, String contentType) {
+        when(objectStorageMetadataService.findObjectMetadata(VALID_STORAGE_KEY))
+                .thenReturn(
+                        Optional.of(
+                                new ObjectStorageMetadataService.StoredObjectMetadata(
+                                        contentLength, contentType)));
     }
 
     private MediaUploadCompleteRequest imageRequest() {

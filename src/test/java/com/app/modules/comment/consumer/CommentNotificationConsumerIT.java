@@ -194,6 +194,19 @@ class CommentNotificationConsumerIT {
     }
 
     @Test
+    void handle_selfLike_doesNotCreateNotification() throws Exception {
+        Channel channel = mock(Channel.class);
+        Map<String, Object> data = new HashMap<>();
+        data.put("commentId", UUID.randomUUID().toString());
+        data.put("commentOwnerId", actor.getId().toString());
+
+        consumer.consume(
+                message(UUID.randomUUID(), CommentEventTypes.COMMENT_LIKED_V1, data), channel);
+
+        assertThat(notificationRepository.findAll()).isEmpty();
+    }
+
+    @Test
     void handle_commentCreatedWithMention_createsMentionCommentNotification() throws Exception {
         Channel channel = mock(Channel.class);
         User mentioned = userRepository.save(activeUser("mention_" + suffix()));

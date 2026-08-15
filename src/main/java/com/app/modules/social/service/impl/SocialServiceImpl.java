@@ -29,6 +29,8 @@ import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.common.response.ViewerRelationshipResponse;
+import com.app.modules.report.enums.ReportType;
+import com.app.modules.report.service.ReportedTargetService;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
 import com.app.modules.social.entity.Block;
@@ -55,18 +57,21 @@ public class SocialServiceImpl implements SocialService {
     private final SocialUserRepository socialUserRepository;
     private final SocialEventService socialEventService;
     private final UserSummaryService userSummaryService;
+    private final ReportedTargetService reportedTargetService;
 
     public SocialServiceImpl(
             FollowRepository followRepository,
             BlockRepository blockRepository,
             SocialUserRepository socialUserRepository,
             SocialEventService socialEventService,
-            UserSummaryService userSummaryService) {
+            UserSummaryService userSummaryService,
+            ReportedTargetService reportedTargetService) {
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.socialUserRepository = socialUserRepository;
         this.socialEventService = socialEventService;
         this.userSummaryService = userSummaryService;
+        this.reportedTargetService = reportedTargetService;
     }
 
     @Override
@@ -565,6 +570,8 @@ public class SocialServiceImpl implements SocialService {
         // stealth block model, so the incoming direction has no caller.
         Set<UUID> blocking =
                 new HashSet<>(blockRepository.findOutgoingBlockedIds(viewerId, distinct));
+        Set<UUID> reported =
+                reportedTargetService.loadReportedEntityIds(viewerId, ReportType.USER, distinct);
         Map<UUID, ViewerRelationshipResponse> result = new HashMap<>(distinct.size());
         for (UUID id : distinct) {
             result.put(
@@ -573,7 +580,8 @@ public class SocialServiceImpl implements SocialService {
                             following.getOrDefault(id, false),
                             requested.getOrDefault(id, false),
                             followedBy.getOrDefault(id, false),
-                            blocking.contains(id)));
+                            blocking.contains(id),
+                            reported.contains(id)));
         }
         return result;
     }

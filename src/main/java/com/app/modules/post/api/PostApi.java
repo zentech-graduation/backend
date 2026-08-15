@@ -1,5 +1,6 @@
 package com.app.modules.post.api;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -344,6 +345,18 @@ public interface PostApi {
     @GetMapping(ApiConstants.Posts.USER_POSTS)
     ResponseEntity<ApiResponse<CursorPageResponse<PostResponse>>> listUserPosts(
             @PathVariable("userId") UUID userId,
+            @Parameter(
+                            description =
+                                    "Post types to include. Repeat the parameter for several"
+                                            + " values, for example type=image&type=video; a"
+                                            + " single comma-delimited value is also accepted."
+                                            + " Omit it for no filter. An unrecognised value is"
+                                            + " rejected with 400 rather than ignored. The"
+                                            + " normalised set is bound into the returned cursor,"
+                                            + " so a cursor from one filter cannot be replayed"
+                                            + " under another.")
+                    @RequestParam(value = "type", required = false)
+                    List<String> type,
             @Parameter(description = "Opaque cursor from the previous page")
                     @RequestParam(value = "cursor", required = false)
                     String cursor,

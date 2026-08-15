@@ -116,6 +116,62 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
             Pageable pageable);
 
     /**
+     * First keyset page of a user's published posts restricted to the given types, newest first.
+     *
+     * <p>Separate from {@link #findFirstUserPosts} rather than binding an empty list, because an
+     * empty {@code IN} list is not valid SQL. The types arrive as one comma-delimited parameter
+     * that Postgres expands into a {@code post_type[]}, so the cast lands on the parameter and the
+     * comparison stays enum-to-enum. Casting the column to text instead discards its statistics and
+     * was measured to replace the index scan with a bitmap heap scan plus a sort.
+     *
+     * @param userId post author
+     * @param types comma-delimited {@code post_type} names; never empty
+     * @param pageable page size carrier (page number is always 0 for keyset paging)
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM posts WHERE user_id = :userId AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "AND post_type = ANY(CAST(string_to_array(:types, ',') AS"
+                            + " post_type[])) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Post> findFirstUserPostsByType(
+            @Param("userId") UUID userId, @Param("types") String types, Pageable pageable);
+
+    /**
+     * Keyset page of a user's published posts of the given types, strictly after the cursor tuple.
+     *
+     * <p>Same predicate as {@link #findFirstUserPostsByType} with the row-value cursor comparison
+     * added. Served by {@code idx_posts_user_created_id} (V34) with the type predicate applied as a
+     * filter; measured across the first, a deep, and a low-selectivity page without degradation, so
+     * no type-aware index is required.
+     *
+     * @param userId post author
+     * @param types comma-delimited {@code post_type} names; never empty
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code created_at}; never null
+     * @param pageable page size carrier
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM posts WHERE user_id = :userId AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "AND post_type = ANY(CAST(string_to_array(:types, ',') AS"
+                            + " post_type[])) "
+                            + "AND (created_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Post> findUserPostsByTypeBefore(
+            @Param("userId") UUID userId,
+            @Param("types") String types,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
+            Pageable pageable);
+
+    /**
      * First keyset batch of posts in the given status across all users, newest first.
      *
      * <p>Used by the Elasticsearch index seed runner to start walking the table.

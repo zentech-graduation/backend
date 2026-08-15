@@ -55,6 +55,9 @@ These tables cannot be rebuilt from any other source if lost.
 | Rule | Service / Component |
 |------|---------------------|
 | A `carousel` post must have more than one `post_media` row | Enforced by `PostServiceImpl.validateMediaCardinality` — rejects fewer than 2 media items with `BAD_REQUEST`. |
+| A `carousel` post must have at most `max_post_media_items` media rows, default 10 | Enforced by `PostServiceImpl.validateMediaCardinality` — rejects more than the setting with `BAD_REQUEST`. |
+| An `image` post accepts exactly one asset whose `media_type` is `image`; a `video` post accepts exactly one asset whose `media_type` is `video` | Enforced by `PostServiceImpl.validateMediaCardinality`. |
+| A `carousel` post may mix `image` and `video` assets in one post | Deliberate. See "Mixed-media carousels" below. |
 | Self-like is permitted. There is no constraint preventing a user from liking their own post. | No constraint in schema |
 | Only the post owner may update or soft-delete their post | Enforced by `PostServiceImpl` — `updateCaption`, `transitionStatus`, `deletePost`. |
 | A soft-deleted post must set `deleted_at = NOW()` and `status = 'removed'`; do not hard-delete | Implemented in `PostServiceImpl.softDelete`. |
@@ -65,6 +68,20 @@ These tables cannot be rebuilt from any other source if lost.
 | A view is accepted but not recorded when the viewer is the post's own owner, so self-views can never inflate any downstream signal | `PostViewServiceImpl.recordView` |
 | Hashtags in `caption` are parsed and written to `post_hashtags` at publish time | Implemented in `PostServiceImpl.upsertCaptionHashtags`, called from `createPost` (when initially published) and `updateCaption` (when the post is already published). |
 | User mentions in `caption` generate `mention_post` notifications | `[NOT YET IMPLEMENTED]` — no mention parsing exists in the post module |
+
+#### Mixed-media carousels
+
+A carousel may hold images and video in the same post.
+The media type restriction applies only to single-asset posts: an `image` post must carry an image asset and a `video` post must carry a video asset, and a carousel is subject to neither.
+
+This is a deliberate exemption, not a validation path that was never extended.
+The `PostService.createPost` contract states the two rules separately and attaches the type requirement only to the single-asset case, and `validateMediaCardinality` matches that contract exactly by returning from the carousel branch once the item count is checked.
+The type check it returns past is written against a single asset and could not be applied to a list without being rewritten.
+The behaviour also matches the product being modelled, where a carousel is explicitly a mixed gallery.
+
+Do not close this as a gap.
+`PostControllerIT.createPost_carouselMixingImageAndVideo_returnsCreated` pins the allowance and `PostControllerIT.createPost_imagePostWithVideoAsset_returnsBadRequest` pins the fact that the exemption stops at carousels.
+A change that made carousels type-homogeneous would break a client feature built on this.
 | Every caption update appends one `post_edit_history` row recording the pre-edit caption and the editor | `PostServiceImpl` |
 | Edit history is readable by the post owner only | `PostServiceImpl` |
 

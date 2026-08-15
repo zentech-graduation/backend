@@ -87,6 +87,7 @@ class RecommendationFeedServiceImplTest {
                 0,
                 false,
                 false,
+                false,
                 0,
                 null,
                 null,

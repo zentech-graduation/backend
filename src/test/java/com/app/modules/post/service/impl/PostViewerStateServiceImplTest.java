@@ -17,18 +17,22 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostSaveRepository;
 import com.app.modules.post.service.PostViewerState;
+import com.app.modules.report.service.ReportedTargetService;
 
 @ExtendWith(MockitoExtension.class)
 class PostViewerStateServiceImplTest {
 
     @Mock private PostLikeRepository postLikeRepository;
     @Mock private PostSaveRepository postSaveRepository;
+    @Mock private ReportedTargetService reportedTargetService;
 
     private PostViewerStateServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new PostViewerStateServiceImpl(postLikeRepository, postSaveRepository);
+        service =
+                new PostViewerStateServiceImpl(
+                        postLikeRepository, postSaveRepository, reportedTargetService);
     }
 
     @Test

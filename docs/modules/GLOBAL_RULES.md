@@ -126,9 +126,14 @@ Flow:
 2. Backend validates the request, generates a Cloudflare R2 pre-signed URL, and returns it to the client.
 3. Client performs a `PUT` request directly to R2 using the pre-signed URL.
 4. After upload completes, client sends an "upload complete" notification to the backend, including: `storage_key`, `cdn_url`, `media_type`, `mime_type`, `file_size`, `width`, `height`, `duration` (video only), `blurhash`.
-5. Backend creates the `media_assets` record using the provided metadata.
+5. Backend issues a head-object request to R2 for that `storage_key` and rejects the notification unless an object exists there whose size and content type match the submitted metadata.
+6. Backend creates the `media_assets` record using the provided metadata.
 
 **Rule**: All media metadata (`width`, `height`, `duration`, `mime_type`, `file_size`, `blurhash`) is collected client-side and submitted by the client. The server does not perform server-side media inspection at upload time.
+
+The existence check in step 5 is not media inspection. The server reads the object's response headers; it never fetches or decodes the file body, so `width`, `height`, `duration`, and `blurhash` remain client-supplied and unverified.
+
+**Rule**: Upload confirmation fails closed. If object storage cannot be reached, the notification is rejected as retryable and no `media_assets` row is written. A row must never exist for an object that is absent, because every reader of `media_assets` treats the row's existence as proof the object is live.
 
 ---
 
@@ -142,6 +147,24 @@ Flow:
 | Hashtag trending | `hashtag_trending` populated by a scheduled background job | Trending data is a periodic snapshot, not live |
 | Email verification / password reset tokens | Stored in Redis, not PostgreSQL | Tokens are lost on full Redis flush; user must re-request |
 | Full-text search | Two tiers by domain. `posts` and `hashtags` are indexed in Elasticsearch and queried behind the `elasticsearchSearch` circuit breaker; hashtag search falls back to `pg_trgm`, post search falls back to an empty page. `users` has no Elasticsearch index; username search queries the PostgreSQL `pg_trgm` GIN index `idx_users_username_trgm` directly via `ILIKE`, with **no** circuit breaker, because the backend is the source of truth and there is no lower tier to degrade to | User search ranking is popularity-ordered, not relevance-scored. A term matching a large fraction of the table degrades to a parallel sequential scan - measured at 56 ms against 200,000 rows - bounded by a 2-character minimum, a 10,000-row offset cap, a 100-row page cap, and required authentication |
+
+### What a client sees when post search degrades
+
+The post search fallback returns `200` with an empty page, not an error.
+That is deliberate, and it means the response carries the same success envelope a genuine no-match carries.
+
+Those two cases were previously indistinguishable: the degraded response and a real no-match differed only in the response timestamp.
+A client could not tell "no posts matched your query" from "the search tier is unavailable", so it could not word an empty state honestly.
+
+`CursorPageResponse` therefore carries a `degraded` boolean.
+It is `false` on every complete result, including a genuine no-match, and `true` only on the post search fallback.
+A client should read `degraded` before rendering an empty state and say the search is temporarily unavailable rather than that nothing matched.
+
+The field appears on every cursor-paginated response because the envelope is shared, and it is `false` on all of them except this one fallback.
+
+Hashtag search does **not** set it.
+Its fallback answers from PostgreSQL, which is the source of truth, so the results are real and complete for the query and only the ranking differs from Elasticsearch relevance.
+Post search sets it because it returns nothing at all.
 | Recommendation | `user_similarity` and `post_interaction_scores` populated by external ML jobs | Recommendations may lag behind recent user behavior |
 | Story expiry | Expired stories remain in the database until a cleanup job removes them | `expires_at` must always be checked; do not rely on row absence alone |
 

@@ -299,6 +299,9 @@ CREATE TABLE comments (
     -- Timestamps
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    -- Set by application code on a content edit only; NULL means never edited. Distinct from
+    -- updated_at, which the row-level trigger moves whenever a counter changes.
+    edited_at           TIMESTAMPTZ,
     deleted_at          TIMESTAMPTZ
 );
 
@@ -808,6 +811,8 @@ CREATE INDEX idx_post_likes_post        ON post_likes (post_id, created_at DESC)
 CREATE INDEX idx_post_likes_user        ON post_likes (user_id, created_at DESC);
 CREATE INDEX idx_post_likes_post_created_user
     ON post_likes (post_id, created_at DESC, user_id DESC);
+CREATE INDEX idx_post_likes_user_created_post
+    ON post_likes (user_id, created_at DESC, post_id DESC);
 
 -- post_saves
 CREATE INDEX idx_post_saves_user        ON post_saves (user_id, created_at DESC);

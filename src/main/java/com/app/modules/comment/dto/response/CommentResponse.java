@@ -26,9 +26,34 @@ public record CommentResponse(
         @Schema(description = "Comment body.") String content,
         @Schema(description = "Trigger-maintained like count.") int likeCount,
         @Schema(description = "Whether the viewer has liked this comment.") boolean isLiked,
+        @Schema(
+                        description =
+                                "Whether the viewer has already reported this comment. True"
+                                        + " exactly when a new report from this viewer against"
+                                        + " this comment would be rejected as a duplicate, so a"
+                                        + " client can disable the report control instead of"
+                                        + " submitting and handling the rejection. Remains true"
+                                        + " after a moderator resolves or dismisses the report,"
+                                        + " because that does not permit reporting the comment"
+                                        + " again. Always false for an anonymous viewer.",
+                        example = "false")
+                boolean hasReported,
         @Schema(description = "Trigger-maintained direct reply count.") int replyCount,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
-        @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt,
+        @Schema(
+                        description =
+                                "Timestamp of the last change to the row, including changes made"
+                                        + " by the like and reply counters. Do not derive an"
+                                        + " edited marker from this; use editedAt.")
+                OffsetDateTime updatedAt,
+        @Schema(
+                        description =
+                                "When the author last changed the content, or null if it has"
+                                        + " never been edited. This is the only field that"
+                                        + " answers whether a comment was edited.",
+                        example = "2026-08-11T11:52:41.512961Z",
+                        nullable = true)
+                OffsetDateTime editedAt,
         @Schema(
                         description =
                                 "Whether this comment was returned as part of the pinned"
@@ -53,9 +78,11 @@ public record CommentResponse(
                 content,
                 likeCount,
                 isLiked,
+                hasReported,
                 replyCount,
                 createdAt,
                 updatedAt,
+                editedAt,
                 true);
     }
 }
