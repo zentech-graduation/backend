@@ -1,32 +1,150 @@
 package com.app.modules.social.service;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 
 public interface SocialService {
 
+    /**
+     * Creates a follow relationship from the current user to the target user.
+     *
+     * <p>Self-follow is rejected, as is following a user with an active block in either direction.
+     * The resulting status is {@code PENDING} when the target account is private and {@code
+     * ACCEPTED} otherwise; counters only increment on acceptance. The insert is a single
+     * INSERT-RETURNING statement so a concurrent duplicate is rejected atomically rather than
+     * silently no-oping.
+     *
+     * @param currentUserId user initiating the follow
+     * @param targetUserId user being followed
+     * @return the created follow relationship and its resulting status
+     * @throws AppException when following self, a block exists between the pair, or the
+     *     relationship already exists (pending or accepted)
+     */
     FollowResponse followUser(UUID currentUserId, UUID targetUserId);
 
+    /**
+     * Removes an existing follow relationship from the current user to the target user.
+     *
+     * <p>Applies regardless of whether the relationship was pending or accepted, which also serves
+     * as the cancellation path for a follow request the current user sent.
+     *
+     * @param currentUserId user removing their own follow
+     * @param targetUserId user currently being followed
+     * @throws AppException when the target user does not exist or no follow relationship exists
+     */
     void unfollowUser(UUID currentUserId, UUID targetUserId);
 
+    /**
+     * Approves or rejects a pending follow request sent to the current user.
+     *
+     * @param currentUserId user who received the follow request
+     * @param requesterId user who sent the follow request
+     * @param action {@code "approve"} to accept the request or {@code "reject"} to delete it, case
+     *     insensitive
+     * @throws AppException when no pending request exists from the requester, or {@code action} is
+     *     neither recognized value
+     */
     void respondToFollowRequest(UUID currentUserId, UUID requesterId, String action);
 
+    /**
+     * Blocks a target user, deleting any follow relationship between the pair in either direction.
+     *
+     * @param currentUserId user creating the block
+     * @param targetUserId user being blocked
+     * @throws AppException when blocking self, the target user does not exist, or the block already
+     *     exists
+     */
     void blockUser(UUID currentUserId, UUID targetUserId);
 
+    /**
+     * Removes an existing block from the current user to the target user.
+     *
+     * <p>Does not restore any follow relationship that was deleted when the block was created.
+     *
+     * @param currentUserId user who created the block
+     * @param targetUserId user who was blocked
+     * @throws AppException when no block relationship exists
+     */
     void unblockUser(UUID currentUserId, UUID targetUserId);
 
-    CursorPageResponse<SocialUserSummaryResponse> getFollowers(
+    /**
+     * Cursor-paginated list of a target user's followers, newest follow first.
+     *
+     * <p>A private target account is only visible to its owner or an accepted follower; a block in
+     * either direction between viewer and target hides the list entirely.
+     *
+     * @param targetUserId user whose followers are listed
+     * @param currentUserId authenticated viewer, used for the visibility and block checks and to
+     *     resolve each row's viewer relationship
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param limit requested page size, normalized to 1-100 with a default of 20
+     * @return cursor page of followers with viewer relationship state
+     * @throws AppException when the target user does not exist, is blocked, or is a private account
+     *     the viewer cannot see
+     */
+    CursorPageResponse<UserListItemResponse> getFollowers(
             UUID targetUserId, UUID currentUserId, String cursor, int limit);
 
-    CursorPageResponse<SocialUserSummaryResponse> getFollowing(
+    /**
+     * Cursor-paginated list of the users a target user follows, newest follow first.
+     *
+     * <p>A private target account is only visible to its owner or an accepted follower; a block in
+     * either direction between viewer and target hides the list entirely.
+     *
+     * @param targetUserId user whose following list is listed
+     * @param currentUserId authenticated viewer, used for the visibility and block checks and to
+     *     resolve each row's viewer relationship
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param limit requested page size, normalized to 1-100 with a default of 20
+     * @return cursor page of followed users with viewer relationship state
+     * @throws AppException when the target user does not exist, is blocked, or is a private account
+     *     the viewer cannot see
+     */
+    CursorPageResponse<UserListItemResponse> getFollowing(
             UUID targetUserId, UUID currentUserId, String cursor, int limit);
 
-    List<FollowRequestResponse> getPendingFollowRequests(UUID currentUserId);
+    /**
+     * Cursor-paginated list of the users the current user has blocked, newest block first.
+     *
+     * <p>Self-scoped: it lists only the viewer's <em>outgoing</em> blocks, so there is no target
+     * whose privacy could be at stake and no visibility gate applies. Users who blocked the viewer
+     * are not included; no endpoint exposes incoming blocks.
+     *
+     * <p>A blocked account that has since been soft-deleted resolves to a placeholder rather than
+     * being dropped, so the page length stays consistent with the row count. {@code isBlocking} is
+     * tautologically true on every row and is emitted anyway, so a client never has to branch on
+     * which endpoint produced the row.
+     *
+     * @param currentUserId authenticated user whose outgoing blocks are listed
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param limit requested page size, normalized to 1-100 with a default of 20
+     * @return cursor page of blocked users with viewer relationship state
+     */
+    CursorPageResponse<UserListItemResponse> getBlockedUsers(
+            UUID currentUserId, String cursor, int limit);
+
+    /**
+     * Cursor-paginated pending follow requests targeting the current user, newest first.
+     *
+     * <p>A request from a soft-deleted or unknown account resolves to a placeholder rather than
+     * being dropped, so the page size stays consistent with the row count.
+     *
+     * @param currentUserId authenticated user whose pending requests are listed
+     * @param cursor opaque base64 cursor from the previous page; null or blank for the first page
+     * @param limit requested page size, normalized to 1–100 with a default of 20
+     * @return cursor page of pending follow requests
+     */
+    CursorPageResponse<FollowRequestResponse> getPendingFollowRequests(
+            UUID currentUserId, String cursor, int limit);
 
     /**
      * Returns the IDs of users the viewer currently follows with accepted status, excluding any
@@ -66,4 +184,19 @@ public interface SocialService {
      * @return true when either user has blocked the other
      */
     boolean isBlockedBetween(UUID userIdA, UUID userIdB);
+
+    /**
+     * Resolves the viewer's follow and block relationship to each of {@code userIds} in two batched
+     * queries, one for follows and one for blocks, each covering both directions in a single round
+     * trip.
+     *
+     * @param viewerId the requesting viewer; a null viewer (anonymous) short-circuits to an empty
+     *     map without querying
+     * @param userIds candidate user ids; may contain duplicates
+     * @return a map from each distinct id to its relationship; an id absent from the map (or when
+     *     {@code viewerId} is null) has no relationship and must default to {@link
+     *     ViewerRelationshipResponse#NONE}
+     */
+    Map<UUID, ViewerRelationshipResponse> loadRelationships(
+            UUID viewerId, Collection<UUID> userIds);
 }

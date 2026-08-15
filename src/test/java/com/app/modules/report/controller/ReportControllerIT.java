@@ -150,7 +150,7 @@ class ReportControllerIT {
     void listReports_sizeAboveMax_returnsBadRequest() {
         TestUser moderator = createUser("list_size_moderator", "moderator");
 
-        ResponseEntity<Map> response = getWithAuth("/api/v1/reports?size=999", moderator);
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports?limit=999", moderator);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
@@ -225,7 +225,7 @@ class ReportControllerIT {
         UUID firstReport = insertReport(reporter.id(), firstTarget.id(), "2026-07-11T08:00:00Z");
         UUID secondReport = insertReport(reporter.id(), secondTarget.id(), "2026-07-11T09:00:00Z");
 
-        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/pending?size=2", moderator);
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/pending?limit=2", moderator);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         List<Map<?, ?>> content = contentOf(response);

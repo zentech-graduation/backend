@@ -78,7 +78,7 @@ class HashtagSearchServiceImplTest {
     void searchFallback_circuitOpen_usesPostgresTrgm() {
         UUID id = UUID.randomUUID();
         Hashtag hashtag = Hashtag.builder().id(id).name("java").build();
-        when(hashtagRepository.searchByNameTrgm("java", 20, 0)).thenReturn(List.of(hashtag));
+        when(hashtagRepository.searchByNameTrgm("java", 21, 0)).thenReturn(List.of(hashtag));
         HashtagResponse mapped = new HashtagResponse(id, "java", 5, null);
         when(hashtagMapper.toResponse(hashtag)).thenReturn(mapped);
 
@@ -91,7 +91,64 @@ class HashtagSearchServiceImplTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("java");
-        verify(hashtagRepository).searchByNameTrgm("java", 20, 0);
+        verify(hashtagRepository).searchByNameTrgm("java", 21, 0);
+        // Not flagged degraded. This fallback answers from PostgreSQL, the source of truth, so the
+        // results are real and complete for the query; only the ranking differs from Elasticsearch.
+        // Post search is flagged because it returns nothing at all and would otherwise read as a
+        // genuine no-match.
+        assertThat(result.isDegraded()).isFalse();
+    }
+
+    @Test
+    void searchFallback_exactlyFullPage_hasNextPageIsFalse() {
+        List<Hashtag> hashtags =
+                java.util.stream.IntStream.range(0, 20)
+                        .mapToObj(
+                                i -> Hashtag.builder().id(UUID.randomUUID()).name("h" + i).build())
+                        .toList();
+        when(hashtagRepository.searchByNameTrgm("java", 21, 0)).thenReturn(hashtags);
+        when(hashtagMapper.toResponse(any(Hashtag.class)))
+                .thenAnswer(
+                        inv -> {
+                            Hashtag h = inv.getArgument(0);
+                            return new HashtagResponse(h.getId(), h.getName(), 0, null);
+                        });
+
+        CallNotPermittedException circuitOpen =
+                CallNotPermittedException.createCallNotPermittedException(
+                        CircuitBreaker.ofDefaults("elasticsearchSearch"));
+
+        CursorPageResponse<HashtagResponse> result =
+                service.searchFallback("java", null, 20, circuitOpen);
+
+        assertThat(result.getContent()).hasSize(20);
+        assertThat(result.getPageInfo().isHasNextPage()).isFalse();
+    }
+
+    @Test
+    void searchFallback_moreThanFullPage_hasNextPageIsTrueAndTrimsToLimit() {
+        List<Hashtag> hashtags =
+                java.util.stream.IntStream.range(0, 21)
+                        .mapToObj(
+                                i -> Hashtag.builder().id(UUID.randomUUID()).name("h" + i).build())
+                        .toList();
+        when(hashtagRepository.searchByNameTrgm("java", 21, 0)).thenReturn(hashtags);
+        when(hashtagMapper.toResponse(any(Hashtag.class)))
+                .thenAnswer(
+                        inv -> {
+                            Hashtag h = inv.getArgument(0);
+                            return new HashtagResponse(h.getId(), h.getName(), 0, null);
+                        });
+
+        CallNotPermittedException circuitOpen =
+                CallNotPermittedException.createCallNotPermittedException(
+                        CircuitBreaker.ofDefaults("elasticsearchSearch"));
+
+        CursorPageResponse<HashtagResponse> result =
+                service.searchFallback("java", null, 20, circuitOpen);
+
+        assertThat(result.getContent()).hasSize(20);
+        assertThat(result.getPageInfo().isHasNextPage()).isTrue();
     }
 
     @Test
@@ -106,5 +163,77 @@ class HashtagSearchServiceImplTest {
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getPageInfo().isHasNextPage()).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void search_exactlyFullPage_hasNextPageIsFalse() {
+        List<SearchHit<HashtagDocument>> hits =
+                java.util.stream.IntStream.range(0, 20)
+                        .mapToObj(
+                                i -> {
+                                    HashtagDocument doc =
+                                            HashtagDocument.builder()
+                                                    .id(UUID.randomUUID().toString())
+                                                    .name("h" + i)
+                                                    .postCount(0)
+                                                    .build();
+                                    SearchHit<HashtagDocument> hit = mock(SearchHit.class);
+                                    when(hit.getContent()).thenReturn(doc);
+                                    return hit;
+                                })
+                        .toList();
+        SearchHits<HashtagDocument> searchHits = mock(SearchHits.class);
+        when(searchHits.getSearchHits()).thenReturn(hits);
+        when(elasticsearchOperations.search(any(Query.class), eq(HashtagDocument.class)))
+                .thenReturn(searchHits);
+        when(hashtagMapper.fromDocument(any(HashtagDocument.class)))
+                .thenAnswer(
+                        inv -> {
+                            HashtagDocument doc = inv.getArgument(0);
+                            return new HashtagResponse(
+                                    UUID.fromString(doc.getId()), doc.getName(), 0, null);
+                        });
+
+        CursorPageResponse<HashtagResponse> result = service.search("h", null, 20);
+
+        assertThat(result.getContent()).hasSize(20);
+        assertThat(result.getPageInfo().isHasNextPage()).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void search_moreThanFullPage_hasNextPageIsTrueAndTrimsToLimit() {
+        List<SearchHit<HashtagDocument>> hits =
+                java.util.stream.IntStream.range(0, 21)
+                        .mapToObj(
+                                i -> {
+                                    HashtagDocument doc =
+                                            HashtagDocument.builder()
+                                                    .id(UUID.randomUUID().toString())
+                                                    .name("h" + i)
+                                                    .postCount(0)
+                                                    .build();
+                                    SearchHit<HashtagDocument> hit = mock(SearchHit.class);
+                                    when(hit.getContent()).thenReturn(doc);
+                                    return hit;
+                                })
+                        .toList();
+        SearchHits<HashtagDocument> searchHits = mock(SearchHits.class);
+        when(searchHits.getSearchHits()).thenReturn(hits);
+        when(elasticsearchOperations.search(any(Query.class), eq(HashtagDocument.class)))
+                .thenReturn(searchHits);
+        when(hashtagMapper.fromDocument(any(HashtagDocument.class)))
+                .thenAnswer(
+                        inv -> {
+                            HashtagDocument doc = inv.getArgument(0);
+                            return new HashtagResponse(
+                                    UUID.fromString(doc.getId()), doc.getName(), 0, null);
+                        });
+
+        CursorPageResponse<HashtagResponse> result = service.search("h", null, 20);
+
+        assertThat(result.getContent()).hasSize(20);
+        assertThat(result.getPageInfo().isHasNextPage()).isTrue();
     }
 }

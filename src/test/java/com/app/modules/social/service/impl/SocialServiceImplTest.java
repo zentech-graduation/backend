@@ -3,6 +3,7 @@ package com.app.modules.social.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,9 +26,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
+import com.app.common.response.UserSummaryResponse;
+import com.app.modules.report.service.ReportedTargetService;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
-import com.app.modules.social.dto.response.SocialUserSummaryResponse;
 import com.app.modules.social.entity.Block;
 import com.app.modules.social.entity.BlockId;
 import com.app.modules.social.entity.Follow;
@@ -37,6 +41,7 @@ import com.app.modules.social.repository.FollowRepository;
 import com.app.modules.social.repository.SocialUserRepository;
 import com.app.modules.social.service.SocialEventService;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
 class SocialServiceImplTest {
@@ -45,6 +50,8 @@ class SocialServiceImplTest {
     @Mock private BlockRepository blockRepository;
     @Mock private SocialUserRepository socialUserRepository;
     @Mock private SocialEventService socialEventService;
+    @Mock private UserSummaryService userSummaryService;
+    @Mock private ReportedTargetService reportedTargetService;
 
     private SocialServiceImpl service;
 
@@ -55,7 +62,9 @@ class SocialServiceImplTest {
                         followRepository,
                         blockRepository,
                         socialUserRepository,
-                        socialEventService);
+                        socialEventService,
+                        userSummaryService,
+                        reportedTargetService);
     }
 
     @Test
@@ -83,7 +92,8 @@ class SocialServiceImplTest {
     }
 
     @Test
-    void followUser_blockExists_throwsBlocked() {
+    void followUser_blockExists_throwsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one.
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
@@ -93,7 +103,7 @@ class SocialServiceImplTest {
         assertThatThrownBy(() -> service.followUser(follower, target))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+                .isEqualTo(ApiErrorCode.NOT_FOUND);
 
         verify(followRepository, never()).insert(any(), any(), any());
     }
@@ -242,8 +252,7 @@ class SocialServiceImplTest {
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(target)).thenReturn(true);
-        when(followRepository.findById(new FollowId(follower, target)))
-                .thenReturn(Optional.empty());
+        when(followRepository.deleteByFollowerIdAndFollowingId(follower, target)).thenReturn(0);
 
         assertThatThrownBy(() -> service.unfollowUser(follower, target))
                 .isInstanceOf(AppException.class)
@@ -255,14 +264,12 @@ class SocialServiceImplTest {
     void unfollowUser_existing_deletes() {
         UUID follower = UUID.randomUUID();
         UUID target = UUID.randomUUID();
-        Follow follow = follow(follower, target, FollowStatus.ACCEPTED);
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(target)).thenReturn(true);
-        when(followRepository.findById(new FollowId(follower, target)))
-                .thenReturn(Optional.of(follow));
+        when(followRepository.deleteByFollowerIdAndFollowingId(follower, target)).thenReturn(1);
 
         service.unfollowUser(follower, target);
 
-        verify(followRepository).delete(follow);
+        verify(followRepository).deleteByFollowerIdAndFollowingId(follower, target);
     }
 
     @Test
@@ -286,16 +293,36 @@ class SocialServiceImplTest {
     void respondToFollowRequest_reject_deletes() {
         UUID current = UUID.randomUUID();
         UUID requester = UUID.randomUUID();
-        Follow follow = follow(requester, current, FollowStatus.PENDING);
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(requester)).thenReturn(true);
         when(socialUserRepository.existsByIdAndDeletedAtIsNull(current)).thenReturn(true);
-        when(followRepository.findByIdAndStatus(
-                        new FollowId(requester, current), FollowStatus.PENDING))
-                .thenReturn(Optional.of(follow));
+        when(followRepository.deleteByFollowerIdAndFollowingIdAndStatus(
+                        requester, current, FollowStatus.PENDING))
+                .thenReturn(1);
 
         service.respondToFollowRequest(current, requester, "reject");
 
-        verify(followRepository).delete(follow);
+        verify(followRepository)
+                .deleteByFollowerIdAndFollowingIdAndStatus(
+                        requester, current, FollowStatus.PENDING);
+    }
+
+    @Test
+    void respondToFollowRequest_rejectConcurrentDuplicate_throwsRequestNotFoundNotServerError() {
+        // Proves the fix for the load-then-delete(entity) race: a second concurrent reject that
+        // finds zero rows affected must produce a clean SOCIAL_REQUEST_NOT_FOUND, not an
+        // ObjectOptimisticLockingFailureException bubbling up as 500.
+        UUID current = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        when(socialUserRepository.existsByIdAndDeletedAtIsNull(requester)).thenReturn(true);
+        when(socialUserRepository.existsByIdAndDeletedAtIsNull(current)).thenReturn(true);
+        when(followRepository.deleteByFollowerIdAndFollowingIdAndStatus(
+                        requester, current, FollowStatus.PENDING))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> service.respondToFollowRequest(current, requester, "reject"))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.SOCIAL_REQUEST_NOT_FOUND);
     }
 
     @Test
@@ -377,7 +404,7 @@ class SocialServiceImplTest {
     void unblockUser_notBlocked_throwsNotFound() {
         UUID current = UUID.randomUUID();
         UUID target = UUID.randomUUID();
-        when(blockRepository.findById(new BlockId(current, target))).thenReturn(Optional.empty());
+        when(blockRepository.deleteByBlockerIdAndBlockedId(current, target)).thenReturn(0);
 
         assertThatThrownBy(() -> service.unblockUser(current, target))
                 .isInstanceOf(AppException.class)
@@ -386,7 +413,19 @@ class SocialServiceImplTest {
     }
 
     @Test
-    void getFollowers_blocked_throwsBlocked() {
+    void unblockUser_existing_deletes() {
+        UUID current = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        when(blockRepository.deleteByBlockerIdAndBlockedId(current, target)).thenReturn(1);
+
+        service.unblockUser(current, target);
+
+        verify(blockRepository).deleteByBlockerIdAndBlockedId(current, target);
+    }
+
+    @Test
+    void getFollowers_blocked_throwsNotFound() {
+        // Stealth block model: a blocked target must be indistinguishable from a nonexistent one.
         UUID viewer = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
@@ -396,7 +435,7 @@ class SocialServiceImplTest {
         assertThatThrownBy(() -> service.getFollowers(target, viewer, null, 20))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.SOCIAL_BLOCKED);
+                .isEqualTo(ApiErrorCode.NOT_FOUND);
     }
 
     @Test
@@ -417,7 +456,7 @@ class SocialServiceImplTest {
     }
 
     @Test
-    void getFollowers_invalidCursor_throwsBadRequest() {
+    void getFollowers_invalidCursor_throwsInvalidCursor() {
         UUID viewer = UUID.randomUUID();
         UUID target = UUID.randomUUID();
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
@@ -427,7 +466,7 @@ class SocialServiceImplTest {
         assertThatThrownBy(() -> service.getFollowers(target, viewer, "!!!not-base64!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test
@@ -437,10 +476,9 @@ class SocialServiceImplTest {
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
                 .thenReturn(Optional.of(user(target, false)));
         when(blockRepository.existsById(any())).thenReturn(false);
-        when(followRepository.findFollowersWithCursor(any(), any(), any(), any(), any()))
-                .thenReturn(List.of());
+        when(followRepository.findFirstFollowers(any(), any(), any())).thenReturn(List.of());
 
-        CursorPageResponse<SocialUserSummaryResponse> page =
+        CursorPageResponse<UserListItemResponse> page =
                 service.getFollowers(target, viewer, null, 20);
 
         assertThat(page.getContent()).isEmpty();
@@ -455,28 +493,26 @@ class SocialServiceImplTest {
         when(socialUserRepository.findByIdAndDeletedAtIsNull(target))
                 .thenReturn(Optional.of(user(target, false)));
         when(blockRepository.existsById(any())).thenReturn(false);
-        when(followRepository.findFollowersWithCursor(any(), any(), any(), any(), any()))
-                .thenReturn(List.of(follow));
+        when(followRepository.findFirstFollowers(any(), any(), any())).thenReturn(List.of(follow));
         when(socialUserRepository.findAllByIdInAndDeletedAtIsNull(List.of(followerId)))
                 .thenReturn(List.of(user(followerId, false)));
 
-        CursorPageResponse<SocialUserSummaryResponse> page =
+        CursorPageResponse<UserListItemResponse> page =
                 service.getFollowers(target, viewer, null, 20);
 
         assertThat(page.getContent()).hasSize(1);
-        assertThat(page.getContent().get(0).id()).isEqualTo(followerId);
+        assertThat(page.getContent().get(0).user().id()).isEqualTo(followerId);
     }
 
     @Test
-    void getPendingFollowRequests_empty_returnsEmptyList() {
+    void getPendingFollowRequests_empty_returnsEmptyPage() {
         UUID current = UUID.randomUUID();
-        when(followRepository.findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
-                        current, FollowStatus.PENDING))
-                .thenReturn(List.of());
+        when(followRepository.findFirstPendingRequests(eq(current), any())).thenReturn(List.of());
 
-        List<FollowRequestResponse> result = service.getPendingFollowRequests(current);
+        CursorPageResponse<FollowRequestResponse> result =
+                service.getPendingFollowRequests(current, null, 20);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
     }
 
     @Test
@@ -484,16 +520,41 @@ class SocialServiceImplTest {
         UUID current = UUID.randomUUID();
         UUID requester = UUID.randomUUID();
         Follow pending = follow(requester, current, FollowStatus.PENDING);
-        when(followRepository.findByIdFollowingIdAndStatusOrderByCreatedAtDesc(
-                        current, FollowStatus.PENDING))
+        when(followRepository.findFirstPendingRequests(eq(current), any()))
                 .thenReturn(List.of(pending));
-        when(socialUserRepository.findAllByIdInAndDeletedAtIsNull(List.of(requester)))
-                .thenReturn(List.of(user(requester, false)));
+        when(userSummaryService.loadSummaries(List.of(requester)))
+                .thenReturn(
+                        Map.of(
+                                requester,
+                                new UserSummaryResponse(
+                                        requester, "requester", "Requester", null, false)));
 
-        List<FollowRequestResponse> result = service.getPendingFollowRequests(current);
+        CursorPageResponse<FollowRequestResponse> result =
+                service.getPendingFollowRequests(current, null, 20);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).id()).isEqualTo(requester);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).id()).isEqualTo(requester);
+    }
+
+    @Test
+    void getPendingFollowRequests_deletedRequester_returnsPlaceholderNotDropped() {
+        UUID current = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        Follow pending = follow(requester, current, FollowStatus.PENDING);
+        when(followRepository.findFirstPendingRequests(eq(current), any()))
+                .thenReturn(List.of(pending));
+        when(userSummaryService.loadSummaries(List.of(requester)))
+                .thenReturn(
+                        Map.of(
+                                requester,
+                                new UserSummaryResponse(
+                                        requester, null, "Deleted user", null, false)));
+
+        CursorPageResponse<FollowRequestResponse> result =
+                service.getPendingFollowRequests(current, null, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).follower().username()).isNull();
     }
 
     @Test

@@ -2,6 +2,9 @@ package com.app.modules.post.api;
 
 import java.util.UUID;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.SavedPostResponse;
@@ -35,11 +40,7 @@ public interface PostSaveApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Post saved",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Post saved"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Post hidden by a block or a private account",
@@ -69,6 +70,7 @@ public interface PostSaveApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Posts.SAVE)
     ResponseEntity<ApiResponse<Void>> savePost(@PathVariable("postId") UUID postId);
 
@@ -94,6 +96,7 @@ public interface PostSaveApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Posts.SAVE)
     ResponseEntity<Void> unsavePost(@PathVariable("postId") UUID postId);
 
@@ -105,11 +108,7 @@ public interface PostSaveApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of saved posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of saved posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
@@ -118,6 +117,8 @@ public interface PostSaveApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Posts.SAVED)
     ResponseEntity<ApiResponse<CursorPageResponse<SavedPostResponse>>> listSavedPosts(
             @Parameter(description = "Opaque cursor from the previous page")
@@ -125,5 +126,7 @@ public interface PostSaveApi {
                     String cursor,
             @Parameter(description = "Page size (1–100, default 20)")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 }

@@ -1,9 +1,9 @@
 package com.app.modules.post.service.impl;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
-import java.util.Base64;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,50 +17,66 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
+import com.app.common.response.UserSummaryResponse;
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.post.dto.response.LikeActionResponse;
-import com.app.modules.post.dto.response.LikerResponse;
+import com.app.modules.post.dto.response.LikedPostResponse;
+import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
-import com.app.modules.post.mapper.PostMapper;
+import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
-import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostLikeService;
 import com.app.modules.post.service.PostVisibilityService;
-import com.app.modules.users.entity.User;
+import com.app.modules.social.service.SocialService;
+import com.app.modules.users.service.UserSummaryService;
 
 @Service
 public class PostLikeServiceImpl implements PostLikeService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
+    private static final String AGGREGATE_TYPE = "post";
 
     private final PostRepository postRepository;
     private final PostLikeRepository postLikeRepository;
-    private final PostUserRepository postUserRepository;
     private final PostVisibilityService postVisibilityService;
-    private final PostMapper postMapper;
+    private final PostResponseAssembler postResponseAssembler;
+    private final UserSummaryService userSummaryService;
+    private final SocialService socialService;
+    private final OutboxService outboxService;
 
     public PostLikeServiceImpl(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
-            PostUserRepository postUserRepository,
             PostVisibilityService postVisibilityService,
-            PostMapper postMapper) {
+            PostResponseAssembler postResponseAssembler,
+            UserSummaryService userSummaryService,
+            SocialService socialService,
+            OutboxService outboxService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
-        this.postUserRepository = postUserRepository;
         this.postVisibilityService = postVisibilityService;
-        this.postMapper = postMapper;
+        this.postResponseAssembler = postResponseAssembler;
+        this.userSummaryService = userSummaryService;
+        this.socialService = socialService;
+        this.outboxService = outboxService;
     }
 
     @Override
     @Transactional
     public LikeActionResponse likePost(UUID userId, UUID postId) {
-        fetchVisiblePublishedPost(userId, postId);
+        Post post = fetchVisiblePublishedPost(userId, postId);
         PostLikeId likeId = new PostLikeId(userId, postId);
         if (postLikeRepository.existsById(likeId)) {
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
@@ -74,6 +90,7 @@ public class PostLikeServiceImpl implements PostLikeService {
             // already recorded the like, so surface the same clean conflict rather than a 500.
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
         }
+        enqueueLiveEvent(PostEventTypes.POST_LIVE_LIKED_V1, post, userId);
         return new LikeActionResponse(postId, true, postRepository.findLikeCount(postId));
     }
 
@@ -95,48 +112,129 @@ public class PostLikeServiceImpl implements PostLikeService {
         if (!postVisibilityService.isVisibleTo(userId, post)) {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
-        PostLikeId likeId = new PostLikeId(userId, postId);
-        PostLike like =
-                postLikeRepository
-                        .findById(likeId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
-        postLikeRepository.delete(like);
-        postLikeRepository.flush();
+        // Conditional delete rather than load-then-delete(entity): the latter raises
+        // ObjectOptimisticLockingFailureException (-> 500) when a concurrent duplicate request
+        // already removed the same row. A missing like row still collapses onto POST_NOT_FOUND,
+        // matching the visibility checks above, so it cannot serve as a separate "have you liked
+        // this" oracle.
+        int deleted = postLikeRepository.deleteByUserAndPost(userId, postId);
+        if (deleted == 0) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
+        enqueueLiveEvent(PostEventTypes.POST_LIVE_UNLIKED_V1, post, userId);
         return new LikeActionResponse(postId, false, postRepository.findLikeCount(postId));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<LikerResponse> listLikers(
+    public CursorPageResponse<UserListItemResponse> listLikers(
             UUID viewerId, UUID postId, String cursor, int size) {
         fetchVisiblePublishedPost(viewerId, postId);
         int pageSize = normalizeLimit(size);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostLike> likes =
-                cursorTime == null
-                        ? postLikeRepository.findFirstLikers(postId, page)
-                        : postLikeRepository.findLikersBefore(postId, cursorTime, page);
-        if (likes.size() > pageSize) {
+                decoded == null
+                        ? postLikeRepository.findFirstLikers(postId, viewerId, page)
+                        : postLikeRepository.findLikersBefore(
+                                postId,
+                                viewerId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        boolean hasNextPage = likes.size() > pageSize;
+        if (hasNextPage) {
             likes = likes.subList(0, pageSize);
         }
         if (likes.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<UUID> likerIds = likes.stream().map(l -> l.getId().getUserId()).toList();
-        Map<UUID, User> users =
-                postUserRepository.findAllByIdInAndDeletedAtIsNull(likerIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
-        List<LikerResponse> content =
-                likes.stream()
-                        .map(l -> users.get(l.getId().getUserId()))
-                        .filter(user -> user != null)
-                        .map(postMapper::toLikerResponse)
+        // Batch-resolve every liker; a soft-deleted liker resolves to a placeholder rather than
+        // being dropped, so the page size stays consistent with the like count.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(likerIds);
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                socialService.loadRelationships(viewerId, likerIds);
+        List<UserListItemResponse> content =
+                likerIds.stream()
+                        .map(
+                                id ->
+                                        new UserListItemResponse(
+                                                summaries.get(id),
+                                                relationships.getOrDefault(
+                                                        id, ViewerRelationshipResponse.NONE)))
                         .toList();
-        String startCursor = encodeCursor(likes.get(0).getCreatedAt());
-        String endCursor = encodeCursor(likes.get(likes.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        PostLike first = likes.get(0);
+        PostLike last = likes.get(likes.size() - 1);
+        String startCursor = encodeCursor(first.getCreatedAt(), first.getId().getUserId());
+        String endCursor = encodeCursor(last.getCreatedAt(), last.getId().getUserId());
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<LikedPostResponse> listLikedPosts(
+            UUID userId, String cursor, int size) {
+        int pageSize = normalizeLimit(size);
+        Cursor decoded = decodeLikedCursor(cursor);
+        PageRequest page = PageRequest.of(0, pageSize + 1);
+        List<PostLike> likes =
+                decoded == null
+                        ? postLikeRepository.findFirstLikes(userId, page)
+                        : postLikeRepository.findLikesBefore(
+                                userId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        boolean hasNextPage = likes.size() > pageSize;
+        if (hasNextPage) {
+            likes = likes.subList(0, pageSize);
+        }
+        if (likes.isEmpty()) {
+            return CursorPageResponse.of(
+                    Collections.emptyList(), false, null, null, cursor != null);
+        }
+        List<UUID> postIds = likes.stream().map(l -> l.getId().getPostId()).toList();
+        // findAllById drops soft-deleted posts via the entity's @SQLRestriction filter.
+        Map<UUID, Post> posts =
+                postRepository.findAllById(postIds).stream()
+                        .filter(p -> p.getStatus() == PostStatus.PUBLISHED)
+                        .filter(p -> postVisibilityService.isVisibleTo(userId, p))
+                        .collect(Collectors.toMap(Post::getId, Function.identity()));
+        // Post-fetch filtering can shrink a page below the requested size; cursors stay correct
+        // because they encode post_likes.created_at, not row counts.
+        List<PostLike> visibleLikes =
+                likes.stream().filter(l -> posts.containsKey(l.getId().getPostId())).toList();
+        List<Post> orderedPosts =
+                visibleLikes.stream().map(l -> posts.get(l.getId().getPostId())).toList();
+        List<PostResponse> responses = postResponseAssembler.assemble(userId, orderedPosts);
+        List<LikedPostResponse> content = new ArrayList<>(visibleLikes.size());
+        for (int i = 0; i < visibleLikes.size(); i++) {
+            content.add(
+                    new LikedPostResponse(responses.get(i), visibleLikes.get(i).getCreatedAt()));
+        }
+        PostLike firstLike = likes.get(0);
+        PostLike lastLike = likes.get(likes.size() - 1);
+        String startCursor =
+                encodeLikedCursor(firstLike.getCreatedAt(), firstLike.getId().getPostId());
+        String endCursor = encodeLikedCursor(lastLike.getCreatedAt(), lastLike.getId().getPostId());
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
+    }
+
+    // Enqueued inside the caller's transaction: OutboxService.enqueue is PROPAGATION.MANDATORY,
+    // so a like that rolls back cannot leave an event behind announcing it. The payload carries
+    // identifiers only - the like count is re-read by the live consumer at push time, because the
+    // outbox publisher runs after this transaction commits and any count captured here would
+    // already be stale by then.
+    private void enqueueLiveEvent(String eventType, Post post, UUID actorId) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("postId", post.getId().toString());
+        // Consumed by the live tier to resolve the post owner's block counterparties; the actor is
+        // deliberately absent from the broadcast payload, since every subscriber of the post would
+        // otherwise learn who liked it.
+        data.put("postOwnerId", post.getUserId().toString());
+        outboxService.enqueue(eventType, eventType, AGGREGATE_TYPE, post.getId(), actorId, data);
     }
 
     private Post fetchVisiblePublishedPost(UUID viewerId, UUID postId) {
@@ -158,22 +256,27 @@ public class PostLikeServiceImpl implements PostLikeService {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID tiebreaker) {
+        if (time == null || tiebreaker == null) {
             return null;
         }
-        return Base64.getEncoder().encodeToString(time.toString().getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(time), tiebreaker), CursorScope.POST_LIKERS);
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor, CursorScope.POST_LIKERS);
+    }
+
+    private String encodeLikedCursor(OffsetDateTime time, UUID tiebreaker) {
+        if (time == null || tiebreaker == null) {
             return null;
         }
-        try {
-            return OffsetDateTime.parse(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(time), tiebreaker), CursorScope.POST_LIKED_POSTS);
+    }
+
+    private Cursor decodeLikedCursor(String cursor) {
+        return CursorCodec.decode(cursor, CursorScope.POST_LIKED_POSTS);
     }
 }

@@ -58,41 +58,104 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
             @Param("deletedAt") OffsetDateTime deletedAt);
 
     /**
-     * First keyset page of a user's posts in the given status, newest first.
+     * First keyset page of a user's published posts, newest first.
      *
      * <p>Paired with {@link #findUserPostsBefore}; the no-cursor variant avoids binding an untyped
-     * null timestamp, which PostgreSQL cannot type-infer.
+     * null cursor. Native so the sibling can use a row-value tuple comparison for an exact index
+     * seek, which JPQL cannot express.
      *
      * @param userId post author
-     * @param status status filter; listing endpoints page published posts only
      * @param pageable page size carrier (page number is always 0 for keyset paging)
-     * @return posts ordered by {@code created_at} descending
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT p FROM Post p WHERE p.userId = :userId "
-                    + "AND p.status = :status "
-                    + "ORDER BY p.createdAt DESC")
-    List<Post> findFirstUserPosts(
-            @Param("userId") UUID userId, @Param("status") PostStatus status, Pageable pageable);
+            value =
+                    "SELECT * FROM posts WHERE user_id = :userId AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Post> findFirstUserPosts(@Param("userId") UUID userId, Pageable pageable);
 
     /**
-     * Keyset page of a user's posts older than the cursor, newest first.
+     * Keyset page of a user's published posts strictly after the cursor tuple, newest first.
+     *
+     * <p>The {@code (created_at, id)} row-value comparison seeks directly to the cursor position
+     * and never drops rows that share a boundary {@code created_at}. Served exactly by {@code
+     * idx_posts_user_created_id} (V34).
      *
      * @param userId post author
-     * @param status status filter; listing endpoints page published posts only
-     * @param cursor exclusive upper bound on {@code created_at}; never null
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code created_at}; never null
      * @param pageable page size carrier
-     * @return posts ordered by {@code created_at} descending
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT p FROM Post p WHERE p.userId = :userId "
-                    + "AND p.status = :status "
-                    + "AND p.createdAt < :cursor "
-                    + "ORDER BY p.createdAt DESC")
+            value =
+                    "SELECT * FROM posts WHERE user_id = :userId AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "AND (created_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
     List<Post> findUserPostsBefore(
             @Param("userId") UUID userId,
-            @Param("status") PostStatus status,
-            @Param("cursor") OffsetDateTime cursor,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
+            Pageable pageable);
+
+    /**
+     * First keyset page of a user's published posts restricted to the given types, newest first.
+     *
+     * <p>Separate from {@link #findFirstUserPosts} rather than binding an empty list, because an
+     * empty {@code IN} list is not valid SQL. The types arrive as one comma-delimited parameter
+     * that Postgres expands into a {@code post_type[]}, so the cast lands on the parameter and the
+     * comparison stays enum-to-enum. Casting the column to text instead discards its statistics and
+     * was measured to replace the index scan with a bitmap heap scan plus a sort.
+     *
+     * @param userId post author
+     * @param types comma-delimited {@code post_type} names; never empty
+     * @param pageable page size carrier (page number is always 0 for keyset paging)
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM posts WHERE user_id = :userId AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "AND post_type = ANY(CAST(string_to_array(:types, ',') AS"
+                            + " post_type[])) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Post> findFirstUserPostsByType(
+            @Param("userId") UUID userId, @Param("types") String types, Pageable pageable);
+
+    /**
+     * Keyset page of a user's published posts of the given types, strictly after the cursor tuple.
+     *
+     * <p>Same predicate as {@link #findFirstUserPostsByType} with the row-value cursor comparison
+     * added. Served by {@code idx_posts_user_created_id} (V34) with the type predicate applied as a
+     * filter; measured across the first, a deep, and a low-selectivity page without degradation, so
+     * no type-aware index is required.
+     *
+     * @param userId post author
+     * @param types comma-delimited {@code post_type} names; never empty
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code created_at}; never null
+     * @param pageable page size carrier
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM posts WHERE user_id = :userId AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "AND post_type = ANY(CAST(string_to_array(:types, ',') AS"
+                            + " post_type[])) "
+                            + "AND (created_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Post> findUserPostsByTypeBefore(
+            @Param("userId") UUID userId,
+            @Param("types") String types,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
             Pageable pageable);
 
     /**
@@ -131,38 +194,38 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
      * null timestamp, which PostgreSQL cannot type-infer.
      *
      * @param authorIds post authors eligible to appear in the feed; must not be empty
-     * @param status status filter; feed endpoints page published posts only
      * @param pageable page size carrier (page number is always 0 for keyset paging)
-     * @return posts ordered by {@code created_at} descending
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT p FROM Post p WHERE p.userId IN :authorIds"
-                    + " AND p.status = :status"
-                    + " ORDER BY p.createdAt DESC")
-    List<Post> findFirstFeedPosts(
-            @Param("authorIds") List<UUID> authorIds,
-            @Param("status") PostStatus status,
-            Pageable pageable);
+            value =
+                    "SELECT * FROM posts WHERE user_id IN (:authorIds) AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
+    List<Post> findFirstFeedPosts(@Param("authorIds") List<UUID> authorIds, Pageable pageable);
 
     /**
      * Keyset page of published posts authored by any user in {@code authorIds}, older than the
      * cursor, newest first.
      *
      * @param authorIds post authors eligible to appear in the feed; must not be empty
-     * @param status status filter; feed endpoints page published posts only
-     * @param cursor exclusive upper bound on {@code created_at}; never null
+     * @param cursorTime {@code created_at} of the cursor row; never null
+     * @param cursorId id of the cursor row, breaking ties on equal {@code created_at}; never null
      * @param pageable page size carrier
-     * @return posts ordered by {@code created_at} descending
+     * @return posts ordered by the {@code (created_at, id)} tuple descending
      */
     @Query(
-            "SELECT p FROM Post p WHERE p.userId IN :authorIds"
-                    + " AND p.status = :status"
-                    + " AND p.createdAt < :cursor"
-                    + " ORDER BY p.createdAt DESC")
+            value =
+                    "SELECT * FROM posts WHERE user_id IN (:authorIds) AND status = 'published'"
+                            + " AND deleted_at IS NULL "
+                            + "AND (created_at, id) < (:cursorTime, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC",
+            nativeQuery = true)
     List<Post> findFeedPostsBefore(
             @Param("authorIds") List<UUID> authorIds,
-            @Param("status") PostStatus status,
-            @Param("cursor") OffsetDateTime cursor,
+            @Param("cursorTime") OffsetDateTime cursorTime,
+            @Param("cursorId") UUID cursorId,
             Pageable pageable);
 
     /**

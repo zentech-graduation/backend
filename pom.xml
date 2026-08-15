@@ -104,6 +104,10 @@
             <artifactId>spring-boot-starter-thymeleaf</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.resend</groupId>
             <artifactId>resend-java</artifactId>
             <version>3.1.0</version>
@@ -111,6 +115,13 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
+            <version>${aws-sdk.version}</version>
+        </dependency>
+        <!-- Already present transitively as the SDK's default sync HTTP client; declared
+             explicitly so connect and read timeouts can be set at compile time. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
             <version>${aws-sdk.version}</version>
         </dependency>
         <dependency>
@@ -275,6 +286,11 @@
                         <include>**/*Tests.java</include>
                         <include>**/*IT.java</include>
                     </includes>
+                    <!-- Measured shutdown-hook teardown of 14 cached Spring contexts took 28.7s
+                         against the 30s default, tripping "Surefire is going to kill self fork JVM"
+                         even on a successful run. 90s gives 3x headroom for added WebSocket/RabbitMQ
+                         contexts and machine-load variance. -->
+                    <forkedProcessExitTimeoutInSeconds>90</forkedProcessExitTimeoutInSeconds>
                 </configuration>
             </plugin>
             <plugin>

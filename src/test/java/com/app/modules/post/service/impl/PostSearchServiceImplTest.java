@@ -73,7 +73,81 @@ class PostSearchServiceImplTest {
 
         ArgumentCaptor<NativeQuery> captor = ArgumentCaptor.forClass(NativeQuery.class);
         verify(elasticsearchOperations).search(captor.capture(), eq(PostDocument.class));
-        assertThat(captor.getValue().getPageable().getPageSize()).isEqualTo(100);
+        // 100 (the clamp) + 1 (the over-fetch probe row used to derive hasNextPage).
+        assertThat(captor.getValue().getPageable().getPageSize()).isEqualTo(101);
+    }
+
+    @Test
+    void searchPosts_exactlyFullPage_hasNextPageIsFalse() {
+        List<UUID> ids =
+                java.util.stream.IntStream.range(0, 20).mapToObj(i -> UUID.randomUUID()).toList();
+        stubEsHits(ids);
+        stubVisibleAndAssembled(ids);
+
+        CursorPageResponse<PostResponse> page =
+                service.searchPosts(UUID.randomUUID(), "sunset", null, 20);
+
+        assertThat(page.getContent()).hasSize(20);
+        assertThat(page.getPageInfo().isHasNextPage()).isFalse();
+    }
+
+    @Test
+    void searchPosts_moreThanFullPage_hasNextPageIsTrueAndTrimsToLimit() {
+        List<UUID> ids =
+                java.util.stream.IntStream.range(0, 21).mapToObj(i -> UUID.randomUUID()).toList();
+        stubEsHits(ids);
+        stubVisibleAndAssembled(ids.subList(0, 20));
+
+        CursorPageResponse<PostResponse> page =
+                service.searchPosts(UUID.randomUUID(), "sunset", null, 20);
+
+        assertThat(page.getContent()).hasSize(20);
+        assertThat(page.getPageInfo().isHasNextPage()).isTrue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubEsHits(List<UUID> ids) {
+        List<org.springframework.data.elasticsearch.core.SearchHit<PostDocument>> hits =
+                ids.stream()
+                        .map(
+                                id -> {
+                                    PostDocument doc = new PostDocument();
+                                    doc.setId(id.toString());
+                                    org.springframework.data.elasticsearch.core.SearchHit<
+                                                    PostDocument>
+                                            hit =
+                                                    org.mockito.Mockito.mock(
+                                                            org.springframework.data.elasticsearch
+                                                                    .core.SearchHit.class);
+                                    when(hit.getContent()).thenReturn(doc);
+                                    return hit;
+                                })
+                        .toList();
+        when(searchHits.getSearchHits()).thenReturn(hits);
+        when(elasticsearchOperations.search(any(NativeQuery.class), eq(PostDocument.class)))
+                .thenReturn(searchHits);
+    }
+
+    private void stubVisibleAndAssembled(List<UUID> visibleIds) {
+        List<com.app.modules.post.entity.Post> posts =
+                visibleIds.stream()
+                        .map(
+                                id ->
+                                        com.app.modules.post.entity.Post.builder()
+                                                .id(id)
+                                                .status(
+                                                        com.app.modules.post.enums.PostStatus
+                                                                .PUBLISHED)
+                                                .build())
+                        .toList();
+        when(postRepository.findAllById(visibleIds)).thenReturn(posts);
+        when(postVisibilityService.isVisibleTo(any(), any())).thenReturn(true);
+        when(postResponseAssembler.assemble(any(), org.mockito.ArgumentMatchers.anyList()))
+                .thenAnswer(
+                        inv -> {
+                            List<com.app.modules.post.entity.Post> input = inv.getArgument(1);
+                            return input.stream().map(p -> (PostResponse) null).toList();
+                        });
     }
 
     @Test
@@ -87,6 +161,9 @@ class PostSearchServiceImplTest {
                         new DataAccessResourceFailureException("es down"));
 
         assertThat(page.getContent()).isEmpty();
+        // An empty page from a degraded search must be distinguishable from a genuine no-match,
+        // which it was not: the two responses differed only in their timestamp.
+        assertThat(page.isDegraded()).isTrue();
     }
 
     @Test
@@ -98,6 +175,7 @@ class PostSearchServiceImplTest {
                 service.searchFallback(UUID.randomUUID(), "cats", null, 0, wrapped);
 
         assertThat(page.getContent()).isEmpty();
+        assertThat(page.isDegraded()).isTrue();
     }
 
     @Test

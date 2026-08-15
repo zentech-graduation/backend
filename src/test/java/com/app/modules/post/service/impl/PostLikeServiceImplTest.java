@@ -21,25 +21,28 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.modules.post.dto.response.LikeActionResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostLike;
 import com.app.modules.post.entity.PostLikeId;
 import com.app.modules.post.enums.PostStatus;
-import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.repository.PostLikeRepository;
 import com.app.modules.post.repository.PostRepository;
-import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.social.service.SocialService;
+import com.app.modules.users.service.UserSummaryService;
 
 @ExtendWith(MockitoExtension.class)
 class PostLikeServiceImplTest {
 
     @Mock private PostRepository postRepository;
     @Mock private PostLikeRepository postLikeRepository;
-    @Mock private PostUserRepository postUserRepository;
     @Mock private PostVisibilityService postVisibilityService;
-    @Mock private PostMapper postMapper;
+    @Mock private PostResponseAssembler postResponseAssembler;
+    @Mock private UserSummaryService userSummaryService;
+    @Mock private SocialService socialService;
+    @Mock private OutboxService outboxService;
 
     private PostLikeServiceImpl service;
 
@@ -56,9 +59,11 @@ class PostLikeServiceImplTest {
                 new PostLikeServiceImpl(
                         postRepository,
                         postLikeRepository,
-                        postUserRepository,
                         postVisibilityService,
-                        postMapper);
+                        postResponseAssembler,
+                        userSummaryService,
+                        socialService,
+                        outboxService);
         publishedPost =
                 Post.builder().id(postId).userId(ownerId).status(PostStatus.PUBLISHED).build();
         lenient()
@@ -106,7 +111,7 @@ class PostLikeServiceImplTest {
 
     @Test
     void unlikePost_notLiked_throwsPostNotFound() {
-        when(postLikeRepository.findById(likeId)).thenReturn(Optional.empty());
+        when(postLikeRepository.deleteByUserAndPost(userId, postId)).thenReturn(0);
 
         assertThatThrownBy(() -> service.unlikePost(userId, postId))
                 .isInstanceOf(AppException.class)
@@ -128,8 +133,7 @@ class PostLikeServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
-        verify(postLikeRepository, never()).findById(any());
-        verify(postLikeRepository, never()).delete(any());
+        verify(postLikeRepository, never()).deleteByUserAndPost(any(), any());
     }
 
     @Test
@@ -140,32 +144,29 @@ class PostLikeServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
-        verify(postLikeRepository, never()).findById(any());
-        verify(postLikeRepository, never()).delete(any());
+        verify(postLikeRepository, never()).deleteByUserAndPost(any(), any());
     }
 
     @Test
     void unlikePost_hiddenPostOwner_reachesLikeLookup() {
         Post draftPost = Post.builder().id(postId).userId(userId).status(PostStatus.DRAFT).build();
-        PostLike like = PostLike.builder().id(likeId).build();
         when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
         when(postVisibilityService.isVisibleTo(userId, draftPost)).thenReturn(true);
-        when(postLikeRepository.findById(likeId)).thenReturn(Optional.of(like));
+        when(postLikeRepository.deleteByUserAndPost(userId, postId)).thenReturn(1);
         when(postRepository.findLikeCount(postId)).thenReturn(0);
 
         LikeActionResponse response = service.unlikePost(userId, postId);
 
         assertThat(response.liked()).isFalse();
-        verify(postLikeRepository).delete(like);
+        verify(postLikeRepository).deleteByUserAndPost(userId, postId);
     }
 
     @Test
     void likePost_unlikeThenRelike_succeeds() {
-        PostLike like = PostLike.builder().id(likeId).build();
         when(postLikeRepository.existsById(likeId)).thenReturn(false, false);
         when(postLikeRepository.saveAndFlush(any(PostLike.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(postLikeRepository.findById(likeId)).thenReturn(Optional.of(like));
+        when(postLikeRepository.deleteByUserAndPost(userId, postId)).thenReturn(1);
         when(postRepository.findLikeCount(postId)).thenReturn(1, 0, 1);
 
         LikeActionResponse first = service.likePost(userId, postId);
@@ -176,7 +177,7 @@ class PostLikeServiceImplTest {
         assertThat(removed.liked()).isFalse();
         assertThat(second.liked()).isTrue();
         verify(postLikeRepository, times(2)).saveAndFlush(any(PostLike.class));
-        verify(postLikeRepository, times(1)).delete(like);
+        verify(postLikeRepository, times(1)).deleteByUserAndPost(userId, postId);
     }
 
     @Test
@@ -216,10 +217,10 @@ class PostLikeServiceImplTest {
     }
 
     @Test
-    void listLikers_invalidCursor_throwsBadRequest() {
+    void listLikers_invalidCursor_throwsInvalidCursor() {
         assertThatThrownBy(() -> service.listLikers(userId, postId, "!!!not-valid-base64!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 }

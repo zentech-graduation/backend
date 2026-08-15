@@ -17,6 +17,10 @@ spring:
         use_sql_comments: false
 
 springdoc:
+  # Success responses declare no explicit @Content, so springdoc resolves the schema from the
+  # method return type. Without this it keys those responses under */* instead of
+  # application/json, which some client generators ignore.
+  default-produces-media-type: application/json
   api-docs:
     path: /api-docs
     enabled: true
@@ -29,11 +33,15 @@ app:
   notification:
     consumer:
       enabled: true
+    live:
+      enabled: true
   hashtag:
     consumer:
       enabled: true
   post:
     consumer:
+      enabled: true
+    live:
       enabled: true
   comment:
     consumer:
@@ -46,13 +54,22 @@ app:
   mail:
     consumer:
       enabled: true
+    # Local development delivers to the Mailpit sink from docker-compose, so no message ever
+    # reaches the production provider and no provider credential is required.
+    transport: smtp
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:
     trusted-proxy-cidrs:
       - "127.0.0.1"
+      # A request over loopback arrives as the IPv6 form on most local setups; without this
+      # entry the IPv4 entry above never actually matches during local testing.
+      - "::1"
     max-login-body-bytes: 2048
     cookie-signing-secret: "dev-insecure-cookie-signing-secret-change-me"
+    refresh-cookie:
+      # Local development serves the API over plain HTTP, where a Secure cookie is never stored.
+      secure: false
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
@@ -89,6 +106,9 @@ app:
         max-attempts: 200
         window-seconds: 60
       "[/api/v1/conversations]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/ws/**]":
         max-attempts: 200
         window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.

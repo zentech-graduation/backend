@@ -49,6 +49,10 @@ public class RabbitMqTopologyConfig {
     public static final String STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
             "story.notification.dead-letter";
 
+    public static final String NOTIFICATION_LIVE_EVENTS_EXCHANGE = "notification.live.events";
+
+    public static final String POST_LIVE_EVENTS_EXCHANGE = "post.live.events";
+
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
     public static final String SEARCH_INDEX_QUEUE = "search-index.queue";
@@ -196,5 +200,43 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(storyNotificationDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    FanoutExchange notificationLiveEventsExchange() {
+        return ExchangeBuilder.fanoutExchange(NOTIFICATION_LIVE_EVENTS_EXCHANGE)
+                .durable(true)
+                .build();
+    }
+
+    // Exchange-to-exchange: the topic bus routes every notification.* event into the live fanout so
+    // the outbox publishes once and the broker fans out to whichever instance holds the recipient's
+    // session, mirroring the comment module's commentLiveExchangeBinding above.
+    @Bean
+    Binding notificationLiveExchangeBinding(
+            FanoutExchange notificationLiveEventsExchange, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(notificationLiveEventsExchange)
+                .to(socialEventsExchange)
+                .with("notification.#");
+    }
+
+    @Bean
+    FanoutExchange postLiveEventsExchange() {
+        return ExchangeBuilder.fanoutExchange(POST_LIVE_EVENTS_EXCHANGE).durable(true).build();
+    }
+
+    // Exchange-to-exchange, mirroring the comment and notification live tiers above, but bound on
+    // post.live.# rather than post.# on purpose. post.index.upsert.v1 and post.index.delete.v1
+    // already flow through this same topic exchange to the Elasticsearch sync queue, and a post.#
+    // binding would deliver every index-sync event into the live tier to be fanned out to
+    // WebSocket subscribers as though it were user-facing. Keeping the live namespace disjoint
+    // also lets a future post live event be added by publishing under post.live.* with no change
+    // to this topology.
+    @Bean
+    Binding postLiveExchangeBinding(
+            FanoutExchange postLiveEventsExchange, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(postLiveEventsExchange)
+                .to(socialEventsExchange)
+                .with("post.live.#");
     }
 }

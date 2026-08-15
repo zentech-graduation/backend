@@ -1,9 +1,7 @@
 package com.app.modules.post.service.impl;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.dto.response.SavedPostResponse;
@@ -97,12 +99,15 @@ public class PostSaveServiceImpl implements PostSaveService {
         if (!postVisibilityService.isVisibleTo(userId, post)) {
             throw new AppException(ApiErrorCode.POST_NOT_FOUND);
         }
-        PostSaveId saveId = new PostSaveId(userId, postId);
-        PostSave save =
-                postSaveRepository
-                        .findById(saveId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
-        postSaveRepository.delete(save);
+        // Conditional delete rather than load-then-delete(entity): the latter raises
+        // ObjectOptimisticLockingFailureException (-> 500) when a concurrent duplicate request
+        // already removed the same row. A missing save row still collapses onto POST_NOT_FOUND,
+        // matching the visibility checks above, so it cannot serve as a separate "have you saved
+        // this" oracle.
+        int deleted = postSaveRepository.deleteByUserAndPost(userId, postId);
+        if (deleted == 0) {
+            throw new AppException(ApiErrorCode.POST_NOT_FOUND);
+        }
     }
 
     @Override
@@ -110,18 +115,23 @@ public class PostSaveServiceImpl implements PostSaveService {
     public CursorPageResponse<SavedPostResponse> listSavedPosts(
             UUID userId, String cursor, int size) {
         int pageSize = normalizeLimit(size);
-        OffsetDateTime cursorTime = decodeCursor(cursor);
+        Cursor decoded = decodeCursor(cursor);
         PageRequest page = PageRequest.of(0, pageSize + 1);
         List<PostSave> saves =
-                cursorTime == null
+                decoded == null
                         ? postSaveRepository.findFirstSaves(userId, page)
-                        : postSaveRepository.findSavesBefore(userId, cursorTime, page);
-        if (saves.size() > pageSize) {
+                        : postSaveRepository.findSavesBefore(
+                                userId,
+                                TimeCursors.fromMicros(decoded.sortValueMicros()),
+                                decoded.id(),
+                                page);
+        boolean hasNextPage = saves.size() > pageSize;
+        if (hasNextPage) {
             saves = saves.subList(0, pageSize);
         }
         if (saves.isEmpty()) {
             return CursorPageResponse.of(
-                    Collections.emptyList(), pageSize, null, null, cursor != null);
+                    Collections.emptyList(), false, null, null, cursor != null);
         }
         List<UUID> postIds = saves.stream().map(s -> s.getId().getPostId()).toList();
         // findAllById drops soft-deleted posts via the entity's @SQLRestriction filter.
@@ -136,37 +146,32 @@ public class PostSaveServiceImpl implements PostSaveService {
                 saves.stream().filter(s -> posts.containsKey(s.getId().getPostId())).toList();
         List<Post> orderedPosts =
                 visibleSaves.stream().map(s -> posts.get(s.getId().getPostId())).toList();
-        List<PostResponse> responses = postResponseAssembler.assemble(orderedPosts);
+        List<PostResponse> responses = postResponseAssembler.assemble(userId, orderedPosts);
         List<SavedPostResponse> content = new ArrayList<>(visibleSaves.size());
         for (int i = 0; i < visibleSaves.size(); i++) {
             content.add(
                     new SavedPostResponse(responses.get(i), visibleSaves.get(i).getCreatedAt()));
         }
-        String startCursor = encodeCursor(saves.get(0).getCreatedAt());
-        String endCursor = encodeCursor(saves.get(saves.size() - 1).getCreatedAt());
-        return CursorPageResponse.of(content, pageSize, startCursor, endCursor, cursor != null);
+        PostSave firstSave = saves.get(0);
+        PostSave lastSave = saves.get(saves.size() - 1);
+        String startCursor = encodeCursor(firstSave.getCreatedAt(), firstSave.getId().getPostId());
+        String endCursor = encodeCursor(lastSave.getCreatedAt(), lastSave.getId().getPostId());
+        return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
     private int normalizeLimit(int limit) {
         return limit > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : (limit < 1 ? DEFAULT_PAGE_SIZE : limit);
     }
 
-    private String encodeCursor(OffsetDateTime time) {
-        if (time == null) {
+    private String encodeCursor(OffsetDateTime time, UUID tiebreaker) {
+        if (time == null || tiebreaker == null) {
             return null;
         }
-        return Base64.getEncoder().encodeToString(time.toString().getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(time), tiebreaker), CursorScope.POST_SAVES);
     }
 
-    private OffsetDateTime decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(
-                    new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid cursor format");
-        }
+    private Cursor decodeCursor(String cursor) {
+        return CursorCodec.decode(cursor, CursorScope.POST_SAVES);
     }
 }

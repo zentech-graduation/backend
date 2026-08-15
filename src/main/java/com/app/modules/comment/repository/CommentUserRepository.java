@@ -3,8 +3,7 @@ package com.app.modules.comment.repository;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.repository.Repository;
 
 import com.app.modules.users.entity.User;
 
@@ -15,8 +14,8 @@ import com.app.modules.users.entity.User;
  * repository owned by this module instead of injecting another module's repository bean. Used to
  * resolve {@code @mention} usernames to user ids.
  */
-@Repository
-public interface CommentUserRepository extends JpaRepository<User, UUID> {
+@org.springframework.stereotype.Repository
+public interface CommentUserRepository extends Repository<User, UUID> {
 
     Optional<User> findByUsernameAndDeletedAtIsNull(String username);
 }

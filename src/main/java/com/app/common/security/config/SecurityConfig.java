@@ -3,7 +3,6 @@ package com.app.common.security.config;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Stream;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.ServletException;
@@ -32,7 +31,6 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -78,7 +76,7 @@ public class SecurityConfig {
     };
 
     private static final String[] PUBLIC_INFRA_PATHS = {
-        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
+        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error",
     };
 
     private final JwtProperties jwtProperties;
@@ -125,7 +123,13 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/ws/comments/**"))
+        http.csrf(
+                        csrf ->
+                                csrf.ignoringRequestMatchers(
+                                        "/api/**",
+                                        "/ws/comments/**",
+                                        "/ws/notifications/**",
+                                        "/ws/posts/**"))
                 .sessionManagement(
                         sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -138,7 +142,7 @@ public class SecurityConfig {
                             configureRoleBasedEndpoints(auth);
                             configurePublicUsersEndpoints(auth);
                             configurePublicHashtagEndpoints(auth);
-                            configureCommentWebSocketEndpoints(auth);
+                            configureWebSocketEndpoints(auth);
                             auth.anyRequest().authenticated();
                         })
                 .addFilterBefore(
@@ -187,11 +191,24 @@ public class SecurityConfig {
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
         auth.requestMatchers(HttpMethod.POST, AUTHENTICATED_POST_AUTH_PATHS).authenticated();
+        // Must be registered before the users permitAll block: the `/{userId}` template matches any
+        // single segment, "search" included, and the first matching rule wins. Without this the
+        // search endpoint would silently become anonymous, which is the one property its
+        // enumeration bound depends on.
+        auth.requestMatchers(HttpMethod.GET, ApiConstants.Users.ROOT + ApiConstants.Users.SEARCH)
+                .authenticated();
     }
 
     /**
-     * Opens health and API-documentation endpoints to all callers; restricts remaining actuator
-     * endpoints to ADMIN.
+     * Opens health, API-documentation, and the error-dispatch endpoints to all callers; restricts
+     * remaining actuator endpoints to ADMIN.
+     *
+     * <p>{@code /error} must be reachable regardless of the original request's authentication
+     * state: Spring's ERROR dispatch (used when a {@code HandlerExceptionResolver} falls through to
+     * {@code response.sendError(...)}) re-enters this filter chain as a fresh, unauthenticated
+     * request. Without this rule that dispatch was itself rejected with 401, masking the original
+     * status - most visibly turning a 406 content-negotiation failure into a 401 that looks like an
+     * expired session.
      */
     private void configureInfrastructureEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
@@ -220,7 +237,10 @@ public class SecurityConfig {
     private void configurePublicUsersEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
-        auth.requestMatchers(HttpMethod.GET, ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID)
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Users.ROOT + ApiConstants.Users.BY_ID,
+                        ApiConstants.Users.ROOT + ApiConstants.Users.BY_USERNAME)
                 .permitAll();
     }
 
@@ -236,12 +256,15 @@ public class SecurityConfig {
     }
 
     // A browser cannot set an Authorization header on a native WebSocket handshake, so the JWT
-    // rides as a query parameter instead; CommentWebSocketJwtHandshakeInterceptor is the sole
-    // authentication gate for this path, matching the query-parameter token it validates.
-    private void configureCommentWebSocketEndpoints(
+    // rides as a query parameter instead; JwtHandshakeInterceptor is the sole authentication gate
+    // for both paths, matching the query-parameter token it validates.
+    private void configureWebSocketEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
-        auth.requestMatchers("/ws/comments/**").permitAll();
+        // Authentication for a STOMP endpoint happens in JwtHandshakeInterceptor, which reads
+        // the token from the handshake query string; the filter chain must let the upgrade
+        // request through for that interceptor to run at all.
+        auth.requestMatchers("/ws/comments/**", "/ws/notifications/**", "/ws/posts/**").permitAll();
     }
 
     @Bean
@@ -261,7 +284,7 @@ public class SecurityConfig {
 
         // Refuse to fall back to a wildcard origin when allowCredentials=true. Empty config
         // becomes a deny-all CORS policy; operator must set CORS_ALLOWED_ORIGINS explicitly.
-        configuration.setAllowedOrigins(parseOrigins(corsProperties.allowedOrigins()));
+        configuration.setAllowedOrigins(corsProperties.allowedOriginList());
         configuration.setAllowedMethods(
                 Arrays.asList(
                         HttpMethod.GET.name(),
@@ -307,12 +330,5 @@ public class SecurityConfig {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         objectMapper.writeValue(response.getWriter(), ApiResponse.failure(errorCode));
-    }
-
-    private static List<String> parseOrigins(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return List.of();
-        }
-        return Stream.of(raw.split(",")).map(String::trim).filter(StringUtils::hasText).toList();
     }
 }

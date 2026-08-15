@@ -2,6 +2,7 @@ package com.app.modules.auth.service.impl;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -27,7 +28,6 @@ import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
 import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
-import com.app.modules.auth.dto.request.RefreshRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
@@ -154,6 +154,10 @@ public class AuthServiceImpl implements AuthService {
 
                     User user =
                             User.builder()
+                                    // Stored exactly as submitted: identity is case-insensitive,
+                                    // display is case-preserving. Uniqueness is enforced by the
+                                    // lower(username) index and checked case-insensitively above,
+                                    // so nothing depends on the stored value being lowercase.
                                     .username(request.username())
                                     .email(request.email())
                                     .displayName(displayName)
@@ -184,7 +188,18 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email()).orElse(null);
+        // Usernames cannot contain '@' (enforced by the registration pattern), so an '@' in the
+        // identifier unambiguously marks an email; anything else is a username. The username
+        // lookup normalizes both sides of the comparison itself, so the identifier is passed
+        // through as typed: case-insensitivity comes from the query, not from the stored casing.
+        String rawIdentifier = request.identifier().trim();
+        Optional<User> userOpt;
+        if (rawIdentifier.contains("@")) {
+            userOpt = userRepository.findByEmailAndDeletedAtIsNull(rawIdentifier);
+        } else {
+            userOpt = userRepository.findByUsernameAndDeletedAtIsNull(rawIdentifier);
+        }
+        User user = userOpt.orElse(null);
         UserCredential credential =
                 user == null ? null : credentialRepository.findByUserId(user.getId()).orElse(null);
 
@@ -232,10 +247,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthResponse refresh(RefreshRequest request, HttpServletRequest httpRequest) {
+    public AuthResponse refresh(String rawRefreshToken, HttpServletRequest httpRequest) {
         RefreshTokenService.RotationResult rotation =
-                refreshTokenService.rotate(
-                        request.refreshToken(), ipExtractor.extract(httpRequest));
+                refreshTokenService.rotate(rawRefreshToken, ipExtractor.extract(httpRequest));
 
         User user =
                 userRepository
@@ -264,12 +278,12 @@ public class AuthServiceImpl implements AuthService {
                 rotation.newRawToken(),
                 jwtProperties.accessTokenTtl(),
                 AuthResponse.BEARER,
-                authMapper.toUserSummaryResponse(user, emailVerified));
+                authMapper.toAuthenticatedUserResponse(user, emailVerified));
     }
 
     @Override
     @Transactional
-    public void logout(RefreshRequest request) {
+    public void logout(String rawRefreshToken) {
         // Blacklist the current access token so it cannot authenticate again before its
         // natural expiry. The raw token was placed on the Authentication credentials by
         // JwtAuthenticationFilter; absence (e.g. logout without an Authorization header)
@@ -278,7 +292,7 @@ public class AuthServiceImpl implements AuthService {
         // Revoke the refresh token first so that if the subsequent blacklist call fails the
         // refresh token is already invalidated; failing before revoke would leave neither
         // invalidation applied.
-        refreshTokenService.revoke(request.refreshToken());
+        refreshTokenService.revoke(rawRefreshToken);
 
         // Retained for defensive completeness — public path now requires authentication
         // (SecurityConfig enforces authenticated() on /logout).
@@ -435,6 +449,6 @@ public class AuthServiceImpl implements AuthService {
                 refreshToken,
                 jwtProperties.accessTokenTtl(),
                 AuthResponse.BEARER,
-                authMapper.toUserSummaryResponse(user, emailVerified));
+                authMapper.toAuthenticatedUserResponse(user, emailVerified));
     }
 }

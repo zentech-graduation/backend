@@ -10,6 +10,14 @@ spring:
     virtual:
       enabled: true
   jackson:
+    # Every OffsetDateTime is rendered in the same UTC offset regardless of the zone it was
+    # constructed with, so the same field on the same resource does not render differently
+    # depending on whether the value just came from application code (local zone) or was read
+    # back from Postgres (UTC).
+    time-zone: UTC
+    datatype:
+      datetime:
+        write-dates-with-context-time-zone: true
     deserialization:
       fail-on-unknown-properties: true
   datasource:
@@ -26,7 +34,10 @@ spring:
         stringtype: unspecified
   flyway:
     enabled: true
-    out-of-order: true
+    # The migration set is a contiguous V01-V43 sequence with no gaps; out-of-order would only
+    # suppress Flyway's own check against an out-of-order apply, which has no branch-merge
+    # workflow here to justify disabling.
+    out-of-order: false
     locations: classpath:db/migration
   data:
     redis:
@@ -82,7 +93,7 @@ app:
       confirm-timeout: ${OUTBOX_PUBLISHER_CONFIRM_TIMEOUT:PT10S}
       processing-timeout: ${OUTBOX_PUBLISHER_PROCESSING_TIMEOUT:PT2M}
       initial-delay: ${OUTBOX_PUBLISHER_INITIAL_DELAY:PT10S}
-      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT5S}
+      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT1S}
       retry-backoffs:
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_1:PT10S}
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_2:PT30S}
@@ -96,6 +107,11 @@ app:
         - ${RABBIT_CONSUMER_RETRY_BACKOFF_3:PT60S}
   security:
     cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET}
+    refresh-cookie:
+      name: ${REFRESH_COOKIE_NAME:luvax_refresh}
+      path: ${REFRESH_COOKIE_PATH:/api/v1/auth}
+      secure: ${REFRESH_COOKIE_SECURE:true}
+      same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}
@@ -107,6 +123,16 @@ app:
   mail:
     consumer:
       enabled: ${MAIL_CONSUMER_ENABLED:false}
+    # Deliberately literal, not an environment placeholder. An APP_MAIL_TRANSPORT environment
+    # variable still outranks this, and MailTransportGuard is what closes the dangerous direction.
+    transport: resend
+    resend:
+      # Defaulted to empty so a developer running the smtp transport needs no Resend credential.
+      # ResendMailConfig rejects a blank key, so selecting resend without one still fails at startup.
+      api-key: ${RESEND_API_KEY:}
+    smtp:
+      host: ${MAIL_SMTP_HOST:localhost}
+      port: ${MAIL_SMTP_PORT:1025}
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
     app-name: ${MAIL_APP_NAME}
@@ -116,6 +142,8 @@ app:
   notification:
     consumer:
       enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
+    live:
+      enabled: ${NOTIFICATION_LIVE_ENABLED:false}
   media:
     cdn-base-url: ${MEDIA_CDN_BASE_URL:}
     r2:
@@ -125,13 +153,19 @@ app:
       bucket: ${R2_BUCKET:}
       region: ${R2_REGION:auto}
       upload-url-ttl: ${R2_UPLOAD_URL_TTL:PT10M}
+      connect-timeout: ${R2_CONNECT_TIMEOUT:PT2S}
+      read-timeout: ${R2_READ_TIMEOUT:PT5S}
+      api-call-timeout: ${R2_API_CALL_TIMEOUT:PT10S}
     allowed-image-mime-types:
       - image/jpeg
       - image/png
       - image/webp
+      - image/gif
     allowed-video-mime-types:
       - video/mp4
       - video/webm
+      - video/quicktime
+    max-video-duration-seconds: ${MEDIA_MAX_VIDEO_DURATION_SECONDS:180}
     storage-key-pattern: ${MEDIA_STORAGE_KEY_PATTERN:^[a-zA-Z0-9][a-zA-Z0-9/_.-]{1,511}$}
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
@@ -153,6 +187,8 @@ app:
       enabled: ${POST_CONSUMER_ENABLED:false}
     seed:
       enabled: ${POST_SEED_ENABLED:true}
+    live:
+      enabled: ${POST_LIVE_ENABLED:false}
   comment:
     slow-mode-seconds: ${COMMENT_SLOW_MODE_SECONDS:0}
     idempotency-ttl-hours: ${COMMENT_IDEMPOTENCY_TTL_HOURS:24}
@@ -171,6 +207,9 @@ app:
     group-chat-enabled: ${MESSAGE_GROUP_CHAT_ENABLED:true}
     idempotency-ttl-hours: ${MESSAGE_IDEMPOTENCY_TTL_HOURS:24}
     max-group-participants: ${MESSAGE_MAX_GROUP_PARTICIPANTS:256}
+  websocket:
+    revocation:
+      interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
   rate-limit:
     endpoint-rules:
       "[/api/v1/auth/login]":
@@ -206,12 +245,20 @@ app:
       "[/api/v1/conversations]":
         max-attempts: 30
         window-seconds: 60
+      "[/ws/**]":
+        max-attempts: 30
+        window-seconds: 60
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
 
 management:
   health:
     elasticsearch:
       enabled: true
+    # The mail starter contributes an indicator that opens an SMTP connection on every health
+    # probe. Outbound mail is asynchronous and already retried through the outbox, so a sink that
+    # is briefly unreachable must not make the application itself report unhealthy.
+    mail:
+      enabled: false
   endpoint:
     health:
       show-details: when-authorized

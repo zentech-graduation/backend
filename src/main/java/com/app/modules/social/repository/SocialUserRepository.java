@@ -5,13 +5,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.repository.Repository;
 
 import com.app.modules.users.entity.User;
 
-@Repository
-public interface SocialUserRepository extends JpaRepository<User, UUID> {
+@org.springframework.stereotype.Repository
+public interface SocialUserRepository extends Repository<User, UUID> {
 
     Optional<User> findByIdAndDeletedAtIsNull(UUID id);
 

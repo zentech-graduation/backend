@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +17,7 @@ import com.app.modules.media.api.MediaApi;
 import com.app.modules.media.dto.request.MediaUploadCompleteRequest;
 import com.app.modules.media.dto.request.MediaUploadUrlRequest;
 import com.app.modules.media.dto.response.MediaAssetResponse;
+import com.app.modules.media.dto.response.MediaConstraintsResponse;
 import com.app.modules.media.dto.response.MediaUploadUrlResponse;
 import com.app.modules.media.service.MediaService;
 
@@ -50,5 +52,14 @@ public class MediaController extends BaseController implements MediaApi {
         MediaAssetResponse response = mediaService.completeUpload(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(ApiSuccessCode.CREATED, response));
+    }
+
+    /** Returns the upload constraints the media validator enforces, for authenticated clients. */
+    @Override
+    @GetMapping(ApiConstants.Media.CONSTRAINTS)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<MediaConstraintsResponse>> getUploadConstraints() {
+        return ResponseEntity.ok(
+                ApiResponse.success(ApiSuccessCode.OK, mediaService.getUploadConstraints()));
     }
 }

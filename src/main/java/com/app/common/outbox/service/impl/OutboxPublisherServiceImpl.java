@@ -56,7 +56,7 @@ public class OutboxPublisherServiceImpl implements OutboxPublisherService {
     @Override
     @Scheduled(
             initialDelayString = "${app.outbox.publisher.initial-delay:PT10S}",
-            fixedDelayString = "${app.outbox.publisher.fixed-delay:PT5S}")
+            fixedDelayString = "${app.outbox.publisher.fixed-delay:PT1S}")
     public int publishDueEvents() {
         OffsetDateTime now = now();
         List<OutboxEvent> events =

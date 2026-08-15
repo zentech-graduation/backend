@@ -69,11 +69,11 @@ class PostSaveServiceImplTest {
         lenient().when(postVisibilityService.isVisibleTo(userId, publishedPost)).thenReturn(true);
         // Mirror the assembler contract: one response per input post, order preserved.
         lenient()
-                .when(postResponseAssembler.assemble(anyList()))
+                .when(postResponseAssembler.assemble(eq(userId), anyList()))
                 .thenAnswer(
                         invocation ->
                                 Collections.nCopies(
-                                        ((List<?>) invocation.getArgument(0)).size(),
+                                        ((List<?>) invocation.getArgument(1)).size(),
                                         (PostResponse) null));
     }
 
@@ -115,7 +115,7 @@ class PostSaveServiceImplTest {
 
     @Test
     void unsavePost_notSaved_throwsPostNotFound() {
-        when(postSaveRepository.findById(saveId)).thenReturn(Optional.empty());
+        when(postSaveRepository.deleteByUserAndPost(userId, postId)).thenReturn(0);
 
         assertThatThrownBy(() -> service.unsavePost(userId, postId))
                 .isInstanceOf(AppException.class)
@@ -137,8 +137,7 @@ class PostSaveServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
-        verify(postSaveRepository, never()).findById(any());
-        verify(postSaveRepository, never()).delete(any());
+        verify(postSaveRepository, never()).deleteByUserAndPost(any(), any());
     }
 
     @Test
@@ -149,21 +148,19 @@ class PostSaveServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.POST_NOT_FOUND);
-        verify(postSaveRepository, never()).findById(any());
-        verify(postSaveRepository, never()).delete(any());
+        verify(postSaveRepository, never()).deleteByUserAndPost(any(), any());
     }
 
     @Test
     void unsavePost_hiddenPostOwner_reachesSaveLookup() {
         Post draftPost = Post.builder().id(postId).userId(userId).status(PostStatus.DRAFT).build();
-        PostSave existing = PostSave.builder().id(saveId).build();
         when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(draftPost));
         when(postVisibilityService.isVisibleTo(userId, draftPost)).thenReturn(true);
-        when(postSaveRepository.findById(saveId)).thenReturn(Optional.of(existing));
+        when(postSaveRepository.deleteByUserAndPost(userId, postId)).thenReturn(1);
 
         service.unsavePost(userId, postId);
 
-        verify(postSaveRepository).delete(existing);
+        verify(postSaveRepository).deleteByUserAndPost(userId, postId);
     }
 
     @Test
@@ -237,11 +234,11 @@ class PostSaveServiceImplTest {
     }
 
     @Test
-    void listSavedPosts_invalidCursor_throwsBadRequest() {
+    void listSavedPosts_invalidCursor_throwsInvalidCursor() {
         assertThatThrownBy(() -> service.listSavedPosts(userId, "!!!invalid-cursor!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test

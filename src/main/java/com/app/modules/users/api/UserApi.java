@@ -3,6 +3,10 @@ package com.app.modules.users.api;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -11,9 +15,13 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
+import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.security.user.UserPrincipal;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
@@ -28,7 +36,15 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-/** OpenAPI contract for the users module. */
+/**
+ * OpenAPI contract for the users module.
+ *
+ * <p>Both anonymous operations below declare {@code security = {@SecurityRequirement(name = "")}}
+ * rather than {@code security = {}}. A truly empty array is indistinguishable from the annotation
+ * attribute's unset default, so springdoc silently falls back to the global {@code bearerAuth}
+ * requirement instead of emitting {@code security: []}. A single requirement with an empty scheme
+ * name is springdoc's documented idiom for an explicit override to no security.
+ */
 @Tag(name = "Users", description = "User profile and settings management")
 @RequestMapping(ApiConstants.Users.ROOT)
 public interface UserApi {
@@ -40,11 +56,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Profile returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserProfileResponse.class))),
+                description = "Profile returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -72,11 +84,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Profile updated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserProfileResponse.class))),
+                description = "Profile updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -92,7 +100,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
+                responseCode = "400",
                 description = "Validation failure",
                 content =
                         @Content(
@@ -106,6 +114,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PatchMapping(ApiConstants.Users.ME)
     ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest request);
@@ -113,28 +122,35 @@ public interface UserApi {
     @Operation(
             summary = "Get a user's public profile",
             description =
-                    "Returns the public profile of the specified user. Private accounts return"
-                            + " 401. Counter fields are omitted for unauthenticated callers.",
-            security = {})
+                    "Returns the public profile of the specified user, always with 200. The"
+                            + " follower, following, and post counts are null unless the caller is"
+                            + " the owner, an accepted follower of a private account, or any"
+                            + " authenticated caller of a public account.",
+            security = {@SecurityRequirement(name = "")})
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Profile returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema =
-                                        @Schema(implementation = PublicUserProfileResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "401",
-                description = "Target account is private",
+                responseCode = "400",
+                description = "Path variable is not a valid UUID",
                 content =
                         @Content(
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description =
+                        "An Authorization header was supplied but the token is invalid or expired; the endpoint itself is anonymous",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description =
+                        "Profile returned; counter fields are null when the caller is not"
+                                + " entitled to see them"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "User not found",
+                description = "User not found, soft-deleted, or blocked in either direction",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -152,6 +168,103 @@ public interface UserApi {
             @PathVariable UUID userId, @AuthenticationPrincipal UserPrincipal principal);
 
     @Operation(
+            summary = "Search users by username",
+            description =
+                    "Case-insensitive substring search over username, ordered by follower count"
+                            + " descending then username. Requires authentication, unlike the"
+                            + " profile lookup endpoints, because it converts the user table from"
+                            + " unlistable to enumerable. The caller never appears in their own"
+                            + " results. Banned, suspended, deactivated, and deleted accounts are"
+                            + " never returned. Users who have blocked the caller are returned with"
+                            + " isBlockedBy true rather than being omitted, since omitting them"
+                            + " would disclose the block.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Search results returned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "Query shorter than 2 characters or longer than 30, limit outside 1-100, or"
+                                + " a malformed or out-of-range cursor",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Users.SEARCH)
+    ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> searchUsers(
+            @RequestParam("q") @Size(min = 2, max = 30) String q,
+            @RequestParam(required = false) @Size(max = 512) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
+
+    @Operation(
+            summary = "Get a user's public profile by username",
+            description =
+                    "Returns the public profile of the user holding the given username. Matching is"
+                            + " case-sensitive, because username uniqueness is enforced on the raw"
+                            + " column. A non-existent username, a soft-deleted account, and an"
+                            + " account blocked with respect to the caller all return 404"
+                            + " identically. Counter fields are omitted for unauthenticated"
+                            + " callers.",
+            security = {@SecurityRequirement(name = "")})
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Profile returned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "No live user holds that username, or the account is block-hidden",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "Username is outside 3-30 characters or contains illegal characters. Path"
+                                + " and query constraint violations return 400, unlike request-body"
+                                + " violations which return 422.",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping(ApiConstants.Users.BY_USERNAME)
+    ResponseEntity<ApiResponse<PublicUserProfileResponse>> getUserProfileByUsername(
+            @PathVariable
+                    @Size(min = 3, max = 30)
+                    @Pattern(
+                            regexp = "^[a-zA-Z0-9_.]+$",
+                            message =
+                                    "Username may only contain letters, digits, underscores and"
+                                            + " dots")
+                    String username,
+            @AuthenticationPrincipal UserPrincipal principal);
+
+    @Operation(
             summary = "Get my settings",
             description =
                     "Returns the notification and privacy settings for the authenticated user.",
@@ -159,11 +272,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Settings returned",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserSettingsResponse.class))),
+                description = "Settings returned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -191,11 +300,7 @@ public interface UserApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Settings updated",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = UserSettingsResponse.class))),
+                description = "Settings updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Missing or invalid access token",
@@ -204,7 +309,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "422",
+                responseCode = "400",
                 description = "Validation failure",
                 content =
                         @Content(
@@ -218,6 +323,7 @@ public interface UserApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @MalformedBodyErrorResponses
     @PatchMapping(ApiConstants.Users.ME_SETTINGS)
     ResponseEntity<ApiResponse<UserSettingsResponse>> updateMySettings(
             @Valid @RequestBody UpdateSettingsRequest request);

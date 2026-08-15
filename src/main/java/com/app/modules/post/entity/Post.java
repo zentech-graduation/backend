@@ -17,9 +17,10 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
-import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.SQLRestriction;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.generator.EventType;
 
 import com.app.modules.post.converter.PostStatusConverter;
 import com.app.modules.post.converter.PostTypeConverter;
@@ -95,12 +96,21 @@ public class Post {
     @Column(name = "longitude", precision = 11, scale = 8)
     private BigDecimal longitude;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
+    // Database-generated like updated_at, rather than @CreationTimestamp. The column's DEFAULT
+    // NOW() and the sibling updated_at default both resolve to the same transaction timestamp, so
+    // the two agree exactly at insert. Under @CreationTimestamp this value came from the JVM
+    // clock while updated_at came from Postgres, leaving them permanently unequal on a post
+    // nobody had touched. Hibernate already re-reads updated_at after every insert, so reading
+    // this one back costs no extra round trip.
+    @Generated(event = EventType.INSERT)
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    // trg_posts_updated_at (V16) is the sole writer of this column; Hibernate never sends it in an
+    // INSERT or UPDATE and instead re-selects it afterward so the entity reflects the
+    // trigger-written value instead of a stale application-side guess the trigger would discard.
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
 
     /** Set by application code on soft delete; {@code null} for live rows (GLOBAL_RULES §6). */
@@ -109,6 +119,9 @@ public class Post {
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
+    // Batches the lazy media-collection initialization across a page of posts into one IN query,
+    // so a list endpoint issues a single media load instead of one per post.
+    @BatchSize(size = 100)
     @Builder.Default
     private List<PostMedia> media = new ArrayList<>();
 }

@@ -29,6 +29,8 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/users";
         public static final String ME = "/me";
         public static final String BY_ID = "/{userId}";
+        public static final String BY_USERNAME = "/by-username/{username}";
+        public static final String SEARCH = "/search";
         public static final String ME_SETTINGS = "/me/settings";
     }
 
@@ -43,6 +45,7 @@ public final class ApiConstants {
         public static final String LIKES = "/{postId}/likes";
         public static final String SAVE = "/{postId}/save";
         public static final String SAVED = "/saved";
+        public static final String LIKED = "/liked";
         public static final String SEARCH = "/search";
         public static final String COMMENTS = "/{postId}/comments";
         public static final String FEED = "/feed";
@@ -56,6 +59,7 @@ public final class ApiConstants {
         public static final String BY_ID = "/{commentId}";
         public static final String LIKE = "/{commentId}/like";
         public static final String REPLIES = "/{commentId}/replies";
+        public static final String DELETION_SCOPE = "/{commentId}/deletion-scope";
     }
 
     public static final class Stories {
@@ -80,6 +84,7 @@ public final class ApiConstants {
                 "/follow-requests/{requesterId}/approve";
         public static final String FOLLOW_REQUEST_REJECT = "/follow-requests/{requesterId}/reject";
         public static final String BLOCK = "/block/{targetUserId}";
+        public static final String BLOCKED = "/blocked";
     }
 
     public static final class Messages {
@@ -116,6 +121,7 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/media";
         public static final String UPLOAD = "/upload";
         public static final String UPLOAD_COMPLETE = "/upload-complete";
+        public static final String CONSTRAINTS = "/constraints";
     }
 
     public static final class Reports {

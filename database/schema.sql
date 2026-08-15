@@ -299,6 +299,9 @@ CREATE TABLE comments (
     -- Timestamps
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    -- Set by application code on a content edit only; NULL means never edited. Distinct from
+    -- updated_at, which the row-level trigger moves whenever a counter changes.
+    edited_at           TIMESTAMPTZ,
     deleted_at          TIMESTAMPTZ
 );
 
@@ -764,20 +767,37 @@ CREATE INDEX idx_users_username_trgm    ON users USING gin (username gin_trgm_op
 CREATE INDEX idx_users_fts              ON users USING gin (
     to_tsvector('simple', COALESCE(username, '') || ' ' || COALESCE(display_name, ''))
 );
+-- Table-wide (not partial on deleted_at) so a soft-deleted account's username stays reserved,
+-- matching the documented soft-delete retention policy; users_username_key (raw UNIQUE column
+-- constraint above) is retained as a structural guard and is implied by this index.
+CREATE UNIQUE INDEX idx_users_username_lower ON users (lower(username));
+-- Same table-wide shape and rationale as idx_users_username_lower, applied to email: soft delete
+-- does not release an email either, and email identity is case-insensitive per RFC 5321 and every
+-- major mail provider's practice. users_email_key (raw UNIQUE column constraint above) is retained
+-- as a structural guard and is implied by this index.
+CREATE UNIQUE INDEX idx_users_email_lower ON users (lower(email));
 
 -- follows
 CREATE INDEX idx_follows_following      ON follows (following_id, status, created_at DESC);
 CREATE INDEX idx_follows_follower       ON follows (follower_id, status, created_at DESC);
+CREATE INDEX idx_follows_following_created_follower
+    ON follows (following_id, status, created_at DESC, follower_id DESC);
+CREATE INDEX idx_follows_follower_created_following
+    ON follows (follower_id, status, created_at DESC, following_id DESC);
 
 -- blocks
 CREATE INDEX idx_blocks_blocker         ON blocks (blocker_id);
 CREATE INDEX idx_blocks_blocked         ON blocks (blocked_id);
+CREATE INDEX idx_blocks_blocker_created_blocked
+    ON blocks (blocker_id, created_at DESC, blocked_id DESC);
 
 -- media_assets
 CREATE INDEX idx_media_assets_user      ON media_assets (user_id, created_at DESC);
 
 -- posts
 CREATE INDEX idx_posts_user_feed        ON posts (user_id, created_at DESC)
+    WHERE status = 'published' AND deleted_at IS NULL;
+CREATE INDEX idx_posts_user_created_id  ON posts (user_id, created_at DESC, id DESC)
     WHERE status = 'published' AND deleted_at IS NULL;
 CREATE INDEX idx_posts_created_at       ON posts (created_at DESC)
     WHERE status = 'published' AND deleted_at IS NULL;
@@ -789,24 +809,39 @@ CREATE INDEX idx_post_media_post        ON post_media (post_id, position);
 -- post_likes
 CREATE INDEX idx_post_likes_post        ON post_likes (post_id, created_at DESC);
 CREATE INDEX idx_post_likes_user        ON post_likes (user_id, created_at DESC);
+CREATE INDEX idx_post_likes_post_created_user
+    ON post_likes (post_id, created_at DESC, user_id DESC);
+CREATE INDEX idx_post_likes_user_created_post
+    ON post_likes (user_id, created_at DESC, post_id DESC);
 
 -- post_saves
 CREATE INDEX idx_post_saves_user        ON post_saves (user_id, created_at DESC);
+CREATE INDEX idx_post_saves_user_created_post
+    ON post_saves (user_id, created_at DESC, post_id DESC);
 
 -- post_edit_history
 CREATE INDEX idx_post_edit_history_post_edited
     ON post_edit_history (post_id, edited_at DESC);
+CREATE INDEX idx_post_edit_history_post_edited_id
+    ON post_edit_history (post_id, edited_at DESC, id DESC);
 
 -- comments
 CREATE INDEX idx_comments_post_root     ON comments (post_id, created_at ASC)
     WHERE parent_id IS NULL AND deleted_at IS NULL;
 CREATE INDEX idx_comments_parent        ON comments (parent_id, created_at ASC)
     WHERE parent_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX idx_comments_post_root_id  ON comments (post_id, created_at DESC, id DESC)
+    WHERE parent_id IS NULL AND deleted_at IS NULL;
+CREATE INDEX idx_comments_parent_id     ON comments (parent_id, created_at DESC, id DESC)
+    WHERE parent_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX idx_comments_root          ON comments (root_id)
     WHERE root_id IS NOT NULL;
 CREATE INDEX idx_comments_user          ON comments (user_id);
 CREATE INDEX idx_comments_post_moderation ON comments (post_id, moderation_status, created_at DESC)
     WHERE deleted_at IS NULL;
+-- Serves the pinned "top comments" block: the most-liked eligible top-level comments on a post.
+CREATE INDEX idx_comments_post_top_liked ON comments (post_id, like_count DESC, created_at DESC, id DESC)
+    WHERE parent_id IS NULL AND deleted_at IS NULL AND moderation_status = 'approved';
 
 -- comment_write_idempotency
 CREATE INDEX idx_comment_idempotency_created ON comment_write_idempotency (created_at);
@@ -827,8 +862,14 @@ CREATE INDEX idx_stories_user           ON stories (user_id, created_at DESC)
 CREATE INDEX idx_stories_expires        ON stories (expires_at)
     WHERE deleted_at IS NULL;  -- used by cleanup job
 
+-- story_views
+CREATE INDEX idx_story_views_story_viewed_viewer
+    ON story_views (story_id, viewed_at DESC, viewer_id DESC);
+
 -- notifications
 CREATE INDEX idx_notifications_recipient ON notifications (recipient_id, created_at DESC);
+CREATE INDEX idx_notifications_recipient_created_id
+    ON notifications (recipient_id, created_at DESC, id DESC);
 CREATE INDEX idx_notifications_unread    ON notifications (recipient_id, created_at DESC)
     WHERE is_read = FALSE;
 

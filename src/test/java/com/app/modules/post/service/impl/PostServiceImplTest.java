@@ -10,9 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +33,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.common.pagination.Cursor;
+import com.app.common.pagination.CursorCodec;
+import com.app.common.pagination.CursorScope;
+import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.settings.service.SystemSettingService;
 import com.app.modules.hashtag.service.HashtagService;
@@ -56,6 +59,7 @@ import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.social.service.SocialService;
+import com.app.modules.users.service.UserSummaryService;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -76,6 +80,7 @@ class PostServiceImplTest {
     @Mock private PostMapper postMapper;
     @Mock private SocialService socialService;
     @Mock private OutboxService outboxService;
+    @Mock private UserSummaryService userSummaryService;
 
     private PostServiceImpl service;
 
@@ -97,7 +102,8 @@ class PostServiceImplTest {
                         postResponseAssembler,
                         postMapper,
                         socialService,
-                        outboxService);
+                        outboxService,
+                        userSummaryService);
         lenient()
                 .when(systemSettingService.getRequiredLong("max_post_media_items"))
                 .thenReturn(10L);
@@ -633,9 +639,9 @@ class PostServiceImplTest {
         Post post = ownedPost(PostStatus.PUBLISHED);
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
-        when(postRepository.findFirstFeedPosts(any(), eq(PostStatus.PUBLISHED), any()))
-                .thenReturn(List.of(post));
-        when(postResponseAssembler.assembleFeed(any())).thenReturn(List.of(feedResponse));
+        when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(List.of(post));
+        when(postResponseAssembler.assembleFeed(eq(viewer), any()))
+                .thenReturn(List.of(feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
 
@@ -648,31 +654,32 @@ class PostServiceImplTest {
         UUID author = UUID.randomUUID();
         Post post = ownedPost(PostStatus.PUBLISHED);
         String cursor =
-                Base64.getEncoder()
-                        .encodeToString(
-                                OffsetDateTime.now().toString().getBytes(StandardCharsets.UTF_8));
+                CursorCodec.encode(
+                        new Cursor(TimeCursors.toMicros(OffsetDateTime.now()), UUID.randomUUID()),
+                        CursorScope.POST_FEED);
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
-        when(postRepository.findFeedPostsBefore(any(), eq(PostStatus.PUBLISHED), any(), any()))
+        when(postRepository.findFeedPostsBefore(any(), any(), any(), any()))
                 .thenReturn(List.of(post));
-        when(postResponseAssembler.assembleFeed(any())).thenReturn(List.of(feedResponse));
+        when(postResponseAssembler.assembleFeed(eq(viewer), any()))
+                .thenReturn(List.of(feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, cursor, 20);
 
         assertThat(page.getContent()).containsExactly(feedResponse);
-        verify(postRepository).findFeedPostsBefore(any(), eq(PostStatus.PUBLISHED), any(), any());
+        verify(postRepository).findFeedPostsBefore(any(), any(), any(), any());
     }
 
     @Test
-    void getFeed_invalidCursor_throwsBadRequest() {
+    void getFeed_invalidCursor_throwsInvalidCursor() {
         UUID viewer = UUID.randomUUID();
-        when(socialService.getAcceptedFollowingExcludingBlocks(viewer))
-                .thenReturn(List.of(UUID.randomUUID()));
 
+        // The cursor is decoded before the accepted-following lookup, so an invalid cursor throws
+        // even for a viewer who follows nobody; socialService is deliberately never stubbed here.
         assertThatThrownBy(() -> service.getFeed(viewer, "!!!not-valid-base64!!!", 20))
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
-                .isEqualTo(ApiErrorCode.BAD_REQUEST);
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
 
     @Test
@@ -682,11 +689,11 @@ class PostServiceImplTest {
         ArgumentCaptor<org.springframework.data.domain.Pageable> pageCaptor =
                 ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
-        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(List.of());
+        when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(List.of());
 
         service.getFeed(viewer, null, 9999);
 
-        verify(postRepository).findFirstFeedPosts(any(), any(), pageCaptor.capture());
+        verify(postRepository).findFirstFeedPosts(any(), pageCaptor.capture());
         // normalizeLimit caps at 100, then fetches pageSize+1 to detect next page
         assertThat(pageCaptor.getValue().getPageSize()).isEqualTo(101);
     }
@@ -698,11 +705,11 @@ class PostServiceImplTest {
         ArgumentCaptor<org.springframework.data.domain.Pageable> pageCaptor =
                 ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
-        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(List.of());
+        when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(List.of());
 
         service.getFeed(viewer, null, 0);
 
-        verify(postRepository).findFirstFeedPosts(any(), any(), pageCaptor.capture());
+        verify(postRepository).findFirstFeedPosts(any(), pageCaptor.capture());
         // normalizeLimit defaults to 20, then fetches pageSize+1 to detect next page
         assertThat(pageCaptor.getValue().getPageSize()).isEqualTo(21);
     }
@@ -715,8 +722,8 @@ class PostServiceImplTest {
         List<Post> posts = buildPosts(author, 21);
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
-        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(posts);
-        when(postResponseAssembler.assembleFeed(any()))
+        when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(posts);
+        when(postResponseAssembler.assembleFeed(eq(viewer), any()))
                 .thenReturn(Collections.nCopies(20, feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
@@ -732,8 +739,8 @@ class PostServiceImplTest {
         List<Post> posts = buildPosts(author, 5);
         FeedPostResponse feedResponse = feedResponse();
         when(socialService.getAcceptedFollowingExcludingBlocks(viewer)).thenReturn(List.of(author));
-        when(postRepository.findFirstFeedPosts(any(), any(), any())).thenReturn(posts);
-        when(postResponseAssembler.assembleFeed(posts))
+        when(postRepository.findFirstFeedPosts(any(), any())).thenReturn(posts);
+        when(postResponseAssembler.assembleFeed(eq(viewer), eq(posts)))
                 .thenReturn(Collections.nCopies(5, feedResponse));
 
         CursorPageResponse<FeedPostResponse> page = service.getFeed(viewer, null, 20);
@@ -761,16 +768,16 @@ class PostServiceImplTest {
     private FeedPostResponse feedResponse() {
         return new FeedPostResponse(
                 UUID.randomUUID(),
-                authorId,
-                null,
-                null,
-                null,
+                new UserSummaryResponse(authorId, "author", "Author", null, false),
                 null,
                 PostType.IMAGE,
                 PostStatus.PUBLISHED,
                 0,
                 0,
                 0,
+                false,
+                false,
+                false,
                 0,
                 null,
                 null,

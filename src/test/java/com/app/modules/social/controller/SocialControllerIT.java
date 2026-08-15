@@ -304,7 +304,7 @@ class SocialControllerIT {
         String verToken = tokenService.createEmailVerificationToken(userId);
         rest.getForEntity("/api/v1/auth/verify-email?token=" + verToken, Map.class);
         ResponseEntity<Map> login =
-                postJson("/api/v1/auth/login", Map.of("email", email, "password", password));
+                postJson("/api/v1/auth/login", Map.of("identifier", email, "password", password));
         Map<String, String> data = (Map<String, String>) login.getBody().get("data");
         return data.get("accessToken");
     }

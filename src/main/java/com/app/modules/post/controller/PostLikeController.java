@@ -16,10 +16,11 @@ import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserListItemResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.post.api.PostLikeApi;
 import com.app.modules.post.dto.response.LikeActionResponse;
-import com.app.modules.post.dto.response.LikerResponse;
+import com.app.modules.post.dto.response.LikedPostResponse;
 import com.app.modules.post.service.PostLikeService;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -57,15 +58,27 @@ public class PostLikeController extends BaseController implements PostLikeApi {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
+    /** Lists the posts the authenticated user has liked, newest like first. */
+    @Override
+    @GetMapping(ApiConstants.Posts.LIKED)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<LikedPostResponse>>> listLikedPosts(
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "20") int limit) {
+        CursorPageResponse<LikedPostResponse> body =
+                postLikeService.listLikedPosts(SecurityUtils.getCurrentUserId(), cursor, limit);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
     /** Lists users who liked the post, newest like first. */
     @Override
     @GetMapping(ApiConstants.Posts.LIKES)
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<CursorPageResponse<LikerResponse>>> listLikers(
+    public ResponseEntity<ApiResponse<CursorPageResponse<UserListItemResponse>>> listLikers(
             @PathVariable("postId") UUID postId,
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "limit", defaultValue = "20") int limit) {
-        CursorPageResponse<LikerResponse> body =
+        CursorPageResponse<UserListItemResponse> body =
                 postLikeService.listLikers(SecurityUtils.getCurrentUserId(), postId, cursor, limit);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }

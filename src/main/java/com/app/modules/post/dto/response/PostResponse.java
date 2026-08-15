@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.enums.PostType;
 
@@ -14,21 +15,33 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Post with ordered media and engagement counters")
 public record PostResponse(
         @Schema(description = "Post identifier.") UUID id,
-        @Schema(description = "Author user identifier.") UUID userId,
-        @Schema(description = "Author username.") String username,
-        @Schema(description = "Author display name.") String userDisplayName,
-        @Schema(description = "Author avatar CDN URL.") String userAvatarUrl,
-        @Schema(description = "Post caption.") String caption,
+        @Schema(description = "Post author.") UserSummaryResponse author,
+        @Schema(description = "Post caption.", nullable = true) String caption,
         @Schema(description = "Post type.") PostType postType,
         @Schema(description = "Lifecycle status.") PostStatus status,
         @Schema(description = "Number of likes; trigger-maintained.") int likeCount,
         @Schema(description = "Number of comments; trigger-maintained.") int commentCount,
         @Schema(description = "Number of saves; trigger-maintained.") int saveCount,
+        @Schema(description = "Whether the viewer has liked this post.") boolean isLiked,
+        @Schema(description = "Whether the viewer has saved this post.") boolean isSaved,
+        @Schema(
+                        description =
+                                "Whether the viewer has already reported this post. True exactly"
+                                        + " when a new report from this viewer against this post"
+                                        + " would be rejected as a duplicate, so a client can"
+                                        + " disable the report control instead of submitting and"
+                                        + " handling the rejection. Remains true after a"
+                                        + " moderator resolves or dismisses the report, because"
+                                        + " that does not permit reporting the post again. Always"
+                                        + " false for an anonymous viewer.",
+                        example = "false")
+                boolean hasReported,
         @Schema(description = "Number of views; updated by a background job and may lag.")
                 int viewCount,
-        @Schema(description = "Free-form location label.") String locationName,
-        @Schema(description = "Latitude in decimal degrees.") BigDecimal latitude,
-        @Schema(description = "Longitude in decimal degrees.") BigDecimal longitude,
+        @Schema(description = "Free-form location label.", nullable = true) String locationName,
+        @Schema(description = "Latitude in decimal degrees.", nullable = true) BigDecimal latitude,
+        @Schema(description = "Longitude in decimal degrees.", nullable = true)
+                BigDecimal longitude,
         @Schema(description = "Ordered media items.") List<PostMediaResponse> media,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
         @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt) {}

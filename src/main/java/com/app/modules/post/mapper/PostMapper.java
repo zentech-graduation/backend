@@ -5,9 +5,9 @@ import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.app.common.response.UserSummaryResponse;
 import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.post.dto.response.FeedPostResponse;
-import com.app.modules.post.dto.response.LikerResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostMediaResponse;
 import com.app.modules.post.dto.response.PostResponse;
@@ -15,42 +15,58 @@ import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostEditHistory;
 import com.app.modules.post.entity.PostMedia;
 import com.app.modules.post.search.PostDocument;
-import com.app.modules.users.entity.User;
 
 /** Maps post entities to API response DTOs. */
 @Mapper(componentModel = "spring")
 public interface PostMapper {
 
     /**
-     * Builds the post response from the entity, the separately hydrated media items, and the post's
-     * author.
+     * Builds the post response from the entity, the separately hydrated media items, the post's
+     * author, and the viewer's like/save state.
      *
      * @param post the source post; media ordering comes from the entity collection {@code @OrderBy}
      * @param media media responses already joined with their {@code media_assets} rows
-     * @param author the post's author, separately hydrated; author fields are null if the author
-     *     lookup missed
-     * @return the post response with media and author display fields populated
+     * @param author the post author's public summary, batch-resolved by the service
+     * @param isLiked whether the requesting viewer has liked this post, batch-resolved by the
+     *     service
+     * @param isSaved whether the requesting viewer has saved this post, batch-resolved by the
+     *     service
+     * @param hasReported whether the requesting viewer has already reported this post,
+     *     batch-resolved by the service
+     * @return the post response with media, the embedded author, and viewer state
      */
     @Mapping(source = "post.id", target = "id")
     @Mapping(source = "post.status", target = "status")
     @Mapping(source = "post.createdAt", target = "createdAt")
     @Mapping(source = "post.updatedAt", target = "updatedAt")
     @Mapping(source = "media", target = "media")
-    @Mapping(source = "author.username", target = "username")
-    @Mapping(source = "author.displayName", target = "userDisplayName")
-    @Mapping(source = "author.avatarUrl", target = "userAvatarUrl")
-    PostResponse toResponse(Post post, List<PostMediaResponse> media, User author);
+    @Mapping(source = "author", target = "author")
+    @Mapping(source = "isLiked", target = "isLiked")
+    @Mapping(source = "isSaved", target = "isSaved")
+    @Mapping(source = "hasReported", target = "hasReported")
+    PostResponse toResponse(
+            Post post,
+            List<PostMediaResponse> media,
+            UserSummaryResponse author,
+            boolean isLiked,
+            boolean isSaved,
+            boolean hasReported);
 
     /**
      * Builds the feed-specific post response from the entity, the separately hydrated media items,
-     * and the post's author, with {@code rankingScore} always null for the current chronological
-     * implementation.
+     * the post's author, and the viewer's like/save state, with {@code rankingScore} always null
+     * for the current chronological implementation.
      *
      * @param post the source post; media ordering comes from the entity collection {@code @OrderBy}
      * @param media media responses already joined with their {@code media_assets} rows
-     * @param author the post's author, separately hydrated; author fields are null if the author
-     *     lookup missed
-     * @return the feed post response with media and author display fields populated and ranking
+     * @param author the post author's public summary, batch-resolved by the service
+     * @param isLiked whether the requesting viewer has liked this post, batch-resolved by the
+     *     service
+     * @param isSaved whether the requesting viewer has saved this post, batch-resolved by the
+     *     service
+     * @param hasReported whether the requesting viewer has already reported this post,
+     *     batch-resolved by the service
+     * @return the feed post response with media, the embedded author, viewer state, and ranking
      *     score reserved as null
      */
     @Mapping(source = "post.id", target = "id")
@@ -58,11 +74,18 @@ public interface PostMapper {
     @Mapping(source = "post.createdAt", target = "createdAt")
     @Mapping(source = "post.updatedAt", target = "updatedAt")
     @Mapping(source = "media", target = "media")
-    @Mapping(source = "author.username", target = "username")
-    @Mapping(source = "author.displayName", target = "userDisplayName")
-    @Mapping(source = "author.avatarUrl", target = "userAvatarUrl")
+    @Mapping(source = "author", target = "author")
+    @Mapping(source = "isLiked", target = "isLiked")
+    @Mapping(source = "isSaved", target = "isSaved")
+    @Mapping(source = "hasReported", target = "hasReported")
     @Mapping(target = "rankingScore", ignore = true)
-    FeedPostResponse toFeedResponse(Post post, List<PostMediaResponse> media, User author);
+    FeedPostResponse toFeedResponse(
+            Post post,
+            List<PostMediaResponse> media,
+            UserSummaryResponse author,
+            boolean isLiked,
+            boolean isSaved,
+            boolean hasReported);
 
     /**
      * Combines a post media row with its referenced media asset for rendering.
@@ -82,17 +105,17 @@ public interface PostMapper {
     @Mapping(source = "asset.blurhash", target = "blurhash")
     PostMediaResponse toMediaResponse(PostMedia postMedia, MediaAsset asset);
 
-    PostEditHistoryResponse toEditHistoryResponse(PostEditHistory history);
-
     /**
-     * Projects a user row onto the liker summary shape.
+     * Builds a caption edit history entry with the editor's public summary embedded.
      *
-     * @param user the liking user
-     * @return the liker summary
+     * @param history the append-only audit row
+     * @param editor the editing user's public summary, batch-resolved by the service
+     * @return the edit history response with the embedded editor
      */
-    @Mapping(source = "id", target = "userId")
-    @Mapping(source = "verified", target = "isVerified")
-    LikerResponse toLikerResponse(User user);
+    @Mapping(source = "history.id", target = "id")
+    @Mapping(source = "editor", target = "editor")
+    PostEditHistoryResponse toEditHistoryResponse(
+            PostEditHistory history, UserSummaryResponse editor);
 
     /**
      * Projects the entity to its Elasticsearch document, converting UUIDs to string form and the

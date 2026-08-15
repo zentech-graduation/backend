@@ -11,8 +11,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record StoryFeedItemResponse(
         @Schema(description = "Author user identifier.") UUID userId,
         @Schema(description = "Author username.") String username,
-        @Schema(description = "Author display name.") String userDisplayName,
-        @Schema(description = "Author avatar CDN URL.") String userAvatarUrl,
+        @Schema(description = "Author display name.", nullable = true) String userDisplayName,
+        @Schema(description = "Author avatar CDN URL.", nullable = true) String userAvatarUrl,
         @Schema(description = "True when at least one story is unseen by the viewer.")
                 boolean hasUnseen,
         @Schema(description = "Creation time of the author's newest active story.")

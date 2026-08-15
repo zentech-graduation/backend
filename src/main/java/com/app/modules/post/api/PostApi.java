@@ -1,8 +1,11 @@
 package com.app.modules.post.api;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.app.common.ApiConstants;
+import com.app.common.config.openapi.AuthenticationRequiredResponse;
+import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.request.CreatePostRequest;
@@ -45,12 +50,15 @@ public interface PostApi {
                             + " Publishing extracts caption hashtags synchronously.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "201",
-                description = "Post created",
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "201",
+                description = "Post created"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid payload, media cardinality, or initial status",
@@ -80,6 +88,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PostMapping
     ResponseEntity<ApiResponse<PostResponse>> createPost(
             @Valid @RequestBody CreatePostRequest request);
@@ -91,12 +100,15 @@ public interface PostApi {
                             + " accounts visible to them.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Post",
+                responseCode = "400",
+                description = "Path variable is not a valid UUID",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Post"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Post hidden by a block or a private account",
@@ -119,6 +131,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Posts.BY_ID)
     ResponseEntity<ApiResponse<PostResponse>> getPostById(@PathVariable("postId") UUID postId);
 
@@ -130,12 +143,15 @@ public interface PostApi {
                             + " associations refreshed.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Updated post",
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Updated post"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Validation failure",
@@ -165,6 +181,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Posts.BY_ID)
     ResponseEntity<ApiResponse<PostResponse>> updateCaption(
             @PathVariable("postId") UUID postId,
@@ -178,12 +195,15 @@ public interface PostApi {
                             + " — equivalent to soft delete).")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Post after the transition",
+                responseCode = "415",
+                description = "Request body was sent with an unsupported Content-Type",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = PostResponse.class))),
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Post after the transition"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Invalid status transition",
@@ -213,6 +233,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Posts.STATUS)
     ResponseEntity<ApiResponse<PostResponse>> transitionStatus(
             @PathVariable("postId") UUID postId,
@@ -249,6 +270,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @DeleteMapping(ApiConstants.Posts.BY_ID)
     ResponseEntity<Void> deletePost(@PathVariable("postId") UUID postId);
 
@@ -264,18 +286,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of feed posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Malformed cursor",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of feed posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
@@ -284,6 +295,8 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Posts.FEED)
     ResponseEntity<ApiResponse<CursorPageResponse<FeedPostResponse>>> getFeed(
             @Parameter(description = "Opaque cursor from the previous page")
@@ -291,6 +304,8 @@ public interface PostApi {
                     String cursor,
             @Parameter(description = "Page size (1–100, default 20)")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 
     @Operation(
@@ -301,11 +316,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Blocked or private account without an accepted follow",
@@ -328,14 +339,30 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Posts.USER_POSTS)
     ResponseEntity<ApiResponse<CursorPageResponse<PostResponse>>> listUserPosts(
             @PathVariable("userId") UUID userId,
+            @Parameter(
+                            description =
+                                    "Post types to include. Repeat the parameter for several"
+                                            + " values, for example type=image&type=video; a"
+                                            + " single comma-delimited value is also accepted."
+                                            + " Omit it for no filter. An unrecognised value is"
+                                            + " rejected with 400 rather than ignored. The"
+                                            + " normalised set is bound into the returned cursor,"
+                                            + " so a cursor from one filter cannot be replayed"
+                                            + " under another.")
+                    @RequestParam(value = "type", required = false)
+                    List<String> type,
             @Parameter(description = "Opaque cursor from the previous page")
                     @RequestParam(value = "cursor", required = false)
                     String cursor,
             @Parameter(description = "Page size (1–100, default 20)")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 
     @Operation(
@@ -344,11 +371,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of edit history entries",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = PostEditHistoryResponse.class))),
+                description = "Cursor page of edit history entries"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Requester is not the post owner",
@@ -371,6 +394,8 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Posts.HISTORY)
     ResponseEntity<ApiResponse<CursorPageResponse<PostEditHistoryResponse>>> listEditHistory(
             @PathVariable("postId") UUID postId,
@@ -379,6 +404,8 @@ public interface PostApi {
                     String cursor,
             @Parameter(description = "Page size (1–100, default 20)")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 
     @Operation(
@@ -389,11 +416,7 @@ public interface PostApi {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Cursor page of matching posts",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
+                description = "Cursor page of matching posts"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Missing query parameter",
@@ -409,6 +432,7 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
+    @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Posts.SEARCH)
     ResponseEntity<ApiResponse<CursorPageResponse<PostResponse>>> searchPosts(
             @Parameter(description = "Search term matched against captions", required = true)
@@ -417,7 +441,9 @@ public interface PostApi {
             @Parameter(description = "Opaque cursor from the previous page")
                     @RequestParam(value = "cursor", required = false)
                     String cursor,
-            @Parameter(description = "Page size (default 20)")
+            @Parameter(description = "Page size (1–100, default 20)")
                     @RequestParam(value = "limit", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
                     int limit);
 }

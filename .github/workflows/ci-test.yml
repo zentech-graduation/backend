@@ -6,6 +6,13 @@ on:
     branches:
       - main
       - develop
+  # `synchronize` fires when the head branch moves, never when the base branch moves, so a
+  # pull request is not re-tested when develop advances underneath it. Two individually green
+  # pull requests that each add a migration with the same version therefore merge cleanly and
+  # leave develop unable to boot. Running on push to develop catches the merged result.
+  push:
+    branches:
+      - develop
 
 permissions:
   contents: read
@@ -17,6 +24,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Runs before the build because it needs no JDK, no database, and under a second. Flyway
+      # aborts at validate on a duplicate version, so this failure mode takes down every
+      # integration test at once and is worth catching before anything expensive starts.
+      - name: Check for duplicate Flyway migration versions
+        run: |
+          set -euo pipefail
+          duplicates=$(
+            ls src/main/resources/db/migration \
+              | sed -nE 's/^V([0-9]+)__.*\.sql$/\1/p' \
+              | sort -n | uniq -d
+          )
+          if [ -n "$duplicates" ]; then
+            echo "Duplicate Flyway migration version(s) found: $duplicates"
+            for v in $duplicates; do
+              ls src/main/resources/db/migration | grep -E "^V${v}__" | sed 's/^/  /'
+            done
+            exit 1
+          fi
+          echo "No duplicate migration versions."
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
