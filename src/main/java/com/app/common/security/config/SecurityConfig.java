@@ -76,7 +76,12 @@ public class SecurityConfig {
     };
 
     private static final String[] PUBLIC_INFRA_PATHS = {
-        "/actuator/health", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error",
+        "/actuator/health",
+        "/api-docs/**",
+        "/swagger-ui/**",
+        "/swagger-ui.html",
+        "/ws/messages/**",
+        "/error",
     };
 
     private final JwtProperties jwtProperties;

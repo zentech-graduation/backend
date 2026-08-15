@@ -1,8 +1,11 @@
 package com.app.modules.message.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +16,27 @@ import com.app.modules.message.entity.Message;
 /** Persistence access for {@link Message}. */
 @Repository
 public interface MessageRepository extends JpaRepository<Message, UUID> {
+
+    Optional<Message> findByIdAndConversationId(UUID id, UUID conversationId);
+
+    /**
+     * First page of a conversation's history, newest first. Deleted (tombstoned) messages are
+     * included so clients can render a "message deleted" placeholder in place.
+     */
+    @Query(
+            "SELECT m FROM Message m WHERE m.conversationId = :conversationId "
+                    + "ORDER BY m.createdAt DESC")
+    List<Message> findFirstByConversation(
+            @Param("conversationId") UUID conversationId, Pageable pageable);
+
+    /** Keyset page of a conversation's history older than the cursor, newest first. */
+    @Query(
+            "SELECT m FROM Message m WHERE m.conversationId = :conversationId "
+                    + "AND m.createdAt < :cursor ORDER BY m.createdAt DESC")
+    List<Message> findByConversationBefore(
+            @Param("conversationId") UUID conversationId,
+            @Param("cursor") OffsetDateTime cursor,
+            Pageable pageable);
 
     /**
      * One row per conversation - its most recent message - for batched conversation-list preview
@@ -56,4 +80,24 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             nativeQuery = true)
     List<ConversationUnreadCount> countUnreadPerConversation(
             @Param("userId") UUID userId, @Param("conversationIds") List<UUID> conversationIds);
+
+    /**
+     * Total unread-message count across every active conversation for the given user; same counting
+     * rule as {@link #countUnreadPerConversation} without the per-conversation breakdown.
+     */
+    @Query(
+            value =
+                    """
+					SELECT COUNT(*)
+					FROM messages m
+					JOIN conversation_participants p
+						ON p.conversation_id = m.conversation_id
+						AND p.user_id = :userId
+						AND p.left_at IS NULL
+					WHERE m.is_deleted = FALSE
+					AND m.sender_id IS DISTINCT FROM :userId
+					AND (p.last_read_at IS NULL OR m.created_at > p.last_read_at)
+					""",
+            nativeQuery = true)
+    long countTotalUnreadForUser(@Param("userId") UUID userId);
 }

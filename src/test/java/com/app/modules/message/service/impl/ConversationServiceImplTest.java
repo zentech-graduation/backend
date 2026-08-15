@@ -38,6 +38,7 @@ import com.app.modules.message.dto.request.CreateDirectConversationRequest;
 import com.app.modules.message.dto.request.CreateGroupRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
+import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.dto.response.ParticipantResponse;
 import com.app.modules.message.entity.Conversation;
 import com.app.modules.message.entity.ConversationParticipant;
@@ -114,12 +115,13 @@ class ConversationServiceImplTest {
         lenient()
                 .when(
                         mapper.toSummaryResponse(
-                                any(), any(), org.mockito.ArgumentMatchers.anyLong()))
+                                any(), any(), org.mockito.ArgumentMatchers.anyLong(), any()))
                 .thenAnswer(
                         inv -> {
                             Conversation c = inv.getArgument(0);
                             List<ParticipantResponse> participants = inv.getArgument(1);
                             long unread = inv.getArgument(2);
+                            MessageResponse lastMessage = inv.getArgument(3);
                             return new ConversationSummaryResponse(
                                     c.getId(),
                                     c.isGroup(),
@@ -127,7 +129,8 @@ class ConversationServiceImplTest {
                                     c.getGroupAvatarUrl(),
                                     participants,
                                     unread,
-                                    c.getLastMessageAt());
+                                    c.getLastMessageAt(),
+                                    lastMessage);
                         });
     }
 

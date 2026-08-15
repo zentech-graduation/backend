@@ -6,6 +6,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.app.modules.message.entity.ConversationParticipant;
@@ -33,4 +35,17 @@ public interface ConversationParticipantRepository
             Collection<UUID> conversationIds);
 
     int countByIdConversationIdAndLeftAtIsNull(UUID conversationId);
+
+    /**
+     * Active member user ids for one conversation whose account still exists (not soft-deleted),
+     * for notification fan-out recipient lookup.
+     */
+    @Query(
+            value =
+                    "SELECT p.user_id FROM conversation_participants p "
+                            + "JOIN users u ON u.id = p.user_id "
+                            + "WHERE p.conversation_id = :conversationId AND p.left_at IS NULL "
+                            + "AND u.deleted_at IS NULL",
+            nativeQuery = true)
+    List<UUID> findActiveUserIdsByConversationId(@Param("conversationId") UUID conversationId);
 }

@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Conversations now deliver new and deleted messages to active participants in real time over a WebSocket connection, in addition to the existing REST history endpoint.
+- Sending a message now notifies every other active participant in the conversation.
+- Sending a message (text, image, video, post share, or story share) into a conversation, with a reply reference, idempotent retries, and validation that the payload matches the declared message type.
+- Cursor-paginated message history for a conversation, including a placeholder for a deleted message.
+- Sender-only message deletion that preserves the message as a placeholder instead of removing it.
+- Marking a conversation read, and a total unread message count across all of a user's conversations.
+- The caller's conversation list now includes a preview of each conversation's newest message.
 - Media uploads now accept animated GIF images and QuickTime video, alongside the JPEG, PNG, and WebP images and MP4 and WebM video already supported. Nothing was removed. HEIC and HEIF remain refused: the CDN serves exactly what was stored and nothing transcodes, so an accepted HEIC would upload cleanly and then fail to render for most viewers.
 - `GET /media/constraints` publishes the limits the upload path actually enforces, so a composer can state the accepted formats, the size ceiling, and the video length ceiling instead of hardcoding values that drift. It is served from the same configuration the upload validator reads, so it cannot advertise a rule the server does not apply.
 - `GET /posts/liked` lists the posts the signed-in user has liked, newest like first, so a profile's liked tab has an endpoint behind it instead of a placeholder. It is self-only: the list is always the caller's own, and one user cannot page another's likes. A post that has since been deleted, removed by moderation, unpublished, or hidden by a block or a newly private author is left out, which can return fewer entries than the requested page size while more pages remain.
@@ -23,6 +30,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The application refuses to start when the SMTP transport is selected outside the development profile, so an environment variable cannot silently divert production mail into a local sink.
 - Refresh tokens are now also issued as an `HttpOnly`, `SameSite`-scoped cookie on login, email verification, OAuth2 code exchange, and refresh, so browser clients can restore a session after a page reload without persisting a credential to web storage.
 - New `app.security.refresh-cookie` configuration group controls the cookie's name, path, `Secure` flag, and `SameSite` policy per environment.
+
+### Tests
+- Regression coverage rejecting a WebSocket handshake and a live-feed subscription for a banned, suspended, deactivated, or deleted account.
+- Unit coverage for the WebSocket connection handshake authentication and for the per-conversation subscription authorization guard, including rejection of a non-participant, a departed participant, and an unauthenticated connection.
+- Regression coverage confirming a deleted account is excluded from message notification fan-out.
+- Unit and end-to-end integration coverage for message notification fan-out, including suppression for a departed participant, a blocked recipient, and a recipient with message notifications disabled, and duplicate-event handling.
+- Regression coverage rejecting a spoofed media asset reference, a non-published shared post, and an expired or deleted shared story in a sent message.
+- Unit coverage for message send validation and gating, idempotent retry and conflict handling, history pagination, sender-only delete, and read-state tracking.
+- End-to-end integration coverage for sending each message type, idempotent replay, history pagination, delete, and read-state endpoints.
 
 ### Security
 - Confirming a media upload no longer trusts the client's claim that the file reached storage: any authenticated user could previously register unlimited media assets, under any storage key including one the server never issued, and receive a CDN URL for an object that does not exist. Upload confirmation now verifies the object against storage before the asset is recorded.
@@ -177,6 +193,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Coverage for login by username and by email through the identifier field, including uppercase-username resolution and identical failure responses for an unknown identifier and a wrong password.
 
 ### Fixed
+- A message-notification event that permanently fails or exhausts its retries is now routed to the dead-letter queue by the broker instead of being acknowledged as successfully processed.
+- Sending a message no longer leaves the response's created-at timestamp null.
+- Sharing an expired or deleted story into a message is now rejected instead of creating a reference the recipient can no longer view.
+- Sharing a draft, removed, or already-deleted post into a message is now rejected instead of creating a reference the recipient cannot access.
+- The message-sent and message-deleted events now carry the timestamp of the action, which the notification and real-time delivery consumers require.
 - A story- or comment-notification event that permanently fails or exhausts its retries is now routed to the dead-letter queue by the broker instead of being acknowledged as successfully processed.
 - Comment and story activity (new comments, replies, mentions, comment likes, and story views) now generates notifications in production; these notification types were previously never created outside the development environment because their event consumers were not enabled.
 - Conversation creation, detail, and list responses now correctly report whether a conversation is a group instead of always reporting false.
@@ -186,6 +207,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A reply can no longer be attached to a parent comment that belongs to a different post; such requests are now rejected as not found and no longer corrupt reply or comment counters.
 
 ### Security
+- A banned, suspended, deactivated, or deleted account can no longer open a message WebSocket connection or subscribe to a conversation's live feed using a still-valid token issued before the account's state changed.
+- A WebSocket subscription to a conversation's live message feed is rejected unless the subscriber is an active participant of that conversation.
+- A deleted account no longer receives a message notification.
+- Referencing another user's media asset in an image or video message is now rejected instead of accepting any existing asset ID.
 - The live comment WebSocket connection can now actually be established; it previously rejected every real client because the browser-only query-parameter authentication path was never permitted through the access control rules.
 - The trending hashtags endpoint now rejects a page size above 100 or a negative page number with 400 Bad Request instead of accepting an unbounded page size, and no longer accepts a client-supplied sort field.
 - Two concurrent requests to start a 1-1 conversation with the same user can no longer create duplicate conversations; the request is now serialized and backed by a database uniqueness constraint.
