@@ -99,7 +99,7 @@ class AdminControllerIT {
 
     @Test
     void banUser_metadataAboveMax_returnsBadRequest() {
-        TestUser actor = createUser("meta_bound_moderator", "moderator");
+        TestUser actor = createUser("meta_bound_admin", "admin");
         TestUser target = createUser("meta_bound_target", "user");
 
         Map<String, Object> metadata = new java.util.HashMap<>();
@@ -131,8 +131,55 @@ class AdminControllerIT {
     }
 
     @Test
-    void userStatusOperations_moderator_applyAllFourContracts() {
+    void userStatusOperations_moderator_returnForbiddenAndLeaveNoTrace() {
         TestUser actor = createUser("status_moderator", "moderator");
+        TestUser target = createUser("status_target", "user");
+
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/suspend",
+                                        Map.of("reason", "Repeated harassment"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/unsuspend",
+                                        Map.of("reason", "Suspension completed"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/ban",
+                                        Map.of("reason", "Severe abuse"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/unban",
+                                        Map.of("reason", "Appeal accepted"),
+                                        actor)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM users WHERE id = ?",
+                                String.class,
+                                target.id()))
+                .isEqualTo("active");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM admin_actions WHERE admin_id = ?",
+                                Integer.class,
+                                actor.id()))
+                .isZero();
+    }
+
+    @Test
+    void userStatusOperations_administrator_applyAllFourContracts() {
+        TestUser actor = createUser("status_admin", "admin");
         TestUser target = createUser("status_target", "user");
 
         assertThat(
@@ -173,6 +220,102 @@ class AdminControllerIT {
         assertThat(auditCount("unsuspend_user", target.id())).isEqualTo(1);
         assertThat(auditCount("ban_user", target.id())).isEqualTo(1);
         assertThat(auditCount("unban_user", target.id())).isEqualTo(1);
+    }
+
+    @Test
+    void removePost_moderator_staysReachableOnTheSharedPrefix() {
+        TestUser actor = createUser("shared_prefix_mod", "moderator");
+        TestUser owner = createUser("shared_prefix_owner", "user");
+        UUID postId = insertPost(owner.id());
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/posts/" + postId + "/remove",
+                        Map.of("reason", "Policy violation"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM posts WHERE id = ?",
+                                String.class,
+                                postId))
+                .isEqualTo("removed");
+    }
+
+    @Test
+    void suspendUser_administratorTargetingItself_returnsConflict() {
+        TestUser actor = createUser("self_action_admin", "admin");
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/users/" + actor.id() + "/suspend",
+                        Map.of("reason", "Self action"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_SELF_ACTION_NOT_ALLOWED");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM users WHERE id = ?",
+                                String.class,
+                                actor.id()))
+                .isEqualTo("active");
+    }
+
+    @Test
+    void banUser_administratorTargetingAnotherAdministrator_returnsForbidden() {
+        TestUser actor = createUser("protected_actor", "admin");
+        TestUser target = createUser("protected_admin", "admin");
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/users/" + target.id() + "/ban",
+                        Map.of("reason", "Admin on admin"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_TARGET_PROTECTED");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM users WHERE id = ?",
+                                String.class,
+                                target.id()))
+                .isEqualTo("active");
+    }
+
+    // The path matcher rejects this before the self-action guard is reached, so the body carries
+    // the
+    // generic FORBIDDEN code rather than ADMIN_SELF_ACTION_NOT_ALLOWED.
+    @Test
+    void suspendUser_moderatorTargetingItself_returnsForbidden() {
+        TestUser actor = createUser("self_action_moderator", "moderator");
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/users/" + actor.id() + "/suspend",
+                        Map.of("reason", "Self action"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("FORBIDDEN");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM users WHERE id = ?",
+                                String.class,
+                                actor.id()))
+                .isEqualTo("active");
+    }
+
+    @Test
+    void actionsForUser_oldPathUnderTheAdminOnlyPrefix_isNotReachableByAModerator() {
+        TestUser actor = createUser("legacy_path_moderator", "moderator");
+        TestUser target = createUser("legacy_path_target", "user");
+
+        ResponseEntity<Map> response =
+                get("/api/v1/admin/users/" + target.id() + "/actions", actor);
+
+        assertThat(response.getStatusCode()).isIn(HttpStatus.FORBIDDEN, HttpStatus.NOT_FOUND);
     }
 
     @Test
@@ -282,18 +425,19 @@ class AdminControllerIT {
 
     @Test
     void listAndGetActions_moderator_returnsPersistedAuditEvent() {
+        TestUser author = createUser("query_admin", "admin");
         TestUser actor = createUser("query_moderator", "moderator");
         TestUser target = createUser("query_target", "user");
         ResponseEntity<Map> mutation =
                 patch(
                         "/api/v1/admin/users/" + target.id() + "/ban",
                         Map.of("reason", "Severe abuse"),
-                        actor);
+                        author);
         UUID actionId = UUID.fromString((String) dataOf(mutation).get("id"));
 
         ResponseEntity<Map> list = get("/api/v1/admin/actions?actionType=ban_user", actor);
         ResponseEntity<Map> detail = get("/api/v1/admin/actions/" + actionId, actor);
-        ResponseEntity<Map> forUser = get("/api/v1/admin/users/" + target.id() + "/actions", actor);
+        ResponseEntity<Map> forUser = get("/api/v1/admin/actions/for-user/" + target.id(), actor);
 
         assertThat(list.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(contentOf(list)).hasSize(1);

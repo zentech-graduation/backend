@@ -41,8 +41,9 @@ public class AdminController extends BaseController implements AdminApi {
         this.adminService = adminService;
     }
 
-    /** Bans a user for the authenticated moderator or administrator. */
+    /** Bans a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.BAN_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> banUser(
@@ -50,8 +51,9 @@ public class AdminController extends BaseController implements AdminApi {
         return ok(adminService.banUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
-    /** Unbans a user for the authenticated moderator or administrator. */
+    /** Unbans a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.UNBAN_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> unbanUser(
@@ -59,8 +61,9 @@ public class AdminController extends BaseController implements AdminApi {
         return ok(adminService.unbanUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
-    /** Suspends a user for the authenticated moderator or administrator. */
+    /** Suspends a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
@@ -68,8 +71,9 @@ public class AdminController extends BaseController implements AdminApi {
         return ok(adminService.suspendUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
-    /** Unsuspends a user for the authenticated moderator or administrator. */
+    /** Unsuspends a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.UNSUSPEND_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> unsuspendUser(

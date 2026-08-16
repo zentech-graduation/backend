@@ -119,7 +119,12 @@ public enum ApiErrorCode {
     // Admin
     ADMIN_ACTION_NOT_FOUND("ADMIN_ACTION_NOT_FOUND", "Admin action not found", HttpStatus.NOT_FOUND),
     ADMIN_INVALID_ACTION("ADMIN_INVALID_ACTION", "Action is not valid for this target", HttpStatus.BAD_REQUEST),
-    ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT);
+    ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT),
+    ADMIN_SELF_ACTION_NOT_ALLOWED("ADMIN_SELF_ACTION_NOT_ALLOWED", "You cannot apply a moderation action to your own account", HttpStatus.CONFLICT),
+    // No API caller may change an administrator's account status. Removing a rogue administrator is
+    // deliberately a database-level operation: an in-application lockout of the whole administrator
+    // tier has no recovery path, whereas an escalation requiring database access does.
+    ADMIN_TARGET_PROTECTED("ADMIN_TARGET_PROTECTED", "This account's status cannot be changed through the API", HttpStatus.FORBIDDEN);
 
     // spotless:on
 

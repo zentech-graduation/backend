@@ -46,27 +46,6 @@ class SecurityUtilsTest {
         assertThat(SecurityUtils.isAdmin()).isFalse();
     }
 
-    @Test
-    void isModerator_moderatorRole_returnsTrue() {
-        setUpContext(UUID.randomUUID(), "MODERATOR");
-
-        assertThat(SecurityUtils.isModerator()).isTrue();
-    }
-
-    @Test
-    void isModerator_adminRole_returnsTrue() {
-        setUpContext(UUID.randomUUID(), "ADMIN");
-
-        assertThat(SecurityUtils.isModerator()).isTrue();
-    }
-
-    @Test
-    void isModerator_regularUserRole_returnsFalse() {
-        setUpContext(UUID.randomUUID(), "user");
-
-        assertThat(SecurityUtils.isModerator()).isFalse();
-    }
-
     private void setUpContext(UUID userId, String role) {
         var principal =
                 new com.app.common.security.user.UserPrincipal(
