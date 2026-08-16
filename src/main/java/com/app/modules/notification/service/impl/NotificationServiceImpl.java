@@ -67,7 +67,8 @@ public class NotificationServiceImpl implements NotificationService {
             UUID recipientId,
             NotificationType type,
             String entityType,
-            UUID entityId) {
+            UUID entityId,
+            UUID postId) {
         if (actorId != null && actorId.equals(recipientId)) {
             return;
         }
@@ -88,6 +89,7 @@ public class NotificationServiceImpl implements NotificationService {
                         .type(type)
                         .entityType(entityType)
                         .entityId(entityId)
+                        .postId(postId)
                         .build();
         Notification saved = notificationRepository.save(notification);
 

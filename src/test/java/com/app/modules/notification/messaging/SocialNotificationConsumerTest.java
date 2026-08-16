@@ -166,7 +166,7 @@ class SocialNotificationConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(notificationService, never()).create(any(), any(), any(), any(), any());
+        verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
         verify(channel).basicAck(1L, false);
         verify(deadLetterPublisher, never()).publish(any(), any(), any());
     }
@@ -184,7 +184,7 @@ class SocialNotificationConsumerTest {
         consumer.consume(message, channel);
 
         verify(notificationService)
-                .create(ACTOR_ID, RECIPIENT_ID, NotificationType.FOLLOW, null, null);
+                .create(ACTOR_ID, RECIPIENT_ID, NotificationType.FOLLOW, null, null, null);
         verify(channel).basicAck(1L, false);
     }
 
@@ -201,7 +201,7 @@ class SocialNotificationConsumerTest {
         consumer.consume(message, channel);
 
         verify(notificationService)
-                .create(ACTOR_ID, RECIPIENT_ID, NotificationType.FOLLOW_REQUEST, null, null);
+                .create(ACTOR_ID, RECIPIENT_ID, NotificationType.FOLLOW_REQUEST, null, null, null);
         verify(channel).basicAck(1L, false);
     }
 

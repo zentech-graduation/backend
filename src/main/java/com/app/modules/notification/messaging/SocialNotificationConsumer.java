@@ -114,7 +114,12 @@ public class SocialNotificationConsumer {
                         event.eventType(),
                         () ->
                                 notificationService.create(
-                                        event.actorId(), event.aggregateId(), type, null, null));
+                                        event.actorId(),
+                                        event.aggregateId(),
+                                        type,
+                                        null,
+                                        null,
+                                        null));
                 return;
             } catch (RuntimeException ex) {
                 if (isPermanent(ex)) {
