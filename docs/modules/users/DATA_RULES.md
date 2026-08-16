@@ -78,7 +78,7 @@ Queries using them must filter soft-deleted rows themselves.
 | A soft-deleted or unknown user id resolves to a placeholder, not an error | `UserSummaryServiceImpl.loadSummaries` — `displayName` becomes `"Deleted user"`, `username` becomes `null` |
 | Batch user lookups are a single query regardless of id count | `UserRepository.findSummariesByIdIn` |
 | `user_settings` is created with defaults when a new user registers | `AuthServiceImpl.register` and `CustomOidcUserService` (OAuth path) |
-| `status` transitions are admin-only and follow a fixed state machine | `AdminServiceImpl` — ban, unban, suspend, unsuspend; each writes an `admin_actions` audit row in the same transaction |
+| `status` transitions are admin-only and follow a fixed state machine | `AdminServiceImpl` — ban, unban, suspend, unsuspend; each writes an `admin_actions` audit row in the same transaction. A moderator cannot reach these at all, an actor cannot change its own status, and no actor can change an administrator's status. See `admin/DATA_RULES.md` |
 
 **Username and Email Retention on Soft Delete**:
 

@@ -41,6 +41,9 @@ This table cannot be rebuilt from any other source if lost.
 | Rule | Service / Component |
 |------|---------------------|
 | Only users with `role = 'admin'` or `role = 'moderator'` may create `admin_actions` rows | `SecurityConfig`, `AdminController` |
+| Only users with `role = 'admin'` may change an account's `status` | `SecurityConfig` (the `/api/v1/admin/users/**` matcher), method-level `@PreAuthorize` on `AdminController`, and `AdminAuthorizationService` at the service layer |
+| Nobody may change their own account's `status` through the API | `AdminAuthorizationService.assertMayChangeUserStatus` |
+| Nobody may change an administrator's account `status` through the API, whoever the actor is | `AdminAuthorizationService.assertMayChangeUserStatus` |
 | `ban_user` action must update `users.status = 'banned'` in the same transaction | `AdminServiceImpl.banUser` |
 | `unban_user` action must update `users.status = 'active'` in the same transaction | `AdminServiceImpl.unbanUser` |
 | `suspend_user` action must update `users.status = 'suspended'` in the same transaction | `AdminServiceImpl.suspendUser` |
@@ -58,7 +61,11 @@ This table cannot be rebuilt from any other source if lost.
 
 ### C. Scope Simplifications
 
-- No role-based action restrictions beyond `admin` vs `moderator` — both roles can currently perform all `action_type` values.
+- Role-based action restrictions are coarse: an administrator may perform every `action_type`, and a moderator may perform every one except the four account-status transitions (`ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`).
+  There is no finer-grained per-action permission model.
+- An administrator's account status cannot be changed through the API by anyone, so removing a rogue administrator is a database-level operation.
+  This is deliberate.
+  A lockout of the whole administrator tier has no in-application recovery path, because a banned account cannot authenticate and unbanning requires authentication; an escalation that requires database access does have one.
 - No approval workflow for high-impact actions (e.g., banning a user does not require a second admin to confirm).
 - `metadata` JSONB schema per `action_type` is convention-based, not enforced by the database.
 - No admin audit log UI; audit data is exposed through role-restricted query endpoints in v1.
