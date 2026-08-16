@@ -23,6 +23,7 @@ import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
 import com.app.modules.admin.repository.AdminActionRepository;
+import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminService;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.post.enums.PostStatus;
@@ -32,6 +33,7 @@ import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
 
@@ -50,6 +52,7 @@ public class AdminServiceImpl implements AdminService {
     private final CommentRepository commentRepository;
     private final ReportRepository reportRepository;
     private final AdminActionMapper adminActionMapper;
+    private final AdminAuthorizationService adminAuthorizationService;
 
     public AdminServiceImpl(
             AdminActionRepository adminActionRepository,
@@ -57,13 +60,15 @@ public class AdminServiceImpl implements AdminService {
             PostRepository postRepository,
             CommentRepository commentRepository,
             ReportRepository reportRepository,
-            AdminActionMapper adminActionMapper) {
+            AdminActionMapper adminActionMapper,
+            AdminAuthorizationService adminAuthorizationService) {
         this.adminActionRepository = adminActionRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.reportRepository = reportRepository;
         this.adminActionMapper = adminActionMapper;
+        this.adminAuthorizationService = adminAuthorizationService;
     }
 
     @Override
@@ -156,10 +161,21 @@ public class AdminServiceImpl implements AdminService {
 
     private AdminActionResponse changeUserStatus(
             UUID actorId, UUID userId, AdminActionType actionType, AdminActionRequest request) {
+        // The actor's role is read from the source of truth rather than taken from the caller or
+        // from a token claim: a claim minted before a demotion is stale, and a caller-supplied role
+        // would make the guard advisory for any future non-controller caller.
+        UserRole actorRole =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(actorId)
+                        .map(User::getRole)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.FORBIDDEN));
         User user =
                 userRepository
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
+        // Checked against the entity already loaded above, inside this transaction; a second read
+        // of the target's role would be a race against a concurrent role change.
+        adminAuthorizationService.assertMayChangeUserStatus(actorId, actorRole, user);
         UserStatus targetStatus = targetUserStatus(actionType, user.getStatus());
         user.setStatus(targetStatus);
         userRepository.save(user);
@@ -283,6 +299,9 @@ public class AdminServiceImpl implements AdminService {
         return toPage(actions, pageSize, cursor != null, scope);
     }
 
+    // UserStatus.DEACTIVATED is deliberately absent from this mapping and is unreachable today. It
+    // is reserved for a future self-service account-deactivation flow, which would be a user action
+    // rather than a moderation one, so it would not enter through an admin_action_type at all.
     private UserStatus targetUserStatus(AdminActionType actionType, UserStatus currentStatus) {
         UserStatus target =
                 switch (actionType) {

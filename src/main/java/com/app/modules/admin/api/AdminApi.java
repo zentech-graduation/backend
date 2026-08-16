@@ -44,7 +44,7 @@ public interface AdminApi {
                 description = "User banned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "Moderator or administrator role required",
+                description = "Administrator role required, or the target account is protected",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -58,7 +58,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "Invalid user status transition",
+                description = "Invalid user status transition, or the actor is the target",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -85,7 +85,7 @@ public interface AdminApi {
                 description = "User unbanned"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "Moderator or administrator role required",
+                description = "Administrator role required, or the target account is protected",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -99,7 +99,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "Invalid user status transition",
+                description = "Invalid user status transition, or the actor is the target",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -126,7 +126,7 @@ public interface AdminApi {
                 description = "User suspended"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "Moderator or administrator role required",
+                description = "Administrator role required, or the target account is protected",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -140,7 +140,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "Invalid user status transition",
+                description = "Invalid user status transition, or the actor is the target",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -167,7 +167,7 @@ public interface AdminApi {
                 description = "User unsuspended"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "Moderator or administrator role required",
+                description = "Administrator role required, or the target account is protected",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -181,7 +181,7 @@ public interface AdminApi {
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "Invalid user status transition",
+                description = "Invalid user status transition, or the actor is the target",
                 content =
                         @Content(
                                 mediaType = "application/json",

@@ -37,6 +37,7 @@ import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
 
@@ -61,15 +62,28 @@ class AdminServiceImplTest {
                         postRepository,
                         commentRepository,
                         reportRepository,
-                        adminActionMapper);
+                        adminActionMapper,
+                        new AdminAuthorizationServiceImpl());
+    }
+
+    private void stubActor(UUID actorId, UserRole role) {
+        when(userRepository.findByIdAndDeletedAtIsNull(actorId))
+                .thenReturn(
+                        Optional.of(
+                                User.builder()
+                                        .id(actorId)
+                                        .role(role)
+                                        .status(UserStatus.ACTIVE)
+                                        .build()));
     }
 
     @Test
     void suspendUser_activeUser_updatesAndAudits() {
         UUID actorId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
-        User user = User.builder().id(userId).status(UserStatus.ACTIVE).build();
+        User user = User.builder().id(userId).role(UserRole.USER).status(UserStatus.ACTIVE).build();
         AdminActionResponse expected = response(AdminActionType.SUSPEND_USER);
+        stubActor(actorId, UserRole.ADMIN);
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
         stubAudit(expected);
 
@@ -88,19 +102,85 @@ class AdminServiceImplTest {
 
     @Test
     void unbanUser_activeUser_throwsInvalidTransition() {
+        UUID actorId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
         when(userRepository.findByIdAndDeletedAtIsNull(userId))
-                .thenReturn(Optional.of(User.builder().status(UserStatus.ACTIVE).build()));
+                .thenReturn(
+                        Optional.of(
+                                User.builder()
+                                        .id(userId)
+                                        .role(UserRole.USER)
+                                        .status(UserStatus.ACTIVE)
+                                        .build()));
 
         assertThatThrownBy(
                         () ->
                                 service.unbanUser(
-                                        UUID.randomUUID(),
+                                        actorId,
                                         userId,
                                         new AdminActionRequest("Review", null, null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
+        verify(adminActionRepository, never()).insert(any());
+    }
+
+    @Test
+    void changeUserStatus_actorIsTarget_throwsSelfActionNotAllowed() {
+        UUID actorId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+
+        assertThatThrownBy(
+                        () ->
+                                service.suspendUser(
+                                        actorId,
+                                        actorId,
+                                        new AdminActionRequest("Self action", null, null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
+        verify(userRepository, never()).save(any());
+        verify(adminActionRepository, never()).insert(any());
+    }
+
+    @Test
+    void changeUserStatus_targetIsAdministrator_throwsTargetProtected() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+        stubActor(targetId, UserRole.ADMIN);
+
+        assertThatThrownBy(
+                        () ->
+                                service.banUser(
+                                        actorId,
+                                        targetId,
+                                        new AdminActionRequest("Admin on admin", null, null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_TARGET_PROTECTED);
+        verify(userRepository, never()).save(any());
+        verify(adminActionRepository, never()).insert(any());
+    }
+
+    @Test
+    void changeUserStatus_actorIsModerator_throwsForbidden() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        stubActor(actorId, UserRole.MODERATOR);
+        stubActor(targetId, UserRole.USER);
+
+        assertThatThrownBy(
+                        () ->
+                                service.banUser(
+                                        actorId,
+                                        targetId,
+                                        new AdminActionRequest("Moderator escalation", null, null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.FORBIDDEN);
+        verify(userRepository, never()).save(any());
         verify(adminActionRepository, never()).insert(any());
     }
 

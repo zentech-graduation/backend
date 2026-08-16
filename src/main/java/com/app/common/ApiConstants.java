@@ -153,6 +153,9 @@ public final class ApiConstants {
         public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
-        public static final String ACTIONS_FOR_USER = "/users/{userId}/actions";
+        // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the
+        // ADMIN-only matcher, and audit reads stay available to moderators. Keeping the path split
+        // structural means no matcher-ordering subtlety decides authorization.
+        public static final String ACTIONS_FOR_USER = "/actions/for-user/{userId}";
     }
 }

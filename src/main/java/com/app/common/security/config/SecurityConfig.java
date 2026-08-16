@@ -222,12 +222,22 @@ public class SecurityConfig {
         auth.requestMatchers("/actuator/**").hasRole("ADMIN");
     }
 
-    /** Restricts admin API paths to ADMIN and moderator API paths to MODERATOR or ADMIN. */
+    /**
+     * Restricts account-status administration to ADMIN and the remaining moderation surfaces to
+     * MODERATOR or ADMIN.
+     *
+     * <p>The two admin matchers are order-dependent: the narrower {@code /api/v1/admin/users/**}
+     * rule must be registered first, because the first matching rule wins and the broader rule
+     * below would otherwise grant a moderator the account-status endpoints. A moderator holding
+     * those endpoints can ban an administrator, and a banned administrator cannot authenticate to
+     * reverse it, so the role hierarchy inverts with no in-application recovery path. No endpoint
+     * that a moderator legitimately needs may live under {@code /api/v1/admin/users/}.
+     */
     private void configureRoleBasedEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
+        auth.requestMatchers("/api/v1/admin/users/**").hasRole("ADMIN");
         auth.requestMatchers("/api/v1/admin/**").hasAnyRole("MODERATOR", "ADMIN");
-        auth.requestMatchers("/api/v1/moderator/**").hasAnyRole("MODERATOR", "ADMIN");
         auth.requestMatchers(
                         HttpMethod.GET,
                         ApiConstants.Reports.ROOT,
