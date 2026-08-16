@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The environment template now documents the media-duration limit plus post and message live/consumer toggles, so local and operator configuration exposes every application-owned environment variable.
 
 ### Added
+- Development-only automatic data seeding on startup: with `SEED_DATA=true` under the `dev` profile, the application seeds curated verified accounts, posts with real externally hosted media, comments, likes, and a follow graph a few seconds after startup, and logs a single reviewer account (which follows every seeded user) whose credentials give an immediate full-feed review experience. It is idempotent and never runs in production.
 - Comment, reply, comment-like, and comment-mention notifications now carry the id of the post they concern, alongside the existing comment id, so a client can open the correct post in one response instead of being unable to resolve it. Like-post notifications are unchanged. The field is additive and null for notifications that don't concern a post.
 - A user can now set and clear a banner (cover image), mirroring the existing avatar upload flow: upload through the pre-signed media flow, then save the resulting CDN URL to the profile. Sending an empty string clears it, exactly like the avatar. The banner URL is returned on both the self and public profile responses.
 - Conversations now deliver new and deleted messages to active participants in real time over a WebSocket connection, in addition to the existing REST history endpoint.
