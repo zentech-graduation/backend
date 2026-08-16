@@ -25,6 +25,7 @@ public record PublicUserProfileResponse(
                 String displayName,
         @Schema(description = "Short bio", nullable = true) String bio,
         @Schema(description = "Avatar CDN URL", nullable = true) String avatarUrl,
+        @Schema(description = "Banner (cover image) CDN URL", nullable = true) String bannerUrl,
         @Schema(description = "Personal website URL", nullable = true) String websiteUrl,
         @Schema(description = "Whether the account is private", example = "false")
                 boolean isPrivate,

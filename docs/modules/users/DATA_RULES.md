@@ -10,7 +10,7 @@ The `push_tokens` table has no Java code at all — no entity, no repository, no
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `users` | `id`, `username`, `email`, `display_name`, `bio`, `avatar_url`, `website_url`, `is_private`, `is_verified`, `status`, `role`, `deleted_at` | Profile fields. Shared with auth module (auth owns the row lifecycle; users module manages profile fields). |
+| `users` | `id`, `username`, `email`, `display_name`, `bio`, `avatar_url`, `banner_url`, `website_url`, `is_private`, `is_verified`, `status`, `role`, `deleted_at` | Profile fields. Shared with auth module (auth owns the row lifecycle; users module manages profile fields). |
 | `user_settings` | `user_id` (PK/FK), `notify_*`, `show_activity_status`, `allow_story_replies`, `allow_message_requests` | Per-user notification and privacy preferences. Created alongside the user account. |
 | `push_tokens` | `id`, `user_id`, `token`, `platform`, `last_used_at` | Device push notification tokens. Multiple tokens per user (one per device). **Schema only — no application code reads or writes this table.** |
 
@@ -64,7 +64,7 @@ Queries using them must filter soft-deleted rows themselves.
 | Profile update cannot change `email` | Enforced by construction: `UpdateProfileRequest` has no `email` field and is annotated `@JsonIgnoreProperties(ignoreUnknown = false)`, so sending one is rejected |
 | `username` change checks uniqueness **table-wide, including soft-deleted rows** | `UserServiceImpl.updateMyProfile` — `userRepository.existsByUsername`, throws `USER_USERNAME_ALREADY_EXISTS` (409) |
 | `username` must match `^[a-zA-Z0-9_.]+$` and be 3–30 characters | `UpdateProfileRequest` bean validation |
-| An empty string clears `bio`, `avatarUrl`, `websiteUrl`; `null` leaves the field untouched | `UserServiceImpl.updateMyProfile` |
+| An empty string clears `bio`, `avatarUrl`, `bannerUrl`, `websiteUrl`; `null` leaves the field untouched | `UserServiceImpl.updateMyProfile` |
 | A block in either direction hides the target profile entirely | `UserServiceImpl.getUserProfile` — returns `NOT_FOUND` so a blocked caller cannot confirm the account exists |
 | User search matches `username` case-insensitively via `ILIKE '%q%'` on `idx_users_username_trgm`, never the `%` similarity operator | `UserRepository.searchByUsername` — the similarity operator returned all 200,000 rows and discarded 174,846 on recheck in measurement |
 | User search requires authentication, excludes the viewer, and excludes non-`active` and soft-deleted accounts | `UserSearchServiceImpl.searchUsers`; the `authenticated()` matcher must precede the `/{userId}` `permitAll` matcher in `SecurityConfig`, since that template also matches `/users/search` |
@@ -116,8 +116,8 @@ A future reader must not re-derive the "counters are safe because they're viewer
 
 ### E. Scope Simplifications
 
-- `users.avatar_url` is a plain `TEXT` CDN URL, not a foreign key to `media_assets`.
-  This avoids enforcing deletion ordering but means avatar asset and profile are not referentially linked.
+- `users.avatar_url` and `users.banner_url` are plain `TEXT` CDN URLs, not foreign keys to `media_assets`.
+  This avoids enforcing deletion ordering but means avatar/banner assets and profile are not referentially linked.
   The client supplies the CDN URL directly on profile update; the users module performs no `media_assets` lookup.
 - No account deactivation self-service flow; `status` changes are admin-only actions.
 - Username identity is case-insensitive and storage is case-preserving: `Alice` and `alice` are one account, and whichever casing was submitted is what the profile renders.
@@ -136,7 +136,7 @@ A future reader must not re-derive the "counters are safe because they're viewer
 | Dependency | Direction | Nature |
 |------------|-----------|--------|
 | `auth` | inbound | Auth module owns the `users` row lifecycle (creation, status validation); users module manages profile fields on the same row |
-| `media` | outbound | `avatar_url` is a CDN URL sourced from `media_assets`; relationship is by convention, not FK |
+| `media` | outbound | `avatar_url` and `banner_url` are CDN URLs sourced from `media_assets`; relationship is by convention, not FK |
 | `notification` | inbound | Notification settings on `user_settings` are read by the notification module before dispatching |
 | `social` | outbound | `UserServiceImpl` calls `SocialService` for block gating, follow gating, and viewer relationship state |
 | `admin` | inbound | Moderation actions mutate `users.status` and write an `admin_actions` audit row |

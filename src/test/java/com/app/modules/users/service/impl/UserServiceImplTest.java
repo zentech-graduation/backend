@@ -89,6 +89,7 @@ class UserServiceImplTest {
                         "New Name",
                         "bio text",
                         "https://example.com/avatar.jpg",
+                        "https://example.com/banner.jpg",
                         "https://example.com",
                         false);
 
@@ -98,6 +99,7 @@ class UserServiceImplTest {
         assertThat(user.getDisplayName()).isEqualTo("New Name");
         assertThat(user.getBio()).isEqualTo("bio text");
         assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
+        assertThat(user.getBannerUrl()).isEqualTo("https://example.com/banner.jpg");
         assertThat(user.getWebsiteUrl()).isEqualTo("https://example.com");
         assertThat(user.isPrivate()).isFalse();
         verify(userRepository).save(user);
@@ -112,7 +114,8 @@ class UserServiceImplTest {
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
         when(userMapper.toProfileResponse(user)).thenReturn(profileResponse(id));
 
-        service.updateMyProfile(id, new UpdateProfileRequest(null, null, null, null, null, null));
+        service.updateMyProfile(
+                id, new UpdateProfileRequest(null, null, null, null, null, null, null));
 
         assertThat(user.getUsername()).isEqualTo("alice");
         assertThat(user.getDisplayName()).isEqualTo("Original");
@@ -132,7 +135,7 @@ class UserServiceImplTest {
                                 service.updateMyProfile(
                                         id,
                                         new UpdateProfileRequest(
-                                                "taken", null, null, null, null, null)))
+                                                "taken", null, null, null, null, null, null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.USER_USERNAME_ALREADY_EXISTS);
@@ -148,7 +151,7 @@ class UserServiceImplTest {
         when(userMapper.toProfileResponse(user)).thenReturn(profileResponse(id));
 
         service.updateMyProfile(
-                id, new UpdateProfileRequest("alice", null, null, null, null, null));
+                id, new UpdateProfileRequest("alice", null, null, null, null, null, null));
 
         verify(userRepository, never()).existsByUsername(any());
         verify(userRepository).save(user);
@@ -162,9 +165,54 @@ class UserServiceImplTest {
         when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
         when(userMapper.toProfileResponse(user)).thenReturn(profileResponse(id));
 
-        service.updateMyProfile(id, new UpdateProfileRequest(null, null, "", null, null, null));
+        service.updateMyProfile(
+                id, new UpdateProfileRequest(null, null, "", null, null, null, null));
 
         assertThat(user.getBio()).isNull();
+    }
+
+    @Test
+    void updateMyProfile_bannerUrlProvided_appliedToEntityAndSaved() {
+        UUID id = UUID.randomUUID();
+        User user = activeUser(id, "alice");
+        when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(userMapper.toProfileResponse(user)).thenReturn(profileResponse(id));
+
+        service.updateMyProfile(
+                id,
+                new UpdateProfileRequest(
+                        null, null, null, null, "https://example.com/banner.jpg", null, null));
+
+        assertThat(user.getBannerUrl()).isEqualTo("https://example.com/banner.jpg");
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateMyProfile_emptyStringBannerUrl_clearsFieldToNull() {
+        UUID id = UUID.randomUUID();
+        User user = activeUser(id, "alice");
+        user.setBannerUrl("https://example.com/existing-banner.jpg");
+        when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(userMapper.toProfileResponse(user)).thenReturn(profileResponse(id));
+
+        service.updateMyProfile(
+                id, new UpdateProfileRequest(null, null, null, null, "", null, null));
+
+        assertThat(user.getBannerUrl()).isNull();
+    }
+
+    @Test
+    void updateMyProfile_nullBannerUrl_entityUnchanged() {
+        UUID id = UUID.randomUUID();
+        User user = activeUser(id, "alice");
+        user.setBannerUrl("https://example.com/existing-banner.jpg");
+        when(userRepository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(user));
+        when(userMapper.toProfileResponse(user)).thenReturn(profileResponse(id));
+
+        service.updateMyProfile(
+                id, new UpdateProfileRequest(null, null, null, null, null, null, null));
+
+        assertThat(user.getBannerUrl()).isEqualTo("https://example.com/existing-banner.jpg");
     }
 
     // ── getUserProfile ────────────────────────────────────────────────────────
@@ -403,6 +451,7 @@ class UserServiceImplTest {
                 null,
                 null,
                 null,
+                null,
                 false,
                 false,
                 0,
@@ -417,6 +466,7 @@ class UserServiceImplTest {
                 id,
                 "bob",
                 "Bob",
+                null,
                 null,
                 null,
                 null,

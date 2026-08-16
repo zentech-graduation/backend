@@ -65,6 +65,7 @@ CREATE TABLE users (
     display_name        VARCHAR(100),
     bio                 TEXT,
     avatar_url          TEXT,
+    banner_url          TEXT,
     website_url         TEXT,
     role                user_role       NOT NULL DEFAULT 'user',
     status              user_status     NOT NULL DEFAULT 'active',

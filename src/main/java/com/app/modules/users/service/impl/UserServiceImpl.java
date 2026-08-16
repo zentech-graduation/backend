@@ -96,6 +96,11 @@ public class UserServiceImpl implements UserService {
                     StringUtils.hasText(request.avatarUrl()) ? request.avatarUrl() : null);
         }
 
+        if (request.bannerUrl() != null) {
+            user.setBannerUrl(
+                    StringUtils.hasText(request.bannerUrl()) ? request.bannerUrl() : null);
+        }
+
         if (request.websiteUrl() != null) {
             user.setWebsiteUrl(
                     StringUtils.hasText(request.websiteUrl()) ? request.websiteUrl() : null);

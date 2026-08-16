@@ -177,6 +177,45 @@ class UserControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void updateMyProfile_bannerUrl_setsAndReturnsOnSelfAndPublicProfile() {
+        String email = uniqueEmail("banner_set");
+        String access =
+                registerVerifyAndLogin("user_banner_set", email, TEST_PASSWORD).get("accessToken");
+        String bannerUrl = "https://cdn.example.com/banners/banner_set.jpg";
+
+        ResponseEntity<Map> patchResponse =
+                patchWithAuth("/api/v1/users/me", Map.of("bannerUrl", bannerUrl), access);
+
+        assertThat(patchResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> patchData = (Map<?, ?>) patchResponse.getBody().get("data");
+        assertThat(patchData.get("bannerUrl")).isEqualTo(bannerUrl);
+
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        ResponseEntity<Map> publicResponse = getNoAuth("/api/v1/users/" + userId);
+        Map<?, ?> publicData = (Map<?, ?>) publicResponse.getBody().get("data");
+        assertThat(publicData.get("bannerUrl")).isEqualTo(bannerUrl);
+    }
+
+    @Test
+    void updateMyProfile_emptyStringBannerUrl_clearsBanner() {
+        String email = uniqueEmail("banner_clear");
+        String access =
+                registerVerifyAndLogin("user_banner_clear", email, TEST_PASSWORD)
+                        .get("accessToken");
+        patchWithAuth(
+                "/api/v1/users/me",
+                Map.of("bannerUrl", "https://cdn.example.com/banners/banner_clear.jpg"),
+                access);
+
+        ResponseEntity<Map> response =
+                patchWithAuth("/api/v1/users/me", Map.of("bannerUrl", ""), access);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("bannerUrl")).isNull();
+    }
+
     // ── GET /api/v1/users/{userId} ────────────────────────────────────────────
 
     @Test

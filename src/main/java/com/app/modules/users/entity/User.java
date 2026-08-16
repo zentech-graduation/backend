@@ -61,6 +61,9 @@ public class User {
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
 
+    @Column(name = "banner_url", columnDefinition = "TEXT")
+    private String bannerUrl;
+
     @Column(name = "website_url", columnDefinition = "TEXT")
     private String websiteUrl;
 
