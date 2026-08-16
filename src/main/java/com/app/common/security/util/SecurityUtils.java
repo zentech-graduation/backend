@@ -41,9 +41,4 @@ public final class SecurityUtils {
     public static boolean isAdmin() {
         return "ADMIN".equals(getCurrentUserRole());
     }
-
-    public static boolean isModerator() {
-        String role = getCurrentUserRole();
-        return "MODERATOR".equals(role) || "ADMIN".equals(role);
-    }
 }
