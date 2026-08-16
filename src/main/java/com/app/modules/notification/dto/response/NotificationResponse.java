@@ -30,6 +30,14 @@ public record NotificationResponse(
                 String entityType,
         @Schema(description = "Polymorphic entity ID; null for follow events", nullable = true)
                 UUID entityId,
+        @Schema(
+                        description =
+                                "Id of the post this notification concerns, so a client can open"
+                                        + " it directly; null for non-content notifications"
+                                        + " (e.g. follow events) and for content notifications"
+                                        + " created before this field existed",
+                        nullable = true)
+                UUID postId,
         @Schema(description = "Whether this notification has been read", requiredMode = REQUIRED)
                 boolean isRead,
         @Schema(

@@ -162,7 +162,7 @@ class NotificationPushLatencyIT {
         CompletableFuture<byte[]> warmUp = subscribe(session, recipient.getId());
         Instant warmUpStart = Instant.now();
         notificationService.create(
-                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null);
+                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null, null);
         warmUp.get(15, TimeUnit.SECONDS);
         log.info(
                 "Warm-up latency (includes leftover initial-delay): {} ms",
@@ -175,7 +175,8 @@ class NotificationPushLatencyIT {
                 recipient.getId(),
                 NotificationType.LIKE_POST,
                 "post",
-                UUID.randomUUID());
+                UUID.randomUUID(),
+                null);
         measured.get(10, TimeUnit.SECONDS);
         Duration observed = Duration.between(start, Instant.now());
 

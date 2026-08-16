@@ -77,7 +77,7 @@ class StoryNotificationConsumerTest {
         consumer.consume(message, channel);
 
         verify(notificationService)
-                .create(VIEWER_ID, OWNER_ID, NotificationType.STORY_VIEW, "story", STORY_ID);
+                .create(VIEWER_ID, OWNER_ID, NotificationType.STORY_VIEW, "story", STORY_ID, null);
         verify(channel).basicAck(1L, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
@@ -90,7 +90,7 @@ class StoryNotificationConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(notificationService, never()).create(any(), any(), any(), any(), any());
+        verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
         verify(channel).basicAck(1L, false);
     }
 
@@ -113,7 +113,7 @@ class StoryNotificationConsumerTest {
         // dead-letter-exchange/routing-key topology instead of redelivering it.
         verify(channel).basicNack(1L, false, false);
         verify(channel, never()).basicAck(1L, false);
-        verify(notificationService, never()).create(any(), any(), any(), any(), any());
+        verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
     }
 
     @Test

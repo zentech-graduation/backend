@@ -8,7 +8,7 @@
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `notifications` | `id`, `recipient_id`, `actor_id`, `type`, `entity_type`, `entity_id`, `is_read`, `read_at`, `created_at` | One row per notification event. `actor_id` is SET NULL if the acting user deletes their account. Polymorphic target via `entity_type` + `entity_id`. |
+| `notifications` | `id`, `recipient_id`, `actor_id`, `type`, `entity_type`, `entity_id`, `post_id`, `is_read`, `read_at`, `created_at` | One row per notification event. `actor_id` is SET NULL if the acting user deletes their account. Polymorphic target via `entity_type` + `entity_id`. `post_id` is an additive, insert-only enrichment: for `COMMENT_POST`, `REPLY_COMMENT`, `LIKE_COMMENT`, and `MENTION_COMMENT` it carries the post the comment belongs to (`entity_id` stays the comment id), so a client can open the post without a second lookup. Null for non-content types and for rows created before this column existed. No FK, consistent with `entity_id`. |
 
 This table cannot be rebuilt from any other source if lost.
 

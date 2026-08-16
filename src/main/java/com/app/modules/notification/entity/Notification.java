@@ -50,6 +50,9 @@ public class Notification {
     @Column(name = "entity_id", nullable = true)
     private UUID entityId;
 
+    @Column(name = "post_id", nullable = true, updatable = false)
+    private UUID postId;
+
     @Setter
     @Column(name = "is_read", nullable = false)
     private boolean isRead;

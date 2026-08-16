@@ -88,11 +88,23 @@ class MessageNotificationConsumerTest {
         consumer.consume(message, channel);
 
         verify(notificationService)
-                .create(SENDER_ID, RECIPIENT1_ID, NotificationType.MESSAGE, "message", MESSAGE_ID);
+                .create(
+                        SENDER_ID,
+                        RECIPIENT1_ID,
+                        NotificationType.MESSAGE,
+                        "message",
+                        MESSAGE_ID,
+                        null);
         verify(notificationService)
-                .create(SENDER_ID, RECIPIENT2_ID, NotificationType.MESSAGE, "message", MESSAGE_ID);
+                .create(
+                        SENDER_ID,
+                        RECIPIENT2_ID,
+                        NotificationType.MESSAGE,
+                        "message",
+                        MESSAGE_ID,
+                        null);
         verify(notificationService, never())
-                .create(eq(SENDER_ID), eq(SENDER_ID), any(), any(), any());
+                .create(eq(SENDER_ID), eq(SENDER_ID), any(), any(), any(), any());
         verify(channel).basicAck(1L, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
@@ -105,7 +117,7 @@ class MessageNotificationConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(notificationService, never()).create(any(), any(), any(), any(), any());
+        verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
         verify(channel).basicAck(1L, false);
     }
 
@@ -128,7 +140,7 @@ class MessageNotificationConsumerTest {
         // dead-letter-exchange/routing-key topology instead of redelivering it.
         verify(channel).basicNack(1L, false, false);
         verify(channel, never()).basicAck(1L, false);
-        verify(notificationService, never()).create(any(), any(), any(), any(), any());
+        verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
     }
 
     @Test

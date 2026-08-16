@@ -113,9 +113,11 @@ class CommentNotificationConsumerIT {
     void handle_commentCreatedTopLevel_createsCommentPostNotification() throws Exception {
         Channel channel = mock(Channel.class);
         UUID commentId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
         Map<String, Object> data = new HashMap<>();
         data.put("commentId", commentId.toString());
         data.put("postOwnerId", postOwner.getId().toString());
+        data.put("postId", postId.toString());
         data.put("depth", 0);
 
         consumer.consume(
@@ -126,6 +128,7 @@ class CommentNotificationConsumerIT {
         assertThat(rows.get(0).getType()).isEqualTo(NotificationType.COMMENT_POST);
         assertThat(rows.get(0).getRecipientId()).isEqualTo(postOwner.getId());
         assertThat(rows.get(0).getActorId()).isEqualTo(actor.getId());
+        assertThat(rows.get(0).getPostId()).isEqualTo(postId);
     }
 
     @Test
@@ -161,10 +164,12 @@ class CommentNotificationConsumerIT {
     void handle_commentCreatedReply_createsReplyCommentNotification() throws Exception {
         Channel channel = mock(Channel.class);
         User parentOwner = userRepository.save(activeUser("parent_" + suffix()));
+        UUID postId = UUID.randomUUID();
         Map<String, Object> data = new HashMap<>();
         data.put("commentId", UUID.randomUUID().toString());
         data.put("postOwnerId", postOwner.getId().toString());
         data.put("parentOwnerId", parentOwner.getId().toString());
+        data.put("postId", postId.toString());
         data.put("depth", 1);
 
         consumer.consume(
@@ -174,15 +179,18 @@ class CommentNotificationConsumerIT {
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getType()).isEqualTo(NotificationType.REPLY_COMMENT);
         assertThat(rows.get(0).getRecipientId()).isEqualTo(parentOwner.getId());
+        assertThat(rows.get(0).getPostId()).isEqualTo(postId);
     }
 
     @Test
     void handle_commentLiked_createsLikeCommentNotification() throws Exception {
         Channel channel = mock(Channel.class);
         User commentOwner = userRepository.save(activeUser("liked_" + suffix()));
+        UUID postId = UUID.randomUUID();
         Map<String, Object> data = new HashMap<>();
         data.put("commentId", UUID.randomUUID().toString());
         data.put("commentOwnerId", commentOwner.getId().toString());
+        data.put("postId", postId.toString());
 
         consumer.consume(
                 message(UUID.randomUUID(), CommentEventTypes.COMMENT_LIKED_V1, data), channel);
@@ -191,6 +199,7 @@ class CommentNotificationConsumerIT {
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getType()).isEqualTo(NotificationType.LIKE_COMMENT);
         assertThat(rows.get(0).getRecipientId()).isEqualTo(commentOwner.getId());
+        assertThat(rows.get(0).getPostId()).isEqualTo(postId);
     }
 
     @Test
@@ -210,9 +219,11 @@ class CommentNotificationConsumerIT {
     void handle_commentCreatedWithMention_createsMentionCommentNotification() throws Exception {
         Channel channel = mock(Channel.class);
         User mentioned = userRepository.save(activeUser("mention_" + suffix()));
+        UUID postId = UUID.randomUUID();
         Map<String, Object> data = new HashMap<>();
         data.put("commentId", UUID.randomUUID().toString());
         data.put("postOwnerId", postOwner.getId().toString());
+        data.put("postId", postId.toString());
         data.put("depth", 0);
         data.put("mentionedUserIds", List.of(mentioned.getId().toString()));
 
@@ -224,6 +235,7 @@ class CommentNotificationConsumerIT {
                         n -> {
                             assertThat(n.getType()).isEqualTo(NotificationType.MENTION_COMMENT);
                             assertThat(n.getRecipientId()).isEqualTo(mentioned.getId());
+                            assertThat(n.getPostId()).isEqualTo(postId);
                         });
     }
 

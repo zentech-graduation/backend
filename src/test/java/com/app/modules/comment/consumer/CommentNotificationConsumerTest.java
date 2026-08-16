@@ -43,6 +43,7 @@ class CommentNotificationConsumerTest {
     private static final UUID POST_OWNER_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000003");
     private static final UUID COMMENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    private static final UUID POST_ID = UUID.fromString("00000000-0000-0000-0000-000000000005");
 
     @Mock private ProcessedMessageService processedMessageService;
     @Mock private NotificationService notificationService;
@@ -83,7 +84,8 @@ class CommentNotificationConsumerTest {
                         POST_OWNER_ID,
                         NotificationType.COMMENT_POST,
                         "comment",
-                        COMMENT_ID);
+                        COMMENT_ID,
+                        POST_ID);
         verify(channel).basicAck(1L, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
@@ -96,7 +98,7 @@ class CommentNotificationConsumerTest {
 
         consumer.consume(message, channel);
 
-        verify(notificationService, never()).create(any(), any(), any(), any(), any());
+        verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
         verify(channel).basicAck(1L, false);
     }
 
@@ -119,7 +121,7 @@ class CommentNotificationConsumerTest {
         // dead-letter-exchange/routing-key topology instead of redelivering it.
         verify(channel).basicNack(1L, false, false);
         verify(channel, never()).basicAck(1L, false);
-        verify(notificationService, never()).create(any(), any(), any(), any(), any());
+        verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -154,6 +156,8 @@ class CommentNotificationConsumerTest {
                         COMMENT_ID.toString(),
                         "postOwnerId",
                         POST_OWNER_ID.toString(),
+                        "postId",
+                        POST_ID.toString(),
                         "depth",
                         0));
     }

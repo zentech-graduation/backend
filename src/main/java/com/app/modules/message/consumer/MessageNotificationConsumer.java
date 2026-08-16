@@ -127,7 +127,7 @@ public class MessageNotificationConsumer {
                 continue;
             }
             notificationService.create(
-                    senderId, recipientId, NotificationType.MESSAGE, ENTITY_TYPE, messageId);
+                    senderId, recipientId, NotificationType.MESSAGE, ENTITY_TYPE, messageId, null);
         }
     }
 

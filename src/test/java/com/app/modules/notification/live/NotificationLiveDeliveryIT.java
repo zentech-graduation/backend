@@ -171,7 +171,7 @@ class NotificationLiveDeliveryIT {
                 connectAndSubscribe(bystander.getId(), bystanderToken);
 
         notificationService.create(
-                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null);
+                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null, null);
 
         byte[] payload = recipientListener.received().get(15, TimeUnit.SECONDS);
         String body = new String(payload);
@@ -190,7 +190,12 @@ class NotificationLiveDeliveryIT {
         ConnectedListener listener = connectAndSubscribe(user.getId(), token);
 
         notificationService.create(
-                user.getId(), user.getId(), NotificationType.LIKE_POST, "post", UUID.randomUUID());
+                user.getId(),
+                user.getId(),
+                NotificationType.LIKE_POST,
+                "post",
+                UUID.randomUUID(),
+                null);
 
         assertThatThrownBy(() -> listener.received().get(3, TimeUnit.SECONDS))
                 .as("a self-notification is suppressed before the outbox is ever touched")
