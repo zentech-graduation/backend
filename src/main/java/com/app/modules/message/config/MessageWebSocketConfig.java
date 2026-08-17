@@ -3,8 +3,6 @@ package com.app.modules.message.config;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
-import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
@@ -24,9 +22,14 @@ import com.app.modules.message.live.MessageWebSocketAuthInterceptor;
  *
  * <p>The channel interceptor authorizes each SUBSCRIBE against active conversation membership.
  * Active only when {@code app.message.live.enabled} is true.
+ *
+ * <p>Contributes only this module's endpoint and its SUBSCRIBE authorization. The broker itself,
+ * the destination prefixes, the send guard, and the session-tracking decorator all belong to {@link
+ * com.app.common.config.websocket.WebSocketBrokerConfig}, which is guaranteed to be active whenever
+ * this configuration is. Declaring {@code @EnableWebSocketMessageBroker} and a second {@code
+ * configureMessageBroker} here duplicated broker-wide setup that only one class may own.
  */
 @Configuration
-@EnableWebSocketMessageBroker
 @ConditionalOnProperty(prefix = "app.message.live", name = "enabled", havingValue = "true")
 public class MessageWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
@@ -49,12 +52,6 @@ public class MessageWebSocketConfig implements WebSocketMessageBrokerConfigurer 
                 .addInterceptors(handshakeInterceptor)
                 .setAllowedOriginPatterns(allowedOrigins())
                 .withSockJS();
-    }
-
-    @Override
-    public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/topic");
-        registry.setApplicationDestinationPrefixes("/app");
     }
 
     @Override
