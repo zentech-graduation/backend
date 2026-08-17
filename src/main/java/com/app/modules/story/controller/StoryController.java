@@ -24,9 +24,11 @@ import com.app.common.security.util.SecurityUtils;
 import com.app.modules.story.api.StoryApi;
 import com.app.modules.story.dto.request.CreateStoryRequest;
 import com.app.modules.story.dto.response.StoryFeedItemResponse;
+import com.app.modules.story.dto.response.StoryLikeActionResponse;
 import com.app.modules.story.dto.response.StoryResponse;
 import com.app.modules.story.dto.response.StoryViewActionResponse;
 import com.app.modules.story.dto.response.StoryViewerResponse;
+import com.app.modules.story.service.StoryLikeService;
 import com.app.modules.story.service.StoryService;
 import com.app.modules.story.service.StoryViewService;
 
@@ -38,10 +40,15 @@ public class StoryController extends BaseController implements StoryApi {
 
     private final StoryService storyService;
     private final StoryViewService storyViewService;
+    private final StoryLikeService storyLikeService;
 
-    public StoryController(StoryService storyService, StoryViewService storyViewService) {
+    public StoryController(
+            StoryService storyService,
+            StoryViewService storyViewService,
+            StoryLikeService storyLikeService) {
         this.storyService = storyService;
         this.storyViewService = storyViewService;
+        this.storyLikeService = storyLikeService;
     }
 
     /** Creates a story for the authenticated user; returns 201 with the story. */
@@ -117,6 +124,29 @@ public class StoryController extends BaseController implements StoryApi {
         CursorPageResponse<StoryViewerResponse> body =
                 storyViewService.listViewers(
                         SecurityUtils.getCurrentUserId(), storyId, cursor, limit);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /** Likes an active story visible to the authenticated user; returns 201 with the new state. */
+    @Override
+    @PostMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.LIKES)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<StoryLikeActionResponse>> likeStory(
+            @PathVariable("storyId") UUID storyId) {
+        StoryLikeActionResponse body =
+                storyLikeService.likeStory(SecurityUtils.getCurrentUserId(), storyId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(ApiSuccessCode.CREATED, body));
+    }
+
+    /** Removes the authenticated user's like from a story. */
+    @Override
+    @DeleteMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.LIKES)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<StoryLikeActionResponse>> unlikeStory(
+            @PathVariable("storyId") UUID storyId) {
+        StoryLikeActionResponse body =
+                storyLikeService.unlikeStory(SecurityUtils.getCurrentUserId(), storyId);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 }

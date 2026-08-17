@@ -21,8 +21,9 @@ import com.app.modules.users.entity.User;
  * owner {@code users} row.
  *
  * <p>Shared by the lifecycle and feed paths so media and author hydration stay in one place. The
- * viewer id decides the context fields: owners get {@code viewCount} and no {@code seen} flag,
- * other viewers get {@code seen} and no {@code viewCount}.
+ * viewer id decides the context fields: owners get {@code viewCount}/{@code likeCount} and no
+ * {@code seen} flag, other viewers get {@code seen} and no {@code viewCount}/{@code likeCount}.
+ * {@code liked} is populated for every viewer, owner included, since self-like is permitted.
  */
 @Component
 public class StoryResponseAssembler {
@@ -41,11 +42,21 @@ public class StoryResponseAssembler {
     }
 
     public StoryResponse assemble(UUID viewerId, Story story, Set<UUID> seenStoryIds) {
-        return assemble(viewerId, List.of(story), seenStoryIds).get(0);
+        return assemble(viewerId, List.of(story), seenStoryIds, Set.of()).get(0);
+    }
+
+    public StoryResponse assemble(
+            UUID viewerId, Story story, Set<UUID> seenStoryIds, Set<UUID> likedStoryIds) {
+        return assemble(viewerId, List.of(story), seenStoryIds, likedStoryIds).get(0);
     }
 
     public List<StoryResponse> assemble(
             UUID viewerId, List<Story> stories, Set<UUID> seenStoryIds) {
+        return assemble(viewerId, stories, seenStoryIds, Set.of());
+    }
+
+    public List<StoryResponse> assemble(
+            UUID viewerId, List<Story> stories, Set<UUID> seenStoryIds, Set<UUID> likedStoryIds) {
         // Single batched asset lookup avoids one media_assets query per story on list pages.
         Set<UUID> assetIds =
                 stories.stream().map(Story::getMediaAssetId).collect(Collectors.toSet());
@@ -70,7 +81,9 @@ public class StoryResponseAssembler {
                                     asset == null ? null : storyMapper.toMediaResponse(asset),
                                     owners.get(story.getUserId()),
                                     isOwner ? story.getViewCount() : null,
-                                    isOwner ? null : seenStoryIds.contains(story.getId()));
+                                    isOwner ? null : seenStoryIds.contains(story.getId()),
+                                    isOwner ? story.getLikeCount() : null,
+                                    likedStoryIds.contains(story.getId()));
                         })
                 .toList();
     }

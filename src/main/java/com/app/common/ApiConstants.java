@@ -70,6 +70,7 @@ public final class ApiConstants {
         public static final String USER_STORIES = "/user/{userId}";
         public static final String FEED = "/feed";
         public static final String VIEWS = "/{storyId}/views";
+        public static final String LIKES = "/{storyId}/likes";
     }
 
     public static final class Social {

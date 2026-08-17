@@ -66,6 +66,10 @@ public class Story {
     @Column(name = "view_count", insertable = false, updatable = false)
     private int viewCount;
 
+    /** Maintained exclusively by Postgres trigger {@code trg_story_like_count} (V49). */
+    @Column(name = "like_count", insertable = false, updatable = false)
+    private int likeCount;
+
     /** Set by the service at creation from the {@code story_duration_hours} system setting. */
     @Column(name = "expires_at", nullable = false, updatable = false)
     private OffsetDateTime expiresAt;

@@ -93,6 +93,7 @@ public enum ApiErrorCode {
     // Story
     STORY_NOT_FOUND("STORY_NOT_FOUND", "Story not found", HttpStatus.NOT_FOUND),
     STORY_FORBIDDEN("STORY_FORBIDDEN", "You do not have access to this story", HttpStatus.FORBIDDEN),
+    STORY_ALREADY_LIKED("STORY_ALREADY_LIKED", "Story already liked", HttpStatus.CONFLICT),
 
     // Message
     CONVERSATION_NOT_FOUND("CONVERSATION_NOT_FOUND", "Conversation not found", HttpStatus.NOT_FOUND),

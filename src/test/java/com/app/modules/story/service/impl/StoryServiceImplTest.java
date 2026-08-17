@@ -33,6 +33,7 @@ import com.app.modules.story.dto.response.StoryFeedItemResponse;
 import com.app.modules.story.dto.response.StoryResponse;
 import com.app.modules.story.entity.Story;
 import com.app.modules.story.enums.StoryType;
+import com.app.modules.story.repository.StoryLikeRepository;
 import com.app.modules.story.repository.StoryMediaAssetRepository;
 import com.app.modules.story.repository.StoryRepository;
 import com.app.modules.story.repository.StoryUserRepository;
@@ -45,6 +46,7 @@ class StoryServiceImplTest {
 
     @Mock private StoryRepository storyRepository;
     @Mock private StoryViewRepository storyViewRepository;
+    @Mock private StoryLikeRepository storyLikeRepository;
     @Mock private StoryUserRepository storyUserRepository;
     @Mock private StoryMediaAssetRepository storyMediaAssetRepository;
     @Mock private SocialService socialService;
@@ -65,6 +67,7 @@ class StoryServiceImplTest {
                 new StoryServiceImpl(
                         storyRepository,
                         storyViewRepository,
+                        storyLikeRepository,
                         storyUserRepository,
                         storyMediaAssetRepository,
                         socialService,
@@ -100,6 +103,8 @@ class StoryServiceImplTest {
                 null,
                 null,
                 null,
+                null,
+                false,
                 story.getCreatedAt(),
                 story.getExpiresAt());
     }
@@ -191,13 +196,13 @@ class StoryServiceImplTest {
                 .thenReturn(Optional.of(story));
         when(storyVisibilityService.isVisibleTo(viewerId, story)).thenReturn(true);
         when(storyViewRepository.existsById(any())).thenReturn(true);
-        when(storyResponseAssembler.assemble(viewerId, story, Set.of(storyId)))
+        when(storyResponseAssembler.assemble(viewerId, story, Set.of(storyId), Set.of()))
                 .thenReturn(response(story));
 
         StoryResponse result = service.getStoryById(viewerId, storyId);
 
         assertThat(result.id()).isEqualTo(storyId);
-        verify(storyResponseAssembler).assemble(viewerId, story, Set.of(storyId));
+        verify(storyResponseAssembler).assemble(viewerId, story, Set.of(storyId), Set.of());
     }
 
     @Test
@@ -266,7 +271,7 @@ class StoryServiceImplTest {
                                 User.builder().id(authorA).username("a").build(),
                                 User.builder().id(authorB).username("b").build(),
                                 User.builder().id(viewerId).username("me").build()));
-        when(storyResponseAssembler.assemble(eq(viewerId), anyList(), any()))
+        when(storyResponseAssembler.assemble(eq(viewerId), anyList(), any(), any()))
                 .thenAnswer(
                         invocation ->
                                 invocation.<List<Story>>getArgument(1).stream()
