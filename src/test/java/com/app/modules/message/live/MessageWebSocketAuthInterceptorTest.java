@@ -25,6 +25,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 
 import com.app.common.security.user.UserPrincipal;
+import com.app.common.security.websocket.JwtHandshakeInterceptor;
 import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.message.repository.MessageUserRepository;
 import com.app.modules.users.entity.User;
@@ -170,7 +171,7 @@ class MessageWebSocketAuthInterceptorTest {
     private static Map<String, Object> sessionAttributesFor(UUID userId) {
         Map<String, Object> attributes = new HashMap<>();
         attributes.put(
-                MessageWebSocketJwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE,
+                JwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE,
                 new UserPrincipal(userId, null, "user", "ACTIVE"));
         return attributes;
     }

@@ -9,27 +9,33 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 import com.app.common.security.config.CorsProperties;
+import com.app.common.security.websocket.JwtHandshakeInterceptor;
 import com.app.modules.message.live.MessageWebSocketAuthInterceptor;
-import com.app.modules.message.live.MessageWebSocketJwtHandshakeInterceptor;
 
 /**
  * STOMP/SockJS WebSocket configuration for real-time message delivery.
  *
- * <p>The handshake interceptor authenticates the connection via a JWT query parameter; the channel
- * interceptor authorizes each SUBSCRIBE against active conversation membership. Active only when
- * {@code app.message.live.enabled} is true.
+ * <p>Authentication uses the application-wide {@link JwtHandshakeInterceptor} rather than a
+ * module-local copy, so this endpoint cannot drift from the REST path on what counts as an
+ * authenticated caller. The shared interceptor also records the raw token in the handshake
+ * attributes, which is what enrols the session for the periodic revocation sweep. A module-local
+ * interceptor previously stored only the resolved principal, so a direct-message socket was never
+ * enrolled and survived logout, ban, and suspension until its access token expired.
+ *
+ * <p>The channel interceptor authorizes each SUBSCRIBE against active conversation membership.
+ * Active only when {@code app.message.live.enabled} is true.
  */
 @Configuration
 @EnableWebSocketMessageBroker
 @ConditionalOnProperty(prefix = "app.message.live", name = "enabled", havingValue = "true")
 public class MessageWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    private final MessageWebSocketJwtHandshakeInterceptor handshakeInterceptor;
+    private final JwtHandshakeInterceptor handshakeInterceptor;
     private final MessageWebSocketAuthInterceptor authInterceptor;
     private final CorsProperties corsProperties;
 
     public MessageWebSocketConfig(
-            MessageWebSocketJwtHandshakeInterceptor handshakeInterceptor,
+            JwtHandshakeInterceptor handshakeInterceptor,
             MessageWebSocketAuthInterceptor authInterceptor,
             CorsProperties corsProperties) {
         this.handshakeInterceptor = handshakeInterceptor;

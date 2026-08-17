@@ -49,6 +49,10 @@ import com.app.modules.users.repository.UserRepository;
             "spring.docker.compose.enabled=false",
             "app.comment.live.enabled=true",
             "app.comment.consumer.enabled=false",
+            // Enabled so the direct-message endpoint is registered too. Revocation must reach every
+            // live endpoint, not only the one the comment module contributes.
+            "app.message.live.enabled=true",
+            "app.message.consumer.enabled=false",
             "app.hashtag.seed.enabled=false",
             "app.post.seed.enabled=false",
             "app.outbox.publisher.enabled=false"
@@ -116,9 +120,13 @@ class WebSocketRevocationIT {
     }
 
     private RecordingHandler connect(String token) throws Exception {
+        return connectTo("/ws/comments", token);
+    }
+
+    private RecordingHandler connectTo(String endpoint, String token) throws Exception {
         RecordingHandler handler = new RecordingHandler();
         StandardWebSocketClient client = new StandardWebSocketClient();
-        String url = "ws://localhost:" + port + "/ws/comments/websocket?token=" + token;
+        String url = "ws://localhost:" + port + endpoint + "/websocket?token=" + token;
         WebSocketSession session = client.execute(handler, url).get(10, TimeUnit.SECONDS);
         assertThat(session.isOpen()).as("session must connect before revocation").isTrue();
         return handler;
@@ -160,6 +168,45 @@ class WebSocketRevocationIT {
 
         JwtClaims claims = jwtTokenProvider.validateAndParse(token);
         tokenBlacklistService.blacklist(claims.jti(), 900);
+        sweepService.sweep();
+
+        CloseStatus closeStatus = handler.awaitClose();
+        assertThat(closeStatus.getCode()).isEqualTo(CloseStatus.POLICY_VIOLATION.getCode());
+    }
+
+    /**
+     * The direct-message endpoint must be revocable on the same terms as every other live endpoint.
+     *
+     * <p>It previously was not. The message module supplied its own handshake interceptor which
+     * stored only the resolved principal, while {@link
+     * SessionTrackingWebSocketHandlerDecoratorFactory} enrols a session only when the raw token is
+     * present under {@link JwtHandshakeInterceptor#TOKEN_ATTRIBUTE}. A direct-message socket
+     * therefore never entered {@link WebSocketSessionRegistry}, the sweep had nothing to examine,
+     * and logging out, banning, or suspending an account left its open conversation socket alive
+     * until the access token expired on its own.
+     */
+    @Test
+    void messageSocket_blacklistedToken_sessionClosedBySweep() throws Exception {
+        User user = activeUser();
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        RecordingHandler handler = connectTo("/ws/messages", token);
+
+        JwtClaims claims = jwtTokenProvider.validateAndParse(token);
+        tokenBlacklistService.blacklist(claims.jti(), 900);
+        sweepService.sweep();
+
+        CloseStatus closeStatus = handler.awaitClose();
+        assertThat(closeStatus.getCode()).isEqualTo(CloseStatus.POLICY_VIOLATION.getCode());
+    }
+
+    @Test
+    void messageSocket_bannedAccount_sessionClosedBySweep() throws Exception {
+        User user = activeUser();
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        RecordingHandler handler = connectTo("/ws/messages", token);
+
+        user.setStatus(UserStatus.BANNED);
+        userRepository.save(user);
         sweepService.sweep();
 
         CloseStatus closeStatus = handler.awaitClose();

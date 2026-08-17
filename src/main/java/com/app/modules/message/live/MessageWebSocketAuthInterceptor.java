@@ -15,6 +15,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
 
 import com.app.common.security.user.UserPrincipal;
+import com.app.common.security.websocket.JwtHandshakeInterceptor;
 import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.message.repository.MessageUserRepository;
 import com.app.modules.users.enums.UserStatus;
@@ -80,8 +81,7 @@ public class MessageWebSocketAuthInterceptor implements ChannelInterceptor {
         Object principal =
                 attributes == null
                         ? null
-                        : attributes.get(
-                                MessageWebSocketJwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE);
+                        : attributes.get(JwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE);
         if (principal instanceof UserPrincipal userPrincipal) {
             return userPrincipal.userId();
         }
