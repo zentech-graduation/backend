@@ -547,6 +547,63 @@ class MessageControllerIT {
     }
 
     @Test
+    void sendMessage_image_responseCarriesResolvableMedia() {
+        // A recipient otherwise holds an opaque asset id and cannot render the attachment: the
+        // media module publishes upload, upload-complete, and constraints, and no lookup by id.
+        TestUser alice = registerUser("media_embed_alice");
+        TestUser bob = registerUser("media_embed_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID mediaAssetId = insertMediaAsset(alice.id(), "image");
+
+        ResponseEntity<Map> response =
+                sendMessage(
+                        alice,
+                        conversationId,
+                        Map.of("messageType", "image", "mediaAssetId", mediaAssetId.toString()),
+                        null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        Map<?, ?> media = (Map<?, ?>) data.get("media");
+        assertThat(media).isNotNull();
+        assertThat(media.get("mediaAssetId")).isEqualTo(mediaAssetId.toString());
+        assertThat((String) media.get("cdnUrl")).isNotBlank();
+    }
+
+    @Test
+    void listHistory_imageMessage_carriesMediaAndTextMessageDoesNot() {
+        TestUser alice = registerUser("media_hist_alice");
+        TestUser bob = registerUser("media_hist_bob");
+        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
+        UUID mediaAssetId = insertMediaAsset(alice.id(), "image");
+        sendMessage(alice, conversationId, Map.of("messageType", "text", "content", "plain"), null);
+        sendMessage(
+                alice,
+                conversationId,
+                Map.of("messageType", "image", "mediaAssetId", mediaAssetId.toString()),
+                null);
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/conversations/" + conversationId + "/messages", bob);
+
+        List<Map<?, ?>> content = historyContent(response);
+        Map<?, ?> imageMessage =
+                content.stream()
+                        .filter(m -> mediaAssetId.toString().equals(m.get("mediaAssetId")))
+                        .findFirst()
+                        .orElseThrow();
+        Map<?, ?> textMessage =
+                content.stream()
+                        .filter(m -> "plain".equals(m.get("content")))
+                        .findFirst()
+                        .orElseThrow();
+
+        assertThat((Map<?, ?>) imageMessage.get("media")).isNotNull();
+        // The field must be conditional, not an empty object on every row.
+        assertThat(textMessage.get("media")).isNull();
+    }
+
+    @Test
     void sendMessage_postShare_success_referencesPost() {
         TestUser alice = registerUser("send_post_alice");
         TestUser bob = registerUser("send_post_bob");

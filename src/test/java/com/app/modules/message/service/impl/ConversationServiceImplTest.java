@@ -46,6 +46,7 @@ import com.app.modules.message.entity.ConversationParticipantId;
 import com.app.modules.message.mapper.MessageMapper;
 import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.message.repository.ConversationRepository;
+import com.app.modules.message.repository.MessageMediaAssetRepository;
 import com.app.modules.message.repository.MessageRepository;
 import com.app.modules.message.repository.MessageUserRepository;
 import com.app.modules.message.repository.MessageUserSettingsRepository;
@@ -63,6 +64,7 @@ class ConversationServiceImplTest {
     @Mock private MessageUserSettingsRepository userSettingsRepository;
     @Mock private SocialService socialService;
     @Mock private MessageMapper mapper;
+    @Mock private MessageMediaAssetRepository mediaAssetRepository;
 
     private ConversationServiceImpl service;
 
@@ -77,7 +79,8 @@ class ConversationServiceImplTest {
                         userSettingsRepository,
                         socialService,
                         new MessageProperties(24, true, 256),
-                        mapper);
+                        mapper,
+                        mediaAssetRepository);
 
         lenient().when(socialService.isBlockedBetween(any(), any())).thenReturn(false);
         lenient().when(userSettingsRepository.findById(any())).thenReturn(Optional.empty());
@@ -310,7 +313,8 @@ class ConversationServiceImplTest {
                         userSettingsRepository,
                         socialService,
                         new MessageProperties(24, false, 256),
-                        mapper);
+                        mapper,
+                        mediaAssetRepository);
         UUID actorId = UUID.randomUUID();
 
         assertThatThrownBy(

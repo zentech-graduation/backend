@@ -9,7 +9,10 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -19,7 +22,9 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
+import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.message.dto.request.SendMessageRequest;
+import com.app.modules.message.dto.response.MessageMediaResponse;
 import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.entity.Conversation;
 import com.app.modules.message.entity.ConversationParticipant;
@@ -130,7 +135,7 @@ public class MessageServiceImpl implements MessageService {
                                 .sharedStoryId(request.sharedStoryId())
                                 .replyToId(request.replyToId())
                                 .build());
-        MessageResponse response = mapper.toMessageResponse(saved);
+        MessageResponse response = mapper.toMessageResponse(saved, resolveMedia(saved));
 
         if (idempotencyKey != null) {
             idempotencyRepository.updateResponseBody(
@@ -341,13 +346,69 @@ public class MessageServiceImpl implements MessageService {
                 data);
     }
 
+    /**
+     * Resolves the attachment for one message, or null when it carries none.
+     *
+     * @param message the message whose asset to resolve
+     * @return the resolved media, or null
+     */
+    private MessageMediaResponse resolveMedia(Message message) {
+        if (message.getMediaAssetId() == null) {
+            return null;
+        }
+        return mediaAssetRepository
+                .findById(message.getMediaAssetId())
+                .map(mapper::toMediaResponse)
+                .orElse(null);
+    }
+
+    /**
+     * Looks up a message's resolved media, tolerating a message that has none.
+     *
+     * <p>{@code Map.of()} throws on a null key, and a text message carries a null asset id, so the
+     * absent case is checked before the lookup rather than left to the map.
+     *
+     * @param media resolved media keyed by asset id
+     * @param message the message being rendered
+     * @return the resolved media, or null when the message has no attachment
+     */
+    private static MessageMediaResponse mediaFor(
+            Map<UUID, MessageMediaResponse> media, Message message) {
+        UUID assetId = message.getMediaAssetId();
+        return assetId == null ? null : media.get(assetId);
+    }
+
+    /**
+     * Resolves attachments for a page of messages in one query.
+     *
+     * <p>Batched deliberately: resolving per row would issue one media_assets query for every
+     * message on a history page, which is the N+1 the post module's assembler already avoids.
+     *
+     * @param messages the page being rendered
+     * @return resolved media keyed by asset id; empty when the page carries no attachments
+     */
+    private Map<UUID, MessageMediaResponse> resolveMedia(List<Message> messages) {
+        Set<UUID> assetIds =
+                messages.stream()
+                        .map(Message::getMediaAssetId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+        if (assetIds.isEmpty()) {
+            return Map.of();
+        }
+        return mediaAssetRepository.findAllById(assetIds).stream()
+                .collect(Collectors.toMap(MediaAsset::getId, mapper::toMediaResponse));
+    }
+
     // Keyset pagination over limit+1 rows: hasNextPage is decided by the pre-trim size, then the
     // extra probe row is dropped.
     private CursorPageResponse<MessageResponse> toPage(
             List<Message> rows, int pageSize, String cursor) {
         boolean hasNextPage = rows.size() > pageSize;
         List<Message> page = hasNextPage ? rows.subList(0, pageSize) : rows;
-        List<MessageResponse> content = page.stream().map(mapper::toMessageResponse).toList();
+        Map<UUID, MessageMediaResponse> media = resolveMedia(page);
+        List<MessageResponse> content =
+                page.stream().map(m -> mapper.toMessageResponse(m, mediaFor(media, m))).toList();
         String startCursor = page.isEmpty() ? null : encodeCursor(page.get(0).getCreatedAt());
         String endCursor =
                 page.isEmpty() ? null : encodeCursor(page.get(page.size() - 1).getCreatedAt());

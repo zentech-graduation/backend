@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -27,6 +28,7 @@ import com.app.common.pagination.CursorCodec;
 import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.message.config.MessageProperties;
 import com.app.modules.message.dto.request.AddParticipantsRequest;
 import com.app.modules.message.dto.request.CreateDirectConversationRequest;
@@ -34,6 +36,7 @@ import com.app.modules.message.dto.request.CreateGroupRequest;
 import com.app.modules.message.dto.request.UpdateGroupRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
+import com.app.modules.message.dto.response.MessageMediaResponse;
 import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.dto.response.ParticipantResponse;
 import com.app.modules.message.entity.Conversation;
@@ -44,6 +47,7 @@ import com.app.modules.message.mapper.MessageMapper;
 import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.message.repository.ConversationRepository;
 import com.app.modules.message.repository.ConversationUnreadCount;
+import com.app.modules.message.repository.MessageMediaAssetRepository;
 import com.app.modules.message.repository.MessageRepository;
 import com.app.modules.message.repository.MessageUserRepository;
 import com.app.modules.message.repository.MessageUserSettingsRepository;
@@ -68,6 +72,9 @@ public class ConversationServiceImpl implements ConversationService {
     private final SocialService socialService;
     private final MessageProperties properties;
     private final MessageMapper mapper;
+    // Read-only view of the media module, mirroring MessageServiceImpl. The conversation list
+    // renders the newest message, which may be an attachment.
+    private final MessageMediaAssetRepository mediaAssetRepository;
 
     public ConversationServiceImpl(
             ConversationRepository conversationRepository,
@@ -77,7 +84,8 @@ public class ConversationServiceImpl implements ConversationService {
             MessageUserSettingsRepository userSettingsRepository,
             SocialService socialService,
             MessageProperties properties,
-            MessageMapper mapper) {
+            MessageMapper mapper,
+            MessageMediaAssetRepository mediaAssetRepository) {
         this.conversationRepository = conversationRepository;
         this.participantRepository = participantRepository;
         this.messageRepository = messageRepository;
@@ -86,6 +94,23 @@ public class ConversationServiceImpl implements ConversationService {
         this.socialService = socialService;
         this.properties = properties;
         this.mapper = mapper;
+        this.mediaAssetRepository = mediaAssetRepository;
+    }
+
+    /**
+     * Looks up a message's resolved media, tolerating a message that carries none.
+     *
+     * <p>{@code Map.of()} throws on a null key and a text message has no asset id, so the absent
+     * case is checked here rather than left to the map.
+     *
+     * @param media resolved media keyed by asset id
+     * @param message the message being rendered
+     * @return the resolved media, or null when the message has no attachment
+     */
+    private static MessageMediaResponse mediaFor(
+            Map<UUID, MessageMediaResponse> media, Message message) {
+        UUID assetId = message.getMediaAssetId();
+        return assetId == null ? null : media.get(assetId);
     }
 
     @Override
@@ -220,11 +245,30 @@ public class ConversationServiceImpl implements ConversationService {
                                 Collectors.toMap(
                                         ConversationUnreadCount::getConversationId,
                                         ConversationUnreadCount::getUnreadCount));
+        List<Message> lastMessages =
+                messageRepository.findLastMessagePerConversation(conversationIds);
+        // One batched asset lookup for the whole list. A conversation whose newest message is an
+        // image otherwise shows a preview row with no way to render its attachment.
+        Set<UUID> lastMessageAssetIds =
+                lastMessages.stream()
+                        .map(Message::getMediaAssetId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+        Map<UUID, MessageMediaResponse> lastMessageMedia =
+                lastMessageAssetIds.isEmpty()
+                        ? Map.of()
+                        : mediaAssetRepository.findAllById(lastMessageAssetIds).stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                MediaAsset::getId, mapper::toMediaResponse));
         Map<UUID, MessageResponse> lastMessageByConversation =
-                messageRepository.findLastMessagePerConversation(conversationIds).stream()
+                lastMessages.stream()
                         .collect(
                                 Collectors.toMap(
-                                        Message::getConversationId, mapper::toMessageResponse));
+                                        Message::getConversationId,
+                                        m ->
+                                                mapper.toMessageResponse(
+                                                        m, mediaFor(lastMessageMedia, m))));
 
         List<ConversationSummaryResponse> content =
                 conversations.stream()

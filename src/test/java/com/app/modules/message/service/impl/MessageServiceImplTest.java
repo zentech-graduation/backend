@@ -31,6 +31,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.dto.request.SendMessageRequest;
+import com.app.modules.message.dto.response.MessageMediaResponse;
 import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.entity.Conversation;
 import com.app.modules.message.entity.ConversationParticipant;
@@ -85,10 +86,11 @@ class MessageServiceImplTest {
                         outboxService,
                         objectMapper);
         lenient()
-                .when(mapper.toMessageResponse(any()))
+                .when(mapper.toMessageResponse(any(), any()))
                 .thenAnswer(
                         inv -> {
                             Message m = inv.getArgument(0);
+                            MessageMediaResponse media = inv.getArgument(1);
                             return new MessageResponse(
                                     m.getId(),
                                     m.getConversationId(),
@@ -96,6 +98,7 @@ class MessageServiceImplTest {
                                     m.getMessageType(),
                                     m.getContent(),
                                     m.getMediaAssetId(),
+                                    media,
                                     m.getSharedPostId(),
                                     m.getSharedStoryId(),
                                     m.getReplyToId(),
@@ -328,6 +331,8 @@ class MessageServiceImplTest {
                         actorId,
                         MessageType.TEXT,
                         "hello",
+                        null,
+                        // mediaAssetId, then the resolved media, both absent on a text message
                         null,
                         null,
                         null,

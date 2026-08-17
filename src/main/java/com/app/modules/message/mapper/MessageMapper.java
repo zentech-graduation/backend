@@ -5,8 +5,10 @@ import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
+import com.app.modules.message.dto.response.MessageMediaResponse;
 import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.dto.response.ParticipantResponse;
 import com.app.modules.message.entity.Conversation;
@@ -70,5 +72,42 @@ public interface MessageMapper {
      * @return the message response
      */
     @Mapping(source = "deleted", target = "isDeleted")
+    @Mapping(target = "media", ignore = true)
     MessageResponse toMessageResponse(Message message);
+
+    /**
+     * Projects a message together with its already-resolved media.
+     *
+     * <p>The asset is passed in rather than looked up here so a page of messages costs one batched
+     * query instead of one per row.
+     *
+     * @param message the source message
+     * @param media the resolved attachment, or null when the message carries none
+     * @return the message response
+     */
+    @Mapping(source = "message.deleted", target = "isDeleted")
+    @Mapping(source = "media", target = "media")
+    // Both sources expose mediaAssetId, so the message is named as the authority for it.
+    @Mapping(source = "message.mediaAssetId", target = "mediaAssetId")
+    MessageResponse toMessageResponse(Message message, MessageMediaResponse media);
+
+    /**
+     * Projects a media asset onto the subset a message needs.
+     *
+     * @param asset the resolved asset, or null
+     * @return the response, or null when no asset was supplied
+     */
+    default MessageMediaResponse toMediaResponse(MediaAsset asset) {
+        if (asset == null) {
+            return null;
+        }
+        return new MessageMediaResponse(
+                asset.getId(),
+                asset.getMediaType(),
+                asset.getCdnUrl(),
+                asset.getWidth(),
+                asset.getHeight(),
+                asset.getDuration(),
+                asset.getBlurhash());
+    }
 }

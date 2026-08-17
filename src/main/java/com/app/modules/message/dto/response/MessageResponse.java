@@ -19,6 +19,14 @@ public record MessageResponse(
                 String content,
         @Schema(description = "Referenced media asset for an image/video message.")
                 UUID mediaAssetId,
+        @Schema(
+                        description =
+                                "Resolved media for an image or video message; null otherwise."
+                                        + " Present so a recipient can render the attachment"
+                                        + " without a separate lookup, which the media module does"
+                                        + " not offer.",
+                        nullable = true)
+                MessageMediaResponse media,
         @Schema(description = "Shared post for a post-share message.") UUID sharedPostId,
         @Schema(description = "Shared story for a story-share message.") UUID sharedStoryId,
         @Schema(description = "Message this one replies to, or null.") UUID replyToId,
