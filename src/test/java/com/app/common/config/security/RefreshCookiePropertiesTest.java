@@ -27,6 +27,41 @@ class RefreshCookiePropertiesTest {
         assertThat(properties.path()).isEqualTo("/api/v1/auth");
         assertThat(properties.secure()).isTrue();
         assertThat(properties.sameSite()).isEqualTo("Lax");
+        assertThat(properties.allowCrossSite()).isFalse();
+    }
+
+    @Test
+    void bind_sameSiteNoneWithoutCrossSiteAcknowledgement_isRejected() {
+        // CSRF filtering is disabled for /api/**, so SameSite is the only control stopping a
+        // hostile origin from driving a refresh or a logout. Setting it to None while debugging a
+        // cross-origin deployment would otherwise remove that control with nothing behind it and
+        // no failure to notice, so it now requires an explicit acknowledgement.
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("app.security.refresh-cookie.same-site", "None");
+        environment.setProperty("app.security.refresh-cookie.secure", "true");
+
+        assertThatThrownBy(() -> bind(environment)).isInstanceOf(BindException.class);
+    }
+
+    @Test
+    void bind_sameSiteNoneWithCrossSiteAcknowledgement_isAccepted() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("app.security.refresh-cookie.same-site", "None");
+        environment.setProperty("app.security.refresh-cookie.secure", "true");
+        environment.setProperty("app.security.refresh-cookie.allow-cross-site", "true");
+
+        assertThatCode(() -> bind(environment)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void bind_crossSiteAcknowledgementWithoutSameSiteNone_isHarmless() {
+        // The acknowledgement only unlocks None. Setting it while staying on Lax must not change
+        // anything, so an operator cannot arm the exception ahead of time and forget about it.
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("app.security.refresh-cookie.allow-cross-site", "true");
+
+        RefreshCookieProperties properties = bind(environment);
+        assertThat(properties.sameSite()).isEqualTo("Lax");
     }
 
     @Test
@@ -38,15 +73,6 @@ class RefreshCookiePropertiesTest {
         environment.setProperty("app.security.refresh-cookie.secure", "false");
 
         assertThatThrownBy(() -> bind(environment)).isInstanceOf(BindException.class);
-    }
-
-    @Test
-    void bind_sameSiteNoneWithSecureTrue_isAccepted() {
-        MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("app.security.refresh-cookie.same-site", "None");
-        environment.setProperty("app.security.refresh-cookie.secure", "true");
-
-        assertThatCode(() -> bind(environment)).doesNotThrowAnyException();
     }
 
     @Test
@@ -85,7 +111,8 @@ class RefreshCookiePropertiesTest {
                 .withPropertyValues(
                         "spring.profiles.active=prod",
                         "REFRESH_COOKIE_SAME_SITE=None",
-                        "REFRESH_COOKIE_SECURE=true")
+                        "REFRESH_COOKIE_SECURE=true",
+                        "REFRESH_COOKIE_ALLOW_CROSS_SITE=true")
                 .withUserConfiguration(RefreshCookiePropertiesConfig.class)
                 .run(
                         context -> {

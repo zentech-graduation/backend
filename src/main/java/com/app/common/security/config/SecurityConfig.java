@@ -77,6 +77,12 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_INFRA_PATHS = {
         "/actuator/health",
+        // A Prometheus scraper cannot present an admin JWT, and the rule below restricts the rest
+        // of /actuator/** to ADMIN. Registered here because the first matching rule wins, so this
+        // must precede that rule. Deliberately anonymous: the endpoint publishes URI templates,
+        // request counts, and JVM internals to any caller that can reach the port, and is expected
+        // to be restricted at the ingress rather than in the application.
+        "/actuator/prometheus",
         "/api-docs/**",
         "/swagger-ui/**",
         "/swagger-ui.html",

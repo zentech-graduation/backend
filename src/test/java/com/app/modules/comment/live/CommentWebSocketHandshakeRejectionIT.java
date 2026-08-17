@@ -47,6 +47,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.common.security.service.TokenBlacklistService;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -126,6 +127,8 @@ class CommentWebSocketHandshakeRejectionIT {
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private TokenBlacklistService tokenBlacklistService;
     @Autowired private UserRepository userRepository;
+    // Bad credentials are delivered through a ticket, which is the only way in now.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     private User activeUser() {
         String username = "ws_reject_" + UUID.randomUUID().toString().substring(0, 8);
@@ -141,9 +144,20 @@ class CommentWebSocketHandshakeRejectionIT {
                         .build());
     }
 
-    private String wsUrl(String tokenQueryParamOrNull) {
+    /**
+     * Builds a handshake URL carrying {@code tokenOrNull} inside a single-use ticket, or no
+     * credential at all when null.
+     *
+     * <p>The handshake no longer reads a raw {@code token} parameter, so a case about a malformed,
+     * wrongly-signed, expired, or blacklisted token has to deliver that token through a ticket.
+     * Passing it as a bare parameter would leave it ignored and quietly turn every case here into a
+     * duplicate of the no-credential one.
+     */
+    private String wsUrl(String tokenOrNull) {
         String base = "ws://localhost:" + port + "/ws/comments/websocket";
-        return tokenQueryParamOrNull == null ? base : base + "?token=" + tokenQueryParamOrNull;
+        return tokenOrNull == null
+                ? base
+                : base + "?ticket=" + webSocketTicketService.issueTicket(tokenOrNull);
     }
 
     private Throwable attemptConnect(String wsUrl) {
@@ -285,8 +299,8 @@ class CommentWebSocketHandshakeRejectionIT {
                         + port
                         + "/ws/comments/000/"
                         + authedSessionId
-                        + "/xhr?token="
-                        + token;
+                        + "/xhr?ticket="
+                        + webSocketTicketService.issueTicket(token);
         ResponseEntity<String> authedResponse = postIgnoringErrors(rest, authedUrl);
         assertNoJsessionIdCookie(authedResponse, "authenticated");
 

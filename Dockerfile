@@ -23,6 +23,18 @@ COPY --from=build /workspace/target/*.jar /app/app.jar
 
 EXPOSE 8080
 
+# The base application.yaml activates the dev profile, which serves Swagger anonymously,
+# marks the refresh cookie non-Secure, points mail at localhost, and trusts only loopback as
+# a proxy. An image started without an explicit profile must therefore fail safe rather than
+# silently run development settings against real users. Override with SPRING_PROFILES_ACTIVE
+# when a different profile is genuinely wanted.
+ENV SPRING_PROFILES_ACTIVE=prod
+
+# curl is installed above for exactly this. start-period covers Flyway migration and context
+# startup, which took roughly 20s on a warm local machine.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -fsS http://localhost:8080/actuator/health || exit 1
+
 USER luvax
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

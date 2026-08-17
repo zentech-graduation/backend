@@ -35,8 +35,12 @@ app:
   comment:
     consumer:
       enabled: true
+    # The frontend opens exactly one socket, /ws/comments, and CommentWebSocketConfig registers
+    # that endpoint only under this flag. With it false the endpoint did not exist in production,
+    # the handshake failed, and the client swallowed the failure by design, so live comment and
+    # like updates were silently dead with no signal on either side.
     live:
-      enabled: false
+      enabled: true
   story:
     consumer:
       enabled: true
@@ -81,6 +85,11 @@ app:
         window-seconds: 300
       "[/api/v1/auth/oauth2/exchange]":
         max-attempts: 10
+        window-seconds: 60
+      "[/api/v1/auth/ws-ticket]":
+        # One per realtime connection and one per reconnect, so the bucket has to tolerate a
+        # reconnect burst while staying bounded.
+        max-attempts: 60
         window-seconds: 60
       "[/api/v1/posts]":
         max-attempts: 30

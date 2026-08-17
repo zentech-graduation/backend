@@ -1,6 +1,5 @@
 package com.app.common.security.websocket;
 
-import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
 
@@ -11,13 +10,16 @@ import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import com.app.common.exception.AppException;
 import com.app.common.security.service.TokenPrincipalResolver;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.security.util.IpExtractor;
+import com.app.modules.auth.service.WebSocketTicketService;
 
 /**
  * Authenticates a WebSocket upgrade using a JWT supplied as the {@code token} query parameter,
@@ -51,11 +53,15 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
     private static final Logger log = LoggerFactory.getLogger(JwtHandshakeInterceptor.class);
 
     private final TokenPrincipalResolver tokenPrincipalResolver;
+    private final WebSocketTicketService webSocketTicketService;
     private final IpExtractor ipExtractor;
 
     public JwtHandshakeInterceptor(
-            TokenPrincipalResolver tokenPrincipalResolver, IpExtractor ipExtractor) {
+            TokenPrincipalResolver tokenPrincipalResolver,
+            WebSocketTicketService webSocketTicketService,
+            IpExtractor ipExtractor) {
         this.tokenPrincipalResolver = tokenPrincipalResolver;
+        this.webSocketTicketService = webSocketTicketService;
         this.ipExtractor = ipExtractor;
     }
 
@@ -65,9 +71,9 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             ServerHttpResponse response,
             WebSocketHandler wsHandler,
             Map<String, Object> attributes) {
-        String token = extractToken(request.getURI());
+        String token = resolveCredential(request);
         if (token == null || token.isBlank()) {
-            logRejection(request, "missing_token");
+            logRejection(request, "missing_credential");
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
@@ -91,8 +97,31 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         // No post-handshake action required.
     }
 
-    private static String extractToken(URI uri) {
-        return UriComponentsBuilder.fromUri(uri).build().getQueryParams().getFirst("token");
+    /**
+     * Resolves the handshake credential to a raw access token.
+     *
+     * <p>Only a {@code ticket} is accepted. It is redeemed server-side, which keeps the access
+     * token out of the URL and therefore out of every proxy and CDN access log. A {@code token}
+     * parameter is deliberately not honoured: continuing to accept one would leave the leak this
+     * exists to close wide open for any client that kept sending it.
+     *
+     * <p>Either way the value returned is the raw access token, which the caller stores under
+     * {@link #TOKEN_ATTRIBUTE}. The revocation sweep re-resolves that value, so it must be the
+     * token and never the ticket.
+     */
+    private String resolveCredential(ServerHttpRequest request) {
+        MultiValueMap<String, String> params =
+                UriComponentsBuilder.fromUri(request.getURI()).build().getQueryParams();
+
+        String ticket = params.getFirst("ticket");
+        if (ticket == null || ticket.isBlank()) {
+            return null;
+        }
+        try {
+            return webSocketTicketService.consumeTicket(ticket);
+        } catch (AppException ex) {
+            return null;
+        }
     }
 
     private void logRejection(ServerHttpRequest request, String reason) {

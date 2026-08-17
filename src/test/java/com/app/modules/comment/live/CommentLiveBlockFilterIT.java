@@ -39,6 +39,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
@@ -124,6 +125,9 @@ class CommentLiveBlockFilterIT {
     @Autowired private UserRepository userRepository;
     @Autowired private PostRepository postRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     @MockitoBean private MailSender mailSender;
 
@@ -178,7 +182,11 @@ class CommentLiveBlockFilterIT {
                 jwtTokenProvider.generateAccessToken(blockedCommenter.getId(), "USER");
         String unblockedCommenterToken =
                 jwtTokenProvider.generateAccessToken(unblockedCommenter.getId(), "USER");
-        String wsUrl = "ws://localhost:" + port + "/ws/comments/websocket?token=" + viewerToken;
+        String wsUrl =
+                "ws://localhost:"
+                        + port
+                        + "/ws/comments/websocket?ticket="
+                        + webSocketTicketService.issueTicket(viewerToken);
 
         LinkedBlockingQueue<String> frames = new LinkedBlockingQueue<>();
         viewerSession =

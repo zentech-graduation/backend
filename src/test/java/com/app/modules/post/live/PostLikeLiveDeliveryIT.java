@@ -38,6 +38,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.post.messaging.PostEventTypes;
 
@@ -111,6 +112,10 @@ class PostLikeLiveDeliveryIT {
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private OutboxService outboxService;
+
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     @Autowired
     private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
@@ -262,7 +267,11 @@ class PostLikeLiveDeliveryIT {
 
     private StompSession connectAs(UUID userId) throws Exception {
         String token = jwtTokenProvider.generateAccessToken(userId, "USER");
-        String wsUrl = "ws://localhost:" + port + "/ws/posts/websocket?token=" + token;
+        String wsUrl =
+                "ws://localhost:"
+                        + port
+                        + "/ws/posts/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         StompSession live =
                 stompClient
                         .connectAsync(wsUrl, new StompSessionHandlerAdapter() {})

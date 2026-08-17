@@ -29,6 +29,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.service.NotificationService;
 import com.app.modules.users.entity.User;
@@ -115,6 +116,9 @@ class NotificationLiveDeliveryIT {
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationService notificationService;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     private User activeUser(String label) {
         String username =
@@ -135,7 +139,11 @@ class NotificationLiveDeliveryIT {
 
     private ConnectedListener connectAndSubscribe(UUID userId, String token) throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
-        String url = "ws://localhost:" + port + "/ws/notifications/websocket?token=" + token;
+        String url =
+                "ws://localhost:"
+                        + port
+                        + "/ws/notifications/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         StompSession session =
                 client.connectAsync(url, new StompSessionHandlerAdapter() {})
                         .get(10, TimeUnit.SECONDS);

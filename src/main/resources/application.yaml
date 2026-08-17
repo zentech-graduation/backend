@@ -112,6 +112,10 @@ app:
       path: ${REFRESH_COOKIE_PATH:/api/v1/auth}
       secure: ${REFRESH_COOKIE_SECURE:true}
       same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
+      # Must be true before same-site None is accepted. Startup fails otherwise, because None
+      # removes the only CSRF control on the refresh endpoint and the request still succeeds,
+      # so the mistake would otherwise be invisible.
+      allow-cross-site: ${REFRESH_COOKIE_ALLOW_CROSS_SITE:false}
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}
@@ -225,6 +229,9 @@ app:
       "[/api/v1/auth/refresh]":
         max-attempts: 60
         window-seconds: 60
+      "[/api/v1/auth/ws-ticket]":
+        max-attempts: 60
+        window-seconds: 60
       "[/api/v1/auth/forgot-password]":
         max-attempts: 3
         window-seconds: 3600
@@ -255,6 +262,14 @@ app:
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
 
 management:
+  endpoints:
+    web:
+      exposure:
+        # micrometer-registry-prometheus is on the classpath but Spring Boot exposes only health
+        # over HTTP by default, so /actuator/prometheus returned 404 and nothing could scrape the
+        # application. Widened deliberately to these three; the ADMIN gate in SecurityConfig still
+        # covers every other actuator endpoint.
+        include: health,info,prometheus
   health:
     elasticsearch:
       enabled: true

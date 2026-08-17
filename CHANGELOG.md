@@ -6,8 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- A container image started without an explicit profile now runs the production profile instead of the development one, so a deployment that forgets to set a profile no longer serves API documentation anonymously, marks the refresh cookie non-Secure, or routes outbound mail to localhost.
+- The development profile no longer shadows the configured cookie signing secret with a value published in this repository, so the operator's secret is authoritative in every profile.
+- A direct-message WebSocket session is now closed when the session is revoked by logout, ban, or suspension, instead of surviving until its access token expired on its own.
+- The guard that rejects a forged client message aimed at another user's realtime channel is now active whenever any realtime endpoint is enabled, rather than only when the comment, notification, or post endpoints happen to be on.
+- Accepting `SameSite=None` on the refresh cookie now requires an explicit acknowledgement and otherwise fails at startup, because it removes the only cross-site request protection on the refresh and logout endpoints while leaving every request apparently successful.
+- WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
+
+### Added
+- Prometheus metrics are now exposed for scraping at `/actuator/prometheus`, which previously returned 404 despite the registry being present.
+- Local service containers now declare healthchecks and restart policies, and the application image declares a healthcheck.
+
+### Changed
+- Real-time comment and like delivery is now enabled in the production profile. It was disabled, which left the only realtime endpoint the client opens absent in production and the feature silently inert.
+- `/actuator/prometheus` is reachable without authentication and should be restricted at the ingress.
+- The local database, cache, broker, and search ports are now published on the loopback interface only, matching the treatment the mail sink already documented.
+- The local database now uses a named volume, so its contents survive container recreation.
+
 ### Fixed
 - The WebSocket handshake's remote-address logging no longer risks a null-pointer failure on non-Servlet requests, resolving a SonarQube dead-code finding without changing the logged value.
+
+### Tests
+- The development data seeder no longer runs during the test suite. It previously activated whenever a developer enabled seeding locally, inserting rows into whichever integration-test database was live and breaking that test's own teardown on a foreign key, with the affected test varying by timing.
+- A query-parameter test no longer selects its subject by position from an unordered reflection array, which intermittently picked a synthetic bridge method carrying none of the annotations under test.
 
 - The environment template now documents the media-duration limit plus post and message live/consumer toggles, so local and operator configuration exposes every application-owned environment variable.
 

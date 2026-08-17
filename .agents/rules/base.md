@@ -30,3 +30,8 @@ description: Always active. Sets agent persona, communication mode, and engineer
 - If something clearly looks off, even if it is not directly related to what you are doing, try to get it fixed along the way.
 - Apply that same high standard to engineering excellence: lint, test failures, and test flakiness.
 - If you see one, even if it is not caused by what you are working on right now, still get it fixed.
+- Migrations that create an index must use CREATE INDEX CONCURRENTLY and run non-transactionally.
+- A plain CREATE INDEX holds a lock that blocks writes to the table for the whole build, which is an availability event on a table of any size.
+- Migrations that delete or overwrite existing rows must copy the affected rows into an archive table first.
+- V30 deleted duplicate reports rows with no archive and no dry run, which is the pattern this rule exists to stop repeating.
+- Never index into Class.getDeclaredMethods() or getMethods(); the order is unspecified and a class implementing an interface also carries synthetic bridge methods that do not expose annotations.
