@@ -30,6 +30,11 @@ EXPOSE 8080
 # when a different profile is genuinely wanted.
 ENV SPRING_PROFILES_ACTIVE=prod
 
+# curl is installed above for exactly this. start-period covers Flyway migration and context
+# startup, which took roughly 20s on a warm local machine.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -fsS http://localhost:8080/actuator/health || exit 1
+
 USER luvax
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
