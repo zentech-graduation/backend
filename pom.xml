@@ -291,6 +291,17 @@
                          even on a successful run. 90s gives 3x headroom for added WebSocket/RabbitMQ
                          contexts and machine-load variance. -->
                     <forkedProcessExitTimeoutInSeconds>90</forkedProcessExitTimeoutInSeconds>
+                    <systemPropertyVariables>
+                        <!-- Integration tests run under the dev profile by convention, and
+                             application.yaml imports the developer's .env, so a local
+                             SEED_DATA=true activated DevDataSeeder inside the test suite. It seeds
+                             on a daemon thread 10s after context start, landing mid-run in whichever
+                             long-running test was executing and inserting rows whose foreign keys
+                             then blocked that test's own teardown. Pinning it here overrides the
+                             imported file, because a system property outranks spring.config.import,
+                             so tests never seed while local development keeps SEED_DATA=true. -->
+                        <SEED_DATA>false</SEED_DATA>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
