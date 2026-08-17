@@ -313,6 +313,9 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
                         + " email_verified_at) VALUES (?, ?, true, now())",
                 id,
                 hash);
+        // Mirrors AuthServiceImpl.register: every real signup gets a settings row, so a
+        // dev-seeded account must too, or GET/PATCH /users/me/settings 404s for it.
+        jdbc.update("INSERT INTO user_settings (user_id) VALUES (?)", id);
     }
 
     private UUID insertImage(UUID userId, String seed, int[] shape) {
