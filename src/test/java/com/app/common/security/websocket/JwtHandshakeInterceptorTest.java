@@ -6,6 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
@@ -181,6 +183,38 @@ class JwtHandshakeInterceptorTest {
                 .contains("reason=rejected")
                 .contains("remoteAddress=198.51.100.9");
         assertThat(event.getFormattedMessage()).doesNotContain(TOKEN);
+    }
+
+    @Test
+    void handshake_missingToken_nonServletRequest_logsRemoteAddressFromSocketAddress()
+            throws Exception {
+        ServerHttpRequest request = mock(ServerHttpRequest.class);
+        when(request.getURI()).thenReturn(URI.create("ws://localhost/ws/comments"));
+        when(request.getRemoteAddress())
+                .thenReturn(new InetSocketAddress(InetAddress.getByName("192.0.2.10"), 5000));
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+
+        boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
+
+        assertThat(result).isFalse();
+        List<ILoggingEvent> events = logAppender.list;
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getFormattedMessage()).contains("remoteAddress=192.0.2.10");
+    }
+
+    @Test
+    void handshake_missingToken_nonServletRequestWithNullSocketAddress_logsUnknown() {
+        ServerHttpRequest request = mock(ServerHttpRequest.class);
+        when(request.getURI()).thenReturn(URI.create("ws://localhost/ws/comments"));
+        when(request.getRemoteAddress()).thenReturn(null);
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+
+        boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
+
+        assertThat(result).isFalse();
+        List<ILoggingEvent> events = logAppender.list;
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getFormattedMessage()).contains("remoteAddress=unknown");
     }
 
     private static ServerHttpRequest requestWithToken(String token) {

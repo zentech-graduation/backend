@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The WebSocket handshake's remote-address logging no longer risks a null-pointer failure on non-Servlet requests, resolving a SonarQube dead-code finding without changing the logged value.
+
 - The environment template now documents the media-duration limit plus post and message live/consumer toggles, so local and operator configuration exposes every application-owned environment variable.
 
 ### Added
