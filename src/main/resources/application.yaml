@@ -255,6 +255,14 @@ app:
       # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
 
 management:
+  endpoints:
+    web:
+      exposure:
+        # micrometer-registry-prometheus is on the classpath but Spring Boot exposes only health
+        # over HTTP by default, so /actuator/prometheus returned 404 and nothing could scrape the
+        # application. Widened deliberately to these three; the ADMIN gate in SecurityConfig still
+        # covers every other actuator endpoint.
+        include: health,info,prometheus
   health:
     elasticsearch:
       enabled: true

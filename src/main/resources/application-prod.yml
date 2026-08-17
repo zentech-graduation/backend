@@ -35,8 +35,12 @@ app:
   comment:
     consumer:
       enabled: true
+    # The frontend opens exactly one socket, /ws/comments, and CommentWebSocketConfig registers
+    # that endpoint only under this flag. With it false the endpoint did not exist in production,
+    # the handshake failed, and the client swallowed the failure by design, so live comment and
+    # like updates were silently dead with no signal on either side.
     live:
-      enabled: false
+      enabled: true
   story:
     consumer:
       enabled: true
