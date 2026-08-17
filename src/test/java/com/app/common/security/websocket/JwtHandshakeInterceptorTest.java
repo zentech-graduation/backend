@@ -110,7 +110,7 @@ class JwtHandshakeInterceptorTest {
         UserPrincipal principal = new UserPrincipal(UUID.randomUUID(), null, "USER", "ACTIVE");
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.of(principal));
 
-        ServerHttpRequest request = requestWithToken(TOKEN);
+        ServerHttpRequest request = requestWithRedeemableTicket(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
         Map<String, Object> attrs = new HashMap<>();
 
@@ -125,7 +125,7 @@ class JwtHandshakeInterceptorTest {
     void handshake_blacklistedToken_returnsFalse() throws Exception {
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.empty());
 
-        ServerHttpRequest request = requestWithToken(TOKEN);
+        ServerHttpRequest request = requestWithRedeemableTicket(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
@@ -150,7 +150,7 @@ class JwtHandshakeInterceptorTest {
     void handshake_invalidToken_returnsFalse() throws Exception {
         when(tokenPrincipalResolver.resolve("bad-token")).thenReturn(Optional.empty());
 
-        ServerHttpRequest request = requestWithToken("bad-token");
+        ServerHttpRequest request = requestWithRedeemableTicket("bad-token");
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
@@ -162,7 +162,7 @@ class JwtHandshakeInterceptorTest {
     void handshake_nonActiveAccountValidToken_returnsFalse() throws Exception {
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.empty());
 
-        ServerHttpRequest request = requestWithToken(TOKEN);
+        ServerHttpRequest request = requestWithRedeemableTicket(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
@@ -200,6 +200,9 @@ class JwtHandshakeInterceptorTest {
 
     @Test
     void handshake_resolverRejects_logsWarnWithEndpointAndRemoteAddress() {
+        // The ticket redeems fine; it is the resolver that declines, so the logged reason must be
+        // "rejected" rather than the missing-credential case.
+        when(webSocketTicketService.consumeTicket("redeemable")).thenReturn(TOKEN);
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.empty());
         MockHttpServletRequest servletRequest = new MockHttpServletRequest("GET", "/ws/comments");
         servletRequest.setRemoteAddr("198.51.100.9");
@@ -208,7 +211,7 @@ class JwtHandshakeInterceptorTest {
                 new ServletServerHttpRequest(servletRequest) {
                     @Override
                     public URI getURI() {
-                        return URI.create("ws://localhost/ws/comments?token=" + TOKEN);
+                        return URI.create("ws://localhost/ws/comments?ticket=redeemable");
                     }
                 };
         ServerHttpResponse response = mock(ServerHttpResponse.class);
@@ -266,9 +269,18 @@ class JwtHandshakeInterceptorTest {
         return request;
     }
 
-    private static ServerHttpRequest requestWithToken(String token) {
+    /**
+     * Builds a handshake carrying a ticket that redeems to {@code token}.
+     *
+     * <p>A raw {@code token} parameter is no longer honoured, so a test about what the resolver
+     * does with a credential has to hand that credential over the way a real client now does.
+     */
+    private ServerHttpRequest requestWithRedeemableTicket(String token) {
+        String ticket = "ticket-for-" + token;
+        when(webSocketTicketService.consumeTicket(ticket)).thenReturn(token);
         ServerHttpRequest request = mock(ServerHttpRequest.class);
-        when(request.getURI()).thenReturn(URI.create("ws://localhost/ws/comments?token=" + token));
+        when(request.getURI())
+                .thenReturn(URI.create("ws://localhost/ws/comments?ticket=" + ticket));
         return request;
     }
 }

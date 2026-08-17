@@ -28,6 +28,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.app.common.security.jwt.JwtClaims;
 import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.common.security.service.TokenBlacklistService;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -104,6 +105,9 @@ class WebSocketRevocationIT {
     @Autowired private UserRepository userRepository;
     @Autowired private TokenBlacklistService tokenBlacklistService;
     @Autowired private WebSocketRevocationSweepService sweepService;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     private User activeUser() {
         String username = "ws_revoke_" + UUID.randomUUID().toString().substring(0, 8);
@@ -126,7 +130,12 @@ class WebSocketRevocationIT {
     private RecordingHandler connectTo(String endpoint, String token) throws Exception {
         RecordingHandler handler = new RecordingHandler();
         StandardWebSocketClient client = new StandardWebSocketClient();
-        String url = "ws://localhost:" + port + endpoint + "/websocket?token=" + token;
+        String url =
+                "ws://localhost:"
+                        + port
+                        + endpoint
+                        + "/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         WebSocketSession session = client.execute(handler, url).get(10, TimeUnit.SECONDS);
         assertThat(session.isOpen()).as("session must connect before revocation").isTrue();
         return handler;

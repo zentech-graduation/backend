@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 
 /**
  * Proves the post WebSocket endpoint exists and is reachable when it is the only live tier enabled,
@@ -87,6 +88,9 @@ class PostOnlyWebSocketConfigIT {
 
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private JdbcTemplate jdbcTemplate;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     @Test
     void postEndpoint_isReachable_whenItIsTheOnlyLiveTierEnabled() throws Exception {
@@ -95,7 +99,10 @@ class PostOnlyWebSocketConfigIT {
 
         StompSession session =
                 client.connectAsync(
-                                "ws://localhost:" + port + "/ws/posts/websocket?token=" + token,
+                                "ws://localhost:"
+                                        + port
+                                        + "/ws/posts/websocket?ticket="
+                                        + webSocketTicketService.issueTicket(token),
                                 new StompSessionHandlerAdapter() {})
                         .get(15, TimeUnit.SECONDS);
 

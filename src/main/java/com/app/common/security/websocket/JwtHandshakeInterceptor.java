@@ -100,10 +100,10 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
     /**
      * Resolves the handshake credential to a raw access token.
      *
-     * <p>A {@code ticket} is redeemed server-side and preferred, because it keeps the access token
-     * out of the URL and therefore out of every proxy and CDN access log. A {@code token} parameter
-     * is still accepted for now so a client that has not adopted tickets keeps working; that path
-     * is scheduled for removal once no client uses it.
+     * <p>Only a {@code ticket} is accepted. It is redeemed server-side, which keeps the access
+     * token out of the URL and therefore out of every proxy and CDN access log. A {@code token}
+     * parameter is deliberately not honoured: continuing to accept one would leave the leak this
+     * exists to close wide open for any client that kept sending it.
      *
      * <p>Either way the value returned is the raw access token, which the caller stores under
      * {@link #TOKEN_ATTRIBUTE}. The revocation sweep re-resolves that value, so it must be the
@@ -114,14 +114,14 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
                 UriComponentsBuilder.fromUri(request.getURI()).build().getQueryParams();
 
         String ticket = params.getFirst("ticket");
-        if (ticket != null && !ticket.isBlank()) {
-            try {
-                return webSocketTicketService.consumeTicket(ticket);
-            } catch (AppException ex) {
-                return null;
-            }
+        if (ticket == null || ticket.isBlank()) {
+            return null;
         }
-        return params.getFirst("token");
+        try {
+            return webSocketTicketService.consumeTicket(ticket);
+        } catch (AppException ex) {
+            return null;
+        }
     }
 
     private void logRejection(ServerHttpRequest request, String reason) {
