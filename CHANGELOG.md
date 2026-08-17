@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A direct-message WebSocket session is now closed when the session is revoked by logout, ban, or suspension, instead of surviving until its access token expired on its own.
 - The guard that rejects a forged client message aimed at another user's realtime channel is now active whenever any realtime endpoint is enabled, rather than only when the comment, notification, or post endpoints happen to be on.
 - Accepting `SameSite=None` on the refresh cookie now requires an explicit acknowledgement and otherwise fails at startup, because it removes the only cross-site request protection on the refresh and logout endpoints while leaving every request apparently successful.
+- WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Added
 - Prometheus metrics are now exposed for scraping at `/actuator/prometheus`, which previously returned 404 despite the registry being present.
