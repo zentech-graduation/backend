@@ -107,8 +107,8 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         if (request instanceof ServletServerHttpRequest servletRequest) {
             return ipExtractor.extract(servletRequest.getServletRequest());
         }
-        return request.getRemoteAddress() == null
-                ? "unknown"
-                : request.getRemoteAddress().getAddress().getHostAddress();
+        return Optional.ofNullable(request.getRemoteAddress())
+                .map(address -> address.getAddress().getHostAddress())
+                .orElse("unknown");
     }
 }
