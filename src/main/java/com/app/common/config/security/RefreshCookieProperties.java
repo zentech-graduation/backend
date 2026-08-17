@@ -30,7 +30,25 @@ public record RefreshCookieProperties(
         @NotBlank @DefaultValue("luvax_refresh") String name,
         @NotBlank @DefaultValue("/api/v1/auth") String path,
         @DefaultValue("true") boolean secure,
-        @Pattern(regexp = "Lax|Strict|None") @DefaultValue("Lax") String sameSite) {
+        @Pattern(regexp = "Lax|Strict|None") @DefaultValue("Lax") String sameSite,
+        @DefaultValue("false") boolean allowCrossSite) {
+
+    /**
+     * Requires an explicit acknowledgement before {@code SameSite=None} is accepted.
+     *
+     * <p>CSRF filtering is disabled for {@code /api/**}, so {@code SameSite} is the only control
+     * stopping a hostile origin from driving a refresh or a logout. {@code None} removes it with
+     * nothing behind it, and because the request still succeeds there is no failure for an operator
+     * to notice. Requiring a second, differently-named flag makes that a deliberate act rather than
+     * a side effect of debugging a cross-origin deployment.
+     */
+    @AssertTrue(
+            message =
+                    "app.security.refresh-cookie.allow-cross-site must be true to accept same-site"
+                            + " None, which removes the only CSRF control on the refresh endpoint")
+    public boolean isCrossSiteAcknowledgedWhenSameSiteIsNone() {
+        return !"None".equals(sameSite) || allowCrossSite;
+    }
 
     /**
      * Rejects {@code SameSite=None} without {@code Secure}. Browsers discard such a cookie without

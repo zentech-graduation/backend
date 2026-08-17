@@ -112,6 +112,10 @@ app:
       path: ${REFRESH_COOKIE_PATH:/api/v1/auth}
       secure: ${REFRESH_COOKIE_SECURE:true}
       same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
+      # Must be true before same-site None is accepted. Startup fails otherwise, because None
+      # removes the only CSRF control on the refresh endpoint and the request still succeeds,
+      # so the mistake would otherwise be invisible.
+      allow-cross-site: ${REFRESH_COOKIE_ALLOW_CROSS_SITE:false}
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}
