@@ -15,10 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Added
+- A message that carries an attachment now includes the attachment's URL, dimensions, duration, and blurhash in the message response, so a client can render it without a second request per message.
+
 - Prometheus metrics are now exposed for scraping at `/actuator/prometheus`, which previously returned 404 despite the registry being present.
 - Local service containers now declare healthchecks and restart policies, and the application image declares a healthcheck.
 
 ### Changed
+- Real-time direct-message delivery is now enabled in the production profile. The setting was absent there, so it fell back to off and messages were delivered only on refresh.
 - Real-time comment and like delivery is now enabled in the production profile. It was disabled, which left the only realtime endpoint the client opens absent in production and the feature silently inert.
 - `/actuator/prometheus` is reachable without authentication and should be restricted at the ingress.
 - The local database, cache, broker, and search ports are now published on the loopback interface only, matching the treatment the mail sink already documented.
