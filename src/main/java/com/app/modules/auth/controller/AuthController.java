@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,7 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.app.common.ApiConstants;
 import com.app.common.base.BaseController;
+import com.app.common.enums.ApiErrorCode;
 import com.app.common.enums.ApiSuccessCode;
+import com.app.common.exception.AppException;
 import com.app.common.response.ApiResponse;
 import com.app.modules.auth.api.AuthApi;
 import com.app.modules.auth.cookie.RefreshTokenCookieManager;
@@ -26,19 +29,27 @@ import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResendVerificationRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
+import com.app.modules.auth.dto.response.WebSocketTicketResponse;
 import com.app.modules.auth.service.AuthService;
+import com.app.modules.auth.service.WebSocketTicketService;
 
 /** HTTP surface for email + password authentication flows. */
 @RestController
 public class AuthController extends BaseController implements AuthApi {
 
+    private static final String BEARER_PREFIX = "Bearer ";
+
     private final AuthService authService;
     private final RefreshTokenCookieManager refreshTokenCookieManager;
+    private final WebSocketTicketService webSocketTicketService;
 
     public AuthController(
-            AuthService authService, RefreshTokenCookieManager refreshTokenCookieManager) {
+            AuthService authService,
+            RefreshTokenCookieManager refreshTokenCookieManager,
+            WebSocketTicketService webSocketTicketService) {
         this.authService = authService;
         this.refreshTokenCookieManager = refreshTokenCookieManager;
+        this.webSocketTicketService = webSocketTicketService;
     }
 
     /**
@@ -166,5 +177,22 @@ public class AuthController extends BaseController implements AuthApi {
         AuthResponse body = authService.exchangeOAuth2Code(request, httpRequest);
         refreshTokenCookieManager.write(httpResponse, body.refreshToken());
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    @Override
+    @PostMapping(ApiConstants.Auth.WS_TICKET)
+    public ResponseEntity<ApiResponse<WebSocketTicketResponse>> issueWebSocketTicket(
+            HttpServletRequest httpRequest) {
+        // Reads the bearer token directly rather than resolving the principal and re-minting: the
+        // ticket must redeem to this exact token so the revocation sweep re-checks the same
+        // credential the caller is actually holding.
+        String header = httpRequest.getHeader(HttpHeaders.AUTHORIZATION);
+        if (header == null || !header.startsWith(BEARER_PREFIX)) {
+            throw new AppException(ApiErrorCode.UNAUTHORIZED);
+        }
+        String ticket =
+                webSocketTicketService.issueTicket(header.substring(BEARER_PREFIX.length()));
+        return ResponseEntity.ok(
+                ApiResponse.success(ApiSuccessCode.OK, new WebSocketTicketResponse(ticket)));
     }
 }

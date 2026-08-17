@@ -22,6 +22,7 @@ import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResendVerificationRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
+import com.app.modules.auth.dto.response.WebSocketTicketResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -463,4 +464,44 @@ public interface AuthApi {
             @Valid @RequestBody OAuth2ExchangeRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse);
+
+    /**
+     * Issues a single-use ticket for authenticating a WebSocket handshake.
+     *
+     * <p>Requires an authenticated caller. The ticket redeems, exactly once and within 30 seconds,
+     * to the access token presented here, so the token itself never travels in a handshake URL
+     * where proxies and CDNs would record it in their access logs.
+     *
+     * @param httpRequest the current request, read for its bearer token
+     * @return the issued ticket
+     */
+    @Operation(
+            summary = "Issue a WebSocket handshake ticket",
+            description =
+                    "Returns a single-use ticket, valid for 30 seconds, to be supplied as the"
+                            + " handshake query parameter named ticket. Requires authentication."
+                            + " Redeeming a ticket twice fails, so a client requests a fresh one"
+                            + " per connection and per reconnect.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Ticket issued"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "No bearer token was supplied, or it does not authenticate",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping(ApiConstants.Auth.WS_TICKET)
+    ResponseEntity<ApiResponse<WebSocketTicketResponse>> issueWebSocketTicket(
+            HttpServletRequest httpRequest);
 }

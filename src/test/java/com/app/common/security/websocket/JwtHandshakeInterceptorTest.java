@@ -28,9 +28,12 @@ import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.mock.web.MockHttpServletRequest;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.common.security.service.TokenPrincipalResolver;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.security.util.IpExtractor;
+import com.app.modules.auth.service.WebSocketTicketService;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -41,6 +44,7 @@ import ch.qos.logback.core.read.ListAppender;
 class JwtHandshakeInterceptorTest {
 
     @Mock private TokenPrincipalResolver tokenPrincipalResolver;
+    @Mock private WebSocketTicketService webSocketTicketService;
     @Mock private IpExtractor ipExtractor;
 
     private JwtHandshakeInterceptor interceptor;
@@ -50,7 +54,9 @@ class JwtHandshakeInterceptorTest {
 
     @BeforeEach
     void setUp() {
-        interceptor = new JwtHandshakeInterceptor(tokenPrincipalResolver, ipExtractor);
+        interceptor =
+                new JwtHandshakeInterceptor(
+                        tokenPrincipalResolver, webSocketTicketService, ipExtractor);
 
         logAppender = new ListAppender<>();
         logAppender.start();
@@ -61,6 +67,42 @@ class JwtHandshakeInterceptorTest {
     void tearDown() {
         ((Logger) LoggerFactory.getLogger(JwtHandshakeInterceptor.class))
                 .detachAppender(logAppender);
+    }
+
+    @Test
+    void handshake_validTicket_redeemsItAndStoresTheRecoveredToken() throws Exception {
+        // The ticket is redeemed server-side and the raw token is what lands in the attributes:
+        // WebSocketRevocationSweepService re-resolves that value to decide whether a live session
+        // is still authenticated, so storing the ticket instead would silently break revocation.
+        UserPrincipal principal = new UserPrincipal(UUID.randomUUID(), null, "USER", "ACTIVE");
+        when(webSocketTicketService.consumeTicket("good-ticket")).thenReturn(TOKEN);
+        when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.of(principal));
+
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+        Map<String, Object> attrs = new HashMap<>();
+
+        boolean result =
+                interceptor.beforeHandshake(
+                        requestWithTicket("good-ticket"), response, null, attrs);
+
+        assertThat(result).isTrue();
+        assertThat(attrs).containsEntry(JwtHandshakeInterceptor.TOKEN_ATTRIBUTE, TOKEN);
+        assertThat(attrs).containsEntry(JwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE, principal);
+    }
+
+    @Test
+    void handshake_redeemedOrUnknownTicket_returnsFalse() throws Exception {
+        when(webSocketTicketService.consumeTicket("used"))
+                .thenThrow(new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
+
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+
+        boolean result =
+                interceptor.beforeHandshake(
+                        requestWithTicket("used"), response, null, new HashMap<>());
+
+        assertThat(result).isFalse();
+        verify(response).setStatusCode(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -152,7 +194,7 @@ class JwtHandshakeInterceptorTest {
         assertThat(event.getLevel()).isEqualTo(Level.WARN);
         assertThat(event.getFormattedMessage())
                 .contains("endpoint=/ws/notifications")
-                .contains("reason=missing_token")
+                .contains("reason=missing_credential")
                 .contains("remoteAddress=203.0.113.7");
     }
 
@@ -215,6 +257,13 @@ class JwtHandshakeInterceptorTest {
         List<ILoggingEvent> events = logAppender.list;
         assertThat(events).hasSize(1);
         assertThat(events.get(0).getFormattedMessage()).contains("remoteAddress=unknown");
+    }
+
+    private static ServerHttpRequest requestWithTicket(String ticket) {
+        ServerHttpRequest request = mock(ServerHttpRequest.class);
+        when(request.getURI())
+                .thenReturn(URI.create("ws://localhost/ws/comments?ticket=" + ticket));
+        return request;
     }
 
     private static ServerHttpRequest requestWithToken(String token) {

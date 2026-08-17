@@ -21,6 +21,7 @@ public final class ApiConstants {
         public static final String VERIFY_EMAIL = "/verify-email";
         public static final String RESEND_VERIFY = "/verify-email/resend";
         public static final String OAUTH2_EXCHANGE = "/oauth2/exchange";
+        public static final String WS_TICKET = "/ws-ticket";
     }
 
     public static final class Users {
