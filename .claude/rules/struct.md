@@ -168,7 +168,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `story` | **Implemented** | api, consumer, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
 | `message` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
-| `admin` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
+| `admin` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `recommendation` | Scaffolded | service/impl (`UserEventsPartitionJob` only — no controller, no repository, no service interface) |
 
 **Module responsibilities:**
@@ -374,7 +374,7 @@ PostgreSQL enum types:
 | `report_reason` | `spam`, `nudity`, `violence`, `hate_speech`, `harassment`, `false_information`, `scam`, `other` |
 | `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message` |
 | `oauth_provider` | `google`, `facebook`, `apple` |
-| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report` |
+| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `force_logout`, `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag` (V54; only `change_user_role` and `force_logout` have a caller today, the rest were added ahead of use because each `ALTER TYPE ... ADD VALUE` needs its own migration) |
 | `event_type` | `post_view`, `post_like`, `post_unlike`, `post_save`, `post_unsave`, `post_share`, `post_comment`, `story_view`, `story_reply`, `profile_view`, `profile_follow`, `profile_unfollow`, `search`, `hashtag_click`, `comment_like`, `comment_reply`, `message_send`, `session_start`, `session_end`, `app_open` |
 
 ### Cache — Redis
