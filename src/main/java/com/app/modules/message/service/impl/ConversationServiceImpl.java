@@ -1,7 +1,6 @@
 package com.app.modules.message.service.impl;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -30,10 +29,7 @@ import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.message.config.MessageProperties;
-import com.app.modules.message.dto.request.AddParticipantsRequest;
 import com.app.modules.message.dto.request.CreateDirectConversationRequest;
-import com.app.modules.message.dto.request.CreateGroupRequest;
-import com.app.modules.message.dto.request.UpdateGroupRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
 import com.app.modules.message.dto.response.MessageMediaResponse;
@@ -167,55 +163,6 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    @Transactional
-    public ConversationResponse createGroupConversation(UUID actorId, CreateGroupRequest request) {
-        if (!properties.groupChatEnabled()) {
-            throw new AppException(ApiErrorCode.GROUP_CHAT_DISABLED);
-        }
-        List<UUID> memberIds =
-                request.participantIds().stream()
-                        .distinct()
-                        .filter(id -> !id.equals(actorId))
-                        .toList();
-        if (memberIds.isEmpty()) {
-            throw new AppException(
-                    ApiErrorCode.CONVERSATION_INVALID_PARTICIPANTS,
-                    "At least one other participant is required");
-        }
-        // +1 accounts for the creator, who is always a member alongside the requested list.
-        if (memberIds.size() + 1 > properties.maxGroupParticipants()) {
-            throw new AppException(
-                    ApiErrorCode.CONVERSATION_INVALID_PARTICIPANTS,
-                    "Too many participants for a single group");
-        }
-        List<User> members = userRepository.findAllByIdInAndDeletedAtIsNull(memberIds);
-        if (members.size() != memberIds.size()) {
-            throw new AppException(ApiErrorCode.USER_NOT_FOUND);
-        }
-        for (UUID memberId : memberIds) {
-            assertNotBlocked(actorId, memberId);
-        }
-
-        Conversation conversation =
-                Conversation.builder()
-                        .isGroup(true)
-                        .groupName(request.groupName())
-                        .groupAvatarUrl(request.groupAvatarUrl())
-                        .createdBy(actorId)
-                        .build();
-        conversationRepository.saveAndFlush(conversation);
-        participantRepository.save(newParticipant(conversation.getId(), actorId, true));
-        for (UUID memberId : memberIds) {
-            participantRepository.save(newParticipant(conversation.getId(), memberId, false));
-        }
-        log.info(
-                "Group conversation created: conversationId={}, members={}",
-                conversation.getId(),
-                memberIds.size() + 1);
-        return assembleDetail(conversation);
-    }
-
-    @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<ConversationSummaryResponse> listMyConversations(
             UUID actorId, String cursor, int limit) {
@@ -294,121 +241,6 @@ public class ConversationServiceImpl implements ConversationService {
         return assembleDetail(conversation);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<ParticipantResponse> listParticipants(UUID actorId, UUID conversationId) {
-        fetchConversation(conversationId);
-        requireActiveParticipant(conversationId, actorId);
-        return assembleParticipants(conversationId);
-    }
-
-    @Override
-    @Transactional
-    public void addParticipants(UUID actorId, UUID conversationId, AddParticipantsRequest request) {
-        Conversation conversation = fetchConversation(conversationId);
-        requireGroupAdmin(conversation, actorId);
-
-        List<UUID> targetIds =
-                request.userIds().stream().distinct().filter(id -> !id.equals(actorId)).toList();
-        if (targetIds.isEmpty()) {
-            throw new AppException(ApiErrorCode.CONVERSATION_INVALID_PARTICIPANTS);
-        }
-        List<User> targets = userRepository.findAllByIdInAndDeletedAtIsNull(targetIds);
-        if (targets.size() != targetIds.size()) {
-            throw new AppException(ApiErrorCode.USER_NOT_FOUND);
-        }
-        for (UUID targetId : targetIds) {
-            assertNotBlocked(actorId, targetId);
-        }
-
-        List<ConversationParticipant> toReactivate = new ArrayList<>();
-        List<UUID> toInsert = new ArrayList<>();
-        for (UUID targetId : targetIds) {
-            Optional<ConversationParticipant> existing =
-                    participantRepository.findByIdConversationIdAndIdUserId(
-                            conversationId, targetId);
-            if (existing.isEmpty()) {
-                toInsert.add(targetId);
-            } else if (existing.get().getLeftAt() != null) {
-                toReactivate.add(existing.get());
-            }
-            // An already-active member is a silent no-op.
-        }
-
-        int currentActive =
-                participantRepository.countByIdConversationIdAndLeftAtIsNull(conversationId);
-        int newJoiners = toReactivate.size() + toInsert.size();
-        if (currentActive + newJoiners > properties.maxGroupParticipants()) {
-            throw new AppException(
-                    ApiErrorCode.CONVERSATION_INVALID_PARTICIPANTS,
-                    "Too many participants for a single group");
-        }
-
-        for (ConversationParticipant participant : toReactivate) {
-            participant.setLeftAt(null);
-            participantRepository.save(participant);
-        }
-        for (UUID targetId : toInsert) {
-            participantRepository.save(newParticipant(conversationId, targetId, false));
-        }
-    }
-
-    @Override
-    @Transactional
-    public void removeParticipant(UUID actorId, UUID conversationId, UUID targetUserId) {
-        Conversation conversation = fetchConversation(conversationId);
-        requireGroupAdmin(conversation, actorId);
-        ConversationParticipant target =
-                participantRepository
-                        .findByIdConversationIdAndIdUserId(conversationId, targetUserId)
-                        .filter(p -> p.getLeftAt() == null)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.PARTICIPANT_NOT_FOUND));
-        boolean removedAdmin = target.isAdmin();
-        target.setLeftAt(OffsetDateTime.now(ZoneOffset.UTC));
-        participantRepository.save(target);
-
-        // Mirrors leaveConversation: removing the last active admin (including self-removal
-        // through this endpoint) must not leave the group permanently unmanageable.
-        if (removedAdmin) {
-            promoteReplacementAdminIfNeeded(conversationId);
-        }
-    }
-
-    @Override
-    @Transactional
-    public void leaveConversation(UUID actorId, UUID conversationId) {
-        Conversation conversation = fetchConversation(conversationId);
-        ConversationParticipant actorParticipant =
-                participantRepository
-                        .findByIdConversationIdAndIdUserId(conversationId, actorId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
-        if (actorParticipant.getLeftAt() != null) {
-            return;
-        }
-        actorParticipant.setLeftAt(OffsetDateTime.now(ZoneOffset.UTC));
-        participantRepository.save(actorParticipant);
-
-        if (conversation.isGroup() && actorParticipant.isAdmin()) {
-            promoteReplacementAdminIfNeeded(conversationId);
-        }
-    }
-
-    @Override
-    @Transactional
-    public ConversationResponse updateGroup(
-            UUID actorId, UUID conversationId, UpdateGroupRequest request) {
-        Conversation conversation = fetchConversation(conversationId);
-        requireGroupAdmin(conversation, actorId);
-        if (request.groupName() != null) {
-            conversation.setGroupName(request.groupName());
-        }
-        if (request.groupAvatarUrl() != null) {
-            conversation.setGroupAvatarUrl(request.groupAvatarUrl());
-        }
-        conversationRepository.save(conversation);
-        return assembleDetail(conversation);
-    }
-
     private void promoteReplacementAdminIfNeeded(UUID conversationId) {
         List<ConversationParticipant> active =
                 participantRepository
@@ -463,20 +295,6 @@ public class ConversationServiceImpl implements ConversationService {
         if (!participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                 conversationId, userId)) {
             throw new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN);
-        }
-    }
-
-    private void requireGroupAdmin(Conversation conversation, UUID actorId) {
-        if (!conversation.isGroup()) {
-            throw new AppException(ApiErrorCode.CONVERSATION_NOT_GROUP);
-        }
-        boolean isActiveAdmin =
-                participantRepository
-                        .findByIdConversationIdAndIdUserId(conversation.getId(), actorId)
-                        .filter(p -> p.getLeftAt() == null && p.isAdmin())
-                        .isPresent();
-        if (!isActiveAdmin) {
-            throw new AppException(ApiErrorCode.GROUP_ADMIN_REQUIRED);
         }
     }
 

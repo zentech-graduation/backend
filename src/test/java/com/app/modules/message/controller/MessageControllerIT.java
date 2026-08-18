@@ -211,48 +211,6 @@ class MessageControllerIT {
     }
 
     @Test
-    void createGroupConversation_success_creatorIsAdminAndMembersAreNot() {
-        TestUser owner = registerUser("group_owner");
-        TestUser member1 = registerUser("group_member1");
-        TestUser member2 = registerUser("group_member2");
-
-        ResponseEntity<Map> response =
-                rest.exchange(
-                        "/api/v1/conversations/group",
-                        HttpMethod.POST,
-                        new HttpEntity<>(
-                                Map.of(
-                                        "groupName",
-                                        "Trip Planning",
-                                        "participantIds",
-                                        List.of(member1.id().toString(), member2.id().toString())),
-                                authHeaders(owner)),
-                        Map.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
-        UUID conversationId = UUID.fromString((String) data.get("id"));
-        assertThat(data.get("isGroup")).isEqualTo(true);
-        assertThat(isAdmin(conversationId, owner.id())).isTrue();
-        assertThat(isAdmin(conversationId, member1.id())).isFalse();
-        assertThat(isAdmin(conversationId, member2.id())).isFalse();
-
-        ResponseEntity<Map> detail = getWithAuth("/api/v1/conversations/" + conversationId, owner);
-        Map<?, ?> detailData = (Map<?, ?>) detail.getBody().get("data");
-        assertThat(detailData.get("isGroup")).isEqualTo(true);
-
-        ResponseEntity<Map> list = getWithAuth("/api/v1/conversations", owner);
-        List<Map<?, ?>> listContent =
-                (List<Map<?, ?>>) ((Map<?, ?>) list.getBody().get("data")).get("content");
-        Map<?, ?> listEntry =
-                listContent.stream()
-                        .filter(entry -> conversationId.toString().equals(entry.get("id")))
-                        .findFirst()
-                        .orElseThrow();
-        assertThat(listEntry.get("isGroup")).isEqualTo(true);
-    }
-
-    @Test
     void listMyConversations_returnsCreatedConversation() {
         TestUser alice = registerUser("list_alice");
         TestUser bob = registerUser("list_bob");
@@ -375,131 +333,6 @@ class MessageControllerIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getBody().get("code")).isEqualTo("CONVERSATION_NOT_FOUND");
-    }
-
-    @Test
-    void updateGroup_byAdmin_updatesNameAndAvatar() {
-        TestUser owner = registerUser("rename_owner");
-        TestUser member = registerUser("rename_member");
-        UUID conversationId = createGroup(owner, "Old Name", member.id());
-
-        ResponseEntity<Map> response =
-                rest.exchange(
-                        "/api/v1/conversations/" + conversationId,
-                        HttpMethod.PATCH,
-                        new HttpEntity<>(
-                                Map.of(
-                                        "groupName",
-                                        "New Name",
-                                        "groupAvatarUrl",
-                                        "https://cdn.test/g.png"),
-                                authHeaders(owner)),
-                        Map.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
-        assertThat(data.get("groupName")).isEqualTo("New Name");
-        assertThat(data.get("groupAvatarUrl")).isEqualTo("https://cdn.test/g.png");
-    }
-
-    @Test
-    void updateGroup_byNonAdmin_returnsForbidden() {
-        TestUser owner = registerUser("rename2_owner");
-        TestUser member = registerUser("rename2_member");
-        UUID conversationId = createGroup(owner, "Old Name", member.id());
-
-        ResponseEntity<Map> response =
-                rest.exchange(
-                        "/api/v1/conversations/" + conversationId,
-                        HttpMethod.PATCH,
-                        new HttpEntity<>(Map.of("groupName", "Hijacked"), authHeaders(member)),
-                        Map.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(response.getBody().get("code")).isEqualTo("GROUP_ADMIN_REQUIRED");
-    }
-
-    @Test
-    void addParticipants_byAdmin_addsNewMember() {
-        TestUser owner = registerUser("add_owner");
-        TestUser existing = registerUser("add_existing");
-        TestUser newcomer = registerUser("add_newcomer");
-        UUID conversationId = createGroup(owner, "Growing Group", existing.id());
-
-        ResponseEntity<Map> response =
-                rest.exchange(
-                        "/api/v1/conversations/" + conversationId + "/participants",
-                        HttpMethod.POST,
-                        new HttpEntity<>(
-                                Map.of("userIds", List.of(newcomer.id().toString())),
-                                authHeaders(owner)),
-                        Map.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(activeParticipantIds(conversationId))
-                .containsExactlyInAnyOrder(owner.id(), existing.id(), newcomer.id());
-    }
-
-    @Test
-    void addParticipants_onDirectConversation_returnsConflict() {
-        TestUser alice = registerUser("notgroup_alice");
-        TestUser bob = registerUser("notgroup_bob");
-        TestUser stranger = registerUser("notgroup_stranger");
-        UUID conversationId = conversationIdOf(createDirect(alice, bob.id()));
-
-        ResponseEntity<Map> response =
-                rest.exchange(
-                        "/api/v1/conversations/" + conversationId + "/participants",
-                        HttpMethod.POST,
-                        new HttpEntity<>(
-                                Map.of("userIds", List.of(stranger.id().toString())),
-                                authHeaders(alice)),
-                        Map.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("code")).isEqualTo("CONVERSATION_NOT_GROUP");
-    }
-
-    @Test
-    void removeParticipant_byAdmin_removesMember() {
-        TestUser owner = registerUser("remove_owner");
-        TestUser member = registerUser("remove_member");
-        UUID conversationId = createGroup(owner, "Shrinking Group", member.id());
-
-        ResponseEntity<Map> response =
-                rest.exchange(
-                        "/api/v1/conversations/" + conversationId + "/participants/" + member.id(),
-                        HttpMethod.DELETE,
-                        new HttpEntity<>(authHeaders(owner)),
-                        Map.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(activeParticipantIds(conversationId)).containsExactly(owner.id());
-    }
-
-    @Test
-    void leaveConversation_lastAdmin_promotesRemainingMemberAndIsIdempotent() {
-        TestUser owner = registerUser("leave_owner");
-        TestUser member = registerUser("leave_member");
-        UUID conversationId = createGroup(owner, "Handoff Group", member.id());
-
-        ResponseEntity<Map> firstLeave =
-                rest.exchange(
-                        "/api/v1/conversations/" + conversationId + "/leave",
-                        HttpMethod.POST,
-                        new HttpEntity<>(authHeaders(owner)),
-                        Map.class);
-        assertThat(firstLeave.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(isAdmin(conversationId, member.id())).isTrue();
-        assertThat(activeParticipantIds(conversationId)).containsExactly(member.id());
-
-        ResponseEntity<Map> secondLeave =
-                rest.exchange(
-                        "/api/v1/conversations/" + conversationId + "/leave",
-                        HttpMethod.POST,
-                        new HttpEntity<>(authHeaders(owner)),
-                        Map.class);
-        assertThat(secondLeave.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
@@ -911,20 +744,6 @@ class MessageControllerIT {
                 Map.class);
     }
 
-    private UUID createGroup(TestUser owner, String groupName, UUID... memberIds) {
-        List<String> ids = List.of(memberIds).stream().map(UUID::toString).toList();
-        ResponseEntity<Map> response =
-                rest.exchange(
-                        "/api/v1/conversations/group",
-                        HttpMethod.POST,
-                        new HttpEntity<>(
-                                Map.of("groupName", groupName, "participantIds", ids),
-                                authHeaders(owner)),
-                        Map.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        return conversationIdOf(response);
-    }
-
     private static UUID conversationIdOf(ResponseEntity<Map> response) {
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         return UUID.fromString((String) data.get("id"));
@@ -990,6 +809,52 @@ class MessageControllerIT {
         assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
         Map<?, ?> data = (Map<?, ?>) login.getBody().get("data");
         return new TestUser(id, (String) data.get("accessToken"));
+    }
+
+    @Test
+    void groupEndpoints_areNoLongerRouted() {
+        // The routes must be absent, not merely reject their bodies. The exact status differs by
+        // whether the path still matches a surviving route: /conversations/group now falls onto the
+        // GET-only /conversations/{id} pattern, and this application maps method-not-supported to
+        // 400 rather than 405. What matters is that none of them succeeds.
+        TestUser alice = registerUser("gone_alice");
+        TestUser bob = registerUser("gone_bob");
+        UUID conversationId =
+                UUID.fromString(
+                        (String)
+                                ((Map<?, ?>) createDirect(alice, bob.id()).getBody().get("data"))
+                                        .get("id"));
+
+        assertGone(
+                "/api/v1/conversations/group",
+                HttpMethod.POST,
+                new HttpEntity<>(
+                        Map.of("groupName", "gone", "participantIds", List.of(bob.id())),
+                        authHeaders(alice)));
+        assertGone(
+                "/api/v1/conversations/" + conversationId + "/participants",
+                HttpMethod.GET,
+                new HttpEntity<>(authHeaders(alice)));
+        assertGone(
+                "/api/v1/conversations/" + conversationId + "/participants/" + bob.id(),
+                HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders(alice)));
+        assertGone(
+                "/api/v1/conversations/" + conversationId + "/leave",
+                HttpMethod.POST,
+                new HttpEntity<>(authHeaders(alice)));
+        assertGone(
+                "/api/v1/conversations/" + conversationId,
+                HttpMethod.PATCH,
+                new HttpEntity<>(Map.of("groupName", "gone"), authHeaders(alice)));
+    }
+
+    private void assertGone(String url, HttpMethod method, HttpEntity<?> request) {
+        ResponseEntity<Map> response = rest.exchange(url, method, request, Map.class);
+        assertThat(response.getStatusCode().is4xxClientError())
+                .as("%s %s must not be routed", method, url)
+                .isTrue();
+        assertThat(response.getBody().get("success")).isEqualTo(false);
     }
 
     private HttpHeaders authHeaders(TestUser user) {
