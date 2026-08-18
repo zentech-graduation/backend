@@ -3,12 +3,14 @@ package com.app.modules.auth.controller;
 import static com.app.modules.auth.messaging.AuthEventTypes.AUTH_EMAIL_VERIFICATION_REQUESTED_V1;
 import static com.app.modules.auth.messaging.AuthEventTypes.USER_REGISTERED_V1;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +122,99 @@ class AuthControllerIT {
     @Autowired private TokenService tokenService;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
+
+    @Test
+    void register_recordsTheOriginTheAccountWasCreatedFrom() {
+        String email = uniqueEmail("reg_ip");
+        String username = uniqueUsername("regip");
+
+        ResponseEntity<Map> response =
+                postJson(
+                        "/api/v1/auth/register",
+                        registerBody(username, email, TEST_PASSWORD),
+                        "198.51.100.42");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT host(registration_ip) FROM users WHERE id = ?",
+                                String.class,
+                                userId))
+                .isEqualTo("198.51.100.42");
+        // Nothing has logged in yet, so the login columns must still be empty. A registration that
+        // also set them would make last_login_at mean "account exists" rather than "account used".
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT last_login_at FROM users WHERE id = ?",
+                                OffsetDateTime.class,
+                                userId))
+                .isNull();
+    }
+
+    @Test
+    void login_advancesLastLoginAtAndRecordsTheOrigin() {
+        String email = uniqueEmail("login_ip");
+        String username = uniqueUsername("loginip");
+        postJson("/api/v1/auth/register", registerBody(username, email, TEST_PASSWORD));
+        String verificationToken = createVerificationToken(email);
+        rest.getForEntity("/api/v1/auth/verify-email?token=" + verificationToken, Map.class);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+
+        ResponseEntity<Map> login =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD),
+                        "203.0.113.77");
+
+        assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT last_login_at FROM users WHERE id = ?",
+                                OffsetDateTime.class,
+                                userId))
+                .isNotNull();
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT host(last_login_ip) FROM users WHERE id = ?",
+                                String.class,
+                                userId))
+                .isEqualTo("203.0.113.77");
+    }
+
+    // A last-login timestamp that moved on every token refresh would report an idle background tab
+    // as recent activity and stop being a login signal at all.
+    @Test
+    void refresh_doesNotAdvanceLastLoginAt() {
+        String email = uniqueEmail("refresh_lastlogin");
+        Map<?, ?> sessionData =
+                registerVerifyAndLogin(uniqueUsername("rlogin"), email, TEST_PASSWORD);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        OffsetDateTime afterLogin =
+                jdbcTemplate.queryForObject(
+                        "SELECT last_login_at FROM users WHERE id = ?",
+                        OffsetDateTime.class,
+                        userId);
+        assertThat(afterLogin).isNotNull();
+        // Rewind the stored value so any write by the refresh path is unmistakable rather than a
+        // sub-millisecond difference that could be argued either way.
+        jdbcTemplate.update(
+                "UPDATE users SET last_login_at = ? WHERE id = ?", afterLogin.minusDays(3), userId);
+
+        ResponseEntity<Map> refreshed =
+                postJson(
+                        "/api/v1/auth/refresh",
+                        Map.of("refreshToken", sessionData.get("refreshToken")));
+
+        assertThat(refreshed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT last_login_at FROM users WHERE id = ?",
+                                OffsetDateTime.class,
+                                userId))
+                .isCloseTo(
+                        afterLogin.minusDays(3), within(1, java.time.temporal.ChronoUnit.SECONDS));
+    }
 
     @Test
     void refresh_bannedUser_returns403AndOldTokenIsDurablyRevoked() {

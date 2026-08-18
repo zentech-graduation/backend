@@ -58,8 +58,9 @@ public class AuthController extends BaseController implements AuthApi {
      */
     @Override
     @PostMapping(ApiConstants.Auth.REGISTER)
-    public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegisterRequest request) {
-        authService.register(request);
+    public ResponseEntity<ApiResponse<Void>> register(
+            @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        authService.register(request, httpRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(ApiSuccessCode.CREATED));
     }

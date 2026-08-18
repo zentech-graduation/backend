@@ -83,7 +83,8 @@ public interface AuthApi {
     })
     @MalformedBodyErrorResponses
     @PostMapping(ApiConstants.Auth.REGISTER)
-    ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegisterRequest request);
+    ResponseEntity<ApiResponse<Void>> register(
+            @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest);
 
     /** Authenticates an existing user and returns access + refresh tokens. */
     @Operation(

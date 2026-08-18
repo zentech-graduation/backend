@@ -170,7 +170,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail("a@b.c")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null);
 
-        assertThatThrownBy(() -> service.register(req))
+        assertThatThrownBy(() -> service.register(req, stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
@@ -183,7 +183,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByUsername("user1")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null);
 
-        assertThatThrownBy(() -> service.register(req))
+        assertThatThrownBy(() -> service.register(req, stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
@@ -202,7 +202,7 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn("HASH");
 
-        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
+        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null), stubRequest());
 
         verify(userRepository).save(any(User.class));
         verify(credentialRepository).save(any(UserCredential.class));
@@ -221,7 +221,7 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(anyString())).thenReturn("HASH");
 
-        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
+        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null), stubRequest());
 
         verify(authMailEventService).publishUserRegistered(any(User.class));
         verify(authMailEventService).publishEmailVerificationRequested(any(User.class), eq(newId));
@@ -245,7 +245,8 @@ class AuthServiceImplTest {
         appender.start();
         logger.addAppender(appender);
         try {
-            service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
+            service.register(
+                    new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null), stubRequest());
         } finally {
             logger.detachAppender(appender);
         }
@@ -511,7 +512,8 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn("HASH");
 
-        service.register(new RegisterRequest("MixedCase", "a@b.c", TEST_PASSWORD, null));
+        service.register(
+                new RegisterRequest("MixedCase", "a@b.c", TEST_PASSWORD, null), stubRequest());
 
         // Deliberate inversion: this asserted the stored value was lowercased. Identity is
         // case-insensitive via idx_users_username_lower, so the column no longer has to carry a
