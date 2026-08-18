@@ -88,8 +88,7 @@ class AdminServiceImplTest {
         stubAudit(expected);
 
         AdminActionResponse result =
-                service.suspendUser(
-                        actorId, userId, new AdminActionRequest("Policy breach", null, Map.of()));
+                service.suspendUser(actorId, userId, new AdminActionRequest("Policy breach", null));
 
         assertThat(result).isEqualTo(expected);
         assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
@@ -117,9 +116,7 @@ class AdminServiceImplTest {
         assertThatThrownBy(
                         () ->
                                 service.unbanUser(
-                                        actorId,
-                                        userId,
-                                        new AdminActionRequest("Review", null, null)))
+                                        actorId, userId, new AdminActionRequest("Review", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
@@ -136,7 +133,7 @@ class AdminServiceImplTest {
                                 service.suspendUser(
                                         actorId,
                                         actorId,
-                                        new AdminActionRequest("Self action", null, null)))
+                                        new AdminActionRequest("Self action", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
@@ -156,7 +153,7 @@ class AdminServiceImplTest {
                                 service.banUser(
                                         actorId,
                                         targetId,
-                                        new AdminActionRequest("Admin on admin", null, null)))
+                                        new AdminActionRequest("Admin on admin", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_TARGET_PROTECTED);
@@ -176,7 +173,7 @@ class AdminServiceImplTest {
                                 service.banUser(
                                         actorId,
                                         targetId,
-                                        new AdminActionRequest("Moderator escalation", null, null)))
+                                        new AdminActionRequest("Moderator escalation", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.FORBIDDEN);
@@ -196,7 +193,7 @@ class AdminServiceImplTest {
 
         AdminActionResponse result =
                 service.removePost(
-                        UUID.randomUUID(), postId, new AdminActionRequest("Violation", null, null));
+                        UUID.randomUUID(), postId, new AdminActionRequest("Violation", null));
 
         assertThat(result).isEqualTo(expected);
         verify(postRepository)
@@ -219,7 +216,7 @@ class AdminServiceImplTest {
                 service.restoreComment(
                         UUID.randomUUID(),
                         commentId,
-                        new AdminActionRequest("Appeal accepted", null, null));
+                        new AdminActionRequest("Appeal accepted", null));
 
         assertThat(result).isEqualTo(expected);
         verify(commentRepository).applyAdminModeration(commentId, null);
@@ -242,8 +239,7 @@ class AdminServiceImplTest {
         stubAudit(expected);
 
         AdminActionResponse result =
-                service.resolveReport(
-                        actorId, reportId, new AdminActionRequest("Confirmed", null, null));
+                service.resolveReport(actorId, reportId, new AdminActionRequest("Confirmed", null));
 
         assertThat(result).isEqualTo(expected);
         assertThat(report.getStatus()).isEqualTo(ReportStatus.RESOLVED);
@@ -263,7 +259,7 @@ class AdminServiceImplTest {
                                 service.resolveReport(
                                         UUID.randomUUID(),
                                         reportId,
-                                        new AdminActionRequest("Reopen not allowed", null, null)))
+                                        new AdminActionRequest("Reopen not allowed", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);

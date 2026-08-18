@@ -180,14 +180,7 @@ public class AdminServiceImpl implements AdminService {
         user.setStatus(targetStatus);
         userRepository.save(user);
         return recordAction(
-                actorId,
-                actionType,
-                userId,
-                "user",
-                userId,
-                null,
-                request.reason(),
-                request.metadata());
+                actorId, actionType, userId, "user", userId, null, request.reason(), null);
     }
 
     private AdminActionResponse moderatePost(
@@ -218,7 +211,7 @@ public class AdminServiceImpl implements AdminService {
                 postId,
                 request.reportId(),
                 request.reason(),
-                request.metadata());
+                null);
     }
 
     private AdminActionResponse moderateComment(
@@ -245,7 +238,7 @@ public class AdminServiceImpl implements AdminService {
                 commentId,
                 request.reportId(),
                 request.reason(),
-                request.metadata());
+                null);
     }
 
     private AdminActionResponse closeReport(
@@ -275,7 +268,7 @@ public class AdminServiceImpl implements AdminService {
                 report.getEntityId(),
                 reportId,
                 request.reason(),
-                request.metadata());
+                null);
     }
 
     private CursorPageResponse<AdminActionSummaryResponse> findActions(
@@ -336,6 +329,8 @@ public class AdminServiceImpl implements AdminService {
         }
     }
 
+    // metadata stays a parameter but is server-derived only. It was previously forwarded straight
+    // from the request body, which made the audit trail record what the client claimed happened.
     private AdminActionResponse recordAction(
             UUID actorId,
             AdminActionType actionType,

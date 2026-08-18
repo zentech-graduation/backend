@@ -98,22 +98,25 @@ class AdminControllerIT {
     }
 
     @Test
-    void banUser_metadataAboveMax_returnsBadRequest() {
+    void banUser_clientSuppliedMetadata_isRejected() {
         TestUser actor = createUser("meta_bound_admin", "admin");
         TestUser target = createUser("meta_bound_target", "user");
 
-        Map<String, Object> metadata = new java.util.HashMap<>();
-        for (int i = 0; i < 21; i++) {
-            metadata.put("k" + i, "v" + i);
-        }
         Map<String, Object> body = new java.util.HashMap<>();
         body.put("reason", "Severe abuse");
-        body.put("metadata", metadata);
+        body.put("metadata", Map.of("severity", "high"));
 
         ResponseEntity<Map> response =
                 patch("/api/v1/admin/users/" + target.id() + "/ban", body, actor);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code")).isEqualTo("MALFORMED_REQUEST_BODY");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM admin_actions WHERE target_user_id = ?",
+                                Integer.class,
+                                target.id()))
+                .isZero();
     }
 
     @Test
