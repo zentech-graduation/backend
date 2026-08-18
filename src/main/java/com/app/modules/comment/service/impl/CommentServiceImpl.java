@@ -599,10 +599,9 @@ public class CommentServiceImpl implements CommentService {
                 .contains(commentId);
     }
 
-    // Re-reads the existing idempotency row to replay the cached response or reject a key reuse
-    // with
-    // a different payload. A null body means a concurrent in-flight create reserved the key but has
-    // not committed its response yet, which is treated as a conflict.
+    // Re-reads the existing idempotency row to replay the cached response, or to reject a key
+    // reused with a different payload. A null body means a concurrent in-flight create reserved the
+    // key but has not committed its response yet, which is treated as a conflict.
     private CommentResponse replayOrConflict(
             UUID actorId, String idempotencyKey, String requestHash) {
         CommentWriteIdempotency row =

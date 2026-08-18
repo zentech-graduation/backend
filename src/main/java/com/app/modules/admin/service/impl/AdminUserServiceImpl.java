@@ -153,8 +153,8 @@ public class AdminUserServiceImpl implements AdminUserService {
     public AdminActionResponse changeRole(
             UUID actorId, UUID userId, AdminRoleChangeRequest request) {
         // Resolved from the source of truth inside this transaction. A role claim on a token
-        // outlives
-        // a demotion for the rest of the token's life, and this endpoint is what creates demotions.
+        // outlives a demotion for the rest of the token's life, and demotion is what this
+        // endpoint exists to perform.
         UserRole actorRole =
                 userRepository
                         .findByIdAndDeletedAtIsNull(actorId)
@@ -170,9 +170,8 @@ public class AdminUserServiceImpl implements AdminUserService {
         UserRole previousRole = target.getRole();
         target.setRole(request.role());
         userRepository.save(target);
-        // Same transaction as the role write. A session that outlived a demotion would keep
-        // whatever
-        // capability the old role granted for as long as its tokens stayed valid.
+        // Same transaction as the role write. A session that outlived a demotion would hold the
+        // old role's capability for as long as its tokens stayed valid.
         int revoked = refreshTokenService.revokeAllForUser(target.getId());
         log.info(
                 "Role changed: actorId={}, targetId={}, from={}, to={}, revokedSessions={}",
