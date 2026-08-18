@@ -8,7 +8,7 @@
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `users` | `id`, `username`, `email`, `role`, `status`, `is_private`, `is_verified` | Core user identity. Canonical for all user-referencing modules. Soft-deleted via `deleted_at`. |
+| `users` | `id`, `username`, `email`, `role`, `status`, `is_private`, `is_verified`, `registration_ip`, `last_login_ip`, `last_login_at` | Core user identity. Canonical for all user-referencing modules. Soft-deleted via `deleted_at`. `registration_ip` is written once, in the same transaction as the row insert, on both the local and the OAuth creation path. `last_login_ip` and `last_login_at` advance on session issuance only and are deliberately not advanced by a token refresh, so `last_login_at` stays a sign-in signal rather than an activity signal. All three come from `IpExtractor`, which honours `X-Forwarded-For` only from a configured trusted proxy. |
 | `user_credentials` | `user_id` (PK/FK), `password_hash`, `email_verified`, `email_verified_at` | Local auth credentials. `password_hash` is nullable — OAuth-only users have no local password. |
 | `oauth_accounts` | `id`, `user_id`, `provider`, `provider_id` | Canonical record that a user authenticated via an external OAuth provider. One row per (provider, provider_id) pair. |
 | `refresh_tokens` | `id`, `user_id`, `token_hash`, `expires_at`, `revoked_at` | Durable record of issued refresh tokens. Token itself is never stored — only its bcrypt hash. |
