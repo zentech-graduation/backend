@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Accepting `SameSite=None` on the refresh cookie now requires an explicit acknowledgement and otherwise fails at startup, because it removes the only cross-site request protection on the refresh and logout endpoints while leaving every request apparently successful.
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
+### Fixed
+- Corrected `database/schema.sql`, which still had the group-conversation columns, a stale follow-counter function, and no record of the new conversation-customization columns despite Flyway having already migrated past all of it.
+
 ### Added
 - A conversation can now be pinned to the top of the caller's own list, muted to suppress its notifications, and given a private nickname visible only to the caller, all independent of the other participant's own view.
 - A conversation can now be deleted from the caller's own inbox only, and marked unread again.

@@ -399,12 +399,12 @@ CREATE TABLE notifications (
 -- MODULE: DIRECT MESSAGE / CHAT
 -- ============================================================
 
--- A conversation can be 1-1 or group
+-- Every conversation is 1-1; group conversations were removed (see
+-- archived_group_conversations below). direct_pair_key is the two participants' user_id values
+-- in sorted order, enforced unique so a pair can never hold two separate threads.
 CREATE TABLE conversations (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    is_group            BOOLEAN         NOT NULL DEFAULT FALSE,
-    group_name          VARCHAR(100),
-    group_avatar_url    TEXT,
+    direct_pair_key     TEXT,
     created_by          UUID            REFERENCES users(id) ON DELETE SET NULL,
     last_message_at     TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -415,7 +415,6 @@ CREATE TABLE conversations (
 CREATE TABLE conversation_participants (
     conversation_id     UUID            NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    is_admin            BOOLEAN         NOT NULL DEFAULT FALSE,
     joined_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     left_at             TIMESTAMPTZ,
     last_read_at        TIMESTAMPTZ,    -- for unread badge calculation
@@ -442,6 +441,45 @@ CREATE TABLE messages (
     is_deleted          BOOLEAN         NOT NULL DEFAULT FALSE,
     deleted_at          TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+-- Snapshot of every group conversation, its members, and its messages, taken before group chat
+-- was removed as a product decision. No foreign keys back into the live schema: these rows must
+-- outlive the conversations they describe.
+CREATE TABLE archived_group_conversations (
+    id                  UUID            PRIMARY KEY,
+    group_name          VARCHAR(100),
+    group_avatar_url    TEXT,
+    created_by          UUID,
+    last_message_at     TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ,
+    archived_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE archived_group_participants (
+    conversation_id     UUID            NOT NULL,
+    user_id             UUID            NOT NULL,
+    is_admin            BOOLEAN,
+    joined_at           TIMESTAMPTZ,
+    left_at             TIMESTAMPTZ,
+    last_read_at        TIMESTAMPTZ,
+    archived_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (conversation_id, user_id)
+);
+
+CREATE TABLE archived_group_messages (
+    id                  UUID            PRIMARY KEY,
+    conversation_id     UUID            NOT NULL,
+    sender_id           UUID,
+    message_type        TEXT,
+    content             TEXT,
+    media_asset_id      UUID,
+    shared_post_id      UUID,
+    shared_story_id     UUID,
+    reply_to_id         UUID,
+    is_deleted          BOOLEAN,
+    created_at          TIMESTAMPTZ,
+    archived_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
@@ -722,7 +760,6 @@ CREATE TABLE feature_flags (
 );
 
 INSERT INTO feature_flags (flag_key, is_enabled, description, environment) VALUES
-    ('group_chat',       FALSE, 'Enable group conversation feature',                        'all'),
     ('recommendation',   FALSE, 'Enable personalized feed recommendation',                  'all'),
     ('story_reply',      TRUE,  'Allow users to reply to stories',                          'all'),
     ('maintenance_mode', FALSE, 'Put the application into read-only maintenance mode',      'all'),
@@ -880,6 +917,11 @@ CREATE INDEX idx_notifications_unread    ON notifications (recipient_id, created
 
 -- conversations
 CREATE INDEX idx_conversations_updated  ON conversations (last_message_at DESC NULLS LAST);
+-- Every conversation is 1-1, so the pair key alone identifies it; losing this index would let a
+-- pair silently hold two separate threads.
+CREATE UNIQUE INDEX idx_conversations_direct_pair_key
+    ON conversations (direct_pair_key)
+    WHERE direct_pair_key IS NOT NULL;
 
 -- conversation_participants
 CREATE INDEX idx_conv_part_user         ON conversation_participants (user_id, last_read_at DESC)
@@ -968,10 +1010,28 @@ CREATE TRIGGER trg_feature_flags_updated_at
     BEFORE UPDATE ON feature_flags
     FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
 
--- Follow counter maintenance
+-- Follow counter maintenance. Both users rows are locked in id order before either is written,
+-- so two people following each other back at the same instant queue behind each other instead
+-- of deadlocking on the opposite lock order.
 CREATE OR REPLACE FUNCTION fn_follow_counts()
 RETURNS TRIGGER AS $$
+DECLARE
+    follower_key  UUID;
+    following_key UUID;
 BEGIN
+    IF TG_OP = 'DELETE' THEN
+        follower_key  := OLD.follower_id;
+        following_key := OLD.following_id;
+    ELSE
+        follower_key  := NEW.follower_id;
+        following_key := NEW.following_id;
+    END IF;
+
+    PERFORM 1 FROM users
+    WHERE id IN (follower_key, following_key)
+    ORDER BY id
+    FOR NO KEY UPDATE;
+
     IF TG_OP = 'INSERT' AND NEW.status = 'accepted' THEN
         UPDATE users SET following_count = following_count + 1 WHERE id = NEW.follower_id;
         UPDATE users SET follower_count  = follower_count  + 1 WHERE id = NEW.following_id;
