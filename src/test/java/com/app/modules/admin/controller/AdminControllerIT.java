@@ -117,6 +117,21 @@ class AdminControllerIT {
     }
 
     @Test
+    void banUser_writeResponse_carriesCreatedAt() {
+        TestUser actor = createUser("created_at_admin", "admin");
+        TestUser target = createUser("created_at_target", "user");
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/users/" + target.id() + "/ban",
+                        Map.of("reason", "Audit timestamp must reach the client"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(response).get("createdAt")).isNotNull();
+    }
+
+    @Test
     void banUser_regularUser_returnsForbidden() {
         TestUser actor = createUser("forbidden_actor", "user");
         TestUser target = createUser("forbidden_target", "user");

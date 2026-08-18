@@ -25,6 +25,10 @@ public class AdminActionRepositoryImpl implements AdminActionRepositoryCustom {
     @Override
     public AdminAction insert(AdminAction action) {
         entityManager.persist(action);
+        // Flush so the @CreationTimestamp createdAt is populated on the returned entity. Without it
+        // persist only queues the INSERT and every caller that maps the return value straight into
+        // a response - which is all of them - emitted "createdAt": null.
+        entityManager.flush();
         return action;
     }
 
