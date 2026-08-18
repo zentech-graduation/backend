@@ -28,6 +28,7 @@ import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.message.service.DirectConversationProvisioner;
 import com.app.modules.report.service.ReportedTargetService;
 import com.app.modules.social.dto.response.FollowRequestResponse;
 import com.app.modules.social.dto.response.FollowResponse;
@@ -52,6 +53,7 @@ class SocialServiceImplTest {
     @Mock private SocialEventService socialEventService;
     @Mock private UserSummaryService userSummaryService;
     @Mock private ReportedTargetService reportedTargetService;
+    @Mock private DirectConversationProvisioner directConversationProvisioner;
 
     private SocialServiceImpl service;
 
@@ -64,7 +66,8 @@ class SocialServiceImplTest {
                         socialUserRepository,
                         socialEventService,
                         userSummaryService,
-                        reportedTargetService);
+                        reportedTargetService,
+                        directConversationProvisioner);
     }
 
     @Test
