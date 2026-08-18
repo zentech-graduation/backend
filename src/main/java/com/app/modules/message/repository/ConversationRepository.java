@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -25,8 +26,7 @@ public interface ConversationRepository
             value =
                     """
 					SELECT c.* FROM conversations c
-					WHERE c.is_group = FALSE
-					AND EXISTS (SELECT 1 FROM conversation_participants p1
+					WHERE EXISTS (SELECT 1 FROM conversation_participants p1
 								WHERE p1.conversation_id = c.id AND p1.user_id = :userA)
 					AND EXISTS (SELECT 1 FROM conversation_participants p2
 								WHERE p2.conversation_id = c.id AND p2.user_id = :userB)
@@ -38,11 +38,33 @@ public interface ConversationRepository
     Optional<Conversation> findDirectConversationBetween(UUID userA, UUID userB);
 
     /**
-     * First page of the caller's active conversations, newest activity first.
+     * Deletes the pair's conversation only when it holds no messages.
+     *
+     * <p>Guarded by {@code NOT EXISTS} so a conversation carrying history can never be removed as a
+     * side effect of a follow change. The pair-key expression is copied verbatim from {@code
+     * ConversationRepositoryImpl.LOCK_AND_KEY_SQL} so the lock and the delete can never disagree
+     * about which conversation they mean.
+     */
+    @Modifying
+    @Query(
+            value =
+                    """
+					DELETE FROM conversations c
+					WHERE c.direct_pair_key = LEAST(:userA, :userB)::text || ':' || GREATEST(:userA, :userB)::text
+					AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id)
+					""",
+            nativeQuery = true)
+    void deleteEmptyDirectConversation(UUID userA, UUID userB);
+
+    /**
+     * First page of the caller's active, unpinned conversations, newest activity first.
      *
      * <p>Conversations with no message yet ({@code last_message_at IS NULL}) sort last, per {@code
      * NULLS LAST}; continuing past them onto later pages is handled by {@link
-     * #findMyConversationsBefore}.
+     * #findMyConversationsBefore}. Pinned conversations are excluded here and returned in full,
+     * unpaginated, by {@link #findMyPinnedConversations} instead - keeping "pinned" out of the
+     * keyset cursor avoids a second sort dimension the cursor would otherwise have to encode, and a
+     * pinned set is small enough that paginating it buys nothing.
      */
     @Query(
             value =
@@ -50,6 +72,7 @@ public interface ConversationRepository
 					SELECT c.* FROM conversations c
 					JOIN conversation_participants p
 						ON p.conversation_id = c.id AND p.user_id = :userId AND p.left_at IS NULL
+					WHERE p.pinned_at IS NULL
 					ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC
 					""",
             nativeQuery = true)
@@ -61,7 +84,8 @@ public interface ConversationRepository
      * <p>{@code cursorTime} is {@code null} when the cursor itself points at a {@code
      * last_message_at IS NULL} row; continuation then stays within that null group, ordered by
      * {@code id DESC}. Otherwise every null row is included unconditionally, since {@code NULLS
-     * LAST} always places the whole null group after every non-null row.
+     * LAST} always places the whole null group after every non-null row. Pinned conversations are
+     * excluded, matching {@link #findFirstMyConversations}.
      */
     @Query(
             value =
@@ -69,15 +93,34 @@ public interface ConversationRepository
 					SELECT c.* FROM conversations c
 					JOIN conversation_participants p
 						ON p.conversation_id = c.id AND p.user_id = :userId AND p.left_at IS NULL
-					WHERE (CAST(:cursorTime AS timestamptz) IS NOT NULL
-							AND (c.last_message_at < :cursorTime
-								OR (c.last_message_at = :cursorTime AND c.id < :cursorId)
-								OR c.last_message_at IS NULL))
-						OR (CAST(:cursorTime AS timestamptz) IS NULL
-							AND c.last_message_at IS NULL AND c.id < :cursorId)
+					WHERE p.pinned_at IS NULL
+						AND ((CAST(:cursorTime AS timestamptz) IS NOT NULL
+								AND (c.last_message_at < :cursorTime
+									OR (c.last_message_at = :cursorTime AND c.id < :cursorId)
+									OR c.last_message_at IS NULL))
+							OR (CAST(:cursorTime AS timestamptz) IS NULL
+								AND c.last_message_at IS NULL AND c.id < :cursorId))
 					ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC
 					""",
             nativeQuery = true)
     List<Conversation> findMyConversationsBefore(
             UUID userId, OffsetDateTime cursorTime, UUID cursorId, Pageable pageable);
+
+    /**
+     * Every conversation the caller has pinned, most recently pinned first.
+     *
+     * <p>Unpaginated by design: prepended to the first page only, by the service layer, so a
+     * caller's pins are always fully visible without their own cursor.
+     */
+    @Query(
+            value =
+                    """
+					SELECT c.* FROM conversations c
+					JOIN conversation_participants p
+						ON p.conversation_id = c.id AND p.user_id = :userId
+							AND p.left_at IS NULL AND p.pinned_at IS NOT NULL
+					ORDER BY p.pinned_at DESC
+					""",
+            nativeQuery = true)
+    List<Conversation> findMyPinnedConversations(UUID userId);
 }

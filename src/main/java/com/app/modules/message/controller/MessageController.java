@@ -1,6 +1,5 @@
 package com.app.modules.message.controller;
 
-import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -9,9 +8,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,15 +23,12 @@ import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.message.api.MessageApi;
-import com.app.modules.message.dto.request.AddParticipantsRequest;
 import com.app.modules.message.dto.request.CreateDirectConversationRequest;
-import com.app.modules.message.dto.request.CreateGroupRequest;
 import com.app.modules.message.dto.request.SendMessageRequest;
-import com.app.modules.message.dto.request.UpdateGroupRequest;
+import com.app.modules.message.dto.request.SetNicknameRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
 import com.app.modules.message.dto.response.MessageResponse;
-import com.app.modules.message.dto.response.ParticipantResponse;
 import com.app.modules.message.dto.response.UnreadCountResponse;
 import com.app.modules.message.service.ConversationService;
 import com.app.modules.message.service.MessageService;
@@ -65,19 +61,6 @@ public class MessageController extends BaseController implements MessageApi {
                 .body(ApiResponse.success(ApiSuccessCode.CREATED, body));
     }
 
-    /** Creates a group conversation with the caller as its first admin; returns 201. */
-    @Override
-    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.GROUP)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<ConversationResponse>> createGroupConversation(
-            @Valid @RequestBody CreateGroupRequest request) {
-        ConversationResponse body =
-                conversationService.createGroupConversation(
-                        SecurityUtils.getCurrentUserId(), request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(ApiSuccessCode.CREATED, body));
-    }
-
     /** Lists the authenticated user's active conversations, newest activity first. */
     @Override
     @GetMapping(ApiConstants.Messages.ROOT)
@@ -104,58 +87,9 @@ public class MessageController extends BaseController implements MessageApi {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
-    /** Renames a group and/or changes its avatar for an active group admin. */
+    /** Deletes a conversation from the caller's own inbox, leaving the other side untouched. */
     @Override
-    @PatchMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<ConversationResponse>> updateGroup(
-            @PathVariable("conversationId") UUID conversationId,
-            @Valid @RequestBody UpdateGroupRequest request) {
-        ConversationResponse body =
-                conversationService.updateGroup(
-                        SecurityUtils.getCurrentUserId(), conversationId, request);
-        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
-    }
-
-    /** Lists a conversation's active and former members for an active participant. */
-    @Override
-    @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
-    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<List<ParticipantResponse>>> listParticipants(
-            @PathVariable("conversationId") UUID conversationId) {
-        List<ParticipantResponse> body =
-                conversationService.listParticipants(
-                        SecurityUtils.getCurrentUserId(), conversationId);
-        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
-    }
-
-    /** Adds members to a group conversation for an active group admin. */
-    @Override
-    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<Void>> addParticipants(
-            @PathVariable("conversationId") UUID conversationId,
-            @Valid @RequestBody AddParticipantsRequest request) {
-        conversationService.addParticipants(
-                SecurityUtils.getCurrentUserId(), conversationId, request);
-        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
-    }
-
-    /** Removes an active member from a group conversation for an active group admin. */
-    @Override
-    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANT_BY_ID)
-    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<Void>> removeParticipant(
-            @PathVariable("conversationId") UUID conversationId,
-            @PathVariable("userId") UUID userId) {
-        conversationService.removeParticipant(
-                SecurityUtils.getCurrentUserId(), conversationId, userId);
-        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
-    }
-
-    /** Leaves a conversation for the authenticated caller; idempotent. */
-    @Override
-    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.LEAVE)
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> leaveConversation(
             @PathVariable("conversationId") UUID conversationId) {
@@ -213,6 +147,16 @@ public class MessageController extends BaseController implements MessageApi {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
     }
 
+    /** Clears the authenticated caller's read marker for a conversation. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> markUnread(
+            @PathVariable("conversationId") UUID conversationId) {
+        messageService.markUnread(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
     /** Returns the authenticated caller's total unread message count. */
     @Override
     @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD_COUNT)
@@ -221,5 +165,57 @@ public class MessageController extends BaseController implements MessageApi {
         long count = messageService.getUnreadCount(SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(
                 ApiResponse.success(ApiSuccessCode.OK, new UnreadCountResponse(count)));
+    }
+
+    /** Pins a conversation to the top of the authenticated caller's own conversation list. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PIN)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> pinConversation(
+            @PathVariable("conversationId") UUID conversationId) {
+        conversationService.pinConversation(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Unpins a conversation for the authenticated caller. */
+    @Override
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PIN)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> unpinConversation(
+            @PathVariable("conversationId") UUID conversationId) {
+        conversationService.unpinConversation(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Mutes a conversation's notifications for the authenticated caller. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.MUTE)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> muteConversation(
+            @PathVariable("conversationId") UUID conversationId) {
+        conversationService.muteConversation(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Unmutes a conversation for the authenticated caller. */
+    @Override
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.MUTE)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> unmuteConversation(
+            @PathVariable("conversationId") UUID conversationId) {
+        conversationService.unmuteConversation(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Sets or clears the authenticated caller's private label for the other participant. */
+    @Override
+    @PutMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.NICKNAME)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> setNickname(
+            @PathVariable("conversationId") UUID conversationId,
+            @Valid @RequestBody SetNicknameRequest request) {
+        conversationService.setNickname(
+                SecurityUtils.getCurrentUserId(), conversationId, request.nickname());
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
     }
 }

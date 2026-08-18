@@ -502,7 +502,6 @@ class OpenApiContractIT {
                         new Expectation("NotificationResponse", "entityId"),
                         new Expectation("NotificationResponse", "entityType"),
                         new Expectation("ConversationResponse", "lastMessageAt"),
-                        new Expectation("ConversationResponse", "groupName"),
                         new Expectation("CommentResponse", "parentId"),
                         new Expectation("CommentResponse", "rootId"),
                         new Expectation("ParticipantResponse", "leftAt"),

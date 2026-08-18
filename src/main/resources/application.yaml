@@ -208,9 +208,7 @@ app:
       initial-delay: ${STORY_CLEANUP_INITIAL_DELAY:PT10M}
       fixed-delay: ${STORY_CLEANUP_FIXED_DELAY:PT1H}
   message:
-    group-chat-enabled: ${MESSAGE_GROUP_CHAT_ENABLED:true}
     idempotency-ttl-hours: ${MESSAGE_IDEMPOTENCY_TTL_HOURS:24}
-    max-group-participants: ${MESSAGE_MAX_GROUP_PARTICIPANTS:256}
     consumer:
       enabled: ${MESSAGE_CONSUMER_ENABLED:false}
     live:

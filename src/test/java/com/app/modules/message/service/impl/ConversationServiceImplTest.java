@@ -33,9 +33,7 @@ import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.config.MessageProperties;
-import com.app.modules.message.dto.request.AddParticipantsRequest;
 import com.app.modules.message.dto.request.CreateDirectConversationRequest;
-import com.app.modules.message.dto.request.CreateGroupRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
 import com.app.modules.message.dto.response.MessageResponse;
@@ -46,6 +44,7 @@ import com.app.modules.message.entity.ConversationParticipantId;
 import com.app.modules.message.mapper.MessageMapper;
 import com.app.modules.message.repository.ConversationParticipantRepository;
 import com.app.modules.message.repository.ConversationRepository;
+import com.app.modules.message.repository.MessageMediaAssetRepository;
 import com.app.modules.message.repository.MessageRepository;
 import com.app.modules.message.repository.MessageUserRepository;
 import com.app.modules.message.repository.MessageUserSettingsRepository;
@@ -63,6 +62,7 @@ class ConversationServiceImplTest {
     @Mock private MessageUserSettingsRepository userSettingsRepository;
     @Mock private SocialService socialService;
     @Mock private MessageMapper mapper;
+    @Mock private MessageMediaAssetRepository mediaAssetRepository;
 
     private ConversationServiceImpl service;
 
@@ -76,8 +76,9 @@ class ConversationServiceImplTest {
                         userRepository,
                         userSettingsRepository,
                         socialService,
-                        new MessageProperties(24, true, 256),
-                        mapper);
+                        new MessageProperties(24),
+                        mapper,
+                        mediaAssetRepository);
 
         lenient().when(socialService.isBlockedBetween(any(), any())).thenReturn(false);
         lenient().when(userSettingsRepository.findById(any())).thenReturn(Optional.empty());
@@ -92,45 +93,60 @@ class ConversationServiceImplTest {
                                     u == null ? null : u.getUsername(),
                                     u == null ? null : u.getDisplayName(),
                                     u == null ? null : u.getAvatarUrl(),
-                                    p.isAdmin(),
                                     p.getJoinedAt(),
-                                    p.getLeftAt());
+                                    p.getLeftAt(),
+                                    p.getNickname());
                         });
         lenient()
-                .when(mapper.toConversationResponse(any(), any()))
+                .when(
+                        mapper.toConversationResponse(
+                                any(),
+                                any(),
+                                org.mockito.ArgumentMatchers.anyBoolean(),
+                                org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(
                         inv -> {
                             Conversation c = inv.getArgument(0);
                             List<ParticipantResponse> participants = inv.getArgument(1);
+                            boolean pinned = inv.getArgument(2);
+                            boolean muted = inv.getArgument(3);
                             return new ConversationResponse(
                                     c.getId(),
-                                    c.isGroup(),
-                                    c.getGroupName(),
-                                    c.getGroupAvatarUrl(),
                                     c.getCreatedBy(),
                                     participants,
                                     c.getLastMessageAt(),
-                                    c.getCreatedAt());
+                                    c.getCreatedAt(),
+                                    pinned,
+                                    muted);
                         });
         lenient()
                 .when(
                         mapper.toSummaryResponse(
-                                any(), any(), org.mockito.ArgumentMatchers.anyLong(), any()))
+                                any(),
+                                any(),
+                                org.mockito.ArgumentMatchers.anyLong(),
+                                any(),
+                                org.mockito.ArgumentMatchers.anyBoolean(),
+                                org.mockito.ArgumentMatchers.anyBoolean(),
+                                org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(
                         inv -> {
                             Conversation c = inv.getArgument(0);
                             List<ParticipantResponse> participants = inv.getArgument(1);
                             long unread = inv.getArgument(2);
                             MessageResponse lastMessage = inv.getArgument(3);
+                            boolean pinned = inv.getArgument(4);
+                            boolean muted = inv.getArgument(5);
+                            boolean manuallyUnread = inv.getArgument(6);
                             return new ConversationSummaryResponse(
                                     c.getId(),
-                                    c.isGroup(),
-                                    c.getGroupName(),
-                                    c.getGroupAvatarUrl(),
                                     participants,
                                     unread,
                                     c.getLastMessageAt(),
-                                    lastMessage);
+                                    lastMessage,
+                                    pinned,
+                                    muted,
+                                    manuallyUnread);
                         });
     }
 
@@ -270,13 +286,10 @@ class ConversationServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
-        Conversation existing = Conversation.builder().id(conversationId).isGroup(false).build();
+        Conversation existing = Conversation.builder().id(conversationId).build();
         ConversationParticipant actorParticipant =
                 participant(
-                        conversationId,
-                        actorId,
-                        false,
-                        OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+                        conversationId, actorId, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         when(userRepository.findByIdAndDeletedAtIsNull(targetId))
                 .thenReturn(Optional.of(user(targetId)));
@@ -300,242 +313,10 @@ class ConversationServiceImplTest {
     }
 
     @Test
-    void createGroupConversation_groupChatDisabled_throwsGroupChatDisabled() {
-        ConversationServiceImpl disabledService =
-                new ConversationServiceImpl(
-                        conversationRepository,
-                        participantRepository,
-                        messageRepository,
-                        userRepository,
-                        userSettingsRepository,
-                        socialService,
-                        new MessageProperties(24, false, 256),
-                        mapper);
-        UUID actorId = UUID.randomUUID();
-
-        assertThatThrownBy(
-                        () ->
-                                disabledService.createGroupConversation(
-                                        actorId,
-                                        new CreateGroupRequest(
-                                                "Group", null, List.of(UUID.randomUUID()))))
-                .isInstanceOf(AppException.class)
-                .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.GROUP_CHAT_DISABLED);
-    }
-
-    @Test
-    void createGroupConversation_success_creatorIsAdminAndMembersAreNot() {
-        UUID actorId = UUID.randomUUID();
-        UUID member1Id = UUID.randomUUID();
-        UUID member2Id = UUID.randomUUID();
-        UUID conversationId = UUID.randomUUID();
-        User member1 = user(member1Id);
-        User member2 = user(member2Id);
-
-        when(userRepository.findAllByIdInAndDeletedAtIsNull(List.of(member1Id, member2Id)))
-                .thenReturn(List.of(member1, member2));
-        when(conversationRepository.saveAndFlush(any(Conversation.class)))
-                .thenAnswer(
-                        inv -> {
-                            Conversation c = inv.getArgument(0);
-                            c.setId(conversationId);
-                            return c;
-                        });
-        ConversationParticipant creatorParticipant =
-                participant(conversationId, actorId, true, null);
-        ConversationParticipant member1Participant =
-                participant(conversationId, member1Id, false, null);
-        ConversationParticipant member2Participant =
-                participant(conversationId, member2Id, false, null);
-        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
-                .thenReturn(List.of(creatorParticipant, member1Participant, member2Participant));
-        when(userRepository.findAllByIdInAndDeletedAtIsNull(Set.of(actorId, member1Id, member2Id)))
-                .thenReturn(List.of(user(actorId), member1, member2));
-
-        ConversationResponse result =
-                service.createGroupConversation(
-                        actorId,
-                        new CreateGroupRequest(
-                                "Trip Planning", null, List.of(member1Id, member2Id)));
-
-        assertThat(result).isNotNull();
-        verify(participantRepository)
-                .save(argThat(p -> p.getId().getUserId().equals(actorId) && p.isAdmin()));
-        verify(participantRepository)
-                .save(argThat(p -> p.getId().getUserId().equals(member1Id) && !p.isAdmin()));
-        verify(participantRepository)
-                .save(argThat(p -> p.getId().getUserId().equals(member2Id) && !p.isAdmin()));
-    }
-
-    @Test
-    void addParticipants_callerNotAdmin_throwsGroupAdminRequired() {
-        UUID conversationId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
-        ConversationParticipant nonAdmin = participant(conversationId, actorId, false, null);
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
-                .thenReturn(Optional.of(nonAdmin));
-
-        assertThatThrownBy(
-                        () ->
-                                service.addParticipants(
-                                        actorId,
-                                        conversationId,
-                                        new AddParticipantsRequest(List.of(UUID.randomUUID()))))
-                .isInstanceOf(AppException.class)
-                .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.GROUP_ADMIN_REQUIRED);
-    }
-
-    @Test
-    void addParticipants_onDirectConversation_throwsConversationNotGroup() {
-        UUID conversationId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        Conversation direct = Conversation.builder().id(conversationId).isGroup(false).build();
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(direct));
-
-        assertThatThrownBy(
-                        () ->
-                                service.addParticipants(
-                                        actorId,
-                                        conversationId,
-                                        new AddParticipantsRequest(List.of(UUID.randomUUID()))))
-                .isInstanceOf(AppException.class)
-                .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.CONVERSATION_NOT_GROUP);
-    }
-
-    @Test
-    void removeParticipant_callerIsActiveAdmin_setsLeftAtOnTarget() {
-        UUID conversationId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        UUID targetId = UUID.randomUUID();
-        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
-        ConversationParticipant admin = participant(conversationId, actorId, true, null);
-        ConversationParticipant target = participant(conversationId, targetId, false, null);
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
-                .thenReturn(Optional.of(admin));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, targetId))
-                .thenReturn(Optional.of(target));
-
-        service.removeParticipant(actorId, conversationId, targetId);
-
-        assertThat(target.getLeftAt()).isNotNull();
-        verify(participantRepository).save(target);
-    }
-
-    @Test
-    void removeParticipant_targetNotActiveParticipant_throwsParticipantNotFound() {
-        UUID conversationId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        UUID targetId = UUID.randomUUID();
-        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
-        ConversationParticipant admin = participant(conversationId, actorId, true, null);
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
-                .thenReturn(Optional.of(admin));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, targetId))
-                .thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.removeParticipant(actorId, conversationId, targetId))
-                .isInstanceOf(AppException.class)
-                .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.PARTICIPANT_NOT_FOUND);
-    }
-
-    @Test
-    void removeParticipant_soleAdminRemovesSelf_promotesReplacementAdmin() {
-        UUID conversationId = UUID.randomUUID();
-        UUID adminId = UUID.randomUUID();
-        UUID otherId = UUID.randomUUID();
-        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
-        ConversationParticipant admin = participant(conversationId, adminId, true, null);
-        ConversationParticipant other = participant(conversationId, otherId, false, null);
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, adminId))
-                .thenReturn(Optional.of(admin));
-        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
-                .thenReturn(List.of(admin, other));
-
-        service.removeParticipant(adminId, conversationId, adminId);
-
-        assertThat(admin.getLeftAt()).isNotNull();
-        assertThat(other.isAdmin()).isTrue();
-        verify(participantRepository).save(admin);
-        verify(participantRepository).save(other);
-    }
-
-    @Test
-    void removeParticipant_nonAdminTargetRemoved_doesNotPromoteAnyone() {
-        UUID conversationId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        UUID targetId = UUID.randomUUID();
-        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
-        ConversationParticipant admin = participant(conversationId, actorId, true, null);
-        ConversationParticipant target = participant(conversationId, targetId, false, null);
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
-                .thenReturn(Optional.of(admin));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, targetId))
-                .thenReturn(Optional.of(target));
-
-        service.removeParticipant(actorId, conversationId, targetId);
-
-        assertThat(target.getLeftAt()).isNotNull();
-        verify(participantRepository, never()).findByIdConversationIdOrderByJoinedAtAsc(any());
-    }
-
-    @Test
-    void leaveConversation_lastActiveAdminLeaves_promotesOldestRemainingMember() {
-        UUID conversationId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        UUID otherId = UUID.randomUUID();
-        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
-        ConversationParticipant leavingAdmin = participant(conversationId, actorId, true, null);
-        ConversationParticipant remainingMember = participant(conversationId, otherId, false, null);
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
-                .thenReturn(Optional.of(leavingAdmin));
-        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
-                .thenReturn(List.of(leavingAdmin, remainingMember));
-
-        service.leaveConversation(actorId, conversationId);
-
-        assertThat(leavingAdmin.getLeftAt()).isNotNull();
-        assertThat(remainingMember.isAdmin()).isTrue();
-        verify(participantRepository).save(leavingAdmin);
-        verify(participantRepository).save(remainingMember);
-    }
-
-    @Test
-    void leaveConversation_alreadyLeft_isNoop() {
-        UUID conversationId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        Conversation group = Conversation.builder().id(conversationId).isGroup(true).build();
-        ConversationParticipant alreadyLeft =
-                participant(
-                        conversationId,
-                        actorId,
-                        true,
-                        OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(group));
-        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
-                .thenReturn(Optional.of(alreadyLeft));
-
-        service.leaveConversation(actorId, conversationId);
-
-        verify(participantRepository, never()).save(any());
-    }
-
-    @Test
     void getConversation_callerNotActiveParticipant_throwsConversationForbidden() {
         UUID conversationId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
-        Conversation conversation =
-                Conversation.builder().id(conversationId).isGroup(false).build();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
         when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
@@ -548,19 +329,199 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void leaveConversation_activeParticipant_setsLeftAt() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.leaveConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.getLeftAt()).isNotNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void leaveConversation_alreadyLeft_throwsConversationForbidden() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant leftParticipant =
+                participant(
+                        conversationId, actorId, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(leftParticipant));
+
+        assertThatThrownBy(() -> service.leaveConversation(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+        verify(participantRepository, never()).save(any());
+    }
+
+    @Test
+    void leaveConversation_nonParticipant_throwsConversationForbidden() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.leaveConversation(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void pinConversation_activeParticipant_setsPinnedAt() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.pinConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.getPinnedAt()).isNotNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void pinConversation_nonParticipant_throwsConversationForbidden() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.pinConversation(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+        verify(participantRepository, never()).save(any());
+    }
+
+    @Test
+    void unpinConversation_pinnedParticipant_clearsPinnedAt() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        actorParticipant.setPinnedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.unpinConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.getPinnedAt()).isNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void muteConversation_activeParticipant_setsMuted() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.muteConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.isMuted()).isTrue();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void unmuteConversation_mutedParticipant_clearsMuted() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        actorParticipant.setMuted(true);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.unmuteConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.isMuted()).isFalse();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void setNickname_blankValue_clearsNickname() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        actorParticipant.setNickname("Old Name");
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.setNickname(actorId, conversationId, "   ");
+
+        assertThat(actorParticipant.getNickname()).isNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void setNickname_nonBlankValue_setsNickname() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.setNickname(actorId, conversationId, "Best Friend");
+
+        assertThat(actorParticipant.getNickname()).isEqualTo("Best Friend");
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void listMyConversations_manuallyUnreadRow_carriesFlagIntoSummary() {
+        UUID actorId = UUID.randomUUID();
+        UUID convId = UUID.randomUUID();
+        Conversation conv = Conversation.builder().id(convId).build();
+        ConversationParticipant myRow = participant(convId, actorId, null);
+        myRow.setManuallyUnread(true);
+        when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
+                .thenReturn(List.of(conv));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(convId)))
+                .thenReturn(List.of(myRow));
+        when(messageRepository.countUnreadPerConversation(eq(actorId), eq(List.of(convId))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> result =
+                service.listMyConversations(actorId, null, 20);
+
+        assertThat(result.getContent().get(0).manuallyUnread()).isTrue();
+    }
+
+    @Test
     void listMyConversations_firstPage_returnsSummariesWithCursors() {
         UUID actorId = UUID.randomUUID();
         UUID conv1Id = UUID.randomUUID();
         UUID conv2Id = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        Conversation conv1 =
-                Conversation.builder().id(conv1Id).isGroup(false).lastMessageAt(now).build();
+        Conversation conv1 = Conversation.builder().id(conv1Id).lastMessageAt(now).build();
         Conversation conv2 =
-                Conversation.builder()
-                        .id(conv2Id)
-                        .isGroup(false)
-                        .lastMessageAt(now.minusMinutes(5))
-                        .build();
+                Conversation.builder().id(conv2Id).lastMessageAt(now.minusMinutes(5)).build();
         when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
                 .thenReturn(List.of(conv1, conv2));
         when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(
@@ -577,6 +538,47 @@ class ConversationServiceImplTest {
         assertThat(result.getPageInfo().getStartCursor()).isNotBlank();
         assertThat(result.getPageInfo().getEndCursor()).isNotBlank();
         assertThat(result.getPageInfo().isHasPreviousPage()).isFalse();
+    }
+
+    @Test
+    void listMyConversations_firstPageWithPinned_prependsPinnedAheadOfUnpinnedPage() {
+        UUID actorId = UUID.randomUUID();
+        UUID pinnedConvId = UUID.randomUUID();
+        UUID unpinnedConvId = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        Conversation pinnedConv =
+                Conversation.builder().id(pinnedConvId).lastMessageAt(now.minusDays(3)).build();
+        Conversation unpinnedConv =
+                Conversation.builder().id(unpinnedConvId).lastMessageAt(now).build();
+        ConversationParticipant myPinnedRow = participant(pinnedConvId, actorId, null);
+        myPinnedRow.setPinnedAt(now.minusHours(1));
+        when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
+                .thenReturn(List.of(unpinnedConv));
+        when(conversationRepository.findMyPinnedConversations(actorId))
+                .thenReturn(List.of(pinnedConv));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(
+                        List.of(pinnedConvId, unpinnedConvId)))
+                .thenReturn(List.of(myPinnedRow));
+        when(messageRepository.countUnreadPerConversation(
+                        eq(actorId), eq(List.of(pinnedConvId, unpinnedConvId))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> result =
+                service.listMyConversations(actorId, null, 20);
+
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent().get(0).id()).isEqualTo(pinnedConvId);
+        assertThat(result.getContent().get(0).pinned()).isTrue();
+        assertThat(result.getContent().get(1).id()).isEqualTo(unpinnedConvId);
+        assertThat(result.getContent().get(1).pinned()).isFalse();
+        // The end cursor must still anchor on the unpinned page's own last row, not the pinned one,
+        // so continuation resumes inside the keyset-paginated sequence.
+        assertThat(
+                        CursorCodec.decode(
+                                        result.getPageInfo().getEndCursor(),
+                                        CursorScope.CONVERSATIONS)
+                                .id())
+                .isEqualTo(unpinnedConvId);
     }
 
     @Test
@@ -611,7 +613,6 @@ class ConversationServiceImplTest {
         Conversation conv1 =
                 Conversation.builder()
                         .id(conv1Id)
-                        .isGroup(false)
                         .lastMessageAt(cursorTime.minusMinutes(10))
                         .build();
         when(conversationRepository.findMyConversationsBefore(
@@ -633,8 +634,7 @@ class ConversationServiceImplTest {
     void listMyConversations_cursorFromNullLastMessageAtRow_decodesToNullCursorTime() {
         UUID actorId = UUID.randomUUID();
         UUID conv1Id = UUID.randomUUID();
-        Conversation conv1 =
-                Conversation.builder().id(conv1Id).isGroup(false).lastMessageAt(null).build();
+        Conversation conv1 = Conversation.builder().id(conv1Id).lastMessageAt(null).build();
         when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
                 .thenReturn(List.of(conv1));
         when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(conv1Id)))
@@ -648,8 +648,7 @@ class ConversationServiceImplTest {
         assertThat(endCursor).isNotBlank();
 
         UUID conv2Id = UUID.randomUUID();
-        Conversation conv2 =
-                Conversation.builder().id(conv2Id).isGroup(false).lastMessageAt(null).build();
+        Conversation conv2 = Conversation.builder().id(conv2Id).lastMessageAt(null).build();
         // Previously this cursor decoded to OffsetDateTime.MIN (a sentinel for "no message yet"),
         // which is outside PostgreSQL's timestamptz range and caused a bind-time 500; it must now
         // decode back to a genuine null so the repository receives real SQL NULL, not a sentinel.
@@ -678,10 +677,9 @@ class ConversationServiceImplTest {
     }
 
     private static ConversationParticipant participant(
-            UUID conversationId, UUID userId, boolean admin, OffsetDateTime leftAt) {
+            UUID conversationId, UUID userId, OffsetDateTime leftAt) {
         return ConversationParticipant.builder()
                 .id(new ConversationParticipantId(conversationId, userId))
-                .isAdmin(admin)
                 .leftAt(leftAt)
                 .build();
     }

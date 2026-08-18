@@ -14,11 +14,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Accepting `SameSite=None` on the refresh cookie now requires an explicit acknowledgement and otherwise fails at startup, because it removes the only cross-site request protection on the refresh and logout endpoints while leaving every request apparently successful.
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
+### Fixed
+- Corrected `database/schema.sql`, which still had the group-conversation columns, a stale follow-counter function, and no record of the new conversation-customization columns despite Flyway having already migrated past all of it.
+
 ### Added
+- A conversation can now be pinned to the top of the caller's own list, muted to suppress its notifications, and given a private nickname visible only to the caller, all independent of the other participant's own view.
+- A conversation can now be deleted from the caller's own inbox only, and marked unread again.
+Deleting only hides it for the caller; the other participant and the message history are untouched, and a new message from them reactivates it for the caller automatically.
+- Two people who follow each other now get a conversation automatically, so writing to someone no longer depends on one of them starting a thread first.
+Pairs who already followed each other before this release are given one by the upgrade.
+- A message that carries an attachment now includes the attachment's URL, dimensions, duration, and blurhash in the message response, so a client can render it without a second request per message.
 - Prometheus metrics are now exposed for scraping at `/actuator/prometheus`, which previously returned 404 despite the registry being present.
 - Local service containers now declare healthchecks and restart policies, and the application image declares a healthcheck.
 
+### Removed
+- Group conversations.
+The endpoints, the group fields on conversation responses, and the underlying columns are all gone, and messaging is now one to one.
+Existing group conversations are deleted by the upgrade, after being copied into archive tables so the content is recoverable.
+
+### Fixed
+- Marking a conversation unread now has a visible effect even when the caller sent its own newest messages. It previously cleared the read marker, which only changes the count when the other participant has newer messages to count; it is now an independent flag, cleared the next time the caller opens the conversation.
+- Two people following each other back at the same instant no longer deadlock in the database, which previously failed one of the two follows outright.
+The follower and following counters are updated in a fixed order now, so the two directions of a pair queue behind each other instead of colliding.
+- Ending a follow no longer leaves an empty conversation behind.
+A conversation that already has messages in it is kept, because unfollowing someone should not destroy the record of what was said.
+
 ### Changed
+- Real-time direct-message delivery is now enabled in the production profile. The setting was absent there, so it fell back to off and messages were delivered only on refresh.
 - Real-time comment and like delivery is now enabled in the production profile. It was disabled, which left the only realtime endpoint the client opens absent in production and the feature silently inert.
 - `/actuator/prometheus` is reachable without authentication and should be restricted at the ingress.
 - The local database, cache, broker, and search ports are now published on the loopback interface only, matching the treatment the mail sink already documented.
