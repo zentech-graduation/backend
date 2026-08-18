@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -36,6 +37,25 @@ public interface ConversationRepository
 					""",
             nativeQuery = true)
     Optional<Conversation> findDirectConversationBetween(UUID userA, UUID userB);
+
+    /**
+     * Deletes the pair's conversation only when it holds no messages.
+     *
+     * <p>Guarded by {@code NOT EXISTS} so a conversation carrying history can never be removed as a
+     * side effect of a follow change. The pair-key expression is copied verbatim from {@code
+     * ConversationRepositoryImpl.LOCK_AND_KEY_SQL} so the lock and the delete can never disagree
+     * about which conversation they mean.
+     */
+    @Modifying
+    @Query(
+            value =
+                    """
+					DELETE FROM conversations c
+					WHERE c.direct_pair_key = LEAST(:userA, :userB)::text || ':' || GREATEST(:userA, :userB)::text
+					AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id)
+					""",
+            nativeQuery = true)
+    void deleteEmptyDirectConversation(UUID userA, UUID userB);
 
     /**
      * First page of the caller's active conversations, newest activity first.
