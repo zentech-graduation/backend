@@ -3,6 +3,8 @@ package com.app.modules.admin.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -285,6 +287,103 @@ class AdminServiceImplTest {
         assertThat(result.getContent()).containsExactly(mapped);
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
         assertThat(result.getPageInfo().getEndCursor()).isNotBlank();
+    }
+
+    // The predicate is asserted on the argument reaching the repository, not on the page that comes
+    // back, so the test fails if the filter is ever moved to the web layer or dropped.
+    @Test
+    void getActions_moderatorActor_forcesTheActorFilterToItselfEvenWhenAnotherIsRequested() {
+        UUID actorId = UUID.randomUUID();
+        UUID otherAdminId = UUID.randomUUID();
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findActions(actorId, null, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActions(actorId, otherAdminId, null, null, 1);
+
+        verify(adminActionRepository).findActions(actorId, null, null, null, null, 2);
+        verify(adminActionRepository, never())
+                .findActions(eq(otherAdminId), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void getActions_administratorActor_passesTheRequestedActorFilterThrough() {
+        UUID actorId = UUID.randomUUID();
+        UUID otherAdminId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+        when(adminActionRepository.findActions(otherAdminId, null, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActions(actorId, otherAdminId, null, null, 1);
+
+        verify(adminActionRepository).findActions(otherAdminId, null, null, null, null, 2);
+    }
+
+    @Test
+    void getActions_administratorActorWithNoFilter_readsEveryActorsRows() {
+        UUID actorId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+        when(adminActionRepository.findActions(null, null, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActions(actorId, null, null, null, 1);
+
+        verify(adminActionRepository).findActions(null, null, null, null, null, 2);
+    }
+
+    @Test
+    void getActionsForUser_moderatorActor_narrowsToItsOwnRows() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetUserId = UUID.randomUUID();
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findActions(actorId, targetUserId, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActionsForUser(actorId, targetUserId, null, 1);
+
+        verify(adminActionRepository).findActions(actorId, targetUserId, null, null, null, 2);
+    }
+
+    @Test
+    void getActionsForUser_administratorActor_readsEveryActorsRows() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetUserId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+        when(adminActionRepository.findActions(null, targetUserId, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActionsForUser(actorId, targetUserId, null, 1);
+
+        verify(adminActionRepository).findActions(null, targetUserId, null, null, null, 2);
+    }
+
+    @Test
+    void getActionById_moderatorActorReadingItsOwnRow_returnsIt() {
+        UUID actorId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AdminAction own = action(AdminActionType.REMOVE_POST);
+        own.setAdminId(actorId);
+        AdminActionResponse expected = response(AdminActionType.REMOVE_POST);
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findById(actionId)).thenReturn(Optional.of(own));
+        when(adminActionMapper.toResponse(own)).thenReturn(expected);
+
+        assertThat(service.getActionById(actorId, actionId)).isEqualTo(expected);
+    }
+
+    @Test
+    void getActionById_moderatorActorReadingAnotherActorsRow_throwsNotFound() {
+        UUID actorId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AdminAction foreign = action(AdminActionType.BAN_USER);
+        foreign.setAdminId(UUID.randomUUID());
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findById(actionId)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.getActionById(actorId, actionId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);
     }
 
     @Test

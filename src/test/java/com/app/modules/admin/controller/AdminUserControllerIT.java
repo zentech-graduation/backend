@@ -221,6 +221,52 @@ class AdminUserControllerIT {
         assertThat(admin.id()).isNotEqualTo(target.id());
     }
 
+    // Same tie hazard as the list endpoint, on the search endpoint's own cursor scope. A cursor
+    // issued by one endpoint must also not decode against the other, which the scope tag enforces.
+    @Test
+    void searchUsers_pageBoundaryInsideACreatedAtTie_visitsEveryRowExactlyOnce() {
+        TestUser admin = createUser("searchtie_admin", "admin");
+        OffsetDateTime shared = OffsetDateTime.parse("2026-04-01T09:00:00Z");
+        for (int i = 0; i < 8; i++) {
+            TestUser row = createUser("searchtie_user" + i, "user");
+            jdbcTemplate.update("UPDATE users SET created_at = ? WHERE id = ?", shared, row.id());
+        }
+
+        List<String> collected = new java.util.ArrayList<>();
+        String cursor = null;
+        for (int page = 0; page < 10; page++) {
+            String path =
+                    "/api/v1/admin/users/search?q=searchtie_user&limit=3"
+                            + (cursor == null ? "" : "&cursor=" + cursor);
+            ResponseEntity<Map> response = get(path, admin);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            contentOf(response).forEach(row -> collected.add((String) row.get("id")));
+            Map<?, ?> pageInfo = (Map<?, ?>) dataOf(response).get("pageInfo");
+            if (!Boolean.TRUE.equals(pageInfo.get("hasNextPage"))) {
+                break;
+            }
+            cursor = (String) pageInfo.get("endCursor");
+        }
+
+        assertThat(collected).hasSize(8).doesNotHaveDuplicates();
+        assertThat(admin.id()).isNotNull();
+    }
+
+    @Test
+    void searchUsers_cursorFromTheListEndpoint_isRejected() {
+        TestUser admin = createUser("crossscope_admin", "admin");
+        createUser("crossscope_user", "user");
+        Map<?, ?> listPageInfo =
+                (Map<?, ?>) dataOf(get("/api/v1/admin/users?limit=1", admin)).get("pageInfo");
+        String listCursor = (String) listPageInfo.get("endCursor");
+        assertThat(listCursor).isNotBlank();
+
+        assertThat(
+                        get("/api/v1/admin/users/search?q=crossscope&cursor=" + listCursor, admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     @Test
     void searchUsers_singleCharacterQuery_returnsBadRequest() {
         TestUser admin = createUser("shortq_admin", "admin");

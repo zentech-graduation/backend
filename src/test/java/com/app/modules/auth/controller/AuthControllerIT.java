@@ -123,6 +123,89 @@ class AuthControllerIT {
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
 
+    // The whole suspension lifecycle through the front door: refused while the term stands,
+    // admitted
+    // on the very first attempt after it lapses, and the row repaired by that same attempt rather
+    // than by a later sweep.
+    @Test
+    void login_fixedTermSuspension_isRefusedBeforeExpiryAndAdmittedAfterWithTheRowRepaired() {
+        String email = uniqueEmail("suspend_expiry");
+        registerVerifyAndLogin(uniqueUsername("suspexp"), email, TEST_PASSWORD);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        jdbcTemplate.update(
+                "UPDATE users SET status = 'suspended', suspended_until = now() + INTERVAL '1 day'"
+                        + " WHERE id = ?",
+                userId);
+
+        ResponseEntity<Map> refused =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
+
+        assertThat(refused.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(refused.getBody().get("code")).isEqualTo("AUTH_ACCOUNT_INACTIVE");
+        assertThat(statusOf(userId)).isEqualTo("suspended");
+
+        jdbcTemplate.update(
+                "UPDATE users SET suspended_until = now() - INTERVAL '1 hour' WHERE id = ?",
+                userId);
+
+        ResponseEntity<Map> admitted =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("identifier", email, "password", TEST_PASSWORD));
+
+        assertThat(admitted.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(statusOf(userId)).isEqualTo("active");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT suspended_until FROM users WHERE id = ?",
+                                OffsetDateTime.class,
+                                userId))
+                .isNull();
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM admin_actions WHERE target_user_id = ?"
+                                        + " AND action_type = 'unsuspend_user' AND admin_id IS NULL",
+                                Integer.class,
+                                userId))
+                .isEqualTo(1);
+    }
+
+    // An indefinite suspension has no deadline, so nothing reinstates it and the refusal stands
+    // however many times the account tries.
+    @Test
+    void login_indefiniteSuspension_isRefusedAndNeverRepaired() {
+        String email = uniqueEmail("suspend_indef");
+        registerVerifyAndLogin(uniqueUsername("suspind"), email, TEST_PASSWORD);
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+        jdbcTemplate.update(
+                "UPDATE users SET status = 'suspended', suspended_until = NULL WHERE id = ?",
+                userId);
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            assertThat(
+                            postJson(
+                                            "/api/v1/auth/login",
+                                            Map.of("identifier", email, "password", TEST_PASSWORD))
+                                    .getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN);
+        }
+
+        assertThat(statusOf(userId)).isEqualTo("suspended");
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM admin_actions WHERE target_user_id = ?",
+                                Integer.class,
+                                userId))
+                .isZero();
+    }
+
+    private String statusOf(UUID userId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT status::text FROM users WHERE id = ?", String.class, userId);
+    }
+
     @Test
     void register_recordsTheOriginTheAccountWasCreatedFrom() {
         String email = uniqueEmail("reg_ip");
