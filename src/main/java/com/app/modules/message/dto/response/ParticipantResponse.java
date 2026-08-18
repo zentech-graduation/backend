@@ -13,7 +13,6 @@ public record ParticipantResponse(
         @Schema(description = "Display name shown on the profile.", nullable = true)
                 String displayName,
         @Schema(description = "Avatar CDN URL.", nullable = true) String avatarUrl,
-        @Schema(description = "Whether this member is a group admin.") boolean isAdmin,
         @Schema(description = "When this member joined.") OffsetDateTime joinedAt,
         @Schema(description = "When this member left, or null if still active.", nullable = true)
                 OffsetDateTime leftAt) {}

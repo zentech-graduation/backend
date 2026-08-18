@@ -26,8 +26,7 @@ public interface ConversationRepository
             value =
                     """
 					SELECT c.* FROM conversations c
-					WHERE c.is_group = FALSE
-					AND EXISTS (SELECT 1 FROM conversation_participants p1
+					WHERE EXISTS (SELECT 1 FROM conversation_participants p1
 								WHERE p1.conversation_id = c.id AND p1.user_id = :userA)
 					AND EXISTS (SELECT 1 FROM conversation_participants p2
 								WHERE p2.conversation_id = c.id AND p2.user_id = :userB)

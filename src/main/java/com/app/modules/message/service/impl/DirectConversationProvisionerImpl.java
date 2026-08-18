@@ -47,11 +47,7 @@ public class DirectConversationProvisionerImpl implements DirectConversationProv
         }
 
         Conversation conversation =
-                Conversation.builder()
-                        .isGroup(false)
-                        .createdBy(userIdA)
-                        .directPairKey(pairKey)
-                        .build();
+                Conversation.builder().createdBy(userIdA).directPairKey(pairKey).build();
         conversationRepository.saveAndFlush(conversation);
         participantRepository.save(participant(conversation.getId(), userIdA));
         participantRepository.save(participant(conversation.getId(), userIdB));
@@ -75,7 +71,6 @@ public class DirectConversationProvisionerImpl implements DirectConversationProv
     private static ConversationParticipant participant(UUID conversationId, UUID userId) {
         return ConversationParticipant.builder()
                 .id(new ConversationParticipantId(conversationId, userId))
-                .isAdmin(false)
                 .build();
     }
 }

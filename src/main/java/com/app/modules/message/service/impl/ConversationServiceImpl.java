@@ -148,15 +148,10 @@ public class ConversationServiceImpl implements ConversationService {
                 participantRepository.save(actorParticipant);
             }
         } else {
-            conversation =
-                    Conversation.builder()
-                            .isGroup(false)
-                            .createdBy(actorId)
-                            .directPairKey(pairKey)
-                            .build();
+            conversation = Conversation.builder().createdBy(actorId).directPairKey(pairKey).build();
             conversationRepository.saveAndFlush(conversation);
-            participantRepository.save(newParticipant(conversation.getId(), actorId, false));
-            participantRepository.save(newParticipant(conversation.getId(), targetId, false));
+            participantRepository.save(newParticipant(conversation.getId(), actorId));
+            participantRepository.save(newParticipant(conversation.getId(), targetId));
             log.info("Direct conversation created: conversationId={}", conversation.getId());
         }
         return assembleDetail(conversation);
@@ -241,25 +236,6 @@ public class ConversationServiceImpl implements ConversationService {
         return assembleDetail(conversation);
     }
 
-    private void promoteReplacementAdminIfNeeded(UUID conversationId) {
-        List<ConversationParticipant> active =
-                participantRepository
-                        .findByIdConversationIdOrderByJoinedAtAsc(conversationId)
-                        .stream()
-                        .filter(p -> p.getLeftAt() == null)
-                        .toList();
-        boolean hasAdmin = active.stream().anyMatch(ConversationParticipant::isAdmin);
-        if (!hasAdmin && !active.isEmpty()) {
-            ConversationParticipant replacement = active.get(0);
-            replacement.setAdmin(true);
-            participantRepository.save(replacement);
-            log.info(
-                    "Promoted new group admin: conversationId={}, userId={}",
-                    conversationId,
-                    replacement.getId().getUserId());
-        }
-    }
-
     // Stealth block model: matches assemblePublicProfile's reference behaviour - a block in
     // either direction must be indistinguishable from userB not existing, not a status that
     // confirms a block relationship. Shared by direct-conversation creation, group creation, and
@@ -298,11 +274,9 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
-    private static ConversationParticipant newParticipant(
-            UUID conversationId, UUID userId, boolean isAdmin) {
+    private static ConversationParticipant newParticipant(UUID conversationId, UUID userId) {
         return ConversationParticipant.builder()
                 .id(new ConversationParticipantId(conversationId, userId))
-                .isAdmin(isAdmin)
                 .build();
     }
 

@@ -109,7 +109,6 @@ class MessageControllerIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
-        assertThat(data.get("isGroup")).isEqualTo(false);
         List<Map<?, ?>> participants = (List<Map<?, ?>>) data.get("participants");
         assertThat(participants).hasSize(2);
         assertThat(activeParticipantIds(UUID.fromString((String) data.get("id"))))

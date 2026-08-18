@@ -271,12 +271,7 @@ public class MessageServiceImpl implements MessageService {
         return new AppException(ApiErrorCode.MESSAGE_INVALID_PAYLOAD, message);
     }
 
-    // The block gate only applies to 1-1 conversations; group membership is already gated by
-    // block checks at creation and add-participant time.
     private void assertNotBlockedForDirectMessage(Conversation conversation, UUID actorId) {
-        if (conversation.isGroup()) {
-            return;
-        }
         UUID otherId =
                 participantRepository
                         .findByIdConversationIdOrderByJoinedAtAsc(conversation.getId())

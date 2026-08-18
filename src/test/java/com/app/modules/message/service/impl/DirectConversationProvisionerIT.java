@@ -1,6 +1,7 @@
 package com.app.modules.message.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
 
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -126,6 +128,34 @@ class DirectConversationProvisionerIT {
         provisioner.discardEmptyDirectConversation(alice, bob);
 
         assertThat(conversationRepository.findDirectConversationBetween(alice, bob)).isPresent();
+    }
+
+    @Test
+    void theRecreatedUniqueIndexStillRejectsADuplicatePair() {
+        // V50 drops is_group, which the original partial index was predicated on. If the migration
+        // failed to recreate that index, this insert succeeds and a pair silently holds two
+        // conversations, which no application-level lock can undo afterwards.
+        provisioner.ensureDirectConversation(alice, bob);
+        String pairKey =
+                jdbcClient
+                        .sql(
+                                "SELECT LEAST(:userA, :userB)::text || ':' ||"
+                                        + " GREATEST(:userA, :userB)::text")
+                        .param("userA", alice)
+                        .param("userB", bob)
+                        .query(String.class)
+                        .single();
+
+        assertThatThrownBy(
+                        () ->
+                                jdbcClient
+                                        .sql(
+                                                "INSERT INTO conversations (direct_pair_key,"
+                                                        + " created_by) VALUES (:key, :createdBy)")
+                                        .param("key", pairKey)
+                                        .param("createdBy", alice)
+                                        .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private long countConversationsForPair() {

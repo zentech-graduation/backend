@@ -35,9 +35,6 @@ public class ConversationParticipant {
 
     @EmbeddedId private ConversationParticipantId id;
 
-    @Column(name = "is_admin", nullable = false)
-    private boolean isAdmin;
-
     @CreationTimestamp
     @Column(name = "joined_at", nullable = false, updatable = false)
     private OffsetDateTime joinedAt;

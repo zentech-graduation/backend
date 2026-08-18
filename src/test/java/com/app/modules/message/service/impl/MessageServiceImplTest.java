@@ -126,7 +126,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
                 .thenReturn(false);
@@ -380,7 +380,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
                 .thenReturn(false);
@@ -495,7 +495,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         ConversationParticipant participant = participant(conversationId, actorId, null);
         when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
                 .thenReturn(Optional.of(participant));
@@ -511,7 +511,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
                 .thenReturn(Optional.empty());
 
@@ -531,7 +531,7 @@ class MessageServiceImplTest {
 
     private void stubActiveGroupParticipant(UUID conversationId, UUID actorId) {
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
                 .thenReturn(true);
@@ -541,12 +541,8 @@ class MessageServiceImplTest {
         return new SendMessageRequest(MessageType.TEXT, content, null, null, null, null);
     }
 
-    private static Conversation groupConversation(UUID id) {
-        return Conversation.builder().id(id).isGroup(true).build();
-    }
-
     private static Conversation directConversation(UUID id) {
-        return Conversation.builder().id(id).isGroup(false).build();
+        return Conversation.builder().id(id).build();
     }
 
     private static ConversationParticipant participant(

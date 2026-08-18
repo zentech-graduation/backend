@@ -29,7 +29,6 @@ public interface MessageMapper {
      * @return the participant summary
      */
     @Mapping(source = "participant.id.userId", target = "userId")
-    @Mapping(source = "participant.admin", target = "isAdmin")
     @Mapping(source = "user.username", target = "username")
     @Mapping(source = "user.displayName", target = "displayName")
     @Mapping(source = "user.avatarUrl", target = "avatarUrl")
@@ -43,7 +42,6 @@ public interface MessageMapper {
      * @param participants active and former members, already hydrated
      * @return the conversation detail response
      */
-    @Mapping(source = "conversation.group", target = "isGroup")
     ConversationResponse toConversationResponse(
             Conversation conversation, List<ParticipantResponse> participants);
 
@@ -58,7 +56,6 @@ public interface MessageMapper {
      * @return the conversation summary response
      */
     @Mapping(source = "conversation.id", target = "id")
-    @Mapping(source = "conversation.group", target = "isGroup")
     ConversationSummaryResponse toSummaryResponse(
             Conversation conversation,
             List<ParticipantResponse> participants,

@@ -42,15 +42,6 @@ public class Conversation {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "is_group", nullable = false, updatable = false)
-    private boolean isGroup;
-
-    @Column(name = "group_name", length = 100)
-    private String groupName;
-
-    @Column(name = "group_avatar_url", columnDefinition = "TEXT")
-    private String groupAvatarUrl;
-
     @Column(name = "created_by", updatable = false)
     private UUID createdBy;
 

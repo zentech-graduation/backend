@@ -93,7 +93,6 @@ class ConversationServiceImplTest {
                                     u == null ? null : u.getUsername(),
                                     u == null ? null : u.getDisplayName(),
                                     u == null ? null : u.getAvatarUrl(),
-                                    p.isAdmin(),
                                     p.getJoinedAt(),
                                     p.getLeftAt());
                         });
@@ -105,9 +104,6 @@ class ConversationServiceImplTest {
                             List<ParticipantResponse> participants = inv.getArgument(1);
                             return new ConversationResponse(
                                     c.getId(),
-                                    c.isGroup(),
-                                    c.getGroupName(),
-                                    c.getGroupAvatarUrl(),
                                     c.getCreatedBy(),
                                     participants,
                                     c.getLastMessageAt(),
@@ -125,9 +121,6 @@ class ConversationServiceImplTest {
                             MessageResponse lastMessage = inv.getArgument(3);
                             return new ConversationSummaryResponse(
                                     c.getId(),
-                                    c.isGroup(),
-                                    c.getGroupName(),
-                                    c.getGroupAvatarUrl(),
                                     participants,
                                     unread,
                                     c.getLastMessageAt(),
@@ -271,13 +264,10 @@ class ConversationServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
-        Conversation existing = Conversation.builder().id(conversationId).isGroup(false).build();
+        Conversation existing = Conversation.builder().id(conversationId).build();
         ConversationParticipant actorParticipant =
                 participant(
-                        conversationId,
-                        actorId,
-                        false,
-                        OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+                        conversationId, actorId, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         when(userRepository.findByIdAndDeletedAtIsNull(targetId))
                 .thenReturn(Optional.of(user(targetId)));
@@ -304,8 +294,7 @@ class ConversationServiceImplTest {
     void getConversation_callerNotActiveParticipant_throwsConversationForbidden() {
         UUID conversationId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
-        Conversation conversation =
-                Conversation.builder().id(conversationId).isGroup(false).build();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
         when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
@@ -323,14 +312,9 @@ class ConversationServiceImplTest {
         UUID conv1Id = UUID.randomUUID();
         UUID conv2Id = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        Conversation conv1 =
-                Conversation.builder().id(conv1Id).isGroup(false).lastMessageAt(now).build();
+        Conversation conv1 = Conversation.builder().id(conv1Id).lastMessageAt(now).build();
         Conversation conv2 =
-                Conversation.builder()
-                        .id(conv2Id)
-                        .isGroup(false)
-                        .lastMessageAt(now.minusMinutes(5))
-                        .build();
+                Conversation.builder().id(conv2Id).lastMessageAt(now.minusMinutes(5)).build();
         when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
                 .thenReturn(List.of(conv1, conv2));
         when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(
@@ -381,7 +365,6 @@ class ConversationServiceImplTest {
         Conversation conv1 =
                 Conversation.builder()
                         .id(conv1Id)
-                        .isGroup(false)
                         .lastMessageAt(cursorTime.minusMinutes(10))
                         .build();
         when(conversationRepository.findMyConversationsBefore(
@@ -403,8 +386,7 @@ class ConversationServiceImplTest {
     void listMyConversations_cursorFromNullLastMessageAtRow_decodesToNullCursorTime() {
         UUID actorId = UUID.randomUUID();
         UUID conv1Id = UUID.randomUUID();
-        Conversation conv1 =
-                Conversation.builder().id(conv1Id).isGroup(false).lastMessageAt(null).build();
+        Conversation conv1 = Conversation.builder().id(conv1Id).lastMessageAt(null).build();
         when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
                 .thenReturn(List.of(conv1));
         when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(conv1Id)))
@@ -418,8 +400,7 @@ class ConversationServiceImplTest {
         assertThat(endCursor).isNotBlank();
 
         UUID conv2Id = UUID.randomUUID();
-        Conversation conv2 =
-                Conversation.builder().id(conv2Id).isGroup(false).lastMessageAt(null).build();
+        Conversation conv2 = Conversation.builder().id(conv2Id).lastMessageAt(null).build();
         // Previously this cursor decoded to OffsetDateTime.MIN (a sentinel for "no message yet"),
         // which is outside PostgreSQL's timestamptz range and caused a bind-time 500; it must now
         // decode back to a genuine null so the repository receives real SQL NULL, not a sentinel.
@@ -448,10 +429,9 @@ class ConversationServiceImplTest {
     }
 
     private static ConversationParticipant participant(
-            UUID conversationId, UUID userId, boolean admin, OffsetDateTime leftAt) {
+            UUID conversationId, UUID userId, OffsetDateTime leftAt) {
         return ConversationParticipant.builder()
                 .id(new ConversationParticipantId(conversationId, userId))
-                .isAdmin(admin)
                 .leftAt(leftAt)
                 .build();
     }
