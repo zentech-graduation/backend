@@ -21,6 +21,7 @@ import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.enums.AdminActionType;
@@ -119,7 +120,13 @@ public interface AdminApi {
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
 
     /** Suspends an active user and returns the persisted audit event. */
-    @Operation(summary = "Suspend a user")
+    @Operation(
+            summary = "Suspend a user",
+            description =
+                    "Supplying durationDays fixes the term: the first authentication attempt after"
+                            + " it lapses returns the account to active, and a periodic sweep does"
+                            + " the same for an account nobody signs into. Omitting it makes the"
+                            + " suspension indefinite, and nothing reinstates it automatically.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -157,7 +164,8 @@ public interface AdminApi {
     @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
     ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
-            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
+            @PathVariable("userId") UUID userId,
+            @Valid @RequestBody AdminSuspendUserRequest request);
 
     /** Unsuspends a suspended user and returns the persisted audit event. */
     @Operation(summary = "Unsuspend a user")

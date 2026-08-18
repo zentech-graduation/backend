@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.enums.AdminActionType;
@@ -17,10 +18,22 @@ public interface AdminService {
     /** Unbans a banned user and records the action atomically. */
     AdminActionResponse unbanUser(UUID actorId, UUID userId, AdminActionRequest request);
 
-    /** Suspends an active user and records the action atomically. */
-    AdminActionResponse suspendUser(UUID actorId, UUID userId, AdminActionRequest request);
+    /**
+     * Suspends an active user and records the action atomically.
+     *
+     * <p>A request carrying {@code durationDays} stores the moment the suspension lapses, after
+     * which the first authentication attempt or the reinstatement sweep returns the account to
+     * active. A request without one is indefinite and stores no deadline, so nothing ever
+     * reinstates it automatically.
+     */
+    AdminActionResponse suspendUser(UUID actorId, UUID userId, AdminSuspendUserRequest request);
 
-    /** Unsuspends a suspended user and records the action atomically. */
+    /**
+     * Unsuspends a suspended user and records the action atomically.
+     *
+     * <p>Clears the suspension deadline in the same transaction, so the reinstatement sweep can
+     * never fire on a row an administrator has already handled.
+     */
     AdminActionResponse unsuspendUser(UUID actorId, UUID userId, AdminActionRequest request);
 
     /** Removes a post and records the action atomically. */

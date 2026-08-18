@@ -23,12 +23,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
 import com.app.modules.admin.repository.AdminActionRepository;
+import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.report.entity.Report;
@@ -63,6 +65,7 @@ class AdminServiceImplTest {
                         commentRepository,
                         reportRepository,
                         adminActionMapper,
+                        new AdminActionRecorder(adminActionRepository, adminActionMapper),
                         new AdminAuthorizationServiceImpl());
     }
 
@@ -88,7 +91,8 @@ class AdminServiceImplTest {
         stubAudit(expected);
 
         AdminActionResponse result =
-                service.suspendUser(actorId, userId, new AdminActionRequest("Policy breach", null));
+                service.suspendUser(
+                        actorId, userId, new AdminSuspendUserRequest("Policy breach", null, null));
 
         assertThat(result).isEqualTo(expected);
         assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
@@ -133,7 +137,7 @@ class AdminServiceImplTest {
                                 service.suspendUser(
                                         actorId,
                                         actorId,
-                                        new AdminActionRequest("Self action", null)))
+                                        new AdminSuspendUserRequest("Self action", null, null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);

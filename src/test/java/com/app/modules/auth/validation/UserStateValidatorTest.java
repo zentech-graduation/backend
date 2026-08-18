@@ -7,21 +7,28 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.modules.admin.service.SuspensionExpiryService;
 import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 
+@ExtendWith(MockitoExtension.class)
 class UserStateValidatorTest {
+
+    @Mock private SuspensionExpiryService suspensionExpiryService;
 
     private UserStateValidator validator;
 
     @BeforeEach
     void setUp() {
-        validator = new UserStateValidator();
+        validator = new UserStateValidator(suspensionExpiryService);
     }
 
     // --- enforceActive ---

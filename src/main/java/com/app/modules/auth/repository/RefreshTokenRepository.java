@@ -1,6 +1,7 @@
 package com.app.modules.auth.repository;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,12 +25,33 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
      *
      * @param userId user whose tokens should be revoked
      * @param now revocation timestamp to record
+     * @return number of sessions that were active and are now revoked
      */
     @Modifying
     @Query(
             "UPDATE RefreshToken r SET r.revokedAt = :now "
                     + "WHERE r.userId = :userId AND r.revokedAt IS NULL")
-    void revokeAllActiveByUserId(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
+    int revokeAllActiveByUserId(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
+
+    /**
+     * Lists a user's live refresh tokens, newest first.
+     *
+     * <p>Live means neither revoked nor past expiry. Served by {@code idx_refresh_tokens_user}
+     * (V15).
+     *
+     * @param userId owner whose sessions to list
+     * @param now comparison instant for the expiry check
+     * @param limit maximum rows to return
+     * @return live refresh tokens ordered by issuance time descending
+     */
+    @Query(
+            "SELECT r FROM RefreshToken r "
+                    + "WHERE r.userId = :userId AND r.revokedAt IS NULL AND r.expiresAt > :now "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<RefreshToken> findActiveByUserId(
+            @Param("userId") UUID userId,
+            @Param("now") OffsetDateTime now,
+            @Param("limit") int limit);
 
     /**
      * Revokes a single active refresh token by its hash and returns the row count affected.

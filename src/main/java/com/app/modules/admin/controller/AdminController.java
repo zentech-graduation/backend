@@ -23,6 +23,7 @@ import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.admin.api.AdminApi;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.enums.AdminActionType;
@@ -67,7 +68,8 @@ public class AdminController extends BaseController implements AdminApi {
     @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
-            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request) {
+            @PathVariable("userId") UUID userId,
+            @Valid @RequestBody AdminSuspendUserRequest request) {
         return ok(adminService.suspendUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
