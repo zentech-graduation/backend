@@ -149,7 +149,9 @@ public class AdminController extends BaseController implements AdminApi {
             @RequestParam(required = false) AdminActionType actionType,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
-        return page(adminService.getActions(adminId, actionType, cursor, limit));
+        return page(
+                adminService.getActions(
+                        SecurityUtils.getCurrentUserId(), adminId, actionType, cursor, limit));
     }
 
     /** Returns one audit event to an authenticated moderator or administrator. */
@@ -158,7 +160,7 @@ public class AdminController extends BaseController implements AdminApi {
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> getActionById(
             @PathVariable("actionId") UUID actionId) {
-        return ok(adminService.getActionById(actionId));
+        return ok(adminService.getActionById(SecurityUtils.getCurrentUserId(), actionId));
     }
 
     /** Returns a cursor page of audit summaries for one affected user. */
@@ -170,7 +172,9 @@ public class AdminController extends BaseController implements AdminApi {
                     @PathVariable("userId") UUID userId,
                     @RequestParam(required = false) String cursor,
                     @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
-        return page(adminService.getActionsForUser(userId, cursor, limit));
+        return page(
+                adminService.getActionsForUser(
+                        SecurityUtils.getCurrentUserId(), userId, cursor, limit));
     }
 
     private ResponseEntity<ApiResponse<AdminActionResponse>> ok(AdminActionResponse response) {

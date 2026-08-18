@@ -442,15 +442,17 @@ class AdminControllerIT {
     }
 
     @Test
-    void listAndGetActions_moderator_returnsPersistedAuditEvent() {
-        TestUser author = createUser("query_admin", "admin");
-        TestUser actor = createUser("query_moderator", "moderator");
+    void listAndGetActions_author_returnsPersistedAuditEvent() {
+        // Author and reader are the same account on purpose. The three read endpoints are scoped to
+        // the reading moderator's own rows, so a reader that did not author the row is asserted on
+        // separately by the scoping tests below rather than here.
+        TestUser actor = createUser("query_admin", "admin");
         TestUser target = createUser("query_target", "user");
         ResponseEntity<Map> mutation =
                 patch(
                         "/api/v1/admin/users/" + target.id() + "/ban",
                         Map.of("reason", "Severe abuse"),
-                        author);
+                        actor);
         UUID actionId = UUID.fromString((String) dataOf(mutation).get("id"));
 
         ResponseEntity<Map> list = get("/api/v1/admin/actions?actionType=ban_user", actor);
@@ -463,6 +465,104 @@ class AdminControllerIT {
         assertThat(dataOf(detail).get("id")).isEqualTo(actionId.toString());
         assertThat(forUser.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(contentOf(forUser)).hasSize(1);
+    }
+
+    @Test
+    void getActions_moderator_seesOnlyRowsItAuthored() {
+        TestUser admin = createUser("scope_admin", "admin");
+        TestUser moderator = createUser("scope_mod", "moderator");
+        TestUser target = createUser("scope_target", "user");
+        UUID postId = insertPost(target.id());
+
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/ban",
+                                        Map.of("reason", "Administrator authored row"),
+                                        admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/posts/" + postId + "/remove",
+                                        Map.of("reason", "Moderator authored row"),
+                                        moderator)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+
+        List<Map<?, ?>> moderatorView = contentOf(get("/api/v1/admin/actions", moderator));
+        assertThat(moderatorView).hasSize(1);
+        assertThat(moderatorView.get(0).get("adminId")).isEqualTo(moderator.id().toString());
+
+        assertThat(contentOf(get("/api/v1/admin/actions", admin))).hasSize(2);
+    }
+
+    @Test
+    void getActions_moderatorFilteringByAnotherActor_seesNothing() {
+        TestUser admin = createUser("filter_admin", "admin");
+        TestUser moderator = createUser("filter_mod", "moderator");
+        TestUser target = createUser("filter_target", "user");
+
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/ban",
+                                        Map.of("reason", "Administrator authored row"),
+                                        admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+
+        assertThat(contentOf(get("/api/v1/admin/actions?adminId=" + admin.id(), moderator)))
+                .isEmpty();
+    }
+
+    @Test
+    void getActionById_moderatorReadingAnotherActorsRow_returnsNotFound() {
+        TestUser admin = createUser("byid_admin", "admin");
+        TestUser moderator = createUser("byid_mod", "moderator");
+        TestUser target = createUser("byid_target", "user");
+
+        ResponseEntity<Map> ban =
+                patch(
+                        "/api/v1/admin/users/" + target.id() + "/ban",
+                        Map.of("reason", "Administrator authored row"),
+                        admin);
+        assertThat(ban.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String actionId = (String) dataOf(ban).get("id");
+
+        assertThat(get("/api/v1/admin/actions/" + actionId, moderator).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(get("/api/v1/admin/actions/" + actionId, admin).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void getActionsForUser_moderator_seesOnlyRowsItAuthored() {
+        TestUser admin = createUser("foruser_admin", "admin");
+        TestUser moderator = createUser("foruser_mod", "moderator");
+        TestUser target = createUser("foruser_target", "user");
+        UUID postId = insertPost(target.id());
+
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/users/" + target.id() + "/ban",
+                                        Map.of("reason", "Administrator authored row"),
+                                        admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(
+                        patch(
+                                        "/api/v1/admin/posts/" + postId + "/remove",
+                                        Map.of("reason", "Moderator authored row"),
+                                        moderator)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+
+        List<Map<?, ?>> moderatorView =
+                contentOf(get("/api/v1/admin/actions/for-user/" + target.id(), moderator));
+        assertThat(moderatorView).hasSize(1);
+        assertThat(moderatorView.get(0).get("adminId")).isEqualTo(moderator.id().toString());
+
+        assertThat(contentOf(get("/api/v1/admin/actions/for-user/" + target.id(), admin)))
+                .hasSize(2);
     }
 
     @Test

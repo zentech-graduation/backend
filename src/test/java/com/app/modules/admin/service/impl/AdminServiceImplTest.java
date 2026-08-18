@@ -267,6 +267,8 @@ class AdminServiceImplTest {
 
     @Test
     void getActions_firstPage_mapsContentAndProbeRow() {
+        UUID actorId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
         AdminAction first = action(AdminActionType.BAN_USER);
         AdminAction probe = action(AdminActionType.REMOVE_POST);
         AdminActionSummaryResponse mapped = summary(AdminActionType.BAN_USER);
@@ -274,7 +276,7 @@ class AdminServiceImplTest {
                 .thenReturn(List.of(first, probe));
         when(adminActionMapper.toSummaryResponseList(List.of(first))).thenReturn(List.of(mapped));
 
-        var result = service.getActions(null, null, null, 1);
+        var result = service.getActions(actorId, null, null, null, 1);
 
         assertThat(result.getContent()).containsExactly(mapped);
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
@@ -286,7 +288,7 @@ class AdminServiceImplTest {
         UUID actionId = UUID.randomUUID();
         when(adminActionRepository.findById(actionId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getActionById(actionId))
+        assertThatThrownBy(() -> service.getActionById(UUID.randomUUID(), actionId))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);

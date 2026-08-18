@@ -139,24 +139,63 @@ public class AdminServiceImpl implements AdminService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminActionSummaryResponse> getActions(
-            UUID adminId, AdminActionType actionType, String cursor, int size) {
-        return findActions(adminId, null, actionType, cursor, size, CursorScope.ADMIN_ACTIONS);
+            UUID actorId, UUID adminId, AdminActionType actionType, String cursor, int size) {
+        return findActions(
+                scopeActorFilter(actorId, adminId),
+                null,
+                actionType,
+                cursor,
+                size,
+                CursorScope.ADMIN_ACTIONS);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public AdminActionResponse getActionById(UUID actionId) {
-        return adminActionMapper.toResponse(
+    public AdminActionResponse getActionById(UUID actorId, UUID actionId) {
+        AdminAction action =
                 adminActionRepository
                         .findById(actionId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND)));
+                        .orElseThrow(() -> new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND));
+        // Reported as absent rather than forbidden. A 403 here would confirm that an audit row this
+        // moderator may not read exists, which is the same disclosure the list filter prevents.
+        if (isModerator(actorId) && !actorId.equals(action.getAdminId())) {
+            throw new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);
+        }
+        return adminActionMapper.toResponse(action);
     }
 
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminActionSummaryResponse> getActionsForUser(
-            UUID userId, String cursor, int size) {
-        return findActions(null, userId, null, cursor, size, CursorScope.ADMIN_ACTIONS_FOR_USER);
+            UUID actorId, UUID userId, String cursor, int size) {
+        return findActions(
+                scopeActorFilter(actorId, null),
+                userId,
+                null,
+                cursor,
+                size,
+                CursorScope.ADMIN_ACTIONS_FOR_USER);
+    }
+
+    /**
+     * Narrows an audit read to the caller's own rows when the caller is a moderator.
+     *
+     * <p>Returns the caller's id for a moderator, discarding whatever {@code adminId} the caller
+     * asked for, and the requested filter unchanged for an administrator.
+     */
+    private UUID scopeActorFilter(UUID actorId, UUID requestedAdminId) {
+        return isModerator(actorId) ? actorId : requestedAdminId;
+    }
+
+    // The actor's role is read from the source of truth rather than from a token claim, for the
+    // same
+    // reason every other authorization decision here is: a claim minted before a demotion is stale.
+    private boolean isModerator(UUID actorId) {
+        return userRepository
+                        .findByIdAndDeletedAtIsNull(actorId)
+                        .map(User::getRole)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.FORBIDDEN))
+                == UserRole.MODERATOR;
     }
 
     private AdminActionResponse changeUserStatus(

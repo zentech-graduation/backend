@@ -451,7 +451,11 @@ public interface AdminApi {
             @Valid @RequestBody AdminActionRequest request);
 
     /** Lists audit-event summaries with optional actor and action-type filters. */
-    @Operation(summary = "List moderation audit events")
+    @Operation(
+            summary = "List moderation audit events",
+            description =
+                    "An administrator sees every audit row. A moderator sees only the rows it"
+                            + " authored, whatever adminId filter it supplies.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -481,7 +485,12 @@ public interface AdminApi {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Returns one audit event by identifier. */
-    @Operation(summary = "Get a moderation audit event")
+    @Operation(
+            summary = "Get a moderation audit event",
+            description =
+                    "A moderator may read only a row it authored. A row authored by anyone else is"
+                            + " reported as not found rather than forbidden, so the response does"
+                            + " not confirm that a row the caller may not read exists.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -514,7 +523,11 @@ public interface AdminApi {
             @PathVariable("actionId") UUID actionId);
 
     /** Lists audit-event summaries for one affected user. */
-    @Operation(summary = "List moderation audit events for a user")
+    @Operation(
+            summary = "List moderation audit events for a user",
+            description =
+                    "An administrator sees every audit row against the user. A moderator sees only"
+                            + " the rows it authored against them.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

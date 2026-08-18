@@ -41,18 +41,48 @@ public interface AdminService {
     /** Dismisses a pending report and records the action atomically. */
     AdminActionResponse dismissReport(UUID actorId, UUID reportId, AdminActionRequest request);
 
-    /** Lists audit-event summaries with optional actor and action-type filters. */
+    /**
+     * Lists audit-event summaries with optional actor and action-type filters.
+     *
+     * <p>A moderator sees only rows it authored, whatever {@code adminId} filter it supplies. An
+     * administrator sees every row. The restriction is applied here rather than at the web layer so
+     * it holds for any caller of this method.
+     *
+     * @param actorId the requesting account, resolved from the security context
+     * @param adminId actor filter requested by the caller; ignored for a moderator
+     * @param actionType action-type filter, or null for every type
+     * @param cursor opaque keyset cursor, or null for the first page
+     * @param size requested page size
+     * @return one cursor page of audit summaries visible to this actor
+     */
     CursorPageResponse<AdminActionSummaryResponse> getActions(
-            UUID adminId, AdminActionType actionType, String cursor, int size);
+            UUID actorId, UUID adminId, AdminActionType actionType, String cursor, int size);
 
     /**
      * Returns one immutable audit event.
      *
-     * @throws AppException when the audit event does not exist
+     * <p>A moderator may read only a row it authored. A row authored by someone else is reported as
+     * absent rather than forbidden, so the endpoint does not confirm that an audit row it may not
+     * read exists.
+     *
+     * @param actorId the requesting account, resolved from the security context
+     * @param actionId the audit event to read
+     * @return the audit event
+     * @throws AppException when the audit event does not exist or is not visible to this actor
      */
-    AdminActionResponse getActionById(UUID actionId);
+    AdminActionResponse getActionById(UUID actorId, UUID actionId);
 
-    /** Lists audit-event summaries for one affected user. */
+    /**
+     * Lists audit-event summaries for one affected user.
+     *
+     * <p>A moderator sees only rows it authored against that user; an administrator sees every row.
+     *
+     * @param actorId the requesting account, resolved from the security context
+     * @param userId the affected account
+     * @param cursor opaque keyset cursor, or null for the first page
+     * @param size requested page size
+     * @return one cursor page of audit summaries visible to this actor
+     */
     CursorPageResponse<AdminActionSummaryResponse> getActionsForUser(
-            UUID userId, String cursor, int size);
+            UUID actorId, UUID userId, String cursor, int size);
 }
