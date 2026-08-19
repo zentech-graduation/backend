@@ -179,7 +179,7 @@ class RoleTransitionPolicyTest {
                                         UserRole.MODERATOR))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_FORBIDDEN);
+                .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_NOT_ALLOWED);
     }
 
     @Test
@@ -194,7 +194,7 @@ class RoleTransitionPolicyTest {
                                         UserRole.ADMIN))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_FORBIDDEN);
+                .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_NOT_ALLOWED);
     }
 
     @Test
@@ -209,6 +209,6 @@ class RoleTransitionPolicyTest {
                                         UserRole.USER))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_FORBIDDEN);
+                .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_NOT_ALLOWED);
     }
 }

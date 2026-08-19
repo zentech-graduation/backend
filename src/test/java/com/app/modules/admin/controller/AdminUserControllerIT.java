@@ -610,7 +610,7 @@ class AdminUserControllerIT {
                         admin);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_FORBIDDEN");
+        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_NOT_ALLOWED");
         assertThat(roleOf(other.id())).isEqualTo("admin");
         assertThat(auditCount()).isZero();
     }
@@ -627,7 +627,7 @@ class AdminUserControllerIT {
                         admin);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_FORBIDDEN");
+        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_NOT_ALLOWED");
         assertThat(roleOf(ordinary.id())).isEqualTo("user");
         assertThat(auditCount()).isZero();
     }
@@ -644,7 +644,7 @@ class AdminUserControllerIT {
                         admin);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_FORBIDDEN");
+        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_NOT_ALLOWED");
     }
 
     @Test

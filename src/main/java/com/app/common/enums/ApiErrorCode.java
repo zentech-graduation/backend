@@ -140,7 +140,11 @@ public enum ApiErrorCode {
     // Covers every rejected role transition: a skip-level promotion, an administrator target, and a
     // no-op. The three are one class of error to the caller - the requested transition is not one
     // the policy permits - and splitting them would let a caller map out the matrix by probing.
-    ADMIN_ROLE_TRANSITION_FORBIDDEN("ADMIN_ROLE_TRANSITION_FORBIDDEN", "The requested role transition is not permitted", HttpStatus.CONFLICT);
+    // Named NOT_ALLOWED rather than FORBIDDEN because it answers 409: every other *_FORBIDDEN
+    // constant here maps to 403, and one that did not would make the naming stop predicting the
+    // status. The status is right as it is - the caller has the authority, the transition is the
+    // problem - so the name moved rather than the code.
+    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT);
 
     // spotless:on
 
