@@ -23,7 +23,7 @@ CREATE TYPE follow_status   AS ENUM ('pending', 'accepted');
 CREATE TYPE story_type      AS ENUM ('image', 'video');
 CREATE TYPE message_type    AS ENUM ('text', 'image', 'video', 'post_share', 'story_share');
 CREATE TYPE report_type     AS ENUM ('post', 'comment', 'user', 'story', 'message');
-CREATE TYPE report_status   AS ENUM ('pending', 'reviewing', 'resolved', 'dismissed');
+CREATE TYPE report_status   AS ENUM ('pending', 'reviewing', 'resolved', 'dismissed', 'escalated');
 CREATE TYPE report_reason   AS ENUM (
     'spam', 'nudity', 'violence', 'hate_speech',
     'harassment', 'false_information', 'scam', 'other'
@@ -516,6 +516,11 @@ CREATE TABLE reports (
     reviewed_by         UUID            REFERENCES users(id) ON DELETE SET NULL,
     reviewed_at         TIMESTAMPTZ,
     resolution_note     TEXT,
+    -- Escalation to an administrator (V65). Columns rather than a join to admin_actions, so
+    -- the queue read that shows the reason does not depend on the audit log.
+    escalated_by        UUID            REFERENCES users(id) ON DELETE SET NULL,
+    escalated_at        TIMESTAMPTZ,
+    escalation_reason   TEXT,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
@@ -1010,6 +1015,10 @@ CREATE INDEX idx_messages_sender        ON messages (sender_id);
 CREATE INDEX idx_reports_status         ON reports (status, created_at DESC);
 CREATE INDEX idx_reports_entity         ON reports (entity_id, report_type);
 CREATE INDEX idx_reports_reporter       ON reports (reporter_id);
+-- Serves both readers of the escalated queue: the administrator listing, oldest first, and the
+-- counter that is the only signal an escalated report is waiting (V66).
+CREATE INDEX idx_reports_escalated      ON reports (created_at ASC, id ASC)
+    WHERE status = 'escalated';
 CREATE UNIQUE INDEX uq_reports_reporter_type_entity ON reports (reporter_id, report_type, entity_id);
 
 -- admin_actions

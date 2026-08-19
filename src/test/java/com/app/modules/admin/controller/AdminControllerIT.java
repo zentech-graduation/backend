@@ -704,6 +704,249 @@ class AdminControllerIT {
                 .isEqualTo("draft");
     }
 
+    @Test
+    void escalateReport_pendingReport_recordsTheEscalationAndTheAuditRow() {
+        TestUser moderator = createUser("esc_mod", "moderator");
+        TestUser reporter = createUser("esc_reporter", "user");
+        TestUser target = createUser("esc_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/reports/" + reportId + "/escalate",
+                        Map.of("reason", "Reported account is a moderator; outside my remit"),
+                        moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(response).get("actionType")).isEqualTo("escalate_report");
+        Map<String, Object> report =
+                jdbcTemplate.queryForMap(
+                        "SELECT status::text AS status, escalated_by, escalated_at,"
+                                + " escalation_reason FROM reports WHERE id = ?",
+                        reportId);
+        assertThat(report.get("status")).isEqualTo("escalated");
+        assertThat(report.get("escalated_by")).isEqualTo(moderator.id());
+        assertThat(report.get("escalated_at")).isNotNull();
+        assertThat(report.get("escalation_reason"))
+                .isEqualTo("Reported account is a moderator; outside my remit");
+    }
+
+    @Test
+    void escalateReport_removesItFromTheModeratorQueueButNotFromTheDirectRead() {
+        TestUser moderator = createUser("escq_mod", "moderator");
+        TestUser reporter = createUser("escq_reporter", "user");
+        TestUser target = createUser("escq_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+        assertThat(reportIdsIn(get("/api/v1/reports", moderator))).contains(reportId.toString());
+
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/escalate",
+                Map.of("reason", "Handing this up"),
+                moderator);
+
+        assertThat(reportIdsIn(get("/api/v1/reports", moderator)))
+                .doesNotContain(reportId.toString());
+        ResponseEntity<Map> direct = get("/api/v1/reports/" + reportId, moderator);
+        assertThat(direct.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(direct).get("status")).isEqualTo("escalated");
+    }
+
+    @Test
+    void escalateReport_administratorQueue_stillContainsIt() {
+        TestUser admin = createUser("escadm", "admin");
+        TestUser moderator = createUser("escadm_mod", "moderator");
+        TestUser reporter = createUser("escadm_rep", "user");
+        TestUser target = createUser("escadm_tgt", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/escalate",
+                Map.of("reason", "Handing this up"),
+                moderator);
+
+        assertThat(reportIdsIn(get("/api/v1/reports", admin))).contains(reportId.toString());
+        assertThat(reportIdsIn(get("/api/v1/reports?status=escalated", admin)))
+                .contains(reportId.toString());
+    }
+
+    @Test
+    void escalateReport_terminalReport_returnsConflict() {
+        TestUser admin = createUser("esct_admin", "admin");
+        TestUser moderator = createUser("esct_mod", "moderator");
+        TestUser reporter = createUser("esct_reporter", "user");
+        TestUser target = createUser("esct_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/resolve",
+                Map.of("reason", "Confirmed and handled"),
+                admin);
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/reports/" + reportId + "/escalate",
+                        Map.of("reason", "Too late"),
+                        moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_INVALID_TRANSITION");
+    }
+
+    @Test
+    void escalateReport_alreadyEscalated_returnsConflict() {
+        TestUser moderator = createUser("esce_mod", "moderator");
+        TestUser reporter = createUser("esce_reporter", "user");
+        TestUser target = createUser("esce_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/escalate",
+                Map.of("reason", "First"),
+                moderator);
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/reports/" + reportId + "/escalate",
+                        Map.of("reason", "Again"),
+                        moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void resolveReport_escalatedReport_refusesAModeratorAndAcceptsAnAdministrator() {
+        TestUser admin = createUser("escr_admin", "admin");
+        TestUser moderator = createUser("escr_mod", "moderator");
+        TestUser reporter = createUser("escr_reporter", "user");
+        TestUser target = createUser("escr_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/escalate",
+                Map.of("reason", "Handing this up"),
+                moderator);
+
+        ResponseEntity<Map> refused =
+                patch(
+                        "/api/v1/admin/reports/" + reportId + "/resolve",
+                        Map.of("reason", "Not mine to close"),
+                        moderator);
+        assertThat(refused.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(statusOfReport(reportId)).isEqualTo("escalated");
+
+        ResponseEntity<Map> accepted =
+                patch(
+                        "/api/v1/admin/reports/" + reportId + "/resolve",
+                        Map.of("reason", "Reviewed and closed"),
+                        admin);
+        assertThat(accepted.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(statusOfReport(reportId)).isEqualTo("resolved");
+    }
+
+    @Test
+    void dismissReport_escalatedReport_refusesAModerator() {
+        TestUser moderator = createUser("escd_mod", "moderator");
+        TestUser reporter = createUser("escd_reporter", "user");
+        TestUser target = createUser("escd_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/escalate",
+                Map.of("reason", "Handing this up"),
+                moderator);
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/reports/" + reportId + "/dismiss",
+                        Map.of("reason", "Not actionable"),
+                        moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(statusOfReport(reportId)).isEqualTo("escalated");
+    }
+
+    @Test
+    void countEscalatedReports_movesWithEscalationAndClosure() {
+        TestUser admin = createUser("cnt_admin", "admin");
+        TestUser moderator = createUser("cnt_mod", "moderator");
+        TestUser reporter = createUser("cnt_reporter", "user");
+        TestUser target = createUser("cnt_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+
+        assertThat(escalatedCount(admin)).isZero();
+
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/escalate",
+                Map.of("reason", "Handing this up"),
+                moderator);
+        assertThat(escalatedCount(admin)).isEqualTo(1);
+
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/resolve",
+                Map.of("reason", "Reviewed and closed"),
+                admin);
+        assertThat(escalatedCount(admin)).isZero();
+    }
+
+    @Test
+    void countEscalatedReports_moderatorActor_returnsForbidden() {
+        TestUser moderator = createUser("cntf_mod", "moderator");
+
+        assertThat(get("/api/v1/admin/reports/escalated/count", moderator).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void listReports_moderatorReplayingAnAdministratorCursor_isRejected() {
+        TestUser admin = createUser("rc_admin", "admin");
+        TestUser moderator = createUser("rc_mod", "moderator");
+        TestUser reporter = createUser("rc_reporter", "user");
+        insertReport(reporter.id(), createUser("rc_t1", "user").id());
+        insertReport(reporter.id(), createUser("rc_t2", "user").id());
+        ResponseEntity<Map> adminPage = get("/api/v1/reports?limit=1", admin);
+        String adminCursor = (String) pageInfoOf(adminPage).get("endCursor");
+        assertThat(adminCursor).isNotBlank();
+
+        ResponseEntity<Map> replayed =
+                get("/api/v1/reports?limit=1&cursor=" + adminCursor, moderator);
+
+        assertThat(replayed.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(replayed.getBody().get("code")).isEqualTo("INVALID_CURSOR");
+    }
+
+    @Test
+    void listReports_moderatorAskingForAResolvedStatus_returnsAnEmptyPage() {
+        TestUser admin = createUser("mq_admin", "admin");
+        TestUser moderator = createUser("mq_mod", "moderator");
+        TestUser reporter = createUser("mq_reporter", "user");
+        TestUser target = createUser("mq_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+        patch(
+                "/api/v1/admin/reports/" + reportId + "/resolve",
+                Map.of("reason", "Confirmed and handled"),
+                admin);
+
+        assertThat(reportIdsIn(get("/api/v1/reports?status=resolved", moderator))).isEmpty();
+        assertThat(reportIdsIn(get("/api/v1/reports?status=resolved", admin)))
+                .contains(reportId.toString());
+        assertThat(reportIdsIn(get("/api/v1/reports", moderator))).isEmpty();
+    }
+
+    private long escalatedCount(TestUser actor) {
+        ResponseEntity<Map> response = get("/api/v1/admin/reports/escalated/count", actor);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return ((Number) dataOf(response).get("count")).longValue();
+    }
+
+    private String statusOfReport(UUID reportId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT status::text FROM reports WHERE id = ?", String.class, reportId);
+    }
+
+    private static List<String> reportIdsIn(ResponseEntity<Map> response) {
+        return contentOf(response).stream().map(row -> (String) row.get("id")).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> pageInfoOf(ResponseEntity<Map> response) {
+        return (Map<String, Object>) dataOf(response).get("pageInfo");
+    }
+
     private TestUser createUser(String prefix, String role) {
         UUID id = UUID.randomUUID();
         String username = prefix + "_" + id.toString().substring(0, 8);

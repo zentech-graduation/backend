@@ -17,9 +17,11 @@ import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
@@ -152,6 +154,45 @@ public class AdminServiceImpl implements AdminService {
     public AdminActionResponse dismissReport(
             UUID actorId, UUID reportId, AdminActionRequest request) {
         return closeReport(actorId, reportId, AdminActionType.DISMISS_REPORT, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse escalateReport(
+            UUID actorId, UUID reportId, AdminEscalateReportRequest request) {
+        Report report =
+                reportRepository
+                        .findById(reportId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.REPORT_NOT_FOUND));
+        // Only an open report can be escalated. Escalating a closed one would reopen a decision
+        // already taken, and escalating an escalated one would rewrite whose escalation it was.
+        if (report.getStatus() != ReportStatus.PENDING
+                && report.getStatus() != ReportStatus.REVIEWING) {
+            throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        }
+        report.setStatus(ReportStatus.ESCALATED);
+        report.setEscalatedBy(actorId);
+        report.setEscalatedAt(OffsetDateTime.now());
+        report.setEscalationReason(request.reason().trim());
+        reportRepository.save(report);
+        log.info("Report escalated: actorId={}, reportId={}", actorId, reportId);
+        UUID targetUserId = report.getReportType() == ReportType.USER ? report.getEntityId() : null;
+        return adminActionRecorder.record(
+                actorId,
+                AdminActionType.ESCALATE_REPORT,
+                targetUserId,
+                report.getReportType().toJson(),
+                report.getEntityId(),
+                reportId,
+                request.reason(),
+                null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EscalatedReportCountResponse countEscalatedReports() {
+        return new EscalatedReportCountResponse(
+                reportRepository.countByStatus(ReportStatus.ESCALATED));
     }
 
     @Override
@@ -305,6 +346,13 @@ public class AdminServiceImpl implements AdminService {
         if (report.getStatus() == ReportStatus.RESOLVED
                 || report.getStatus() == ReportStatus.DISMISSED) {
             throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        }
+        // Checked here rather than by a path matcher, because resolve and dismiss are one shared
+        // path for every report and only the report's own state decides who may close it. A
+        // moderator escalated this one because it did not want to decide it; letting a moderator
+        // close it anyway would make the escalation an empty gesture.
+        if (report.getStatus() == ReportStatus.ESCALATED && isModerator(actorId)) {
+            throw new AppException(ApiErrorCode.FORBIDDEN);
         }
         report.setStatus(
                 actionType == AdminActionType.RESOLVE_REPORT

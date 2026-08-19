@@ -23,9 +23,11 @@ import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.admin.api.AdminApi;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.service.AdminService;
 
@@ -177,6 +179,26 @@ public class AdminController extends BaseController implements AdminApi {
         return page(
                 adminService.getActionsForUser(
                         SecurityUtils.getCurrentUserId(), userId, cursor, limit));
+    }
+
+    /** Escalates a report to an administrator for the authenticated moderator. */
+    @Override
+    @PatchMapping(ApiConstants.Admin.ESCALATE_REPORT)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> escalateReport(
+            @PathVariable("reportId") UUID reportId,
+            @Valid @RequestBody AdminEscalateReportRequest request) {
+        return ok(adminService.escalateReport(SecurityUtils.getCurrentUserId(), reportId, request));
+    }
+
+    /** Returns the number of reports waiting on an administrator. */
+    @Override
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping(ApiConstants.Admin.ESCALATED_REPORT_COUNT)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<EscalatedReportCountResponse>> countEscalatedReports() {
+        return ResponseEntity.ok(
+                ApiResponse.success(ApiSuccessCode.OK, adminService.countEscalatedReports()));
     }
 
     private ResponseEntity<ApiResponse<AdminActionResponse>> ok(AdminActionResponse response) {

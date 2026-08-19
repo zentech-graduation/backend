@@ -21,9 +21,11 @@ import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -472,6 +474,86 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<AdminActionResponse>> dismissReport(
             @PathVariable("reportId") UUID reportId,
             @Valid @RequestBody AdminActionRequest request);
+
+    /** Hands a report up to an administrator and returns the persisted audit event. */
+    @Operation(
+            summary = "Escalate a report",
+            description =
+                    "Moves an open report out of the moderator queue and into the administrator's."
+                            + " The escalating moderator can still read it, but only an administrator"
+                            + " may resolve or dismiss it, and there is no transition back to pending"
+                            + " or reviewing. No notification is pushed: the escalated count endpoint"
+                            + " is the only signal that one is waiting. Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Report escalated"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Report is already closed or already escalated",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PatchMapping(ApiConstants.Admin.ESCALATE_REPORT)
+    ResponseEntity<ApiResponse<AdminActionResponse>> escalateReport(
+            @PathVariable("reportId") UUID reportId,
+            @Valid @RequestBody AdminEscalateReportRequest request);
+
+    /** Counts the reports waiting on an administrator. */
+    @Operation(
+            summary = "Count escalated reports",
+            description =
+                    "Returns how many reports are in the escalated state. Escalation pushes no"
+                            + " notification, so this is the only signal that one is waiting; a"
+                            + " dashboard that does not surface it makes escalation a black hole."
+                            + " Requires ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Escalated report count"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Admin.ESCALATED_REPORT_COUNT)
+    ResponseEntity<ApiResponse<EscalatedReportCountResponse>> countEscalatedReports();
 
     /** Lists audit-event summaries with optional actor and action-type filters. */
     @Operation(

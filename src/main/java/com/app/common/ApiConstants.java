@@ -163,6 +163,9 @@ public final class ApiConstants {
         public static final String RESTORE_COMMENT = "/comments/{commentId}/restore";
         public static final String RESOLVE_REPORT = "/reports/{reportId}/resolve";
         public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
+        public static final String ESCALATE_REPORT = "/reports/{reportId}/escalate";
+        // Literal segments, so no template can shadow it whatever the matcher ordering.
+        public static final String ESCALATED_REPORT_COUNT = "/reports/escalated/count";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
         // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the

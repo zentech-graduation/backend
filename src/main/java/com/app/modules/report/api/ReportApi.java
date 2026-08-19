@@ -94,7 +94,12 @@ public interface ReportApi {
             summary = "List reports",
             description =
                     "Returns a cursor-paginated moderation queue filtered by status and target"
-                            + " type, ordered newest first. Requires MODERATOR or ADMIN.")
+                            + " type, ordered newest first. A moderator sees the open part of the"
+                            + " lifecycle only, pending and reviewing; asking for a closed or escalated"
+                            + " status returns an empty page rather than an error. An administrator"
+                            + " sees every status including escalated. The cursor is scoped per role, so"
+                            + " one issued to an administrator is rejected when replayed by a"
+                            + " moderator. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

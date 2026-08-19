@@ -32,6 +32,10 @@ public final class CursorScope {
     public static final String POST_LIKED_POSTS = "lkd";
     public static final String POST_SAVES = "sav";
     public static final String REPORTS = "rpt";
+    // A moderator's report listing is narrowed to the open statuses, so its cursor is
+    // tagged separately. Sharing REPORTS would let a moderator replay an
+    // administrator's cursor and page into rows its own listing never produces.
+    public static final String REPORTS_MODERATOR = "rptm";
     public static final String PENDING_REPORTS = "prpt";
     public static final String SOCIAL_FOLLOWERS = "flw";
     public static final String SOCIAL_FOLLOWING = "flg";

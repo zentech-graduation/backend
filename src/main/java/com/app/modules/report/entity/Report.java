@@ -79,6 +79,17 @@ public class Report {
     @Column(name = "resolution_note", columnDefinition = "TEXT")
     private String resolutionNote;
 
+    /** Moderator who escalated the report, or null once that account is deleted. */
+    @Column(name = "escalated_by")
+    private UUID escalatedBy;
+
+    @Column(name = "escalated_at")
+    private OffsetDateTime escalatedAt;
+
+    /** Why the moderator handed the decision up; read by the administrator who picks it up. */
+    @Column(name = "escalation_reason", columnDefinition = "TEXT")
+    private String escalationReason;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

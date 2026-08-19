@@ -2,6 +2,7 @@ package com.app.modules.report.service.impl;
 
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,12 +26,17 @@ import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.mapper.ReportMapper;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.report.service.ReportService;
+import com.app.modules.users.enums.UserRole;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
 public class ReportServiceImpl implements ReportService {
+
+    /** The open part of the lifecycle, and the whole of a moderator's queue. */
+    private static final List<ReportStatus> MODERATOR_STATUSES =
+            List.of(ReportStatus.PENDING, ReportStatus.REVIEWING);
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
@@ -74,15 +80,29 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<ReportSummaryResponse> listReports(
-            ReportStatus status, ReportType reportType, String cursor, int size) {
+            UserRole actorRole,
+            ReportStatus status,
+            ReportType reportType,
+            String cursor,
+            int size) {
+        boolean moderator = actorRole == UserRole.MODERATOR;
+        String scope = moderator ? CursorScope.REPORTS_MODERATOR : CursorScope.REPORTS;
         int pageSize = normalizeLimit(size);
-        ReportCursor decoded = decodeCursor(cursor, CursorScope.REPORTS);
+        ReportCursor decoded = decodeCursor(cursor, scope);
         int queryLimit = pageSize + 1;
+        if (moderator && status != null && !MODERATOR_STATUSES.contains(status)) {
+            // Empty rather than forbidden. A moderator asking for resolved reports learns
+            // nothing either way, and an error would confirm that rows exist behind the
+            // filter, which is the disclosure the narrowing exists to prevent.
+            return emptyPage(cursor != null);
+        }
+        List<ReportStatus> statuses = moderator && status == null ? MODERATOR_STATUSES : null;
         var reports =
                 decoded.isEmpty()
-                        ? findFirstReportPage(status, reportType, queryLimit)
-                        : findReportPageAfterCursor(status, reportType, decoded, queryLimit);
-        return toSummaryPage(reports, pageSize, cursor != null, CursorScope.REPORTS);
+                        ? findFirstReportPage(statuses, status, reportType, queryLimit)
+                        : findReportPageAfterCursor(
+                                statuses, status, reportType, decoded, queryLimit);
+        return toSummaryPage(reports, pageSize, cursor != null, scope);
     }
 
     @Override
@@ -150,15 +170,26 @@ public class ReportServiceImpl implements ReportService {
         boolean valid =
                 switch (current) {
                     case PENDING -> target == ReportStatus.REVIEWING;
-                    case REVIEWING, RESOLVED, DISMISSED -> false;
+                    // ESCALATED is here rather than absent because the switch is exhaustive. It
+                    // behaves like a terminal state to this endpoint on purpose: a report handed up
+                    // to an administrator must not be pulled back into the moderator queue.
+                    case REVIEWING, RESOLVED, DISMISSED, ESCALATED -> false;
                 };
         if (!valid) {
             throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
         }
     }
 
-    private java.util.List<Report> findFirstReportPage(
-            ReportStatus status, ReportType reportType, int limit) {
+    // statuses is non-null only for a moderator that asked for no particular status, where the
+    // listing is narrowed to the open ones. status and statuses are never both set.
+    private List<Report> findFirstReportPage(
+            List<ReportStatus> statuses, ReportStatus status, ReportType reportType, int limit) {
+        if (statuses != null) {
+            return reportType != null
+                    ? reportRepository.findFirstReportsByStatusInAndReportType(
+                            statuses, reportType, limit)
+                    : reportRepository.findFirstReportsByStatusIn(statuses, limit);
+        }
         if (status != null && reportType != null) {
             return reportRepository.findFirstReportsByStatusAndReportType(
                     status, reportType, limit);
@@ -172,8 +203,19 @@ public class ReportServiceImpl implements ReportService {
         return reportRepository.findFirstReports(limit);
     }
 
-    private java.util.List<Report> findReportPageAfterCursor(
-            ReportStatus status, ReportType reportType, ReportCursor cursor, int limit) {
+    private List<Report> findReportPageAfterCursor(
+            List<ReportStatus> statuses,
+            ReportStatus status,
+            ReportType reportType,
+            ReportCursor cursor,
+            int limit) {
+        if (statuses != null) {
+            return reportType != null
+                    ? reportRepository.findAllByStatusInAndReportTypeBeforeCursor(
+                            statuses, reportType, cursor.createdAt(), cursor.id(), limit)
+                    : reportRepository.findAllByStatusInBeforeCursor(
+                            statuses, cursor.createdAt(), cursor.id(), limit);
+        }
         if (status != null && reportType != null) {
             return reportRepository.findAllByStatusAndReportTypeBeforeCursor(
                     status, reportType, cursor.createdAt(), cursor.id(), limit);
@@ -187,6 +229,10 @@ public class ReportServiceImpl implements ReportService {
                     reportType, cursor.createdAt(), cursor.id(), limit);
         }
         return reportRepository.findAllBeforeCursor(cursor.createdAt(), cursor.id(), limit);
+    }
+
+    private CursorPageResponse<ReportSummaryResponse> emptyPage(boolean hasPreviousPage) {
+        return CursorPageResponse.of(Collections.emptyList(), false, null, null, hasPreviousPage);
     }
 
     private CursorPageResponse<ReportSummaryResponse> toSummaryPage(

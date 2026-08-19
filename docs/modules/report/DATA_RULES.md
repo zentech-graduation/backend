@@ -8,7 +8,7 @@
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `reports` | `id`, `reporter_id`, `report_type`, `report_reason`, `entity_id`, `description`, `status`, `reviewed_by`, `reviewed_at`, `resolution_note` | One row per user-submitted content flag. Polymorphic target: `report_type` indicates whether `entity_id` references a post, comment, user, story, or message. |
+| `reports` | `id`, `reporter_id`, `report_type`, `report_reason`, `entity_id`, `description`, `status`, `reviewed_by`, `reviewed_at`, `resolution_note`, `escalated_by`, `escalated_at`, `escalation_reason` | One row per user-submitted content flag. Polymorphic target: `report_type` indicates whether `entity_id` references a post, comment, user, story, or message. The three escalation columns are columns rather than a join to `admin_actions`, so the queue read that shows the reason does not depend on the audit log. |
 
 This table cannot be rebuilt from any other source if lost.
 
@@ -31,7 +31,8 @@ This table cannot be rebuilt from any other source if lost.
 |------|-------------|
 | `report_type` must be one of `'post'`, `'comment'`, `'user'`, `'story'`, `'message'` | `report_type` enum |
 | `report_reason` must be one of the 8 values in `report_reason` enum | `report_reason` enum |
-| `status` must be one of `'pending'`, `'reviewing'`, `'resolved'`, `'dismissed'`; defaults to `'pending'` | `report_status` enum, `DEFAULT 'pending'` |
+| `status` must be one of `'pending'`, `'reviewing'`, `'resolved'`, `'dismissed'`, `'escalated'`; defaults to `'pending'` | `report_status` enum, `DEFAULT 'pending'` |
+| `escalated_by` becomes NULL if the escalating moderator deletes their account | `ON DELETE SET NULL` on `escalated_by` FK |
 | `reviewed_by` becomes NULL if the reviewing moderator/admin deletes their account | `ON DELETE SET NULL` on `reviewed_by` FK |
 | Deleting the reporter cascades to their submitted reports | `ON DELETE CASCADE` on `reporter_id` FK |
 | `entity_id` is a raw `UUID` with no enforced FK — it is polymorphic | No referential constraint; application must validate |
@@ -46,13 +47,19 @@ This table cannot be rebuilt from any other source if lost.
 | `PATCH /reports/{reportId}/status` performs exactly one transition, `pending` to `reviewing`, and records `reviewed_by` and `reviewed_at` | `ReportServiceImpl.validateTransition`, `ReportServiceImpl.updateStatus` |
 | Resolving or dismissing a report is refused by `PATCH /reports/{reportId}/status` with `REPORT_INVALID_TRANSITION` | `ReportServiceImpl.validateTransition` — a terminal transition writes an `admin_actions` row, so it belongs to the admin module and giving that row a second, silent writer here is what this refusal prevents |
 | Only users with `role = 'moderator'` or `role = 'admin'` may update report status | `SecurityConfig`, `ReportController` — role enforcement via Spring Security |
+| A moderator or administrator may escalate an open report; the transition is `pending -> escalated` or `reviewing -> escalated`, and there is none back | `AdminServiceImpl.escalateReport` — a report that could fall into the queue it just left would defeat the point of escalating it |
+| Only an administrator may resolve or dismiss an escalated report | `AdminServiceImpl.closeReport` — checked on the report's own state rather than by a path matcher, because resolve and dismiss are one shared path for every report |
+| A moderator's report listing is narrowed to `pending` and `reviewing`; asking for any other status returns an empty page rather than an error | `ReportServiceImpl.listReports` — an error would confirm that rows exist behind the filter, which is the disclosure the narrowing prevents |
+| An escalated report stays readable at `GET /reports/{reportId}` to the moderator that escalated it | `ReportServiceImpl.getReport` carries no scoping, so it stays readable to every moderator, which is the intended read-only retention |
+| The report listing's cursor is scoped per role | `CursorScope.REPORTS` and `REPORTS_MODERATOR` — filtering by role without scoping the cursor would let a moderator replay an administrator's cursor into rows its own listing never produces |
 | Resolving a report with action `remove_post` or `ban_user` must be coordinated with the admin module's `admin_actions` log | Coordination delegated to `AdminServiceImpl.resolveReport` and `AdminServiceImpl.dismissReport` — the admin module is the entry point for resolution actions that carry moderation consequences |
 
 ### C. Scope Simplifications
 
 - The application pre-check cannot close the race between two concurrent submissions; the unique index added in V30 is what actually rejects the second one, surfaced as `REPORT_DUPLICATE`.
 - `entity_id` has no FK enforcement — if the reported entity is deleted before the report is reviewed, the `entity_id` will reference a non-existent row.
-- No automatic escalation or SLA on report review time.
+- No automatic escalation and no SLA on report review time. Escalation is a moderator's explicit act, not something a timer performs.
+- An escalated report pushes no notification. `GET /api/v1/admin/reports/escalated/count` is the only signal one is waiting, so a dashboard that does not surface that count makes escalation a black hole: the moderator has handed the decision up and nobody is told it arrived. This is a frontend dependency, not something the backend can close on its own.
 - `resolution_note` is written only by the admin close endpoints. The `resolutionNote` field on the triage request body is retained for wire compatibility and is ignored, because the one transition that endpoint still performs carries no resolution.
 - `REPORT_RESOLUTION_NOTE_REQUIRED` is unreachable now that the note requirement lives behind `AdminActionRequest.reason`, which is `@NotBlank`. The constant is kept because an error code is part of the published contract and a client may still branch on it.
 
