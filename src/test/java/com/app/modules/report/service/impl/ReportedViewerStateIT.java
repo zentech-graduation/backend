@@ -217,10 +217,13 @@ class ReportedViewerStateIT {
         postService.listUserPosts(viewer, owner, PostTypeFilter.empty(), null, 20);
         long twentyPage = stats.getPrepareStatementCount();
 
-        // Eight before this change, nine after: exactly one added batch lookup, independent of
-        // how many posts the page carries.
-        assertThat(onePage).isEqualTo(9);
-        assertThat(twentyPage).isEqualTo(9);
+        // The number is not the point; that the two are equal is. Each viewer-state or hydration
+        // concern adds exactly one batched lookup whose cost does not move with the page size, so
+        // a page of twenty costs the same number of statements as a page of one. It was eight
+        // before the report lookup was batched, nine after, and ten once a post response began
+        // listing its hashtags. A change that makes these two differ has introduced an N+1.
+        assertThat(onePage).isEqualTo(twentyPage);
+        assertThat(onePage).isEqualTo(10);
     }
 
     private CommentResponse firstComment(UUID viewer, UUID postId) {

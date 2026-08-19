@@ -88,10 +88,17 @@ public class HashtagTrendingServiceImpl implements HashtagTrendingService {
             OffsetDateTime windowStart, OffsetDateTime windowEnd) {
         List<TrendingCount> counts =
                 jdbcTemplate.query(
+                        // The join to hashtags exists only for the status predicate: a banned or
+                        // deleted tag belongs on no discovery surface, and trending is the most
+                        // prominent one there is. The immediate purge on a status change keeps the
+                        // current snapshot clean; this keeps the next one from putting the tag
+                        // straight back.
                         "SELECT ph.hashtag_id, COUNT(ph.post_id) AS post_count"
                                 + " FROM post_hashtags ph"
                                 + " JOIN posts p ON p.id = ph.post_id"
+                                + " JOIN hashtags h ON h.id = ph.hashtag_id"
                                 + " WHERE p.created_at >= ? AND p.created_at < ? AND p.deleted_at IS NULL"
+                                + " AND h.status = 'active'"
                                 + " GROUP BY ph.hashtag_id"
                                 + " ORDER BY post_count DESC"
                                 + " LIMIT "

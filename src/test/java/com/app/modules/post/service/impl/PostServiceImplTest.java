@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -254,7 +255,7 @@ class PostServiceImplTest {
     }
 
     @Test
-    void createPost_draft_skipsHashtagExtraction() {
+    void createPost_draft_screensTheCaptionButAssociatesNothing() {
         UUID mediaId = UUID.randomUUID();
         when(postMediaAssetRepository.findAllById(List.of(mediaId)))
                 .thenReturn(List.of(asset(mediaId, authorId, MediaType.IMAGE)));
@@ -263,7 +264,12 @@ class PostServiceImplTest {
                 authorId,
                 createRequest("#draft tag", PostType.IMAGE, List.of(mediaId), PostStatus.DRAFT));
 
-        verifyNoInteractions(hashtagService);
+        // A draft creates no post_hashtags rows, which is the rule this test exists for. It is
+        // still screened for banned tags: a draft naming one could never be published, so the
+        // author should learn while the caption is in front of them rather than at publish time.
+        verify(hashtagService).findBannedNames(List.of("draft"));
+        verify(hashtagService, never()).upsertHashtagsForPost(any(), any());
+        verify(hashtagService, never()).upsertHashtagsForPostSkippingBanned(any(), any());
     }
 
     @Test

@@ -180,6 +180,16 @@ public final class ApiConstants {
         // sub-tree is reserved for the ADMIN-only matcher, and warning and violation reads are
         // moderator work. Putting them under "/users/" would mean adding exceptions ahead of that
         // matcher, which is precisely the ordering subtlety the split exists to avoid.
+        // Under /api/v1/admin/ but outside the /users/** sub-tree, so the broader
+        // "/api/v1/admin/**" matcher applies and admits a moderator. These endpoints are
+        // administrator-only, which method-level @PreAuthorize on the controller enforces, the same
+        // way the administrator-only warning and strike revocations do.
+        public static final String HASHTAGS = "/hashtags";
+        // Declared before HASHTAG_BY_ID for readability only. The literal segment wins over the
+        // "/hashtags/{hashtagId}" template in Spring MVC's pattern comparator regardless of
+        // declaration order, and the two carry different HTTP methods in any case.
+        public static final String HASHTAG_SEARCH = "/hashtags/search";
+        public static final String HASHTAG_BY_ID = "/hashtags/{hashtagId}";
         public static final String WARN_USER = "/warnings/for-user/{userId}";
         public static final String VIOLATIONS_FOR_USER = "/violations/for-user/{userId}";
         public static final String REVOKE_WARNING = "/warnings/{warningId}";

@@ -125,8 +125,15 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public ReportResponse getReport(UUID reportId) {
-        return reportMapper.toResponse(findReport(reportId));
+    public ReportResponse getReport(UserRole actorRole, UUID actorId, UUID reportId) {
+        Report report = findReport(reportId);
+        if (!mayRead(actorRole, actorId, report)) {
+            // Not found rather than forbidden. The listing already hides these rows, and answering
+            // 403 here would tell a moderator which identifiers name a real report, which is the
+            // disclosure hiding them was for.
+            throw new AppException(ApiErrorCode.REPORT_NOT_FOUND);
+        }
+        return reportMapper.toResponse(report);
     }
 
     @Override
@@ -153,6 +160,18 @@ public class ReportServiceImpl implements ReportService {
                 reporterId, reportType, entityId)) {
             throw new AppException(ApiErrorCode.REPORT_DUPLICATE);
         }
+    }
+
+    // An administrator reads everything. A moderator reads its own queue, and keeps read access to
+    // a report it escalated so it can follow the case it handed up. Nothing else: leaving the
+    // direct read open let every moderator read every closed and escalated report by identifier
+    // while the listing that was meant to hide them filtered them out.
+    private static boolean mayRead(UserRole actorRole, UUID actorId, Report report) {
+        if (actorRole != UserRole.MODERATOR) {
+            return true;
+        }
+        return MODERATOR_STATUSES.contains(report.getStatus())
+                || (report.getEscalatedBy() != null && report.getEscalatedBy().equals(actorId));
     }
 
     private Report findReport(UUID reportId) {

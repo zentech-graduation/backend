@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.hashtag.service.HashtagService;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.entity.PostMedia;
 import com.app.modules.post.mapper.PostMapper;
@@ -35,6 +36,7 @@ class PostResponseAssemblerTest {
     @Mock private PostMediaAssetRepository postMediaAssetRepository;
     @Mock private UserSummaryService userSummaryService;
     @Mock private PostViewerStateService postViewerStateService;
+    @Mock private HashtagService hashtagService;
     @Mock private PostMapper postMapper;
 
     private PostResponseAssembler assembler;
@@ -46,6 +48,7 @@ class PostResponseAssemblerTest {
                         postMediaAssetRepository,
                         userSummaryService,
                         postViewerStateService,
+                        hashtagService,
                         postMapper);
     }
 
@@ -70,7 +73,14 @@ class PostResponseAssemblerTest {
 
         verify(postMediaAssetRepository, never()).findAllById(any());
         verify(postMapper)
-                .toResponse(eq(post), eq(List.of()), eq(author), eq(false), eq(false), eq(false));
+                .toResponse(
+                        eq(post),
+                        eq(List.of()),
+                        eq(author),
+                        eq(false),
+                        eq(false),
+                        eq(false),
+                        eq(List.of()));
     }
 
     @Test
@@ -94,7 +104,15 @@ class PostResponseAssemblerTest {
         verify(postMediaAssetRepository).findAllById(Set.of(assetId));
         // Asset map is empty, so the media row hydrates against a null asset.
         verify(postMapper).toMediaResponse(eq(media), isNull());
-        verify(postMapper).toResponse(eq(post), any(), eq(author), eq(false), eq(false), eq(false));
+        verify(postMapper)
+                .toResponse(
+                        eq(post),
+                        any(),
+                        eq(author),
+                        eq(false),
+                        eq(false),
+                        eq(false),
+                        eq(List.of()));
     }
 
     @Test
@@ -118,7 +136,14 @@ class PostResponseAssemblerTest {
 
         verify(userSummaryService).loadSummaries(List.of(authorId));
         verify(postMapper)
-                .toResponse(eq(post), eq(List.of()), eq(author), eq(false), eq(false), eq(false));
+                .toResponse(
+                        eq(post),
+                        eq(List.of()),
+                        eq(author),
+                        eq(false),
+                        eq(false),
+                        eq(false),
+                        eq(List.of()));
     }
 
     @Test
@@ -137,6 +162,13 @@ class PostResponseAssemblerTest {
         assembler.assemble(viewerId, post);
 
         verify(postMapper)
-                .toResponse(eq(post), eq(List.of()), eq(author), eq(true), eq(true), eq(true));
+                .toResponse(
+                        eq(post),
+                        eq(List.of()),
+                        eq(author),
+                        eq(true),
+                        eq(true),
+                        eq(true),
+                        eq(List.of()));
     }
 }

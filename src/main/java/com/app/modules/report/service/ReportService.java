@@ -67,11 +67,22 @@ public interface ReportService {
     /**
      * Returns a report by identifier for moderation review.
      *
+     * <p>A moderator reaches the open part of the lifecycle, pending and reviewing, and any report
+     * it escalated itself. Every other report answers as if it did not exist, which is the same
+     * stealth model the listing uses: a 403 would confirm that the row is there. An administrator
+     * reaches every report.
+     *
+     * <p>The role and the caller identity are parameters rather than lookups so this module keeps
+     * importing no other. They are the caller's real role and id either way: the principal they
+     * come from is rebuilt from the account row on every request, not from a token claim.
+     *
+     * @param actorRole role of the caller, which decides what it may read
+     * @param actorId identity of the caller, matched against the report's escalating moderator
      * @param reportId report identifier
      * @return report details
-     * @throws AppException when the report does not exist
+     * @throws AppException when the report does not exist, or the caller may not read it
      */
-    ReportResponse getReport(UUID reportId);
+    ReportResponse getReport(UserRole actorRole, UUID actorId, UUID reportId);
 
     /**
      * Applies a valid moderation lifecycle transition and records reviewer metadata.

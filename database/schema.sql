@@ -33,8 +33,9 @@ CREATE TYPE notification_type AS ENUM (
     'comment_post', 'reply_comment',
     'follow', 'follow_request',
     'mention_post', 'mention_comment',
-    'story_view', 'message'
+    'story_view', 'message', 'warning'
 );
+CREATE TYPE hashtag_status  AS ENUM ('active', 'banned', 'deleted');
 CREATE TYPE oauth_provider  AS ENUM ('google', 'facebook', 'apple');
 CREATE TYPE admin_action_type AS ENUM (
     'ban_user', 'unban_user', 'suspend_user', 'unsuspend_user',
@@ -352,6 +353,12 @@ CREATE TABLE hashtags (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     name                VARCHAR(100)    UNIQUE NOT NULL,  -- stored without #
     post_count          INT             NOT NULL DEFAULT 0 CHECK (post_count >= 0),
+    -- 'deleted' is a state, never a row removal: deleting the row cascades to post_hashtags and
+    -- drives the post_count trigger over every post that used the tag.
+    status              hashtag_status  NOT NULL DEFAULT 'active',
+    status_note         TEXT,
+    status_at           TIMESTAMPTZ,
+    status_by           UUID            REFERENCES users(id) ON DELETE SET NULL,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
@@ -975,6 +982,8 @@ CREATE INDEX idx_comment_likes_user     ON comment_likes (user_id);
 CREATE INDEX idx_hashtags_name          ON hashtags USING btree (name);
 CREATE INDEX idx_hashtags_name_trgm     ON hashtags USING gin (name gin_trgm_ops);
 CREATE INDEX idx_hashtags_post_count    ON hashtags (post_count DESC);
+CREATE INDEX idx_hashtags_active_post_count ON hashtags (post_count DESC, name ASC) WHERE status = 'active';
+CREATE INDEX idx_hashtags_status_created    ON hashtags (status, created_at DESC, id DESC);
 CREATE INDEX idx_post_hashtags_tag      ON post_hashtags (hashtag_id, post_id);
 
 -- stories

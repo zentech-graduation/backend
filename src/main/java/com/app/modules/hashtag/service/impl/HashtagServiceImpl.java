@@ -1,13 +1,13 @@
 package com.app.modules.hashtag.service.impl;
 
-import static com.app.modules.hashtag.messaging.HashtagEventTypes.HASHTAG_INDEX_DELETE_V1;
-import static com.app.modules.hashtag.messaging.HashtagEventTypes.HASHTAG_INDEX_UPSERT_V1;
-
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -17,19 +17,26 @@ import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.app.common.outbox.service.OutboxService;
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
+import com.app.modules.hashtag.dto.response.HashtagSummaryResponse;
 import com.app.modules.hashtag.entity.Hashtag;
 import com.app.modules.hashtag.entity.PostHashtag;
 import com.app.modules.hashtag.entity.PostHashtagId;
+import com.app.modules.hashtag.enums.HashtagStatus;
 import com.app.modules.hashtag.repository.HashtagIndexProjection;
 import com.app.modules.hashtag.repository.HashtagRepository;
+import com.app.modules.hashtag.repository.PostHashtagNameProjection;
 import com.app.modules.hashtag.repository.PostHashtagRepository;
+import com.app.modules.hashtag.service.HashtagIndexEventPublisher;
 import com.app.modules.hashtag.service.HashtagService;
 
 @Service
 public class HashtagServiceImpl implements HashtagService {
 
-    private static final String AGGREGATE_TYPE_HASHTAG = "hashtag";
+    /** A deleted hashtag is not listed on a post; a banned one still is. */
+    private static final List<HashtagStatus> VISIBLE_ON_POST =
+            List.of(HashtagStatus.ACTIVE, HashtagStatus.BANNED);
 
     // hashtags.name is VARCHAR(100); names beyond this bound would fail the insert at the DB.
     private static final int MAX_NAME_LENGTH = 100;
@@ -37,17 +44,17 @@ public class HashtagServiceImpl implements HashtagService {
     private final HashtagRepository hashtagRepository;
     private final PostHashtagRepository postHashtagRepository;
     private final EntityManager entityManager;
-    private final OutboxService outboxService;
+    private final HashtagIndexEventPublisher indexEventPublisher;
 
     public HashtagServiceImpl(
             HashtagRepository hashtagRepository,
             PostHashtagRepository postHashtagRepository,
             EntityManager entityManager,
-            OutboxService outboxService) {
+            HashtagIndexEventPublisher indexEventPublisher) {
         this.hashtagRepository = hashtagRepository;
         this.postHashtagRepository = postHashtagRepository;
         this.entityManager = entityManager;
-        this.outboxService = outboxService;
+        this.indexEventPublisher = indexEventPublisher;
     }
 
     @Override
@@ -71,26 +78,47 @@ public class HashtagServiceImpl implements HashtagService {
     @Override
     @Transactional
     public void upsertHashtagsForPost(UUID postId, List<String> rawTags) {
-        LinkedHashSet<String> names = new LinkedHashSet<>();
-        for (String raw : rawTags) {
-            String n = normalize(raw);
-            if (!n.isBlank()) {
-                names.add(n);
-            }
+        LinkedHashSet<String> names = normalizedSet(rawTags);
+        List<String> banned = bannedAmong(names);
+        if (!banned.isEmpty()) {
+            throw new AppException(ApiErrorCode.POST_BANNED_HASHTAG, Map.of("bannedTags", banned));
         }
+        associate(postId, names);
+    }
 
-        LinkedHashSet<UUID> affectedIds = new LinkedHashSet<>();
-        for (String name : names) {
-            hashtagRepository.upsertByName(name);
-            Hashtag hashtag = hashtagRepository.findByName(name).orElseThrow();
-            postHashtagRepository.save(
-                    PostHashtag.builder().id(new PostHashtagId(postId, hashtag.getId())).build());
-            affectedIds.add(hashtag.getId());
-        }
+    @Override
+    @Transactional
+    public List<String> upsertHashtagsForPostSkippingBanned(UUID postId, List<String> rawTags) {
+        LinkedHashSet<String> names = normalizedSet(rawTags);
+        List<String> banned = bannedAmong(names);
+        names.removeAll(banned);
+        associate(postId, names);
+        return banned;
+    }
 
-        for (UUID id : affectedIds) {
-            enqueueUpsert(id);
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> findBannedNames(Collection<String> rawNames) {
+        return bannedAmong(normalizedSet(rawNames));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<HashtagSummaryResponse>> getVisibleHashtagsForPosts(
+            Collection<UUID> postIds) {
+        if (postIds.isEmpty()) {
+            return Map.of();
         }
+        return postHashtagRepository.findNamedByPostIdIn(postIds, VISIBLE_ON_POST).stream()
+                .collect(
+                        Collectors.groupingBy(
+                                PostHashtagNameProjection::getPostId,
+                                LinkedHashMap::new,
+                                Collectors.mapping(
+                                        p ->
+                                                new HashtagSummaryResponse(
+                                                        p.getHashtagId(), p.getName()),
+                                        Collectors.toList())));
     }
 
     @Override
@@ -110,15 +138,9 @@ public class HashtagServiceImpl implements HashtagService {
         for (UUID id : affected) {
             HashtagIndexProjection projection = projections.get(id);
             if (projection != null && projection.getPostCount() > 0) {
-                enqueueUpsert(id);
+                indexEventPublisher.enqueueSync(id);
             } else {
-                outboxService.enqueue(
-                        HASHTAG_INDEX_DELETE_V1,
-                        HASHTAG_INDEX_DELETE_V1,
-                        AGGREGATE_TYPE_HASHTAG,
-                        id,
-                        null,
-                        Map.of("hashtagId", id.toString()));
+                indexEventPublisher.enqueueDelete(id);
             }
         }
     }
@@ -137,16 +159,42 @@ public class HashtagServiceImpl implements HashtagService {
                                         ph -> ph.getId().getHashtagId(), Collectors.toList())));
     }
 
-    // Carry only the hashtag id; the consumer reads name/post_count/created_at from the
-    // source-of-truth database. This keeps user free-text out of the event payload (the outbox
-    // rejects sensitive-looking values) and lets the post_count gate run against current state.
-    private void enqueueUpsert(UUID id) {
-        outboxService.enqueue(
-                HASHTAG_INDEX_UPSERT_V1,
-                HASHTAG_INDEX_UPSERT_V1,
-                AGGREGATE_TYPE_HASHTAG,
-                id,
-                null,
-                Map.of("hashtagId", id.toString()));
+    private LinkedHashSet<String> normalizedSet(Collection<String> rawTags) {
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        for (String raw : rawTags) {
+            String n = normalize(raw);
+            if (!n.isBlank()) {
+                names.add(n);
+            }
+        }
+        return names;
+    }
+
+    // Guards the empty case here rather than in the query: "IN ()" is a SQL syntax error, and a
+    // caption with no tags is the common case, not an edge one.
+    private List<String> bannedAmong(Collection<String> normalizedNames) {
+        if (normalizedNames.isEmpty()) {
+            return List.of();
+        }
+        // A List rather than the caller's set: the parameter binds into an IN list, and a stable
+        // ordered argument is what makes the emitted statement reproducible.
+        List<String> probe = List.copyOf(normalizedNames);
+        Set<String> banned = new HashSet<>(hashtagRepository.findBannedNames(probe));
+        return probe.stream().filter(banned::contains).toList();
+    }
+
+    private void associate(UUID postId, Collection<String> names) {
+        LinkedHashSet<UUID> affectedIds = new LinkedHashSet<>();
+        for (String name : names) {
+            hashtagRepository.upsertByName(name);
+            Hashtag hashtag = hashtagRepository.findByName(name).orElseThrow();
+            postHashtagRepository.save(
+                    PostHashtag.builder().id(new PostHashtagId(postId, hashtag.getId())).build());
+            affectedIds.add(hashtag.getId());
+        }
+
+        for (UUID id : affectedIds) {
+            indexEventPublisher.enqueueSync(id);
+        }
     }
 }

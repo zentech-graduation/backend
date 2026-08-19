@@ -162,7 +162,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `social` | **Implemented** | api, controller, converter, dto/response, entity, enums, mapper, messaging, repository, service/impl |
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
 | `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, live, mapper, messaging, repository, runner, search, service/impl, validation |
-| `hashtag` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, event, mapper, messaging, repository, runner, search, service/impl |
+| `hashtag` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, mapper, messaging, repository, runner, search, service/impl |
 | `notification` | **Implemented** | api, config, controller, dto/response, entity, entity/converter, entity/enums, live, mapper, messaging, repository, service/impl |
 | `comment` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, live, mapper, messaging, observability, repository, service/impl, util |
 | `story` | **Implemented** | api, consumer, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
@@ -178,11 +178,11 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
 - **`post`**: Post CRUD (image/video/carousel), likes, saves, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
-- **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback.
+- **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback, and the `active`/`banned`/`deleted` lifecycle that governs what every hashtag surface shows and what every post write path accepts. `HashtagLifecycleService` owns the status transitions, the immediate `hashtag_trending` purge, and the status-spanning administrative reads.
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
 - **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
-- **`admin`**: Immutable moderation audit log, atomic moderation actions, the warning and strike discipline ladder, report escalation, and the report-anchored moderation view of a reported entity; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
+- **`admin`**: Immutable moderation audit log, atomic moderation actions, the warning and strike discipline ladder, report escalation, the report-anchored moderation view of a reported entity, and the administrative hashtag registry; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss, and `AdminHashtagServiceImpl` handles hashtag create/ban/unban/delete — each writing an `admin_actions` row and mutating the target entity in the same transaction.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -205,7 +205,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
-Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 201 test classes total. The roster below has not been regenerated since well before that count and is missing entries across several modules; only the rows this branch changes are corrected here.
+Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 206 test classes total. The roster below has not been regenerated since well before that count and is missing entries across several modules; only the rows this branch changes are corrected here.
 
 | Package | Test Classes |
 |---------|-------------|
@@ -237,7 +237,8 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest`, `SecurityUtilsTest` |
 | `common/security/websocket` | `BrokerTopicSendGuardIT`, `JwtHandshakeInterceptorTest`, `WebSocketHandshakeRateLimitIT`, `WebSocketRevocationIT`, `WebSocketRevocationSweepServiceTest` |
 | `common/settings/service/impl` | `SystemSettingServiceImplTest` |
-| `modules/admin/controller` | `AdminControllerIT`, `AdminDisciplineControllerIT` |
+| `modules/admin/controller` | `AdminControllerIT`, `AdminDisciplineControllerIT`, `AdminHashtagControllerIT` |
+| `modules/admin/dto/request` | `AdminUpdateHashtagRequestDeserializationTest` |
 | `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest`, `UserWarningRepositoryIT` |
 | `modules/admin/service/impl` | `AdminServiceImplTest`, `UserDisciplineServiceImplTest` |
 | `modules/auth/controller` | `AuthControllerIT`, `PasswordPolicyIT` |
@@ -256,7 +257,8 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `modules/comment/service/impl` | `CommentAuthorEmbeddingIT`, `CommentModerationServiceImplTest`, `CommentPinnedTopCommentsIT`, `CommentServiceImplTest`, `CommentViewerStateIT`, `CommentViewerStateServiceImplTest` |
 | `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT`, `HashtagIndexSyncConsumerTest` |
 | `modules/hashtag/controller` | `HashtagControllerIT` |
-| `modules/hashtag/service/impl` | `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT` |
+| `modules/hashtag/repository` | `HashtagRepositoryIT` |
+| `modules/hashtag/service/impl` | `HashtagLifecycleServiceImplTest`, `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT` |
 | `modules/media/controller` | `MediaControllerIT` |
 | `modules/media/repository` | `MediaAssetRepositoryIT` |
 | `modules/media/service/impl` | `MediaAssetRegistrarTest`, `MediaEventServiceImplTest`, `MediaServiceImplTest` |
@@ -276,7 +278,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `modules/notification/service/impl` | `NotificationAuthorEmbeddingIT`, `NotificationServiceImplTest` |
 | `modules/post/consumer` | `PostIndexSyncConsumerIT`, `PostIndexSyncConsumerTest` |
 | `modules/post/live` | `PostLikeLiveDeliveryIT`, `PostOnlyWebSocketConfigIT` |
-| `modules/post/controller` | `PostControllerIT` |
+| `modules/post/controller` | `PostBannedHashtagIT`, `PostControllerIT` |
 | `modules/post/repository` | `PostKeysetRowLossIT` |
 | `modules/post/service/impl` | `PostAuthorEmbeddingIT`, `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostViewerStateIT`, `PostViewerStateServiceImplTest`, `PostVisibilityServiceImplTest` |
 | `modules/recommendation/service/impl` | `UserEventsPartitionJobTest` |
@@ -303,7 +305,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 66 migrations at `src/main/resources/db/migration/`. V57, V63 and V66 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`:
+- Migration: **Flyway** (`out-of-order: false`); 68 migrations at `src/main/resources/db/migration/`. V57, V63, V66 and V68 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -352,27 +354,49 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | V43 | align_username_index_with_soft_delete_policy |
 | V44 | add_email_case_insensitive_index |
 | V45 | add_comment_edited_at |
-| V46 | add_post_likes_user_keyset_index |
-| V47 | add_notification_post_id |
-| V48 | add_users_banner_url |
-| V49 | add_story_likes |
-| V50 | remove_group_conversations |
-| V51 | order_follow_counter_locks |
-| V52 | add_conversation_participant_customization |
-| V53 | add_conversation_manual_unread_flag |
-| V54 | add_admin_action_type_values |
-| V55 | add_moderation_action_configs_rows |
-| V56 | add_users_admin_visibility_columns |
-| V57 | add_users_admin_visibility_indexes |
-| V58 | add_users_token_epoch |
-| V59 | add_posts_status_before_moderation |
-| V60 | add_notification_type_warning |
-| V61 | add_notification_type_configs_warning_row |
-| V62 | create_user_discipline_tables |
-| V63 | create_user_discipline_indexes |
-| V64 | add_report_status_escalated |
-| V65 | add_reports_escalation_columns |
+| V46 | add_post_likes_user_keyset_index |
+
+| V47 | add_notification_post_id |
+
+| V48 | add_users_banner_url |
+
+| V49 | add_story_likes |
+
+| V50 | remove_group_conversations |
+
+| V51 | order_follow_counter_locks |
+
+| V52 | add_conversation_participant_customization |
+
+| V53 | add_conversation_manual_unread_flag |
+
+| V54 | add_admin_action_type_values |
+
+| V55 | add_moderation_action_configs_rows |
+
+| V56 | add_users_admin_visibility_columns |
+
+| V57 | add_users_admin_visibility_indexes |
+
+| V58 | add_users_token_epoch |
+
+| V59 | add_posts_status_before_moderation |
+
+| V60 | add_notification_type_warning |
+
+| V61 | add_notification_type_configs_warning_row |
+
+| V62 | create_user_discipline_tables |
+
+| V63 | create_user_discipline_indexes |
+
+| V64 | add_report_status_escalated |
+
+| V65 | add_reports_escalation_columns |
+
 | V66 | add_reports_escalated_index |
+| V67 | add_hashtag_status |
+| V68 | add_hashtag_status_indexes |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -387,6 +411,7 @@ PostgreSQL enum types:
 | `post_type` | `image`, `video`, `carousel`, `text` |
 | `media_type` | `image`, `video` |
 | `follow_status` | `pending`, `accepted` |
+| `hashtag_status` | `active`, `banned`, `deleted` (V67) |
 | `story_type` | `image`, `video` |
 | `message_type` | `text`, `image`, `video`, `post_share`, `story_share` |
 | `report_type` | `post`, `comment`, `user`, `story`, `message` |
@@ -437,7 +462,8 @@ PostgreSQL enum types:
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
 | `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
-| `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
+| `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
+
 | `admin.notification.queue` | `admin.notification.dlq` | `admin.notification.dead-letter` |
 
 **Bindings (queue → `social.events`):**
@@ -455,7 +481,8 @@ PostgreSQL enum types:
 | `post.index.sync` | `post.index.#` (wildcard) | `PostRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
-| `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
+| `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
+
 | `admin.notification.queue` | `user.warned.v1` | `AdminRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |

@@ -99,7 +99,12 @@ public class ReportController extends BaseController implements ReportApi {
     public ResponseEntity<ApiResponse<ReportResponse>> getReport(
             @PathVariable("reportId") UUID reportId) {
         return ResponseEntity.ok(
-                ApiResponse.success(ApiSuccessCode.OK, reportService.getReport(reportId)));
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        reportService.getReport(
+                                UserRole.fromJson(SecurityUtils.getCurrentUserRole()),
+                                SecurityUtils.getCurrentUserId(),
+                                reportId)));
     }
 
     /** Applies a lifecycle transition and records the authenticated moderator as reviewer. */

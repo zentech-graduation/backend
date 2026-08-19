@@ -20,6 +20,11 @@ public final class CursorScope {
     public static final String ADMIN_VIOLATIONS_FULL = "admvf";
     public static final String OWN_WARNINGS = "ownw";
     public static final String ADMIN_USER_SEARCH = "admus";
+    // One tag per endpoint, not one shared "admin hashtags" tag. The listing and the search apply
+    // different predicates over the same keyset ordering, so a shared tag would let a cursor from
+    // one be replayed into the other and page into rows that endpoint never produced.
+    public static final String ADMIN_HASHTAGS = "admh";
+    public static final String ADMIN_HASHTAG_SEARCH = "admhs";
     public static final String COMMENTS_TOP_LEVEL = "cmt";
     public static final String COMMENTS_TOP_LEVEL_NEWEST = "cmtn";
     public static final String COMMENT_REPLIES = "rpl";
