@@ -164,6 +164,10 @@ public final class ApiConstants {
         public static final String RESOLVE_REPORT = "/reports/{reportId}/resolve";
         public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
         public static final String ESCALATE_REPORT = "/reports/{reportId}/escalate";
+        // Anchored on the report, never on the entity. An endpoint taking a bare entity
+        // identifier here would be a universal privacy bypass rather than a moderation
+        // tool: the report is what limits a moderator to what somebody has flagged.
+        public static final String REPORT_TARGET = "/reports/{reportId}/target";
         // Literal segments, so no template can shadow it whatever the matcher ordering.
         public static final String ESCALATED_REPORT_COUNT = "/reports/escalated/count";
         public static final String ACTIONS = "/actions";

@@ -112,6 +112,11 @@ public enum ApiErrorCode {
     REPORT_DUPLICATE("REPORT_DUPLICATE", "You have already reported this entity", HttpStatus.CONFLICT),
     REPORT_SELF_NOT_ALLOWED("REPORT_SELF_NOT_ALLOWED", "You cannot report your own content", HttpStatus.BAD_REQUEST),
     REPORT_INVALID_TRANSITION("REPORT_INVALID_TRANSITION", "Invalid report status transition", HttpStatus.CONFLICT),
+    // Distinct from REPORT_TARGET_NOT_FOUND, which is raised when a user submits a report
+    // against something that never existed. This one means the report is real and the
+    // entity it points at has since been hard-deleted: entity_id carries no foreign key, so
+    // that leaves the report pointing at nothing.
+    REPORT_TARGET_GONE("REPORT_TARGET_GONE", "The reported entity no longer exists", HttpStatus.GONE),
     REPORT_RESOLUTION_NOTE_REQUIRED("REPORT_RESOLUTION_NOTE_REQUIRED", "A resolution note is required to close a report", HttpStatus.BAD_REQUEST),
 
     // Admin

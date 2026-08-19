@@ -25,6 +25,7 @@ import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminReportTargetResponse;
 import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
@@ -554,6 +555,56 @@ public interface AdminApi {
     @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Admin.ESCALATED_REPORT_COUNT)
     ResponseEntity<ApiResponse<EscalatedReportCountResponse>> countEscalatedReports();
+
+    /** Returns the reported entity, rendered for moderation review. */
+    @Operation(
+            summary = "Review a report's target",
+            description =
+                    "Returns the entity the report points at, discriminated by report type, so a"
+                            + " moderator can see what was reported. Deliberately bypasses the ordinary"
+                            + " visibility rules: a private account's post, or one by someone who has"
+                            + " blocked the reviewing moderator, is exactly what has to be reviewable"
+                            + " once it is reported. The report is the anchor and the only way in, so a"
+                            + " moderator sees what somebody flagged and nothing else. The response is"
+                            + " not cacheable and the read is logged rather than written to the audit"
+                            + " log. Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Reported entity returned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "410",
+                description = "The reported entity has since been deleted",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Admin.REPORT_TARGET)
+    ResponseEntity<ApiResponse<AdminReportTargetResponse>> getReportTarget(
+            @PathVariable("reportId") UUID reportId);
 
     /** Lists audit-event summaries with optional actor and action-type filters. */
     @Operation(

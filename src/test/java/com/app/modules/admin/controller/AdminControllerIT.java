@@ -92,6 +92,7 @@ class AdminControllerIT {
         jdbcTemplate.execute("DROP FUNCTION IF EXISTS fail_admin_action_insert()");
         jdbcTemplate.update("DELETE FROM admin_actions");
         jdbcTemplate.update("DELETE FROM reports");
+        jdbcTemplate.update("DELETE FROM blocks");
         jdbcTemplate.update("DELETE FROM comments");
         jdbcTemplate.update("DELETE FROM post_hashtags");
         jdbcTemplate.update("DELETE FROM hashtags");
@@ -945,6 +946,137 @@ class AdminControllerIT {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> pageInfoOf(ResponseEntity<Map> response) {
         return (Map<String, Object>) dataOf(response).get("pageInfo");
+    }
+
+    @Test
+    void getReportTarget_postHiddenByABlock_isVisibleToTheModeratorAndStaysHiddenPublicly() {
+        TestUser moderator = createUser("tgt_mod", "moderator");
+        TestUser author = createUser("tgt_author", "user");
+        TestUser reporter = createUser("tgt_reporter", "user");
+        UUID postId = insertPost(author.id());
+        blockUser(author.id(), moderator.id());
+        UUID reportId = insertPostReport(reporter.id(), postId);
+
+        ResponseEntity<Map> viaReport =
+                get("/api/v1/admin/reports/" + reportId + "/target", moderator);
+
+        assertThat(viaReport.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<String, Object> target = dataOf(viaReport);
+        assertThat(target.get("reportType")).isEqualTo("post");
+        assertThat(target.get("entityId")).isEqualTo(postId.toString());
+        assertThat(target.get("ownerId")).isEqualTo(author.id().toString());
+        assertThat(target.get("text")).isEqualTo("Moderation target");
+        assertThat(target.get("removed")).isEqualTo(false);
+        assertThat(viaReport.getHeaders().getCacheControl()).contains("no-store");
+
+        // The second half matters as much as the first: the bypass must not have leaked into the
+        // ordinary read path.
+        ResponseEntity<Map> viaPublicEndpoint = get("/api/v1/posts/" + postId, moderator);
+        assertThat(viaPublicEndpoint.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(viaPublicEndpoint.getBody().get("code")).isEqualTo("POST_FORBIDDEN");
+    }
+
+    @Test
+    void getReportTarget_writesNoAuditRow() {
+        TestUser moderator = createUser("tgta_mod", "moderator");
+        TestUser author = createUser("tgta_author", "user");
+        TestUser reporter = createUser("tgta_reporter", "user");
+        UUID postId = insertPost(author.id());
+        UUID reportId = insertPostReport(reporter.id(), postId);
+
+        get("/api/v1/admin/reports/" + reportId + "/target", moderator);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM admin_actions", Integer.class))
+                .isZero();
+    }
+
+    @Test
+    void getReportTarget_deletedEntity_returnsGone() {
+        TestUser moderator = createUser("tgtg_mod", "moderator");
+        TestUser author = createUser("tgtg_author", "user");
+        TestUser reporter = createUser("tgtg_reporter", "user");
+        UUID postId = insertPost(author.id());
+        UUID reportId = insertPostReport(reporter.id(), postId);
+        jdbcTemplate.update("DELETE FROM posts WHERE id = ?", postId);
+
+        ResponseEntity<Map> response =
+                get("/api/v1/admin/reports/" + reportId + "/target", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.GONE);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_TARGET_GONE");
+    }
+
+    @Test
+    void getReportTarget_softDeletedPost_isStillReviewableAndFlaggedRemoved() {
+        TestUser moderator = createUser("tgts_mod", "moderator");
+        TestUser author = createUser("tgts_author", "user");
+        TestUser reporter = createUser("tgts_reporter", "user");
+        UUID postId = insertPost(author.id());
+        UUID reportId = insertPostReport(reporter.id(), postId);
+        jdbcTemplate.update(
+                "UPDATE posts SET status = 'removed', deleted_at = NOW() WHERE id = ?", postId);
+
+        ResponseEntity<Map> response =
+                get("/api/v1/admin/reports/" + reportId + "/target", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(response).get("removed")).isEqualTo(true);
+        assertThat(dataOf(response).get("status")).isEqualTo("removed");
+    }
+
+    @Test
+    void getReportTarget_unknownReport_returnsNotFound() {
+        TestUser moderator = createUser("tgtn_mod", "moderator");
+
+        ResponseEntity<Map> response =
+                get("/api/v1/admin/reports/" + UUID.randomUUID() + "/target", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void getReportTarget_reportedAccount_rendersTheProfile() {
+        TestUser moderator = createUser("tgtu_mod", "moderator");
+        TestUser reporter = createUser("tgtu_reporter", "user");
+        TestUser target = createUser("tgtu_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+
+        ResponseEntity<Map> response =
+                get("/api/v1/admin/reports/" + reportId + "/target", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(response).get("reportType")).isEqualTo("user");
+        assertThat(dataOf(response).get("entityId")).isEqualTo(target.id().toString());
+        assertThat(dataOf(response).get("status")).isEqualTo("active");
+    }
+
+    @Test
+    void getReportTarget_regularUser_returnsForbidden() {
+        TestUser actor = createUser("tgtf_actor", "user");
+        TestUser reporter = createUser("tgtf_reporter", "user");
+        TestUser target = createUser("tgtf_target", "user");
+        UUID reportId = insertReport(reporter.id(), target.id());
+
+        assertThat(get("/api/v1/admin/reports/" + reportId + "/target", actor).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    private void blockUser(UUID blockerId, UUID blockedId) {
+        jdbcTemplate.update(
+                "INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)", blockerId, blockedId);
+    }
+
+    private UUID insertPostReport(UUID reporterId, UUID postId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO reports "
+                        + "(id, reporter_id, report_type, report_reason, entity_id, status) "
+                        + "VALUES (?, ?, 'post', 'spam', ?, 'pending')",
+                id,
+                reporterId,
+                postId);
+        return id;
     }
 
     private TestUser createUser(String prefix, String role) {
