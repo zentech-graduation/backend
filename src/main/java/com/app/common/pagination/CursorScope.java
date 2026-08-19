@@ -13,6 +13,12 @@ public final class CursorScope {
     public static final String ADMIN_ACTIONS = "adma";
     public static final String ADMIN_ACTIONS_FOR_USER = "admu";
     public static final String ADMIN_USERS = "admul";
+    // One tag per role, not one per endpoint, because the violations listing returns different
+    // rows to a moderator and to an administrator. A shared tag would let a moderator replay an
+    // administrator's cursor and page into strike rows its own listing never produces.
+    public static final String ADMIN_VIOLATIONS_WARNINGS = "admvw";
+    public static final String ADMIN_VIOLATIONS_FULL = "admvf";
+    public static final String OWN_WARNINGS = "ownw";
     public static final String ADMIN_USER_SEARCH = "admus";
     public static final String COMMENTS_TOP_LEVEL = "cmt";
     public static final String COMMENTS_TOP_LEVEL_NEWEST = "cmtn";

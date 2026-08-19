@@ -536,6 +536,38 @@ CREATE TABLE admin_actions (
     created_at              TIMESTAMPTZ         NOT NULL DEFAULT NOW()
 );
 
+-- Warnings a moderator issues against an account. Three active warnings produce a strike.
+-- admin_action_id is NOT NULL: every row here is explained by an audit row written in the same
+-- transaction, and the foreign key is what makes that impossible to skip.
+-- reason_key references report_reason_configs, which is that table's only runtime reader.
+CREATE TABLE user_warnings (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    issued_by           UUID            REFERENCES users(id) ON DELETE SET NULL,
+    reason_key          VARCHAR(50)     NOT NULL REFERENCES report_reason_configs(reason_key),
+    note                TEXT            NOT NULL,
+    admin_action_id     UUID            NOT NULL REFERENCES admin_actions(id),
+    revoked_at          TIMESTAMPTZ,
+    revoked_by          UUID            REFERENCES users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    CONSTRAINT user_warnings_note_not_blank CHECK (length(btrim(note)) > 0)
+);
+
+-- Strikes, the consequence three active warnings produce.
+-- strike_number is CHECK (>= 1), deliberately not capped at 3: an administrator may unban a
+-- strike-3 account by hand, and a cap would make that account's next strike fail to insert.
+-- Strike 3 and every strike above it carry the same consequence, so a cap would buy nothing.
+CREATE TABLE user_strikes (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    strike_number       SMALLINT        NOT NULL CHECK (strike_number >= 1),
+    triggered_by        UUID            REFERENCES users(id) ON DELETE SET NULL,
+    admin_action_id     UUID            NOT NULL REFERENCES admin_actions(id),
+    revoked_at          TIMESTAMPTZ,
+    revoked_by          UUID            REFERENCES users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
 -- ============================================================
 -- MODULE: RECOMMENDATION SYSTEM & USER BEHAVIOR
 -- ============================================================
@@ -982,6 +1014,16 @@ CREATE UNIQUE INDEX uq_reports_reporter_type_entity ON reports (reporter_id, rep
 
 -- admin_actions
 CREATE INDEX idx_admin_actions_admin    ON admin_actions (admin_id, created_at DESC);
+
+CREATE INDEX idx_user_warnings_active   ON user_warnings (user_id, created_at DESC)
+    WHERE revoked_at IS NULL;
+CREATE INDEX idx_user_strikes_active    ON user_strikes (user_id, created_at DESC)
+    WHERE revoked_at IS NULL;
+-- Correctness guard, not a performance index: two concurrent warnings can both read an active
+-- count of two and both try to issue the same strike number. Partial on revoked_at IS NULL so
+-- revoking a strike frees its number for re-issue.
+CREATE UNIQUE INDEX uq_user_strikes_active_number ON user_strikes (user_id, strike_number)
+    WHERE revoked_at IS NULL;
 CREATE INDEX idx_admin_actions_target   ON admin_actions (target_user_id)
     WHERE target_user_id IS NOT NULL;
 

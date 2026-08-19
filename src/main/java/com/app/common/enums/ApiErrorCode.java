@@ -119,6 +119,15 @@ public enum ApiErrorCode {
     ADMIN_INVALID_ACTION("ADMIN_INVALID_ACTION", "Action is not valid for this target", HttpStatus.BAD_REQUEST),
     ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT),
     ADMIN_SELF_ACTION_NOT_ALLOWED("ADMIN_SELF_ACTION_NOT_ALLOWED", "You cannot apply a moderation action to your own account", HttpStatus.CONFLICT),
+    // Only an ordinary account can be warned. Three warnings produce a strike and a strike changes
+    // users.status, so a warnable moderator or administrator would hand any moderator a route to
+    // an administrator's account status, which no endpoint grants directly.
+    ADMIN_TARGET_NOT_WARNABLE("ADMIN_TARGET_NOT_WARNABLE", "Only an ordinary account can be warned", HttpStatus.FORBIDDEN),
+    WARNING_NOT_FOUND("WARNING_NOT_FOUND", "Warning not found", HttpStatus.NOT_FOUND),
+    STRIKE_NOT_FOUND("STRIKE_NOT_FOUND", "Strike not found", HttpStatus.NOT_FOUND),
+    // Covers an unknown reason key and a disabled one alike. Splitting them would let a caller
+    // enumerate which reasons exist but are currently switched off.
+    WARNING_REASON_DISABLED("WARNING_REASON_DISABLED", "That reason is not available", HttpStatus.UNPROCESSABLE_ENTITY),
     // No API caller may change an administrator's account status. Removing a rogue administrator is
     // deliberately a database-level operation: an in-application lockout of the whole administrator
     // tier has no recovery path, whereas an escalation requiring database access does.

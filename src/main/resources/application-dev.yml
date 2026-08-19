@@ -48,6 +48,9 @@ app:
       enabled: true
     live:
       enabled: true
+  admin:
+    consumer:
+      enabled: true
   story:
     consumer:
       enabled: true

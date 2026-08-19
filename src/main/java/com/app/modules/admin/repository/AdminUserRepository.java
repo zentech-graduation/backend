@@ -1,7 +1,11 @@
 package com.app.modules.admin.repository;
 
+import java.util.Optional;
 import java.util.UUID;
 
+import jakarta.persistence.LockModeType;
+
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
@@ -72,4 +76,26 @@ public interface AdminUserRepository extends Repository<User, UUID>, AdminUserRe
                             + " WHERE id = :userId AND deleted_at IS NULL",
             nativeQuery = true)
     int incrementTokenEpoch(@Param("userId") UUID userId);
+
+    /**
+     * Loads a live account and holds its row until the transaction ends.
+     *
+     * <p>Used by the discipline path only. Two moderators warning the same account at the same
+     * moment would otherwise both read the same active-warning count and both conclude the account
+     * had reached three, issuing one strike each. The unique index on the active strike number
+     * would reject the second, but by failing its whole transaction and taking a legitimate warning
+     * down with it. Serializing on this row makes the later warning read the earlier one's strike
+     * and correctly issue none.
+     *
+     * <p>Not on the reinstatement path, which is deliberately lock-free: its predicate is checked
+     * in the statement itself, so it needs no lock to be correct.
+     *
+     * @param userId account to lock
+     * @return the account, or empty when no live row holds that id
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id = :userId AND u.deletedAt IS NULL")
+    Optional<User> lockForDiscipline(@Param("userId") UUID userId);
+
+    User save(User user);
 }
