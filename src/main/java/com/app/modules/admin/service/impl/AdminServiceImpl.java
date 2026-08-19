@@ -3,6 +3,7 @@ package com.app.modules.admin.service.impl;
 import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -16,9 +17,11 @@ import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
@@ -29,6 +32,8 @@ import com.app.modules.admin.service.AdminService;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
+import com.app.modules.post.service.PostModerationResult;
+import com.app.modules.post.service.PostService;
 import com.app.modules.report.entity.Report;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
@@ -50,6 +55,7 @@ public class AdminServiceImpl implements AdminService {
     private final AdminActionRepository adminActionRepository;
     private final UserRepository userRepository;
     private final PostRepository postRepository;
+    private final PostService postService;
     private final CommentRepository commentRepository;
     private final ReportRepository reportRepository;
     private final AdminActionMapper adminActionMapper;
@@ -60,6 +66,7 @@ public class AdminServiceImpl implements AdminService {
             AdminActionRepository adminActionRepository,
             UserRepository userRepository,
             PostRepository postRepository,
+            PostService postService,
             CommentRepository commentRepository,
             ReportRepository reportRepository,
             AdminActionMapper adminActionMapper,
@@ -68,6 +75,7 @@ public class AdminServiceImpl implements AdminService {
         this.adminActionRepository = adminActionRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
+        this.postService = postService;
         this.commentRepository = commentRepository;
         this.reportRepository = reportRepository;
         this.adminActionMapper = adminActionMapper;
@@ -146,6 +154,45 @@ public class AdminServiceImpl implements AdminService {
     public AdminActionResponse dismissReport(
             UUID actorId, UUID reportId, AdminActionRequest request) {
         return closeReport(actorId, reportId, AdminActionType.DISMISS_REPORT, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse escalateReport(
+            UUID actorId, UUID reportId, AdminEscalateReportRequest request) {
+        Report report =
+                reportRepository
+                        .findById(reportId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.REPORT_NOT_FOUND));
+        // Only an open report can be escalated. Escalating a closed one would reopen a decision
+        // already taken, and escalating an escalated one would rewrite whose escalation it was.
+        if (report.getStatus() != ReportStatus.PENDING
+                && report.getStatus() != ReportStatus.REVIEWING) {
+            throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        }
+        report.setStatus(ReportStatus.ESCALATED);
+        report.setEscalatedBy(actorId);
+        report.setEscalatedAt(OffsetDateTime.now());
+        report.setEscalationReason(request.reason().trim());
+        reportRepository.save(report);
+        log.info("Report escalated: actorId={}, reportId={}", actorId, reportId);
+        UUID targetUserId = report.getReportType() == ReportType.USER ? report.getEntityId() : null;
+        return adminActionRecorder.record(
+                actorId,
+                AdminActionType.ESCALATE_REPORT,
+                targetUserId,
+                report.getReportType().toJson(),
+                report.getEntityId(),
+                reportId,
+                request.reason(),
+                null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EscalatedReportCountResponse countEscalatedReports() {
+        return new EscalatedReportCountResponse(
+                reportRepository.countByStatus(ReportStatus.ESCALATED));
     }
 
     @Override
@@ -233,35 +280,34 @@ public class AdminServiceImpl implements AdminService {
                 actorId, actionType, userId, "user", userId, null, reason, null);
     }
 
+    // The mutation itself is deliberately not performed here. PostService owns every side effect
+    // of a removal, so the administrative path and the owner path cannot drift apart again the way
+    // they had: this method used to write the row directly and left the hashtag associations and
+    // the search-index document behind.
     private AdminActionResponse moderatePost(
             UUID actorId, UUID postId, AdminActionType actionType, AdminActionRequest request) {
-        UUID ownerId =
-                postRepository
-                        .findOwnerIdIncludingDeleted(postId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         String currentStatus =
                 postRepository
                         .findStatusIncludingDeleted(postId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         boolean restore = actionType == AdminActionType.RESTORE_POST;
-        if ((restore && !PostStatus.REMOVED.toJson().equals(currentStatus))
-                || (!restore && PostStatus.REMOVED.toJson().equals(currentStatus))) {
+        if (restore != PostStatus.REMOVED.toJson().equals(currentStatus)) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
         validateLinkedReport(request.reportId());
-        postRepository.applyAdminModeration(
-                postId,
-                restore ? PostStatus.PUBLISHED.toJson() : PostStatus.REMOVED.toJson(),
-                restore ? null : OffsetDateTime.now());
+        PostModerationResult result =
+                restore
+                        ? postService.applyModerationRestore(postId)
+                        : postService.applyModerationRemoval(postId);
         return adminActionRecorder.record(
                 actorId,
                 actionType,
-                ownerId,
+                result.ownerId(),
                 "post",
                 postId,
                 request.reportId(),
                 request.reason(),
-                null);
+                Map.of("resultingStatus", result.status().toJson()));
     }
 
     private AdminActionResponse moderateComment(
@@ -300,6 +346,13 @@ public class AdminServiceImpl implements AdminService {
         if (report.getStatus() == ReportStatus.RESOLVED
                 || report.getStatus() == ReportStatus.DISMISSED) {
             throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        }
+        // Checked here rather than by a path matcher, because resolve and dismiss are one shared
+        // path for every report and only the report's own state decides who may close it. A
+        // moderator escalated this one because it did not want to decide it; letting a moderator
+        // close it anyway would make the escalation an empty gesture.
+        if (report.getStatus() == ReportStatus.ESCALATED && isModerator(actorId)) {
+            throw new AppException(ApiErrorCode.FORBIDDEN);
         }
         report.setStatus(
                 actionType == AdminActionType.RESOLVE_REPORT

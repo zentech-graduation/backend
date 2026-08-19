@@ -113,7 +113,7 @@ class NotificationOnlyWebSocketConfigIT {
                                 .isPrivate(false)
                                 .isVerified(false)
                                 .build());
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
 
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         String url =

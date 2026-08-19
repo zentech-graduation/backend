@@ -1,6 +1,7 @@
 package com.app.modules.post.service.impl;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,8 +46,10 @@ import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostEditHistoryRepository;
 import com.app.modules.post.repository.PostMediaAssetRepository;
+import com.app.modules.post.repository.PostModerationProjection;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
+import com.app.modules.post.service.PostModerationResult;
 import com.app.modules.post.service.PostService;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.post.validation.PostTypeFilter;
@@ -300,6 +303,42 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
+    @Transactional
+    public PostModerationResult applyModerationRemoval(UUID postId) {
+        PostModerationProjection post = requireModerationView(postId);
+        hashtagService.removeHashtagsForPost(postId);
+        postRepository.applyModerationRemoval(postId, OffsetDateTime.now());
+        enqueuePostIndexDelete(postId, post.getUserId());
+        log.info("Post removed by moderation: postId={}, from={}", postId, post.getStatus());
+        return new PostModerationResult(post.getUserId(), PostStatus.REMOVED);
+    }
+
+    @Override
+    @Transactional
+    public PostModerationResult applyModerationRestore(UUID postId) {
+        PostModerationProjection post = requireModerationView(postId);
+        // Null for a post removed before the prior status was recorded. Published is the right
+        // fallback rather than a guess: it is what restore did for every post back then, so a row
+        // from that era lands exactly where it would have.
+        PostStatus restored =
+                post.getStatusBeforeModeration() == null
+                        ? PostStatus.PUBLISHED
+                        : PostStatus.fromJson(post.getStatusBeforeModeration());
+        postRepository.applyModerationRestore(postId, restored.toJson());
+        // Only a published post belongs in post_hashtags and in the search index; the owner path
+        // keeps a draft and an archived post out of both. A hashtag-eligibility check, when one
+        // exists, belongs on this re-derivation rather than on the removal arm, because removal
+        // detaches every association regardless of which tag it is.
+        if (restored == PostStatus.PUBLISHED) {
+            upsertCaptionHashtags(postId, post.getCaption());
+            enqueuePostIndexUpsert(
+                    postId, post.getUserId(), post.getCreatedAt().atOffset(ZoneOffset.UTC));
+        }
+        log.info("Post restored by moderation: postId={}, to={}", postId, restored);
+        return new PostModerationResult(post.getUserId(), restored);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<PostResponse> listUserPosts(
             UUID viewerId, UUID targetUserId, PostTypeFilter typeFilter, String cursor, int size) {
@@ -492,40 +531,54 @@ public class PostServiceImpl implements PostService {
         }
     }
 
-    // Must run after upsertCaptionHashtags so the post_hashtags associations are queryable here.
+    private PostModerationProjection requireModerationView(UUID postId) {
+        return postRepository
+                .findModerationViewIncludingDeleted(postId)
+                .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+    }
+
     private void enqueuePostIndexUpsert(Post post) {
+        enqueuePostIndexUpsert(post.getId(), post.getUserId(), post.getCreatedAt());
+    }
+
+    private void enqueuePostIndexDelete(Post post) {
+        enqueuePostIndexDelete(post.getId(), post.getUserId());
+    }
+
+    // Must run after upsertCaptionHashtags so the post_hashtags associations are queryable here.
+    private void enqueuePostIndexUpsert(UUID postId, UUID userId, OffsetDateTime createdAt) {
         List<String> hashtagIds =
                 hashtagService
-                        .getHashtagIdsForPosts(List.of(post.getId()))
-                        .getOrDefault(post.getId(), List.of())
+                        .getHashtagIdsForPosts(List.of(postId))
+                        .getOrDefault(postId, List.of())
                         .stream()
                         .map(UUID::toString)
                         .toList();
         // User free-text (caption) is excluded from the payload; the consumer reads it from the
         // source-of-truth post row it already loads for the Q4 gate.
         Map<String, Object> data = new HashMap<>();
-        data.put("postId", post.getId().toString());
-        data.put("userId", post.getUserId().toString());
+        data.put("postId", postId.toString());
+        data.put("userId", userId.toString());
         data.put("status", "published");
         data.put("hashtagIds", hashtagIds);
-        data.put("createdAt", post.getCreatedAt().toString());
+        data.put("createdAt", createdAt.toString());
         outboxService.enqueue(
                 PostEventTypes.POST_INDEX_UPSERT_V1,
                 PostEventTypes.POST_INDEX_UPSERT_V1,
                 "post",
-                post.getId(),
-                post.getUserId(),
+                postId,
+                userId,
                 data);
     }
 
-    private void enqueuePostIndexDelete(Post post) {
+    private void enqueuePostIndexDelete(UUID postId, UUID userId) {
         outboxService.enqueue(
                 PostEventTypes.POST_INDEX_DELETE_V1,
                 PostEventTypes.POST_INDEX_DELETE_V1,
                 "post",
-                post.getId(),
-                post.getUserId(),
-                Map.of("postId", post.getId().toString()));
+                postId,
+                userId,
+                Map.of("postId", postId.toString()));
     }
 
     // Tokens are #-prefixed runs of Unicode letters, digits, and underscores; normalization and

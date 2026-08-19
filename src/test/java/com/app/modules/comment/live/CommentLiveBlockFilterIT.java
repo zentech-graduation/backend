@@ -177,11 +177,11 @@ class CommentLiveBlockFilterIT {
     }
 
     private void assertBlockedCommenterFilteredAndUnrelatedDelivered() throws Exception {
-        String viewerToken = jwtTokenProvider.generateAccessToken(viewer.getId(), "USER");
+        String viewerToken = jwtTokenProvider.generateAccessToken(viewer.getId(), "USER", 0);
         String blockedCommenterToken =
-                jwtTokenProvider.generateAccessToken(blockedCommenter.getId(), "USER");
+                jwtTokenProvider.generateAccessToken(blockedCommenter.getId(), "USER", 0);
         String unblockedCommenterToken =
-                jwtTokenProvider.generateAccessToken(unblockedCommenter.getId(), "USER");
+                jwtTokenProvider.generateAccessToken(unblockedCommenter.getId(), "USER", 0);
         String wsUrl =
                 "ws://localhost:"
                         + port

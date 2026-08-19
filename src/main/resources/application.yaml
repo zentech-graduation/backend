@@ -214,6 +214,9 @@ app:
       enabled: ${COMMENT_CONSUMER_ENABLED:false}
     live:
       enabled: ${COMMENT_LIVE_ENABLED:false}
+  admin:
+    consumer:
+      enabled: ${ADMIN_CONSUMER_ENABLED:false}
   story:
     consumer:
       enabled: ${STORY_CONSUMER_ENABLED:false}

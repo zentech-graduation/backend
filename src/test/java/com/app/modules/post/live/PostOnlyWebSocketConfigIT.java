@@ -95,7 +95,7 @@ class PostOnlyWebSocketConfigIT {
     @Test
     void postEndpoint_isReachable_whenItIsTheOnlyLiveTierEnabled() throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
-        String token = jwtTokenProvider.generateAccessToken(insertUser(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(insertUser(), "USER", 0);
 
         StompSession session =
                 client.connectAsync(
@@ -113,7 +113,7 @@ class PostOnlyWebSocketConfigIT {
     @Test
     void commentEndpoint_isAbsent_whenOnlyThePostTierIsEnabled() {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
-        String token = jwtTokenProvider.generateAccessToken(insertUser(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(insertUser(), "USER", 0);
 
         assertThatThrownBy(
                         () ->

@@ -203,17 +203,18 @@ class ReportControllerIT {
         assertThat(((Map<?, ?>) reviewing.getBody().get("data")).get("status"))
                 .isEqualTo("reviewing");
 
+        // Closing the report is a moderation decision and belongs to the audited admin endpoint;
+        // this one refuses it.
         ResponseEntity<Map> resolved =
                 patchWithAuth(
                         "/api/v1/reports/" + reportId + "/status",
                         Map.of("status", "resolved", "resolutionNote", "Confirmed violation"),
                         moderator);
-        assertThat(resolved.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(resolved.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         Report persisted = reportRepository.findById(reportId).orElseThrow();
-        assertThat(persisted.getStatus()).isEqualTo(ReportStatus.RESOLVED);
+        assertThat(persisted.getStatus()).isEqualTo(ReportStatus.REVIEWING);
         assertThat(persisted.getReviewedBy()).isEqualTo(moderator.id());
         assertThat(persisted.getReviewedAt()).isNotNull();
-        assertThat(persisted.getResolutionNote()).isEqualTo("Confirmed violation");
     }
 
     @Test
@@ -235,7 +236,7 @@ class ReportControllerIT {
     }
 
     @Test
-    void updateStatus_terminalWithoutNote_returnsBadRequest() {
+    void updateStatus_pendingToResolved_returnsConflict() {
         TestUser reporter = createUser("note_reporter", "user");
         TestUser target = createUser("note_target", "user");
         TestUser moderator = createUser("note_moderator", "moderator");
@@ -246,15 +247,15 @@ class ReportControllerIT {
         ResponseEntity<Map> response =
                 patchWithAuth(
                         "/api/v1/reports/" + reportId + "/status",
-                        Map.of("status", "resolved"),
+                        Map.of("status", "resolved", "resolutionNote", "Confirmed violation"),
                         moderator);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("code")).isEqualTo("REPORT_RESOLUTION_NOTE_REQUIRED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_INVALID_TRANSITION");
     }
 
     @Test
-    void updateStatus_dismissedWithoutNote_returnsBadRequest() {
+    void updateStatus_pendingToDismissed_returnsConflict() {
         TestUser reporter = createUser("dismiss_note_reporter", "user");
         TestUser target = createUser("dismiss_note_target", "user");
         TestUser moderator = createUser("dismiss_note_moderator", "moderator");
@@ -265,11 +266,11 @@ class ReportControllerIT {
         ResponseEntity<Map> response =
                 patchWithAuth(
                         "/api/v1/reports/" + reportId + "/status",
-                        Map.of("status", "dismissed"),
+                        Map.of("status", "dismissed", "resolutionNote", "Not actionable"),
                         moderator);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("code")).isEqualTo("REPORT_RESOLUTION_NOTE_REQUIRED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_INVALID_TRANSITION");
     }
 
     private TestUser createUser(String username, String role) {
@@ -282,7 +283,7 @@ class ReportControllerIT {
                 username,
                 email,
                 role);
-        String token = jwtTokenProvider.generateAccessToken(id, role.toUpperCase());
+        String token = jwtTokenProvider.generateAccessToken(id, role.toUpperCase(), 0);
         return new TestUser(id, token);
     }
 

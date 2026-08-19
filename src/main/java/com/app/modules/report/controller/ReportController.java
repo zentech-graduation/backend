@@ -31,6 +31,7 @@ import com.app.modules.report.dto.response.ReportSummaryResponse;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.service.ReportService;
+import com.app.modules.users.enums.UserRole;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 
@@ -69,7 +70,12 @@ public class ReportController extends BaseController implements ReportApi {
         return ResponseEntity.ok(
                 ApiResponse.success(
                         ApiSuccessCode.OK,
-                        reportService.listReports(status, reportType, cursor, limit)));
+                        reportService.listReports(
+                                UserRole.fromJson(SecurityUtils.getCurrentUserRole()),
+                                status,
+                                reportType,
+                                cursor,
+                                limit)));
     }
 
     /** Returns pending reports in FIFO order to authenticated moderators and administrators. */

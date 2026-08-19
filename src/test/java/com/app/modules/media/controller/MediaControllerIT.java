@@ -483,6 +483,6 @@ class MediaControllerIT {
                 id,
                 username,
                 username + "@test.local");
-        return new TestUser(id, jwtTokenProvider.generateAccessToken(id, "USER"));
+        return new TestUser(id, jwtTokenProvider.generateAccessToken(id, "USER", 0));
     }
 }

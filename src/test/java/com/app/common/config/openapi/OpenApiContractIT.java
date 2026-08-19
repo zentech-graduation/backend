@@ -419,16 +419,19 @@ class OpenApiContractIT {
     @Test
     void only422IsDocumentedForAKnownUnprocessableOutcome() {
         JsonNode doc = document();
-        // 422 is reserved for a well-formed request whose content cannot be satisfied. Two
-        // outcomes qualify: COMMENT_MODERATION_REJECTED, and the media upload confirmation
-        // rejecting a storage key with no matching stored object. A 422 documented for anything
-        // else (e.g. generic bean-validation failure, which the server answers with 400) is a
-        // contract defect, not a valid outcome.
+        // 422 is reserved for a well-formed request whose content cannot be satisfied. Three
+        // outcomes qualify: COMMENT_MODERATION_REJECTED, the media upload confirmation rejecting a
+        // storage key with no matching stored object, and a warning citing a reason key whose
+        // report_reason_configs row is disabled or absent. All three are requests the server
+        // understood and refused on their content. A 422 documented for anything else (e.g. generic
+        // bean-validation failure, which the server answers with 400) is a contract defect, not a
+        // valid outcome.
         Set<String> allowed422 =
                 Set.of(
                         "POST /api/v1/posts/{postId}/comments",
                         "PATCH /api/v1/comments/{commentId}",
-                        "POST /api/v1/media/upload-complete");
+                        "POST /api/v1/media/upload-complete",
+                        "POST /api/v1/admin/warnings/for-user/{userId}");
 
         List<String> offenders = new ArrayList<>();
         forEachOperation(

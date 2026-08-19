@@ -89,7 +89,7 @@ public class RoleTransitionPolicy {
      * @param requestedRole the role the caller asked for
      * @throws AppException {@code FORBIDDEN} when the actor is not an administrator, {@code
      *     ADMIN_SELF_ACTION_NOT_ALLOWED} when the actor targets itself, and {@code
-     *     ADMIN_ROLE_TRANSITION_FORBIDDEN} for a protected target, a skip-level promotion, or a
+     *     ADMIN_ROLE_TRANSITION_NOT_ALLOWED} for a protected target, a skip-level promotion, or a
      *     no-op
      */
     public void assertAllowed(
@@ -103,7 +103,7 @@ public class RoleTransitionPolicy {
             case ACTOR_NOT_ADMIN -> throw new AppException(ApiErrorCode.FORBIDDEN);
             case SELF_TARGET -> throw new AppException(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
             case TARGET_IS_ADMIN, SKIP_LEVEL, NO_OP ->
-                    throw new AppException(ApiErrorCode.ADMIN_ROLE_TRANSITION_FORBIDDEN);
+                    throw new AppException(ApiErrorCode.ADMIN_ROLE_TRANSITION_NOT_ALLOWED);
         }
     }
 }

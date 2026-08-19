@@ -112,6 +112,11 @@ public enum ApiErrorCode {
     REPORT_DUPLICATE("REPORT_DUPLICATE", "You have already reported this entity", HttpStatus.CONFLICT),
     REPORT_SELF_NOT_ALLOWED("REPORT_SELF_NOT_ALLOWED", "You cannot report your own content", HttpStatus.BAD_REQUEST),
     REPORT_INVALID_TRANSITION("REPORT_INVALID_TRANSITION", "Invalid report status transition", HttpStatus.CONFLICT),
+    // Distinct from REPORT_TARGET_NOT_FOUND, which is raised when a user submits a report
+    // against something that never existed. This one means the report is real and the
+    // entity it points at has since been hard-deleted: entity_id carries no foreign key, so
+    // that leaves the report pointing at nothing.
+    REPORT_TARGET_GONE("REPORT_TARGET_GONE", "The reported entity no longer exists", HttpStatus.GONE),
     REPORT_RESOLUTION_NOTE_REQUIRED("REPORT_RESOLUTION_NOTE_REQUIRED", "A resolution note is required to close a report", HttpStatus.BAD_REQUEST),
 
     // Admin
@@ -119,6 +124,15 @@ public enum ApiErrorCode {
     ADMIN_INVALID_ACTION("ADMIN_INVALID_ACTION", "Action is not valid for this target", HttpStatus.BAD_REQUEST),
     ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT),
     ADMIN_SELF_ACTION_NOT_ALLOWED("ADMIN_SELF_ACTION_NOT_ALLOWED", "You cannot apply a moderation action to your own account", HttpStatus.CONFLICT),
+    // Only an ordinary account can be warned. Three warnings produce a strike and a strike changes
+    // users.status, so a warnable moderator or administrator would hand any moderator a route to
+    // an administrator's account status, which no endpoint grants directly.
+    ADMIN_TARGET_NOT_WARNABLE("ADMIN_TARGET_NOT_WARNABLE", "Only an ordinary account can be warned", HttpStatus.FORBIDDEN),
+    WARNING_NOT_FOUND("WARNING_NOT_FOUND", "Warning not found", HttpStatus.NOT_FOUND),
+    STRIKE_NOT_FOUND("STRIKE_NOT_FOUND", "Strike not found", HttpStatus.NOT_FOUND),
+    // Covers an unknown reason key and a disabled one alike. Splitting them would let a caller
+    // enumerate which reasons exist but are currently switched off.
+    WARNING_REASON_DISABLED("WARNING_REASON_DISABLED", "That reason is not available", HttpStatus.UNPROCESSABLE_ENTITY),
     // No API caller may change an administrator's account status. Removing a rogue administrator is
     // deliberately a database-level operation: an in-application lockout of the whole administrator
     // tier has no recovery path, whereas an escalation requiring database access does.
@@ -126,7 +140,11 @@ public enum ApiErrorCode {
     // Covers every rejected role transition: a skip-level promotion, an administrator target, and a
     // no-op. The three are one class of error to the caller - the requested transition is not one
     // the policy permits - and splitting them would let a caller map out the matrix by probing.
-    ADMIN_ROLE_TRANSITION_FORBIDDEN("ADMIN_ROLE_TRANSITION_FORBIDDEN", "The requested role transition is not permitted", HttpStatus.CONFLICT);
+    // Named NOT_ALLOWED rather than FORBIDDEN because it answers 409: every other *_FORBIDDEN
+    // constant here maps to 403, and one that did not would make the naming stop predicting the
+    // status. The status is right as it is - the caller has the authority, the transition is the
+    // problem - so the name moved rather than the code.
+    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT);
 
     // spotless:on
 

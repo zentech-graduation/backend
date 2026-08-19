@@ -103,6 +103,21 @@ public class User {
     @Column(name = "suspended_until")
     private OffsetDateTime suspendedUntil;
 
+    /**
+     * Monotonic counter that invalidates every access token minted before its current value.
+     *
+     * <p>Stamped into each access token at issuance and compared against this column on every
+     * authenticated request. Incrementing it ends the target's access capability at once, which is
+     * what force logout and role change need and what refresh-token revocation alone cannot give.
+     *
+     * <p>Never written through this entity. The sole writer is {@code
+     * AdminUserRepository.incrementTokenEpoch}, whose atomic {@code token_epoch + 1} cannot lose an
+     * increment to a concurrent one the way a read-modify-write through a managed entity could.
+     */
+    @Generated(event = EventType.INSERT)
+    @Column(name = "token_epoch", nullable = false, insertable = false, updatable = false)
+    private int tokenEpoch;
+
     /** Maintained exclusively by Postgres trigger {@code trg_follow_counts} (V16). */
     @Column(name = "follower_count", insertable = false, updatable = false)
     private int followerCount;

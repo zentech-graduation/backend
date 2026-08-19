@@ -45,6 +45,10 @@ public class RabbitMqTopologyConfig {
     public static final String COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
             "comment.notification.dead-letter";
 
+    public static final String ADMIN_NOTIFICATION_QUEUE = "admin.notification.queue";
+    public static final String ADMIN_NOTIFICATION_DEAD_LETTER_QUEUE = "admin.notification.dlq";
+    public static final String ADMIN_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
+            "admin.notification.dead-letter";
     public static final String STORY_NOTIFICATION_QUEUE = "story.notification.queue";
     public static final String STORY_NOTIFICATION_DEAD_LETTER_QUEUE = "story.notification.dlq";
     public static final String STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
@@ -184,6 +188,28 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(commentNotificationDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(COMMENT_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Queue adminNotificationQueue() {
+        return QueueBuilder.durable(ADMIN_NOTIFICATION_QUEUE)
+                .withArgument("x-dead-letter-exchange", SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE)
+                .withArgument(
+                        "x-dead-letter-routing-key", ADMIN_NOTIFICATION_DEAD_LETTER_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    Queue adminNotificationDeadLetterQueue() {
+        return QueueBuilder.durable(ADMIN_NOTIFICATION_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding adminNotificationDeadLetterBinding(
+            Queue adminNotificationDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(adminNotificationDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(ADMIN_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);
     }
 
     @Bean

@@ -249,7 +249,7 @@ class CommentWebSocketHandshakeRejectionIT {
     @Test
     void handshake_blacklistedJti_doesNotEstablishStompSession() {
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         String jti = jwtTokenProvider.validateAndParse(token).jti();
         tokenBlacklistService.blacklist(jti, 900);
 
@@ -291,7 +291,7 @@ class CommentWebSocketHandshakeRejectionIT {
     void noSessionCookie_authenticatedAndUnauthenticatedRequests_noJsessionIdCookie() {
         RestTemplate rest = boundedRestTemplate();
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
 
         String authedSessionId = UUID.randomUUID().toString().substring(0, 8);
         String authedUrl =

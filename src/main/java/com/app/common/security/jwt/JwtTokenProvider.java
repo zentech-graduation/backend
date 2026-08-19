@@ -70,9 +70,11 @@ public class JwtTokenProvider {
      *
      * @param userId stable user identifier; placed in the {@code sub} claim
      * @param role user role name; placed in a custom {@code role} claim
+     * @param tokenEpoch the account's current {@code users.token_epoch}; placed in a custom {@code
+     *     epoch} claim so an administrator can invalidate this token by advancing the column
      * @return the encoded JWT string
      */
-    public String generateAccessToken(UUID userId, String role) {
+    public String generateAccessToken(UUID userId, String role, int tokenEpoch) {
         Instant now = Instant.now();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         JwtClaimsSet claims =
@@ -82,6 +84,7 @@ public class JwtTokenProvider {
                         .subject(userId.toString())
                         .claim("role", role)
                         .claim("jti", UUID.randomUUID().toString())
+                        .claim("epoch", tokenEpoch)
                         .issuedAt(now)
                         .notBefore(now)
                         .expiresAt(now.plusSeconds(properties.accessTokenTtl()))
@@ -129,6 +132,9 @@ public class JwtTokenProvider {
 
         String role = jwt.getClaimAsString("role");
         String jti = jwt.getClaimAsString("jti");
-        return new JwtClaims(userId, role, jti, expiresAt);
+        // Null for a token minted before the epoch claim existed. Left null here rather than
+        // defaulted, so the resolver owns the decision to read a missing claim as epoch 0.
+        Number epoch = jwt.getClaim("epoch");
+        return new JwtClaims(userId, role, jti, epoch == null ? null : epoch.intValue(), expiresAt);
     }
 }

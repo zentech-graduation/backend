@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V44 SQL migrations
+│   │       ├── db/migration/       # Flyway V01-V66 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -168,7 +168,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `story` | **Implemented** | api, consumer, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
 | `message` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
-| `admin` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
+| `admin` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
 | `recommendation` | Scaffolded | service/impl (`UserEventsPartitionJob` only — no controller, no repository, no service interface) |
 
 **Module responsibilities:**
@@ -182,7 +182,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
 - **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
-- **`admin`**: Immutable moderation audit log and atomic moderation actions; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
+- **`admin`**: Immutable moderation audit log, atomic moderation actions, the warning and strike discipline ladder, report escalation, and the report-anchored moderation view of a reported entity; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -205,7 +205,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
-Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 185 test classes total.
+Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 201 test classes total. The roster below has not been regenerated since well before that count and is missing entries across several modules; only the rows this branch changes are corrected here.
 
 | Package | Test Classes |
 |---------|-------------|
@@ -237,9 +237,9 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest`, `SecurityUtilsTest` |
 | `common/security/websocket` | `BrokerTopicSendGuardIT`, `JwtHandshakeInterceptorTest`, `WebSocketHandshakeRateLimitIT`, `WebSocketRevocationIT`, `WebSocketRevocationSweepServiceTest` |
 | `common/settings/service/impl` | `SystemSettingServiceImplTest` |
-| `modules/admin/controller` | `AdminControllerIT` |
-| `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest` |
-| `modules/admin/service/impl` | `AdminServiceImplTest` |
+| `modules/admin/controller` | `AdminControllerIT`, `AdminDisciplineControllerIT` |
+| `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest`, `UserWarningRepositoryIT` |
+| `modules/admin/service/impl` | `AdminServiceImplTest`, `UserDisciplineServiceImplTest` |
 | `modules/auth/controller` | `AuthControllerIT`, `PasswordPolicyIT` |
 | `modules/auth/converter` | `OAuthProviderConverterTest` |
 | `modules/auth/cookie` | `RefreshTokenCookieManagerTest` |
@@ -303,7 +303,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 46 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: false`); 66 migrations at `src/main/resources/db/migration/`. V57, V63 and V66 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -352,7 +352,27 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | V43 | align_username_index_with_soft_delete_policy |
 | V44 | add_email_case_insensitive_index |
 | V45 | add_comment_edited_at |
-| V46 | add_post_likes_user_keyset_index |
+| V46 | add_post_likes_user_keyset_index |
+| V47 | add_notification_post_id |
+| V48 | add_users_banner_url |
+| V49 | add_story_likes |
+| V50 | remove_group_conversations |
+| V51 | order_follow_counter_locks |
+| V52 | add_conversation_participant_customization |
+| V53 | add_conversation_manual_unread_flag |
+| V54 | add_admin_action_type_values |
+| V55 | add_moderation_action_configs_rows |
+| V56 | add_users_admin_visibility_columns |
+| V57 | add_users_admin_visibility_indexes |
+| V58 | add_users_token_epoch |
+| V59 | add_posts_status_before_moderation |
+| V60 | add_notification_type_warning |
+| V61 | add_notification_type_configs_warning_row |
+| V62 | create_user_discipline_tables |
+| V63 | create_user_discipline_indexes |
+| V64 | add_report_status_escalated |
+| V65 | add_reports_escalation_columns |
+| V66 | add_reports_escalated_index |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -370,11 +390,11 @@ PostgreSQL enum types:
 | `story_type` | `image`, `video` |
 | `message_type` | `text`, `image`, `video`, `post_share`, `story_share` |
 | `report_type` | `post`, `comment`, `user`, `story`, `message` |
-| `report_status` | `pending`, `reviewing`, `resolved`, `dismissed` |
+| `report_status` | `pending`, `reviewing`, `resolved`, `dismissed`, `escalated` (V64) |
 | `report_reason` | `spam`, `nudity`, `violence`, `hate_speech`, `harassment`, `false_information`, `scam`, `other` |
-| `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message` |
+| `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message`, `warning` (V60) |
 | `oauth_provider` | `google`, `facebook`, `apple` |
-| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `force_logout`, `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag` (V54; only `change_user_role` and `force_logout` have a caller today, the rest were added ahead of use because each `ALTER TYPE ... ADD VALUE` needs its own migration) |
+| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `force_logout`, `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag` (V54; the five hashtag values still have no caller, the rest do) |
 | `event_type` | `post_view`, `post_like`, `post_unlike`, `post_save`, `post_unsave`, `post_share`, `post_comment`, `story_view`, `story_reply`, `profile_view`, `profile_follow`, `profile_unfollow`, `search`, `hashtag_click`, `comment_like`, `comment_reply`, `message_send`, `session_start`, `session_end`, `app_open` |
 
 ### Cache — Redis
@@ -417,7 +437,8 @@ PostgreSQL enum types:
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
 | `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
-| `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
+| `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
+| `admin.notification.queue` | `admin.notification.dlq` | `admin.notification.dead-letter` |
 
 **Bindings (queue → `social.events`):**
 
@@ -434,7 +455,8 @@ PostgreSQL enum types:
 | `post.index.sync` | `post.index.#` (wildcard) | `PostRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
-| `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
+| `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
+| `admin.notification.queue` | `user.warned.v1` | `AdminRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `post.live.events` (exchange) | `post.live.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |

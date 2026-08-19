@@ -33,6 +33,7 @@ public final class ApiConstants {
         public static final String BY_USERNAME = "/by-username/{username}";
         public static final String SEARCH = "/search";
         public static final String ME_SETTINGS = "/me/settings";
+        public static final String ME_WARNINGS = "/me/warnings";
     }
 
     public static final class Posts {
@@ -162,11 +163,26 @@ public final class ApiConstants {
         public static final String RESTORE_COMMENT = "/comments/{commentId}/restore";
         public static final String RESOLVE_REPORT = "/reports/{reportId}/resolve";
         public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
+        public static final String ESCALATE_REPORT = "/reports/{reportId}/escalate";
+        // Anchored on the report, never on the entity. An endpoint taking a bare entity
+        // identifier here would be a universal privacy bypass rather than a moderation
+        // tool: the report is what limits a moderator to what somebody has flagged.
+        public static final String REPORT_TARGET = "/reports/{reportId}/target";
+        // Literal segments, so no template can shadow it whatever the matcher ordering.
+        public static final String ESCALATED_REPORT_COUNT = "/reports/escalated/count";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
         // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the
         // ADMIN-only matcher, and audit reads stay available to moderators. Keeping the path split
         // structural means no matcher-ordering subtlety decides authorization.
         public static final String ACTIONS_FOR_USER = "/actions/for-user/{userId}";
+        // Outside the "/users/**" sub-tree for the same structural reason as ACTIONS_FOR_USER: that
+        // sub-tree is reserved for the ADMIN-only matcher, and warning and violation reads are
+        // moderator work. Putting them under "/users/" would mean adding exceptions ahead of that
+        // matcher, which is precisely the ordering subtlety the split exists to avoid.
+        public static final String WARN_USER = "/warnings/for-user/{userId}";
+        public static final String VIOLATIONS_FOR_USER = "/violations/for-user/{userId}";
+        public static final String REVOKE_WARNING = "/warnings/{warningId}";
+        public static final String REVOKE_STRIKE = "/strikes/{strikeId}";
     }
 }

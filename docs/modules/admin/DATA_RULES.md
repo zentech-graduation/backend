@@ -9,6 +9,8 @@
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
 | `admin_actions` | `id`, `admin_id`, `action_type`, `target_user_id`, `target_entity_type`, `target_entity_id`, `report_id`, `reason`, `metadata`, `created_at` | Immutable audit log of every moderation action taken by an admin or moderator. `target_user_id` and `report_id` become NULL if the referenced records are deleted. |
+| `user_warnings` | `id`, `user_id`, `issued_by`, `reason_key`, `note`, `admin_action_id`, `revoked_at`, `revoked_by`, `created_at` | One warning issued against an account. `admin_action_id` is NOT NULL, so a warning that no audit row explains cannot exist. `reason_key` references `report_reason_configs`, which is that table's only runtime reader. |
+| `user_strikes` | `id`, `user_id`, `strike_number`, `triggered_by`, `admin_action_id`, `revoked_at`, `revoked_by`, `created_at` | One strike, the consequence of three active warnings. `strike_number` is `CHECK (>= 1)` and uncapped. |
 
 This table cannot be rebuilt from any other source if lost.
 
@@ -52,14 +54,28 @@ This table cannot be rebuilt from any other source if lost.
 | `force_logout` action must revoke every non-revoked `refresh_tokens` row for the target and record the count in `metadata` | `AdminUserServiceImpl.forceLogout` |
 | Only the transitions `user -> moderator`, `moderator -> user` and `moderator -> admin` are permitted; an administrator is never a valid target, a skip-level `user -> admin` promotion is refused, and a request naming the role already held is refused | `RoleTransitionPolicy` |
 | A moderator reading the audit log sees only rows where `admin_id` equals its own id; an administrator sees every row | `AdminServiceImpl.getActions`, `getActionById`, `getActionsForUser` |
+| `GET /admin/reports/{reportId}/target` returns the reported entity regardless of privacy, blocks or soft-delete, and is reachable only with a report identifier | `AdminReportTargetServiceImpl`, `AdminReportTargetRepository` - the report is the anchor and the whole security property: a moderator sees what somebody flagged and nothing else. An endpoint taking a bare entity identifier would be a universal privacy bypass. A moderator branch inside `PostVisibilityServiceImpl` was rejected for the same reason: the feed, the profile listing, search hydration and comment access all call it, so the branch would leak into every one of them |
+| Reviewing a report target is logged at info with `reportId`, `actorId` and `entityId`, and writes no `admin_actions` row | `AdminReportTargetServiceImpl.getReportTarget` - a read that happens many times per report would dilute a table whose purpose is recording state changes |
+| The report-target response is returned `Cache-Control: no-store` | `AdminController.getReportTarget` - the body is content a moderator may see only because it was reported, so it must not survive in a shared cache or a browser's back-forward store |
 | A lapsed fixed-term suspension returns the account to active and records one `unsuspend_user` row with a null `admin_id` | `SuspensionExpiryServiceImpl`, driven by `UserStateValidator.enforceActive` and `SuspensionExpiryJob` |
 | `metadata` is written from server-derived facts only and is never accepted from a request body | `AdminActionRecorder`, `AdminActionRequest` |
-| `remove_post` action must set `posts.status = 'removed'` and `posts.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removePost` |
-| `restore_post` action must clear `posts.deleted_at` and reset `posts.status = 'published'` in the same transaction | `AdminServiceImpl.restorePost` |
+| `remove_post` must perform every side effect an owner removal performs, in the same transaction | `AdminServiceImpl.removePost` delegating to `PostService.applyModerationRemoval`. The admin module owns the transition guard and the audit row; the post module owns the side effects, so the administrative and owner removal paths cannot drift apart |
+| `restore_post` must return the post to the status it held before the removal, and report that status in the audit row's `metadata.resultingStatus` | `AdminServiceImpl.restorePost` delegating to `PostService.applyModerationRestore` |
 | `remove_comment` action must set `comments.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removeComment` |
 | `restore_comment` action must clear `comments.deleted_at` in the same transaction | `AdminServiceImpl.restoreComment` |
 | `resolve_report` and `dismiss_report` must update `reports.status` and `reports.reviewed_by` / `reviewed_at` in the same transaction | `AdminServiceImpl.resolveReport`, `AdminServiceImpl.dismissReport` |
 | `admin_actions` rows must never be updated or deleted once created; they are the permanent audit trail | `AdminActionRepository` exposes read and insert operations only |
+| Only an account whose role is `user` may be warned, and no actor may warn itself | `UserDisciplineServiceImpl.issueWarning` - three warnings produce a strike and a strike changes `users.status`, so a warnable moderator or administrator would hand any moderator a route to an administrator's account status |
+| A warning counts toward the next strike while it is unrevoked, newer than the account's most recent unrevoked strike, and less than 90 days old | `UserWarningRepository.countActiveWarnings` - one statement, because the three conditions compose and a wrong composition changes how fast accounts are banned while failing nothing |
+| The third counting warning issues a strike: number one suspends for 7 days, two for 30, three and above ban permanently | `UserDisciplineServiceImpl.issueStrike` |
+| A strike's consequence is applied only when it is strictly stronger than the account's current state; the strike row is written either way | `UserDisciplineServiceImpl.applyConsequenceIfStronger` - severity order is active, then a suspension that ends, then one that does not, then a ban; within fixed-term suspensions the later end date wins, so strike two's 30 days does replace strike one's 7. Deactivated is ranked with banned so no strike undoes a self-removal |
+| A strike writes a second `admin_actions` row with a null `admin_id` and metadata naming the moderator whose warning triggered it | `UserDisciplineServiceImpl.issueStrike` - the strike is the ladder's consequence, not a decision the moderator took, and recording the moderator as the actor would attribute a ban to someone who never chose one |
+| Two concurrent warnings on the same account cannot both issue a strike | `AdminUserRepository.lockForDiscipline` serializes them; `uq_user_strikes_active_number` is the invariant of last resort |
+| Revoking a warning revokes that warning only: no strike is reversed and `users.status` is untouched | `UserDisciplineServiceImpl.revokeWarning` |
+| Revoking a strike leaves `users.status` exactly as it is; lifting the penalty is a separate decision through the account-status endpoints | `UserDisciplineServiceImpl.revokeStrike` |
+| A warned account is notified through the outbox in the same transaction as the warning, with a null actor | `UserDisciplineServiceImpl.enqueueWarningNotification`, `AdminNotificationConsumer` - a named actor would run the notification block guard, so an account that had blocked the moderator would never learn it had been warned |
+| An account may read its own unrevoked warnings, never its strikes and never another account's | `UserDisciplineServiceImpl.listOwnWarnings` |
+| The violation listing's cursor is scoped per role | `CursorScope.ADMIN_VIOLATIONS_WARNINGS` and `ADMIN_VIOLATIONS_FULL` - the listing returns different rows to a moderator and an administrator, so a shared tag would let a moderator replay an administrator's cursor into strike rows |
 
 **`admin_id` cascade behavior** `[RESOLVED IN V29]`:
 - `admin_actions.admin_id` is nullable and uses `ON DELETE SET NULL`.
@@ -91,6 +107,7 @@ This table cannot be rebuilt from any other source if lost.
 | Dependency | Direction | Nature |
 |------------|-----------|--------|
 | `users` | inbound | `admin_id` and `target_user_id` reference `users.id`; admin actions mutate `users.status` |
-| `report` | inbound | `report_id` links an admin action to the report that prompted it |
+| `report` | inbound | `report_id` links an admin action to the report that prompted it; `report_reason_configs` supplies the reason keys a warning may cite |
+| `notification` | outbound | A warning enqueues `user.warned.v1`, which `AdminNotificationConsumer` turns into a `warning` notification |
 | `post` | outbound | `remove_post` / `restore_post` actions mutate `posts.status` and `posts.deleted_at` |
 | `comment` | outbound | `remove_comment` / `restore_comment` actions mutate `comments.deleted_at` |

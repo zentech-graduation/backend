@@ -85,7 +85,7 @@ public interface AdminUserService {
      * @return the audit row for the role change
      * @throws AppException {@code FORBIDDEN} when the actor is not an administrator, {@code
      *     USER_NOT_FOUND} when no live account holds that id, {@code ADMIN_SELF_ACTION_NOT_ALLOWED}
-     *     when the actor targets itself, and {@code ADMIN_ROLE_TRANSITION_FORBIDDEN} for a
+     *     when the actor targets itself, and {@code ADMIN_ROLE_TRANSITION_NOT_ALLOWED} for a
      *     transition the policy refuses
      */
     AdminActionResponse changeRole(UUID actorId, UUID userId, AdminRoleChangeRequest request);

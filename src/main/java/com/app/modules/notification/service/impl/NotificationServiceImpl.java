@@ -194,6 +194,10 @@ public class NotificationServiceImpl implements NotificationService {
             case MESSAGE -> settings.isNotifyMessages();
             // STORY_VIEW has no user_settings toggle; it is never preference-suppressed.
             case STORY_VIEW -> true;
+            // WARNING has no toggle either, and deliberately never gets one. An account that could
+            // switch off moderation warnings would be disciplined without being told, and the
+            // strike that follows three of them would arrive unexplained.
+            case WARNING -> true;
         };
     }
 }

@@ -21,9 +21,12 @@ import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminReportTargetResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -209,7 +212,13 @@ public interface AdminApi {
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
 
     /** Removes a post and returns the persisted audit event. */
-    @Operation(summary = "Remove a post")
+    @Operation(
+            summary = "Remove a post",
+            description =
+                    "Performs the same side effects as an owner removal: the post is soft-deleted,"
+                            + " its hashtag associations are detached, and its search-index document is"
+                            + " deleted. The status it held is recorded so restore can return it"
+                            + " there.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -249,8 +258,17 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<AdminActionResponse>> removePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
 
-    /** Restores a removed post and returns the persisted audit event. */
-    @Operation(summary = "Restore a post")
+    /** Restores a removed post to its pre-removal status and returns the persisted audit event. */
+    @Operation(
+            summary = "Restore a post",
+            description =
+                    "Returns the post to the status it held before the moderation removal, which is"
+                            + " not necessarily published: a post that was a draft when it was removed"
+                            + " comes back a draft. A post removed before that status was recorded"
+                            + " comes back published. The resulting status is reported in the audit"
+                            + " event's metadata as resultingStatus. Hashtag associations are"
+                            + " re-derived and the search index is refreshed only when the post comes"
+                            + " back published.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -457,6 +475,136 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<AdminActionResponse>> dismissReport(
             @PathVariable("reportId") UUID reportId,
             @Valid @RequestBody AdminActionRequest request);
+
+    /** Hands a report up to an administrator and returns the persisted audit event. */
+    @Operation(
+            summary = "Escalate a report",
+            description =
+                    "Moves an open report out of the moderator queue and into the administrator's."
+                            + " The escalating moderator can still read it, but only an administrator"
+                            + " may resolve or dismiss it, and there is no transition back to pending"
+                            + " or reviewing. No notification is pushed: the escalated count endpoint"
+                            + " is the only signal that one is waiting. Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Report escalated"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Report is already closed or already escalated",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PatchMapping(ApiConstants.Admin.ESCALATE_REPORT)
+    ResponseEntity<ApiResponse<AdminActionResponse>> escalateReport(
+            @PathVariable("reportId") UUID reportId,
+            @Valid @RequestBody AdminEscalateReportRequest request);
+
+    /** Counts the reports waiting on an administrator. */
+    @Operation(
+            summary = "Count escalated reports",
+            description =
+                    "Returns how many reports are in the escalated state. Escalation pushes no"
+                            + " notification, so this is the only signal that one is waiting; a"
+                            + " dashboard that does not surface it makes escalation a black hole."
+                            + " Requires ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Escalated report count"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Admin.ESCALATED_REPORT_COUNT)
+    ResponseEntity<ApiResponse<EscalatedReportCountResponse>> countEscalatedReports();
+
+    /** Returns the reported entity, rendered for moderation review. */
+    @Operation(
+            summary = "Review a report's target",
+            description =
+                    "Returns the entity the report points at, discriminated by report type, so a"
+                            + " moderator can see what was reported. Deliberately bypasses the ordinary"
+                            + " visibility rules: a private account's post, or one by someone who has"
+                            + " blocked the reviewing moderator, is exactly what has to be reviewable"
+                            + " once it is reported. The report is the anchor and the only way in, so a"
+                            + " moderator sees what somebody flagged and nothing else. The response is"
+                            + " not cacheable and the read is logged rather than written to the audit"
+                            + " log. Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Reported entity returned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "410",
+                description = "The reported entity has since been deleted",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Admin.REPORT_TARGET)
+    ResponseEntity<ApiResponse<AdminReportTargetResponse>> getReportTarget(
+            @PathVariable("reportId") UUID reportId);
 
     /** Lists audit-event summaries with optional actor and action-type filters. */
     @Operation(

@@ -41,6 +41,9 @@ app:
     # like updates were silently dead with no signal on either side.
     live:
       enabled: true
+  admin:
+    consumer:
+      enabled: true
   story:
     consumer:
       enabled: true

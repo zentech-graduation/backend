@@ -34,7 +34,10 @@ import com.app.modules.admin.mapper.AdminActionMapper;
 import com.app.modules.admin.repository.AdminActionRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.comment.repository.CommentRepository;
+import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
+import com.app.modules.post.service.PostModerationResult;
+import com.app.modules.post.service.PostService;
 import com.app.modules.report.entity.Report;
 import com.app.modules.report.enums.ReportReason;
 import com.app.modules.report.enums.ReportStatus;
@@ -51,6 +54,7 @@ class AdminServiceImplTest {
     @Mock private AdminActionRepository adminActionRepository;
     @Mock private UserRepository userRepository;
     @Mock private PostRepository postRepository;
+    @Mock private PostService postService;
     @Mock private CommentRepository commentRepository;
     @Mock private ReportRepository reportRepository;
     @Mock private AdminActionMapper adminActionMapper;
@@ -64,6 +68,7 @@ class AdminServiceImplTest {
                         adminActionRepository,
                         userRepository,
                         postRepository,
+                        postService,
                         commentRepository,
                         reportRepository,
                         adminActionMapper,
@@ -188,13 +193,14 @@ class AdminServiceImplTest {
     }
 
     @Test
-    void removePost_livePost_softDeletesAndAudits() {
+    void removePost_livePost_delegatesEverySideEffectToThePostModule() {
         UUID postId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         AdminActionResponse expected = response(AdminActionType.REMOVE_POST);
-        when(postRepository.findOwnerIdIncludingDeleted(postId)).thenReturn(Optional.of(ownerId));
         when(postRepository.findStatusIncludingDeleted(postId))
                 .thenReturn(Optional.of("published"));
+        when(postService.applyModerationRemoval(postId))
+                .thenReturn(new PostModerationResult(ownerId, PostStatus.REMOVED));
         stubAudit(expected);
 
         AdminActionResponse result =
@@ -202,11 +208,27 @@ class AdminServiceImplTest {
                         UUID.randomUUID(), postId, new AdminActionRequest("Violation", null));
 
         assertThat(result).isEqualTo(expected);
-        verify(postRepository)
-                .applyAdminModeration(
-                        org.mockito.ArgumentMatchers.eq(postId),
-                        org.mockito.ArgumentMatchers.eq("removed"),
-                        any(OffsetDateTime.class));
+        verify(postService).applyModerationRemoval(postId);
+    }
+
+    @Test
+    void restorePost_removedPost_recordsTheStatusThePostReturnedTo() {
+        UUID postId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        AdminActionResponse expected = response(AdminActionType.RESTORE_POST);
+        when(postRepository.findStatusIncludingDeleted(postId)).thenReturn(Optional.of("removed"));
+        when(postService.applyModerationRestore(postId))
+                .thenReturn(new PostModerationResult(ownerId, PostStatus.DRAFT));
+        stubAudit(expected);
+
+        AdminActionResponse result =
+                service.restorePost(
+                        UUID.randomUUID(), postId, new AdminActionRequest("Appeal accepted", null));
+
+        assertThat(result).isEqualTo(expected);
+        ArgumentCaptor<AdminAction> captor = ArgumentCaptor.forClass(AdminAction.class);
+        verify(adminActionRepository).insert(captor.capture());
+        assertThat(captor.getValue().getMetadata()).containsEntry("resultingStatus", "draft");
     }
 
     @Test
