@@ -1,4 +1,4 @@
-package com.app.modules.admin.service;
+package com.app.modules.admin.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -10,70 +10,77 @@ import org.junit.jupiter.api.Test;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
-import com.app.modules.admin.service.RoleTransitionPolicy.Outcome;
+import com.app.modules.admin.service.AdminAuthorizationService.Outcome;
+import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 
-class RoleTransitionPolicyTest {
+class AdminAuthorizationServiceImplTest {
 
-    private final RoleTransitionPolicy policy = new RoleTransitionPolicy();
+    private final AdminAuthorizationServiceImpl policy = new AdminAuthorizationServiceImpl();
 
     private static final UUID ACTOR = UUID.randomUUID();
     private static final UUID TARGET = UUID.randomUUID();
 
     @Test
-    void evaluate_userToModerator_isAllowed() {
+    void evaluateRoleTransition_userToModerator_isAllowed() {
         assertThat(
-                        policy.evaluate(
+                        policy.evaluateRoleTransition(
                                 ACTOR, UserRole.ADMIN, TARGET, UserRole.USER, UserRole.MODERATOR))
                 .isEqualTo(Outcome.ALLOWED);
     }
 
     @Test
-    void evaluate_moderatorToUser_isAllowed() {
+    void evaluateRoleTransition_moderatorToUser_isAllowed() {
         assertThat(
-                        policy.evaluate(
+                        policy.evaluateRoleTransition(
                                 ACTOR, UserRole.ADMIN, TARGET, UserRole.MODERATOR, UserRole.USER))
                 .isEqualTo(Outcome.ALLOWED);
     }
 
     @Test
-    void evaluate_moderatorToAdmin_isAllowed() {
+    void evaluateRoleTransition_moderatorToAdmin_isAllowed() {
         assertThat(
-                        policy.evaluate(
+                        policy.evaluateRoleTransition(
                                 ACTOR, UserRole.ADMIN, TARGET, UserRole.MODERATOR, UserRole.ADMIN))
                 .isEqualTo(Outcome.ALLOWED);
     }
 
     @Test
-    void evaluate_userToAdmin_isSkipLevel() {
-        assertThat(policy.evaluate(ACTOR, UserRole.ADMIN, TARGET, UserRole.USER, UserRole.ADMIN))
+    void evaluateRoleTransition_userToAdmin_isSkipLevel() {
+        assertThat(
+                        policy.evaluateRoleTransition(
+                                ACTOR, UserRole.ADMIN, TARGET, UserRole.USER, UserRole.ADMIN))
                 .isEqualTo(Outcome.SKIP_LEVEL);
     }
 
     @Test
-    void evaluate_adminTargetToModerator_isTargetIsAdmin() {
+    void evaluateRoleTransition_adminTargetToModerator_isTargetIsAdmin() {
         assertThat(
-                        policy.evaluate(
+                        policy.evaluateRoleTransition(
                                 ACTOR, UserRole.ADMIN, TARGET, UserRole.ADMIN, UserRole.MODERATOR))
                 .isEqualTo(Outcome.TARGET_IS_ADMIN);
     }
 
     @Test
-    void evaluate_adminTargetToUser_isTargetIsAdmin() {
-        assertThat(policy.evaluate(ACTOR, UserRole.ADMIN, TARGET, UserRole.ADMIN, UserRole.USER))
+    void evaluateRoleTransition_adminTargetToUser_isTargetIsAdmin() {
+        assertThat(
+                        policy.evaluateRoleTransition(
+                                ACTOR, UserRole.ADMIN, TARGET, UserRole.ADMIN, UserRole.USER))
                 .isEqualTo(Outcome.TARGET_IS_ADMIN);
     }
 
     @Test
-    void evaluate_userToUser_isNoOp() {
-        assertThat(policy.evaluate(ACTOR, UserRole.ADMIN, TARGET, UserRole.USER, UserRole.USER))
+    void evaluateRoleTransition_userToUser_isNoOp() {
+        assertThat(
+                        policy.evaluateRoleTransition(
+                                ACTOR, UserRole.ADMIN, TARGET, UserRole.USER, UserRole.USER))
                 .isEqualTo(Outcome.NO_OP);
     }
 
     @Test
-    void evaluate_moderatorToModerator_isNoOp() {
+    void evaluateRoleTransition_moderatorToModerator_isNoOp() {
         assertThat(
-                        policy.evaluate(
+                        policy.evaluateRoleTransition(
                                 ACTOR,
                                 UserRole.ADMIN,
                                 TARGET,
@@ -85,23 +92,25 @@ class RoleTransitionPolicyTest {
     // The protected-target rule is checked before the no-op rule, so an administrator asked to stay
     // an administrator reports the more specific reason rather than "nothing to do".
     @Test
-    void evaluate_adminToAdmin_reportsProtectedTargetRatherThanNoOp() {
-        assertThat(policy.evaluate(ACTOR, UserRole.ADMIN, TARGET, UserRole.ADMIN, UserRole.ADMIN))
+    void evaluateRoleTransition_adminToAdmin_reportsProtectedTargetRatherThanNoOp() {
+        assertThat(
+                        policy.evaluateRoleTransition(
+                                ACTOR, UserRole.ADMIN, TARGET, UserRole.ADMIN, UserRole.ADMIN))
                 .isEqualTo(Outcome.TARGET_IS_ADMIN);
     }
 
     @Test
-    void evaluate_actorTargetsItself_isSelfTarget() {
+    void evaluateRoleTransition_actorTargetsItself_isSelfTarget() {
         assertThat(
-                        policy.evaluate(
+                        policy.evaluateRoleTransition(
                                 ACTOR, UserRole.ADMIN, ACTOR, UserRole.ADMIN, UserRole.MODERATOR))
                 .isEqualTo(Outcome.SELF_TARGET);
     }
 
     @Test
-    void evaluate_moderatorActor_isActorNotAdmin() {
+    void evaluateRoleTransition_moderatorActor_isActorNotAdmin() {
         assertThat(
-                        policy.evaluate(
+                        policy.evaluateRoleTransition(
                                 ACTOR,
                                 UserRole.MODERATOR,
                                 TARGET,
@@ -111,24 +120,28 @@ class RoleTransitionPolicyTest {
     }
 
     @Test
-    void evaluate_userActor_isActorNotAdmin() {
-        assertThat(policy.evaluate(ACTOR, UserRole.USER, TARGET, UserRole.USER, UserRole.MODERATOR))
+    void evaluateRoleTransition_userActor_isActorNotAdmin() {
+        assertThat(
+                        policy.evaluateRoleTransition(
+                                ACTOR, UserRole.USER, TARGET, UserRole.USER, UserRole.MODERATOR))
                 .isEqualTo(Outcome.ACTOR_NOT_ADMIN);
     }
 
     // Actor authority is checked before self-targeting, so a non-administrator acting on itself is
     // refused for lacking authority rather than for the target being itself.
     @Test
-    void evaluate_nonAdminActorTargetingItself_reportsActorNotAdmin() {
-        assertThat(policy.evaluate(ACTOR, UserRole.USER, ACTOR, UserRole.USER, UserRole.MODERATOR))
+    void evaluateRoleTransition_nonAdminActorTargetingItself_reportsActorNotAdmin() {
+        assertThat(
+                        policy.evaluateRoleTransition(
+                                ACTOR, UserRole.USER, ACTOR, UserRole.USER, UserRole.MODERATOR))
                 .isEqualTo(Outcome.ACTOR_NOT_ADMIN);
     }
 
     @Test
-    void assertAllowed_permittedTransition_doesNotThrow() {
+    void assertMayChangeUserRole_permittedTransition_doesNotThrow() {
         assertThatCode(
                         () ->
-                                policy.assertAllowed(
+                                policy.assertMayChangeUserRole(
                                         ACTOR,
                                         UserRole.ADMIN,
                                         TARGET,
@@ -138,10 +151,10 @@ class RoleTransitionPolicyTest {
     }
 
     @Test
-    void assertAllowed_nonAdminActor_throwsForbidden() {
+    void assertMayChangeUserRole_nonAdminActor_throwsForbidden() {
         assertThatThrownBy(
                         () ->
-                                policy.assertAllowed(
+                                policy.assertMayChangeUserRole(
                                         ACTOR,
                                         UserRole.MODERATOR,
                                         TARGET,
@@ -153,10 +166,10 @@ class RoleTransitionPolicyTest {
     }
 
     @Test
-    void assertAllowed_selfTarget_throwsSelfActionNotAllowed() {
+    void assertMayChangeUserRole_selfTarget_throwsSelfActionNotAllowed() {
         assertThatThrownBy(
                         () ->
-                                policy.assertAllowed(
+                                policy.assertMayChangeUserRole(
                                         ACTOR,
                                         UserRole.ADMIN,
                                         ACTOR,
@@ -168,10 +181,10 @@ class RoleTransitionPolicyTest {
     }
 
     @Test
-    void assertAllowed_adminTarget_throwsRoleTransitionForbidden() {
+    void assertMayChangeUserRole_adminTarget_throwsRoleTransitionForbidden() {
         assertThatThrownBy(
                         () ->
-                                policy.assertAllowed(
+                                policy.assertMayChangeUserRole(
                                         ACTOR,
                                         UserRole.ADMIN,
                                         TARGET,
@@ -183,10 +196,10 @@ class RoleTransitionPolicyTest {
     }
 
     @Test
-    void assertAllowed_skipLevel_throwsRoleTransitionForbidden() {
+    void assertMayChangeUserRole_skipLevel_throwsRoleTransitionForbidden() {
         assertThatThrownBy(
                         () ->
-                                policy.assertAllowed(
+                                policy.assertMayChangeUserRole(
                                         ACTOR,
                                         UserRole.ADMIN,
                                         TARGET,
@@ -198,10 +211,10 @@ class RoleTransitionPolicyTest {
     }
 
     @Test
-    void assertAllowed_noOp_throwsRoleTransitionForbidden() {
+    void assertMayChangeUserRole_noOp_throwsRoleTransitionForbidden() {
         assertThatThrownBy(
                         () ->
-                                policy.assertAllowed(
+                                policy.assertMayChangeUserRole(
                                         ACTOR,
                                         UserRole.ADMIN,
                                         TARGET,
@@ -210,5 +223,59 @@ class RoleTransitionPolicyTest {
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_NOT_ALLOWED);
+    }
+
+    @Test
+    void assertMayChangeUserStatus_ordinaryTarget_doesNotThrow() {
+        assertThatCode(
+                        () ->
+                                policy.assertMayChangeUserStatus(
+                                        ACTOR, UserRole.ADMIN, targetUser(TARGET, UserRole.USER)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void assertMayChangeUserStatus_moderatorActor_throwsForbidden() {
+        assertStatusRefusedWith(UserRole.MODERATOR, TARGET, UserRole.USER, ApiErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void assertMayChangeUserStatus_selfTarget_throwsSelfActionNotAllowed() {
+        assertStatusRefusedWith(
+                UserRole.ADMIN, ACTOR, UserRole.ADMIN, ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
+    }
+
+    // The status contract names the protected target directly while the role contract folds the
+    // same condition into its transition code. Sharing one evaluation must not merge the two.
+    @Test
+    void assertMayChangeUserStatus_adminTarget_throwsTargetProtected() {
+        assertStatusRefusedWith(
+                UserRole.ADMIN, TARGET, UserRole.ADMIN, ApiErrorCode.ADMIN_TARGET_PROTECTED);
+    }
+
+    // Actor authority is checked before self-targeting here too, so a moderator acting on itself is
+    // refused for lacking authority rather than for the target being itself.
+    @Test
+    void assertMayChangeUserStatus_nonAdminActorTargetingItself_throwsForbidden() {
+        assertStatusRefusedWith(
+                UserRole.MODERATOR, ACTOR, UserRole.MODERATOR, ApiErrorCode.FORBIDDEN);
+    }
+
+    private void assertStatusRefusedWith(
+            UserRole actorRole, UUID targetId, UserRole targetRole, ApiErrorCode expected) {
+        assertThatThrownBy(
+                        () ->
+                                policy.assertMayChangeUserStatus(
+                                        ACTOR, actorRole, targetUser(targetId, targetRole)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(expected);
+    }
+
+    private static User targetUser(UUID id, UserRole role) {
+        User user = new User();
+        user.setId(id);
+        user.setRole(role);
+        return user;
     }
 }

@@ -50,10 +50,27 @@
 #   Safe to run repeatedly. Every write is guarded by a natural key, so a second run inserts
 #   nothing and reports zero rows affected. It never updates or deletes existing rows.
 #
+# RESET (--reset), off by default
+#
+#   Clears the content tables so a run starts from a known state, and returns the seeded accounts
+#   to 'active' so a ban left behind by an earlier test does not block the next login.
+#
+#   This is opt-in precisely because it breaks the idempotency property above: it deletes rows this
+#   script did not create. Leaving it off by default keeps the plain invocation safe to run against
+#   a database somebody is working in, while giving end-to-end scripts one place to reset from
+#   instead of each carrying its own block that drifts as tables are added.
+#
+#   Cleared: user_events, platform_stats, user_strikes, user_warnings, notifications, reports,
+#   admin_actions, post_hashtags, hashtag_trending, hashtags, post_edit_history, posts,
+#   outbox_events, processed_messages. Accounts, credentials and the follow graph are left alone,
+#   since the seed recreates them idempotently anyway and deleting an account would cascade far
+#   wider than a reset should reach.
+#
 # SAFETY
 #
 #   Refuses to run unless POSTGRES_URL points at localhost and the active Docker context is a
-#   local socket. It cannot be pointed at a remote or production database.
+#   local socket. It cannot be pointed at a remote or production database. --reset is subject to
+#   both guards, so it can only ever reach a disposable local database.
 
 set -euo pipefail
 
@@ -61,6 +78,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 SEED_PASSWORD='SeedPass123!'
+RESET=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --reset) RESET=true ;;
+        *) echo "seed-dev-data: unknown argument '$arg'. Only --reset is accepted." >&2; exit 2 ;;
+    esac
+done
 
 fail() {
     echo "seed-dev-data: $*" >&2
@@ -111,6 +136,36 @@ docker compose ps --status running --services 2>/dev/null | grep -qx postgres \
 
 psql_exec -tAc "SELECT to_regclass('public.users');" | grep -qx users \
     || fail "the schema is not migrated. Start the application once so Flyway runs, then retry."
+
+if [[ "$RESET" == true ]]; then
+    echo "seed-dev-data: --reset given, clearing content tables in $POSTGRES_DB"
+    # One transaction, deepest dependency first. posts cascades to comments, likes and saves, so
+    # those are not listed; post_hashtags and post_edit_history are listed because clearing them
+    # ahead of posts keeps the order readable rather than relying on which cascades exist.
+    psql_exec <<'SQL'
+BEGIN;
+DELETE FROM user_events;
+DELETE FROM platform_stats;
+DELETE FROM user_strikes;
+DELETE FROM user_warnings;
+DELETE FROM notifications;
+DELETE FROM reports;
+DELETE FROM admin_actions;
+DELETE FROM post_hashtags;
+DELETE FROM hashtag_trending;
+DELETE FROM hashtags;
+DELETE FROM post_edit_history;
+DELETE FROM posts;
+DELETE FROM outbox_events;
+DELETE FROM processed_messages;
+-- Only the accounts this script owns. A ban or suspension left by an earlier test would otherwise
+-- make the next run's first login fail for a reason that has nothing to do with what it is testing.
+UPDATE users
+   SET status = 'active', suspended_until = NULL
+ WHERE email LIKE '%@seed.local';
+COMMIT;
+SQL
+fi
 
 echo "seed-dev-data: seeding $POSTGRES_DB via the compose postgres service"
 

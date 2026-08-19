@@ -16,6 +16,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -169,10 +170,7 @@ class HashtagLifecycleServiceImplTest {
     @Test
     void create_bannedTerm_insertsNormalizedAndEnqueuesNoIndexEvent() {
         UUID actorId = UUID.randomUUID();
-        Hashtag persisted = hashtag(HashtagStatus.BANNED);
-        persisted.setName("worldcup");
         when(hashtagService.normalize("#WorldCup")).thenReturn("worldcup");
-        when(hashtagRepository.findByName("worldcup")).thenReturn(Optional.of(persisted));
 
         HashtagLifecycleResult result =
                 service.create(actorId, "#WorldCup", HashtagStatus.BANNED, "ahead of the event");
@@ -180,7 +178,12 @@ class HashtagLifecycleServiceImplTest {
         assertThat(result.name()).isEqualTo("worldcup");
         assertThat(result.previousStatus()).isNull();
         assertThat(result.status()).isEqualTo(HashtagStatus.BANNED);
-        verify(hashtagRepository).insertWithStatus(any(), any(), any(), any(), any());
+        ArgumentCaptor<Hashtag> saved = ArgumentCaptor.forClass(Hashtag.class);
+        verify(hashtagRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getName()).isEqualTo("worldcup");
+        assertThat(saved.getValue().getStatus()).isEqualTo(HashtagStatus.BANNED);
+        assertThat(saved.getValue().getStatusNote()).isEqualTo("ahead of the event");
+        assertThat(saved.getValue().getStatusBy()).isEqualTo(actorId);
         verifyNoInteractions(indexEventPublisher);
     }
 

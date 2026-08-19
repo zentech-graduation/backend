@@ -61,7 +61,7 @@ This table cannot be rebuilt from any other source if lost.
 - No automatic escalation and no SLA on report review time. Escalation is a moderator's explicit act, not something a timer performs.
 - An escalated report pushes no notification. `GET /api/v1/admin/reports/escalated/count` is the only signal one is waiting, so a dashboard that does not surface that count makes escalation a black hole: the moderator has handed the decision up and nobody is told it arrived. This is a frontend dependency, not something the backend can close on its own.
 - `resolution_note` is written only by the admin close endpoints. The `resolutionNote` field on the triage request body is retained for wire compatibility and is ignored, because the one transition that endpoint still performs carries no resolution.
-- `REPORT_RESOLUTION_NOTE_REQUIRED` is unreachable now that the note requirement lives behind `AdminActionRequest.reason`, which is `@NotBlank`. The constant is kept because an error code is part of the published contract and a client may still branch on it.
+- There is no distinct error code for a missing resolution note. The requirement lives behind `AdminActionRequest.reason`, which is `@NotBlank`, so a close attempt without one is refused as a validation failure before any report logic runs. A dedicated code existed and was removed once it became unreachable: an error code nothing can raise is a promise the API cannot keep, and a client branching on it would be writing dead code against a response it can never receive.
 
 ---
 

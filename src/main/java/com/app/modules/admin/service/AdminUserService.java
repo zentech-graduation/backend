@@ -75,9 +75,9 @@ public interface AdminUserService {
     /**
      * Changes an account's role and revokes its sessions in the same transaction.
      *
-     * <p>The permitted transitions are defined by {@link RoleTransitionPolicy}. The actor's role is
-     * resolved from the database inside the transaction, never from a token claim, because a claim
-     * minted before a demotion outlives the demotion.
+     * <p>The permitted transitions are defined by {@link AdminAuthorizationService}. The actor's
+     * role is resolved from the database inside the transaction, never from a token claim, because
+     * a claim minted before a demotion outlives the demotion.
      *
      * @param actorId the acting administrator
      * @param userId account whose role to change

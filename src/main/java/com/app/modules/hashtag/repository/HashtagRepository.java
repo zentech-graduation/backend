@@ -1,6 +1,5 @@
 package com.app.modules.hashtag.repository;
 
-import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -38,36 +37,6 @@ public interface HashtagRepository extends JpaRepository<Hashtag, UUID>, Hashtag
     void upsertByName(@Param("name") String name);
 
     /**
-     * Inserts a hashtag directly in the requested lifecycle state.
-     *
-     * <p>Deliberately has no {@code ON CONFLICT} clause, unlike {@link #upsertByName}: this is the
-     * administrative create, and it must report a conflict rather than silently report success for
-     * a row somebody else owns. The unique index on name is the guard against a concurrent create.
-     *
-     * <p>Native, so {@code id} and {@code created_at} keep their database defaults rather than
-     * being generated in application code.
-     *
-     * @param name the normalized hashtag name
-     * @param status the lifecycle state to create the row in
-     * @param note the administrator's justification
-     * @param statusAt when the decision was taken
-     * @param statusBy the administrator that took it
-     */
-    @Modifying
-    @Query(
-            value =
-                    "INSERT INTO hashtags (name, status, status_note, status_at, status_by)"
-                            + " VALUES (:name, CAST(:status AS hashtag_status), :note, :statusAt,"
-                            + " :statusBy)",
-            nativeQuery = true)
-    void insertWithStatus(
-            @Param("name") String name,
-            @Param("status") String status,
-            @Param("note") String note,
-            @Param("statusAt") OffsetDateTime statusAt,
-            @Param("statusBy") UUID statusBy);
-
-    /**
      * Fuzzy hashtag search using the pg_trgm similarity operator, ordered by popularity then name.
      *
      * <p>Narrowed to active hashtags: a banned or deleted tag is absent from every hashtag surface,
@@ -86,6 +55,24 @@ public interface HashtagRepository extends JpaRepository<Hashtag, UUID>, Hashtag
             nativeQuery = true)
     List<Hashtag> searchByNameTrgm(
             @Param("query") String query, @Param("limit") int limit, @Param("offset") int offset);
+
+    /**
+     * Returns the most used active hashtags, most used first.
+     *
+     * <p>Served by {@code idx_hashtags_active_post_count} as an index scan with a limit, which is
+     * why the administrative statistics surface computes this one metric live instead of reading a
+     * snapshot: it is the metric where staleness is most visible and the only one cheap enough to
+     * answer on a request path.
+     *
+     * @param limit maximum number of rows to return
+     * @return active hashtags ordered by {@code post_count} descending, then {@code name} ascending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM hashtags WHERE status = 'active'"
+                            + " ORDER BY post_count DESC, name ASC LIMIT :limit",
+            nativeQuery = true)
+    List<Hashtag> findTopActiveByPostCount(@Param("limit") int limit);
 
     /**
      * Returns the subset of the supplied names that name a banned hashtag.

@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.ViewerRelationshipResponse;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
@@ -38,13 +39,19 @@ class UserServiceImplTest {
     @Mock private UserSettingsRepository settingsRepository;
     @Mock private UserMapper userMapper;
     @Mock private SocialService socialService;
+    @Mock private UserEventRecorder userEventRecorder;
 
     private UserServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service =
-                new UserServiceImpl(userRepository, settingsRepository, userMapper, socialService);
+                new UserServiceImpl(
+                        userRepository,
+                        settingsRepository,
+                        userMapper,
+                        socialService,
+                        userEventRecorder);
     }
 
     // ── getMyProfile ──────────────────────────────────────────────────────────

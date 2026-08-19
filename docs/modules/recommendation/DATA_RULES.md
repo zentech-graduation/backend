@@ -1,6 +1,11 @@
 # Recommendation Module — Data Rules
 
-**Implementation status**: Scaffolding only. No Service, Controller, or Repository Java files exist for this module.
+**Implementation status**: Partially implemented. `user_events` has a writer, a repository and a read path; nothing else in this module does.
+
+Implemented: `UserEventRecorder` (the single writer to `user_events`), `UserEventRepository` (read, keyset-paged), `UserEventsPartitionJob` (partition maintenance), and the `UserEvent` entity with its enum and converters.
+The read surface lives in the `admin` module as the administrative activity log; this module owns the table and the write path.
+
+Not implemented: `categories`, `user_interests`, `post_categories`, `post_interaction_scores`, `user_similarity`. No Controller exists in this module.
 
 ---
 
@@ -45,16 +50,41 @@ These tables cannot be rebuilt if lost — `user_events` is the raw behavioral r
 | Deleting a post cascades to `post_categories` and `post_interaction_scores` | `ON DELETE CASCADE` on FK references |
 | `user_events` is partitioned by `created_at` month; a default partition catches unmatched dates | Declarative partitioning; `user_events_default` partition |
 
+**The catch-all partition is not the safety net it appears to be, and the consequence is measured rather than argued.**
+
+A write whose month has no declared partition does **not** fail. It lands in `user_events_default` silently, so nothing signals the problem.
+Once it has, that month's partition can never be created: PostgreSQL refuses with `updated partition constraint for default partition "user_events_default" would be violated by some row`.
+The gap becomes permanent, and the trapped rows become unprunable, because every window-bounded read then has to scan the default partition to prove it holds nothing relevant.
+Detaching the default and writing to an undeclared month fails outright with `no partition of relation "user_events" found for row`, which is what the default is preventing.
+
+So the default stays, because rejecting an analytics write is worse than absorbing it, and rows accumulating in `user_events_default` are the alert condition. V69 closed the 2026-07 hole that V14 and V28 left between them, and `UserEventsPartitionJob` keeps the horizon ahead from there.
+
+Partition pruning, measured against a table populated across four months:
+
+| Window | Partitions scanned |
+|--------|--------------------|
+| Entirely inside one month | that month alone |
+| Crossing one month boundary | exactly the two months it spans |
+| Reaching past the last declared partition | the declared months it spans, plus `user_events_default` |
+| Unbounded, `user_id` only | every declared partition and the catch-all |
+
+The last row is the read the activity log's mandatory window exists to make impossible.
+
 ### B. Rules Enforced by Application Code
 
 | Rule | Service / Component |
 |------|---------------------|
-| `user_events` rows are append-only; existing events must never be updated or deleted | `[NOT YET IMPLEMENTED]` |
-| Event writes must be fire-and-forget (non-blocking to the user action that triggered them) | `[NOT YET IMPLEMENTED]` |
+| `user_events` rows are append-only; existing events must never be updated or deleted | `UserEventRecorder` issues only `INSERT`; the `UserEvent` entity is `@Immutable` and has no persist path |
+| Event writes must be fire-and-forget (non-blocking to the user action that triggered them) | `UserEventRecorder` - the insert runs on a virtual thread of its own, so it neither joins nor extends the caller's transaction, and every failure ends in a warn log and a dropped row |
+| An analytics write must never fail the request that triggered it | `UserEventRecorder` - no retry, no outbox, no dead letter. `OutboxService` exists for events that must reach RabbitMQ; these are not those |
+| Event writes must not be able to exhaust the connection pool | `UserEventRecorder` - submission is bounded by a permit count well under the Hikari pool size, and a submission with no permit free is dropped immediately rather than queued or blocked, because backpressure onto a request thread would defeat the rule above |
+| Only three event types are ever written | `UserEventRecorder` - `session_start` on any route that issues a session, `search` on both search surfaces carrying the term, `profile_view` for another account's profile. Chosen for investigative value per unit of write volume; `post_view` is an order of magnitude larger than all three together and belongs to a later cycle |
+| A view of one's own profile is not recorded | `UserServiceImpl.assemblePublicProfile` - excluded at the call site rather than filtered out later, so the table does not fill with the views that answer no question |
+| A read of `user_events` must be bounded by `created_at` | `AdminUserEventServiceImpl` - the window is the only predicate that prunes partitions; a read bounded only by `user_id` touches every partition ever declared |
 | `post_interaction_scores.engagement_score` is computed as: `likes + comments * 2 + saves * 3` | `[NOT YET IMPLEMENTED]` — defined in schema comment |
 | `post_interaction_scores.recency_score` applies a time-decay factor based on `posts.created_at` | `[NOT YET IMPLEMENTED]` |
 | `user_interests.score` is updated by an ML job; application code must not overwrite ML-derived scores directly | `[NOT YET IMPLEMENTED]` |
-| New `user_events` partitions must be created before their `created_at` range begins (monthly) | `[NOT YET IMPLEMENTED]` — production uses `pg_partman` |
+| New `user_events` partitions must be created before their `created_at` range begins (monthly) | `UserEventsPartitionJob` - ensures the current month and the next two, daily. It ensures the whole window rather than only its far edge, and runs daily rather than monthly, because a run missed on the first of a month would otherwise leave a hole that outlives the outage |
 | `post_categories.confidence` must be in [0.000, 1.000]; validate before insert | `[NOT YET IMPLEMENTED]` |
 
 ### C. Scope Simplifications

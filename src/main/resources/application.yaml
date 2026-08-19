@@ -217,6 +217,23 @@ app:
   admin:
     consumer:
       enabled: ${ADMIN_CONSUMER_ENABLED:false}
+
+  # Platform statistics collection and roll-up.
+  #
+  # A single application instance is assumed. There is no distributed scheduler lock in this
+  # codebase, so two instances would each run both jobs; the composite primary key on
+  # platform_stats with ON CONFLICT DO UPDATE keeps that harmless rather than duplicative, but it
+  # is an assumption to revisit before scaling out.
+  #
+  # There is no backfill. A bucket that was never collected can never be collected later, and a
+  # daily row deleted by retention is gone, so fine-retention and daily-retention are the real
+  # limits of what can ever be charted.
+  stats:
+    enabled: ${STATS_ENABLED:true}
+    interval: ${STATS_INTERVAL:PT30M}
+    fine-retention: ${STATS_FINE_RETENTION:P30D}
+    daily-retention: ${STATS_DAILY_RETENTION:P365D}
+    rollup-cron: ${STATS_ROLLUP_CRON:0 20 3 * * *}
   story:
     consumer:
       enabled: ${STORY_CONSUMER_ENABLED:false}
