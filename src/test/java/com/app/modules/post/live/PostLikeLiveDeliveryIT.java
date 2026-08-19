@@ -266,7 +266,7 @@ class PostLikeLiveDeliveryIT {
     }
 
     private StompSession connectAs(UUID userId) throws Exception {
-        String token = jwtTokenProvider.generateAccessToken(userId, "USER");
+        String token = jwtTokenProvider.generateAccessToken(userId, "USER", 0);
         String wsUrl =
                 "ws://localhost:"
                         + port
@@ -304,7 +304,7 @@ class PostLikeLiveDeliveryIT {
 
     private void exchange(UUID userId, String path, HttpMethod method) {
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(jwtTokenProvider.generateAccessToken(userId, "USER"));
+        headers.setBearerAuth(jwtTokenProvider.generateAccessToken(userId, "USER", 0));
         new RestTemplate()
                 .exchange(
                         "http://localhost:" + port + path,

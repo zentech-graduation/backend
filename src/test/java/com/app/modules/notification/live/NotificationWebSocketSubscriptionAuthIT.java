@@ -213,7 +213,7 @@ class NotificationWebSocketSubscriptionAuthIT {
     void subscribeToAnotherUsersTopic_rejectedAndLogged() throws Exception {
         User self = activeUser("self");
         User other = activeUser("other");
-        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER", 0);
 
         ConnectedSession connected = connectWithErrorCapture("/ws/notifications", token);
         subscribeExpectingNoDelivery(
@@ -230,7 +230,7 @@ class NotificationWebSocketSubscriptionAuthIT {
     @Test
     void subscribeToMalformedTopic_rejected() throws Exception {
         User self = activeUser("self");
-        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER", 0);
 
         ConnectedSession connected = connectWithErrorCapture("/ws/notifications", token);
         subscribeExpectingNoDelivery(
@@ -252,7 +252,7 @@ class NotificationWebSocketSubscriptionAuthIT {
     @Test
     void subscribeToOwnTopic_succeeds() throws Exception {
         User self = activeUser("self");
-        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER", 0);
 
         ConnectedSession connected = connectWithErrorCapture("/ws/notifications", token);
         connected
@@ -281,7 +281,7 @@ class NotificationWebSocketSubscriptionAuthIT {
     void sessionEstablishedOnCommentEndpoint_stillRejectedForNotificationTopic() throws Exception {
         User self = activeUser("self");
         User other = activeUser("other");
-        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(self.getId(), "USER", 0);
 
         ConnectedSession connected = connectWithErrorCapture("/ws/comments", token);
         subscribeExpectingNoDelivery(

@@ -132,6 +132,12 @@ public class AdminUserServiceImpl implements AdminUserService {
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
         int revoked = refreshTokenService.revokeAllForUser(target.getId());
+        // Same transaction as the revocation. Revoking refresh tokens alone ends the ability to
+        // obtain a new access token but not the access tokens already in the target's hands: the
+        // blacklist is keyed on each token's own jti and no administrator holds it. Advancing the
+        // epoch is what closes that window, on the REST path and on the WebSocket sweep alike,
+        // because both authenticate through TokenPrincipalResolver.
+        adminUserRepository.incrementTokenEpoch(target.getId());
         log.info(
                 "Force logout: actorId={}, targetId={}, revokedSessions={}",
                 actorId,
@@ -173,6 +179,11 @@ public class AdminUserServiceImpl implements AdminUserService {
         // Same transaction as the role write. A session that outlived a demotion would hold the
         // old role's capability for as long as its tokens stayed valid.
         int revoked = refreshTokenService.revokeAllForUser(target.getId());
+        // For the same reason as force logout: an access token issued under the previous role
+        // would otherwise stay usable until it expired. Authority itself is read from the row on
+        // every request, so this is session hygiene rather than an authority fix, but it is also
+        // what makes "you have been logged out" true at the moment the administrator is told it is.
+        adminUserRepository.incrementTokenEpoch(target.getId());
         log.info(
                 "Role changed: actorId={}, targetId={}, from={}, to={}, revokedSessions={}",
                 actorId,

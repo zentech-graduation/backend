@@ -53,4 +53,23 @@ public interface AdminUserRepository extends Repository<User, UUID>, AdminUserRe
      */
     @Query(value = "SELECT u.status::text FROM users u WHERE u.id = :userId", nativeQuery = true)
     String findStatusIncludingDeleted(@Param("userId") UUID userId);
+
+    /**
+     * Advances the account's token epoch, invalidating every access token already issued to it.
+     *
+     * <p>The sole writer of {@code users.token_epoch}. The increment is computed by the database in
+     * the statement itself rather than read into the application and written back, so two
+     * administrators acting at the same moment cannot lose one of the two increments and leave a
+     * token minted between their reads still valid.
+     *
+     * @param userId account whose access tokens are being invalidated
+     * @return {@code 1} when a live row was advanced, {@code 0} when no live row holds that id
+     */
+    @Modifying
+    @Query(
+            value =
+                    "UPDATE users SET token_epoch = token_epoch + 1"
+                            + " WHERE id = :userId AND deleted_at IS NULL",
+            nativeQuery = true)
+    int incrementTokenEpoch(@Param("userId") UUID userId);
 }

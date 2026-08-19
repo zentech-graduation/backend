@@ -637,7 +637,7 @@ class AdminControllerIT {
                 username,
                 email,
                 role);
-        return new TestUser(id, jwtTokenProvider.generateAccessToken(id, role.toUpperCase()));
+        return new TestUser(id, jwtTokenProvider.generateAccessToken(id, role.toUpperCase(), 0));
     }
 
     private UUID insertPost(UUID ownerId) {

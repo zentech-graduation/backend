@@ -136,7 +136,7 @@ class CommentWebSocketAccountStatusIT {
     @Test
     void handshake_bannedUserValidToken_doesNotEstablishStompSession() {
         User banned = userWithStatus(UserStatus.BANNED);
-        String token = jwtTokenProvider.generateAccessToken(banned.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(banned.getId(), "USER", 0);
 
         Throwable thrown = attemptConnect(token);
 
@@ -151,7 +151,7 @@ class CommentWebSocketAccountStatusIT {
     @Test
     void handshake_suspendedUserValidToken_doesNotEstablishStompSession() {
         User suspended = userWithStatus(UserStatus.SUSPENDED);
-        String token = jwtTokenProvider.generateAccessToken(suspended.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(suspended.getId(), "USER", 0);
 
         Throwable thrown = attemptConnect(token);
 

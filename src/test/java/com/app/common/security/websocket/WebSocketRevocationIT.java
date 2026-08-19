@@ -144,7 +144,7 @@ class WebSocketRevocationIT {
     @Test
     void bannedAccount_sessionClosedBySweep() throws Exception {
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         RecordingHandler handler = connect(token);
 
         user.setStatus(UserStatus.BANNED);
@@ -158,7 +158,7 @@ class WebSocketRevocationIT {
     @Test
     void suspendedAccount_sessionClosedBySweep() throws Exception {
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         RecordingHandler handler = connect(token);
 
         user.setStatus(UserStatus.SUSPENDED);
@@ -172,7 +172,7 @@ class WebSocketRevocationIT {
     @Test
     void blacklistedToken_sessionClosedBySweep() throws Exception {
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         RecordingHandler handler = connect(token);
 
         JwtClaims claims = jwtTokenProvider.validateAndParse(token);
@@ -197,7 +197,7 @@ class WebSocketRevocationIT {
     @Test
     void messageSocket_blacklistedToken_sessionClosedBySweep() throws Exception {
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         RecordingHandler handler = connectTo("/ws/messages", token);
 
         JwtClaims claims = jwtTokenProvider.validateAndParse(token);
@@ -211,7 +211,7 @@ class WebSocketRevocationIT {
     @Test
     void messageSocket_bannedAccount_sessionClosedBySweep() throws Exception {
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         RecordingHandler handler = connectTo("/ws/messages", token);
 
         user.setStatus(UserStatus.BANNED);
@@ -225,7 +225,7 @@ class WebSocketRevocationIT {
     @Test
     void stillValidSession_survivesSweep() throws Exception {
         User user = activeUser();
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         RecordingHandler handler = connect(token);
 
         sweepService.sweep();

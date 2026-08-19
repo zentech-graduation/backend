@@ -823,6 +823,42 @@ class AuthControllerIT {
     }
 
     @Test
+    void logout_doesNotInvalidateTheAccountsOtherSessions() {
+        String email = uniqueEmail("multi_session");
+        Map<?, ?> first = registerVerifyAndLogin("user_ms", email, TEST_PASSWORD);
+        String firstAccess = (String) first.get("accessToken");
+        String firstRefresh = (String) first.get("refreshToken");
+        Map<?, ?> second =
+                (Map<?, ?>)
+                        postJson(
+                                        "/api/v1/auth/login",
+                                        Map.of("identifier", email, "password", TEST_PASSWORD))
+                                .getBody()
+                                .get("data");
+        String secondAccess = (String) second.get("accessToken");
+        UUID userId = userRepository.findByEmailAndDeletedAtIsNull(email).orElseThrow().getId();
+
+        assertThat(
+                        postJsonWithAuth(
+                                        "/api/v1/auth/logout",
+                                        Map.of("refreshToken", firstRefresh),
+                                        firstAccess)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+
+        assertThat(getWithAuth("/api/v1/test/me", firstAccess).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(getWithAuth("/api/v1/test/me", secondAccess).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT token_epoch FROM users WHERE id = ?",
+                                Integer.class,
+                                userId))
+                .isZero();
+    }
+
+    @Test
     void login_wrongPassword_10timesSameIp_11thReturns429() {
         String forwardedIp = uniqueIp();
         String email = uniqueEmail("rl_login");

@@ -170,8 +170,8 @@ class NotificationLiveDeliveryIT {
         User actor = activeUser("actor");
         User bystander = activeUser("bystander");
 
-        String recipientToken = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER");
-        String bystanderToken = jwtTokenProvider.generateAccessToken(bystander.getId(), "USER");
+        String recipientToken = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER", 0);
+        String bystanderToken = jwtTokenProvider.generateAccessToken(bystander.getId(), "USER", 0);
 
         ConnectedListener recipientListener =
                 connectAndSubscribe(recipient.getId(), recipientToken);
@@ -194,7 +194,7 @@ class NotificationLiveDeliveryIT {
     @Test
     void selfNotification_producesNoPush() throws Exception {
         User user = activeUser("self");
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         ConnectedListener listener = connectAndSubscribe(user.getId(), token);
 
         notificationService.create(

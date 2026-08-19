@@ -153,7 +153,7 @@ class NotificationPushLatencyIT {
     void steadyStatePushLatency_underDefaultPollingInterval() throws Exception {
         User recipient = activeUser("recipient");
         User actor = activeUser("actor");
-        String token = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER", 0);
 
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         String url =

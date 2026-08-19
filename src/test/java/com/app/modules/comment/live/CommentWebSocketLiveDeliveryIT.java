@@ -165,7 +165,7 @@ class CommentWebSocketLiveDeliveryIT {
     @Test
     void realBrowserClient_connectsThroughSecurityChain_andReceivesLiveCommentEvent()
             throws Exception {
-        String token = jwtTokenProvider.generateAccessToken(author.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(author.getId(), "USER", 0);
         String wsUrl =
                 "ws://localhost:"
                         + port

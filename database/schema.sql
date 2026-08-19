@@ -87,6 +87,10 @@ CREATE TABLE users (
     last_login_at       TIMESTAMPTZ,
     -- Meaningful only while status = 'suspended'; NULL means indefinite
     suspended_until     TIMESTAMPTZ,
+    -- Stamped into every access token at issuance and compared on every authenticated request
+    -- (V58). Advancing it invalidates every token already issued to the account. Written only by
+    -- the atomic increment in AdminUserRepository, never through the User entity.
+    token_epoch         INTEGER         NOT NULL DEFAULT 0,
     -- Timestamps
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),

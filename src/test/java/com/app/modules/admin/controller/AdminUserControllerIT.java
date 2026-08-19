@@ -2,10 +2,13 @@ package com.app.modules.admin.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +24,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -33,6 +42,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.app.common.security.jwt.JwtTokenProvider;
 import com.app.modules.admin.service.SuspensionExpiryService;
 import com.app.modules.mail.service.MailService;
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -46,6 +56,9 @@ import com.app.modules.mail.service.MailService;
 @AutoConfigureTestRestTemplate
 class AdminUserControllerIT {
 
+    private static final String JWT_SECRET = "admin-user-controller-it-secret-32-chars-min!!!";
+    private static final String JWT_ISSUER = "https://admin-user.it.local";
+
     @Container @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
@@ -58,8 +71,8 @@ class AdminUserControllerIT {
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         registry.add("spring.data.redis.password", () -> "");
-        registry.add("JWT_SECRET", () -> "admin-user-controller-it-secret-32-chars-min!!!");
-        registry.add("JWT_ISSUER", () -> "https://admin-user.it.local");
+        registry.add("JWT_SECRET", () -> JWT_SECRET);
+        registry.add("JWT_ISSUER", () -> JWT_ISSUER);
         registry.add("JWT_AUDIENCE", () -> "App");
         registry.add("ACCESS_TOKEN_TTL", () -> 900L);
         registry.add("REFRESH_TOKEN_TTL", () -> 3600L);
@@ -680,6 +693,123 @@ class AdminUserControllerIT {
                 .isEqualTo(HttpStatus.NOT_FOUND);
     }
 
+    @Test
+    void forceLogout_targetAccessToken_isRejectedOnTheVeryNextRequest() {
+        TestUser admin = createUser("epoch_logout_admin", "admin");
+        TestUser target = createUser("epoch_logout_user", "user");
+        assertThat(get("/api/v1/users/me", target).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        post(
+                "/api/v1/admin/users/" + target.id() + "/force-logout",
+                Map.of("reason", "Compromised credentials"),
+                admin);
+
+        assertThat(get("/api/v1/users/me", target).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(tokenEpochOf(target.id())).isEqualTo(1);
+    }
+
+    @Test
+    void changeRole_targetAccessToken_isRejectedOnTheVeryNextRequest() {
+        TestUser admin = createUser("epoch_role_admin", "admin");
+        TestUser moderator = createUser("epoch_role_mod", "moderator");
+        assertThat(get("/api/v1/users/me", moderator).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        patch(
+                "/api/v1/admin/users/" + moderator.id() + "/role",
+                Map.of("role", "user", "reason", "Stepped down"),
+                admin);
+
+        assertThat(get("/api/v1/users/me", moderator).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(tokenEpochOf(moderator.id())).isEqualTo(1);
+    }
+
+    @Test
+    void forceLogout_tokenMintedAtTheNewEpoch_isAccepted() {
+        TestUser admin = createUser("epoch_reissue_admin", "admin");
+        TestUser target = createUser("epoch_reissue_user", "user");
+        post(
+                "/api/v1/admin/users/" + target.id() + "/force-logout",
+                Map.of("reason", "Compromised credentials"),
+                admin);
+
+        TestUser reissued =
+                new TestUser(
+                        target.id(),
+                        target.username(),
+                        target.email(),
+                        jwtTokenProvider.generateAccessToken(
+                                target.id(), "USER", tokenEpochOf(target.id())));
+
+        assertThat(get("/api/v1/users/me", reissued).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void resolve_tokenWithoutEpochClaim_isAcceptedAgainstAnUntouchedAccount() {
+        TestUser target = createUser("epoch_legacy_user", "user");
+
+        TestUser legacy =
+                new TestUser(
+                        target.id(),
+                        target.username(),
+                        target.email(),
+                        mintTokenWithoutEpochClaim(target.id()));
+
+        assertThat(get("/api/v1/users/me", legacy).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void resolve_tokenWithoutEpochClaim_isRejectedAfterForceLogout() {
+        TestUser admin = createUser("epoch_legacy_admin", "admin");
+        TestUser target = createUser("epoch_legacy_gone", "user");
+        TestUser legacy =
+                new TestUser(
+                        target.id(),
+                        target.username(),
+                        target.email(),
+                        mintTokenWithoutEpochClaim(target.id()));
+
+        post(
+                "/api/v1/admin/users/" + target.id() + "/force-logout",
+                Map.of("reason", "Compromised credentials"),
+                admin);
+
+        assertThat(get("/api/v1/users/me", legacy).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    private int tokenEpochOf(UUID userId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT token_epoch FROM users WHERE id = ?", Integer.class, userId);
+    }
+
+    // Reproduces a token minted before the epoch claim existed. The encoder and the claim set are
+    // the ones JwtTokenProvider uses, minus the epoch claim, so this differs from a live token in
+    // exactly the one respect the deploy-time compatibility rule is about.
+    private String mintTokenWithoutEpochClaim(UUID userId) {
+        SecretKey key =
+                new SecretKeySpec(
+                        JWT_SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256");
+        JwtEncoder encoder = new NimbusJwtEncoder(new ImmutableSecret<>(key));
+        Instant now = Instant.now();
+        JwtClaimsSet claims =
+                JwtClaimsSet.builder()
+                        .issuer(JWT_ISSUER)
+                        .audience(List.of("App"))
+                        .subject(userId.toString())
+                        .claim("role", "USER")
+                        .claim("jti", UUID.randomUUID().toString())
+                        .issuedAt(now)
+                        .notBefore(now)
+                        .expiresAt(now.plusSeconds(900))
+                        .build();
+        return encoder.encode(
+                        JwtEncoderParameters.from(
+                                JwsHeader.with(MacAlgorithm.HS256).build(), claims))
+                .getTokenValue();
+    }
+
     private TestUser createUser(String prefix, String role) {
         UUID id = UUID.randomUUID();
         String username = prefix + "_" + id.toString().substring(0, 8);
@@ -692,7 +822,10 @@ class AdminUserControllerIT {
                 email,
                 role);
         return new TestUser(
-                id, username, email, jwtTokenProvider.generateAccessToken(id, role.toUpperCase()));
+                id,
+                username,
+                email,
+                jwtTokenProvider.generateAccessToken(id, role.toUpperCase(), 0));
     }
 
     private void softDelete(UUID userId) {

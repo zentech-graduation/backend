@@ -276,7 +276,7 @@ class BrokerTopicSendGuardIT {
 
     private StompSession connect(User user, CompletableFuture<Throwable> errorSink)
             throws Exception {
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         String wsUrl =
                 "ws://localhost:"
                         + port

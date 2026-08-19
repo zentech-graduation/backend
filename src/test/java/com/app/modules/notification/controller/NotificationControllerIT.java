@@ -325,7 +325,7 @@ class NotificationControllerIT {
     }
 
     private String jwtFor(User user) {
-        return jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
+        return jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name(), 0);
     }
 
     private static User activeUser(String username) {

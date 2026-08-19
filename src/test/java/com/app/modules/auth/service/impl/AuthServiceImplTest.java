@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -394,7 +395,8 @@ class AuthServiceImplTest {
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp =
@@ -412,7 +414,8 @@ class AuthServiceImplTest {
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         Logger logger = (Logger) LoggerFactory.getLogger(AuthServiceImpl.class);
@@ -441,7 +444,8 @@ class AuthServiceImplTest {
         when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp = service.login(new LoginRequest("alice", TEST_PASSWORD), stubRequest());
@@ -489,7 +493,8 @@ class AuthServiceImplTest {
         when(userRepository.findByUsernameAndDeletedAtIsNull("ALICE")).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp = service.login(new LoginRequest("ALICE", TEST_PASSWORD), stubRequest());
@@ -574,7 +579,8 @@ class AuthServiceImplTest {
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(userId))
                 .thenReturn(Optional.of(credential(userId, "HASH")));
-        when(jwtTokenProvider.generateAccessToken(eq(userId), eq("USER"))).thenReturn("ACCESS-NEW");
+        when(jwtTokenProvider.generateAccessToken(eq(userId), eq("USER"), anyInt()))
+                .thenReturn("ACCESS-NEW");
 
         AuthResponse resp = service.refresh("OLD", stubRequest());
 
@@ -611,7 +617,7 @@ class AuthServiceImplTest {
         String rawAccessToken = "raw-access";
         String jti = UUID.randomUUID().toString();
         Instant exp = Instant.now().plusSeconds(600);
-        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "USER", jti, exp);
+        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "USER", jti, 0, exp);
         when(jwtTokenProvider.validateAndParse(rawAccessToken)).thenReturn(claims);
 
         SecurityContextHolder.getContext()
@@ -807,7 +813,8 @@ class AuthServiceImplTest {
         User user = activeUser();
         user.setId(userId);
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
-        when(jwtTokenProvider.generateAccessToken(eq(userId), anyString())).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(userId), anyString(), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(userId), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp = service.verifyEmail("VALID-TOKEN", stubRequest());
