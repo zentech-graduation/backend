@@ -15,10 +15,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Added
+- Two people who follow each other now get a conversation automatically, so writing to someone no longer depends on one of them starting a thread first.
+Pairs who already followed each other before this release are given one by the upgrade.
 - A message that carries an attachment now includes the attachment's URL, dimensions, duration, and blurhash in the message response, so a client can render it without a second request per message.
-
 - Prometheus metrics are now exposed for scraping at `/actuator/prometheus`, which previously returned 404 despite the registry being present.
 - Local service containers now declare healthchecks and restart policies, and the application image declares a healthcheck.
+
+### Removed
+- Group conversations.
+The endpoints, the group fields on conversation responses, and the underlying columns are all gone, and messaging is now one to one.
+Existing group conversations are deleted by the upgrade, after being copied into archive tables so the content is recoverable.
+
+### Fixed
+- Ending a follow no longer leaves an empty conversation behind.
+A conversation that already has messages in it is kept, because unfollowing someone should not destroy the record of what was said.
 
 ### Changed
 - Real-time direct-message delivery is now enabled in the production profile. The setting was absent there, so it fell back to off and messages were delivered only on refresh.
