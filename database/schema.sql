@@ -419,6 +419,9 @@ CREATE TABLE conversation_participants (
     joined_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     left_at             TIMESTAMPTZ,
     last_read_at        TIMESTAMPTZ,    -- for unread badge calculation
+    pinned_at           TIMESTAMPTZ,    -- non-null pins the conversation to the top of this user's list
+    is_muted            BOOLEAN         NOT NULL DEFAULT FALSE,
+    nickname            VARCHAR(50),    -- this user's private label for the other participant
     PRIMARY KEY (conversation_id, user_id)
 );
 

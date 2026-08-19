@@ -15,4 +15,12 @@ public record ParticipantResponse(
         @Schema(description = "Avatar CDN URL.", nullable = true) String avatarUrl,
         @Schema(description = "When this member joined.") OffsetDateTime joinedAt,
         @Schema(description = "When this member left, or null if still active.", nullable = true)
-                OffsetDateTime leftAt) {}
+                OffsetDateTime leftAt,
+        @Schema(
+                        description =
+                                "This row's own private label for the other participant; null if"
+                                        + " that user has not set one. Only meaningful on the"
+                                        + " caller's own row - it is never another user's label"
+                                        + " for them.",
+                        nullable = true)
+                String nickname) {}

@@ -62,4 +62,58 @@ public interface ConversationService {
      *     CONVERSATION_FORBIDDEN when the caller is not an active participant
      */
     void leaveConversation(UUID actorId, UUID conversationId);
+
+    /**
+     * Pins a conversation to the top of the caller's own conversation list. Idempotent: pinning an
+     * already-pinned conversation only refreshes its pin time.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to pin
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void pinConversation(UUID actorId, UUID conversationId);
+
+    /**
+     * Unpins a conversation for the caller. A no-op, not an error, when it was not pinned.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to unpin
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void unpinConversation(UUID actorId, UUID conversationId);
+
+    /**
+     * Mutes a conversation for the caller: the {@code message} notification is no longer created
+     * for them from this conversation. The conversation still counts toward their unread total.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to mute
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void muteConversation(UUID actorId, UUID conversationId);
+
+    /**
+     * Unmutes a conversation for the caller.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to unmute
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void unmuteConversation(UUID actorId, UUID conversationId);
+
+    /**
+     * Sets or clears the caller's own private label for the other participant in this conversation.
+     * Visible only to the caller; the other participant's own view is unaffected.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to customize
+     * @param nickname the label to show, or null to clear it
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void setNickname(UUID actorId, UUID conversationId, String nickname);
 }

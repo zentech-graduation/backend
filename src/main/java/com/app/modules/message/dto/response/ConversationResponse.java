@@ -16,4 +16,6 @@ public record ConversationResponse(
                         description = "Creation time of the newest message; null if none yet.",
                         nullable = true)
                 OffsetDateTime lastMessageAt,
-        @Schema(description = "Creation timestamp.") OffsetDateTime createdAt) {}
+        @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
+        @Schema(description = "Whether the caller has pinned this conversation.") boolean pinned,
+        @Schema(description = "Whether the caller has muted this conversation.") boolean muted) {}

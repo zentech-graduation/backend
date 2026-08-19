@@ -32,27 +32,36 @@ public interface MessageMapper {
     @Mapping(source = "user.username", target = "username")
     @Mapping(source = "user.displayName", target = "displayName")
     @Mapping(source = "user.avatarUrl", target = "avatarUrl")
+    @Mapping(source = "participant.nickname", target = "nickname")
     ParticipantResponse toParticipantResponse(ConversationParticipant participant, User user);
 
     /**
-     * Builds the conversation detail response from the entity and its already-assembled participant
-     * summaries.
+     * Builds the conversation detail response from the entity, its already-assembled participant
+     * summaries, and the caller's own pin/mute state.
      *
      * @param conversation the source conversation
      * @param participants active and former members, already hydrated
+     * @param pinned whether the requesting caller has pinned this conversation
+     * @param muted whether the requesting caller has muted this conversation
      * @return the conversation detail response
      */
     ConversationResponse toConversationResponse(
-            Conversation conversation, List<ParticipantResponse> participants);
+            Conversation conversation,
+            List<ParticipantResponse> participants,
+            boolean pinned,
+            boolean muted);
 
     /**
      * Builds one conversation-list row from the entity, its active participants, a
-     * separately-computed unread count, and its newest message preview.
+     * separately-computed unread count, its newest message preview, and the caller's own pin/mute
+     * state.
      *
      * @param conversation the source conversation
      * @param participants active members, already hydrated
      * @param unreadCount unread-message count for the requesting user, computed by the caller
      * @param lastMessage the conversation's newest message, or null if none yet
+     * @param pinned whether the requesting caller has pinned this conversation
+     * @param muted whether the requesting caller has muted this conversation
      * @return the conversation summary response
      */
     @Mapping(source = "conversation.id", target = "id")
@@ -60,7 +69,9 @@ public interface MessageMapper {
             Conversation conversation,
             List<ParticipantResponse> participants,
             long unreadCount,
-            MessageResponse lastMessage);
+            MessageResponse lastMessage,
+            boolean pinned,
+            boolean muted);
 
     /**
      * Projects a message entity onto its API response shape, including a tombstoned one.

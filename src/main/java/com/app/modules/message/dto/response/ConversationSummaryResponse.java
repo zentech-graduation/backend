@@ -21,4 +21,6 @@ public record ConversationSummaryResponse(
                                 "Preview of the newest message, including a tombstoned one; null"
                                         + " if the conversation has no message yet.",
                         nullable = true)
-                MessageResponse lastMessage) {}
+                MessageResponse lastMessage,
+        @Schema(description = "Whether the caller has pinned this conversation.") boolean pinned,
+        @Schema(description = "Whether the caller has muted this conversation.") boolean muted) {}

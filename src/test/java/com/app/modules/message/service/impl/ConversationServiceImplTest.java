@@ -94,37 +94,56 @@ class ConversationServiceImplTest {
                                     u == null ? null : u.getDisplayName(),
                                     u == null ? null : u.getAvatarUrl(),
                                     p.getJoinedAt(),
-                                    p.getLeftAt());
+                                    p.getLeftAt(),
+                                    p.getNickname());
                         });
         lenient()
-                .when(mapper.toConversationResponse(any(), any()))
+                .when(
+                        mapper.toConversationResponse(
+                                any(),
+                                any(),
+                                org.mockito.ArgumentMatchers.anyBoolean(),
+                                org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(
                         inv -> {
                             Conversation c = inv.getArgument(0);
                             List<ParticipantResponse> participants = inv.getArgument(1);
+                            boolean pinned = inv.getArgument(2);
+                            boolean muted = inv.getArgument(3);
                             return new ConversationResponse(
                                     c.getId(),
                                     c.getCreatedBy(),
                                     participants,
                                     c.getLastMessageAt(),
-                                    c.getCreatedAt());
+                                    c.getCreatedAt(),
+                                    pinned,
+                                    muted);
                         });
         lenient()
                 .when(
                         mapper.toSummaryResponse(
-                                any(), any(), org.mockito.ArgumentMatchers.anyLong(), any()))
+                                any(),
+                                any(),
+                                org.mockito.ArgumentMatchers.anyLong(),
+                                any(),
+                                org.mockito.ArgumentMatchers.anyBoolean(),
+                                org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(
                         inv -> {
                             Conversation c = inv.getArgument(0);
                             List<ParticipantResponse> participants = inv.getArgument(1);
                             long unread = inv.getArgument(2);
                             MessageResponse lastMessage = inv.getArgument(3);
+                            boolean pinned = inv.getArgument(4);
+                            boolean muted = inv.getArgument(5);
                             return new ConversationSummaryResponse(
                                     c.getId(),
                                     participants,
                                     unread,
                                     c.getLastMessageAt(),
-                                    lastMessage);
+                                    lastMessage,
+                                    pinned,
+                                    muted);
                         });
     }
 
@@ -357,6 +376,121 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void pinConversation_activeParticipant_setsPinnedAt() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.pinConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.getPinnedAt()).isNotNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void pinConversation_nonParticipant_throwsConversationForbidden() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.pinConversation(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+        verify(participantRepository, never()).save(any());
+    }
+
+    @Test
+    void unpinConversation_pinnedParticipant_clearsPinnedAt() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        actorParticipant.setPinnedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.unpinConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.getPinnedAt()).isNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void muteConversation_activeParticipant_setsMuted() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.muteConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.isMuted()).isTrue();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void unmuteConversation_mutedParticipant_clearsMuted() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        actorParticipant.setMuted(true);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.unmuteConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.isMuted()).isFalse();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void setNickname_blankValue_clearsNickname() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        actorParticipant.setNickname("Old Name");
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.setNickname(actorId, conversationId, "   ");
+
+        assertThat(actorParticipant.getNickname()).isNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void setNickname_nonBlankValue_setsNickname() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.setNickname(actorId, conversationId, "Best Friend");
+
+        assertThat(actorParticipant.getNickname()).isEqualTo("Best Friend");
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
     void listMyConversations_firstPage_returnsSummariesWithCursors() {
         UUID actorId = UUID.randomUUID();
         UUID conv1Id = UUID.randomUUID();
@@ -381,6 +515,47 @@ class ConversationServiceImplTest {
         assertThat(result.getPageInfo().getStartCursor()).isNotBlank();
         assertThat(result.getPageInfo().getEndCursor()).isNotBlank();
         assertThat(result.getPageInfo().isHasPreviousPage()).isFalse();
+    }
+
+    @Test
+    void listMyConversations_firstPageWithPinned_prependsPinnedAheadOfUnpinnedPage() {
+        UUID actorId = UUID.randomUUID();
+        UUID pinnedConvId = UUID.randomUUID();
+        UUID unpinnedConvId = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        Conversation pinnedConv =
+                Conversation.builder().id(pinnedConvId).lastMessageAt(now.minusDays(3)).build();
+        Conversation unpinnedConv =
+                Conversation.builder().id(unpinnedConvId).lastMessageAt(now).build();
+        ConversationParticipant myPinnedRow = participant(pinnedConvId, actorId, null);
+        myPinnedRow.setPinnedAt(now.minusHours(1));
+        when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
+                .thenReturn(List.of(unpinnedConv));
+        when(conversationRepository.findMyPinnedConversations(actorId))
+                .thenReturn(List.of(pinnedConv));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(
+                        List.of(pinnedConvId, unpinnedConvId)))
+                .thenReturn(List.of(myPinnedRow));
+        when(messageRepository.countUnreadPerConversation(
+                        eq(actorId), eq(List.of(pinnedConvId, unpinnedConvId))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> result =
+                service.listMyConversations(actorId, null, 20);
+
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent().get(0).id()).isEqualTo(pinnedConvId);
+        assertThat(result.getContent().get(0).pinned()).isTrue();
+        assertThat(result.getContent().get(1).id()).isEqualTo(unpinnedConvId);
+        assertThat(result.getContent().get(1).pinned()).isFalse();
+        // The end cursor must still anchor on the unpinned page's own last row, not the pinned one,
+        // so continuation resumes inside the keyset-paginated sequence.
+        assertThat(
+                        CursorCodec.decode(
+                                        result.getPageInfo().getEndCursor(),
+                                        CursorScope.CONVERSATIONS)
+                                .id())
+                .isEqualTo(unpinnedConvId);
     }
 
     @Test

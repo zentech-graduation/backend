@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,6 +24,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.dto.request.CreateDirectConversationRequest;
 import com.app.modules.message.dto.request.SendMessageRequest;
+import com.app.modules.message.dto.request.SetNicknameRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
 import com.app.modules.message.dto.response.MessageResponse;
@@ -308,4 +310,119 @@ public interface MessageApi {
     @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD_COUNT)
     ResponseEntity<ApiResponse<UnreadCountResponse>> getUnreadCount();
+
+    @Operation(
+            summary = "Pin a conversation",
+            description =
+                    "Pins a conversation to the top of the caller's own conversation list."
+                            + " Idempotent. Requires authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation pinned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PIN)
+    ResponseEntity<ApiResponse<Void>> pinConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Unpin a conversation",
+            description =
+                    "Unpins a conversation for the caller; a no-op if it was not pinned. Requires"
+                            + " authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation unpinned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PIN)
+    ResponseEntity<ApiResponse<Void>> unpinConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Mute a conversation",
+            description =
+                    "Suppresses message notifications from this conversation for the caller. The"
+                            + " conversation still counts toward their unread total. Requires"
+                            + " authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation muted"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.MUTE)
+    ResponseEntity<ApiResponse<Void>> muteConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Unmute a conversation",
+            description =
+                    "Restores message notifications from this conversation for the caller."
+                            + " Requires authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation unmuted"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.MUTE)
+    ResponseEntity<ApiResponse<Void>> unmuteConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Set or clear the caller's nickname for a conversation",
+            description =
+                    "Sets the caller's own private label for the other participant in this"
+                            + " conversation, or clears it when the nickname is null or blank."
+                            + " Visible only to the caller. Requires authentication as an active"
+                            + " participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Nickname set or cleared"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PutMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.NICKNAME)
+    ResponseEntity<ApiResponse<Void>> setNickname(
+            @PathVariable("conversationId") UUID conversationId,
+            @Valid @RequestBody SetNicknameRequest request);
 }

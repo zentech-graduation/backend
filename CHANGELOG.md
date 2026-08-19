@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Added
+- A conversation can now be pinned to the top of the caller's own list, muted to suppress its notifications, and given a private nickname visible only to the caller, all independent of the other participant's own view.
 - A conversation can now be deleted from the caller's own inbox only, and marked unread again.
 Deleting only hides it for the caller; the other participant and the message history are untouched, and a new message from them reactivates it for the caller automatically.
 - Two people who follow each other now get a conversation automatically, so writing to someone no longer depends on one of them starting a thread first.

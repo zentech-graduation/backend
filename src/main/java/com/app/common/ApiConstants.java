@@ -99,6 +99,9 @@ public final class ApiConstants {
         public static final String READ = "/{conversationId}/read";
         public static final String UNREAD = "/{conversationId}/unread";
         public static final String UNREAD_COUNT = "/unread-count";
+        public static final String PIN = "/{conversationId}/pin";
+        public static final String MUTE = "/{conversationId}/mute";
+        public static final String NICKNAME = "/{conversationId}/nickname";
     }
 
     public static final class Notifications {

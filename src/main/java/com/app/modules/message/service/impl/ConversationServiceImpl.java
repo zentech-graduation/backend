@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -155,7 +156,7 @@ public class ConversationServiceImpl implements ConversationService {
             participantRepository.save(newParticipant(conversation.getId(), targetId));
             log.info("Direct conversation created: conversationId={}", conversation.getId());
         }
-        return assembleDetail(conversation);
+        return assembleDetail(conversation, actorId);
     }
 
     @Override
@@ -174,14 +175,41 @@ public class ConversationServiceImpl implements ConversationService {
         if (hasNextPage) {
             conversations = conversations.subList(0, pageSize);
         }
-        if (conversations.isEmpty()) {
+        // Cursors are derived from the unpinned page alone, before the pinned prepend below, so
+        // continuation always resumes within the keyset-paginated sequence and never re-anchors on
+        // a pinned row.
+        String startCursor = conversations.isEmpty() ? null : encodeCursor(conversations.get(0));
+        String endCursor =
+                conversations.isEmpty()
+                        ? null
+                        : encodeCursor(conversations.get(conversations.size() - 1));
+
+        // Pinned conversations bypass keyset pagination entirely and are shown ahead of the first
+        // page only; see ConversationRepository.findMyPinnedConversations.
+        List<Conversation> pinned =
+                decoded.isEmpty()
+                        ? conversationRepository.findMyPinnedConversations(actorId)
+                        : List.of();
+        List<Conversation> allConversations =
+                pinned.isEmpty()
+                        ? conversations
+                        : Stream.concat(pinned.stream(), conversations.stream()).toList();
+        if (allConversations.isEmpty()) {
             return CursorPageResponse.of(
                     Collections.emptyList(), false, null, null, cursor != null);
         }
 
-        List<UUID> conversationIds = conversations.stream().map(Conversation::getId).toList();
+        List<UUID> conversationIds = allConversations.stream().map(Conversation::getId).toList();
+        List<ConversationParticipant> activeParticipants =
+                participantRepository.findByIdConversationIdInAndLeftAtIsNull(conversationIds);
         Map<UUID, List<ParticipantResponse>> participantsByConversation =
-                batchAssembleActiveParticipants(conversationIds);
+                groupParticipantResponses(activeParticipants);
+        Map<UUID, ConversationParticipant> myParticipantByConversation =
+                activeParticipants.stream()
+                        .filter(p -> p.getId().getUserId().equals(actorId))
+                        .collect(
+                                Collectors.toMap(
+                                        p -> p.getId().getConversationId(), Function.identity()));
         Map<UUID, Long> unreadByConversation =
                 messageRepository.countUnreadPerConversation(actorId, conversationIds).stream()
                         .collect(
@@ -214,18 +242,23 @@ public class ConversationServiceImpl implements ConversationService {
                                                         m, mediaFor(lastMessageMedia, m))));
 
         List<ConversationSummaryResponse> content =
-                conversations.stream()
+                allConversations.stream()
                         .map(
-                                c ->
-                                        mapper.toSummaryResponse(
-                                                c,
-                                                participantsByConversation.getOrDefault(
-                                                        c.getId(), List.of()),
-                                                unreadByConversation.getOrDefault(c.getId(), 0L),
-                                                lastMessageByConversation.get(c.getId())))
+                                c -> {
+                                    ConversationParticipant mine =
+                                            myParticipantByConversation.get(c.getId());
+                                    boolean isPinned = mine != null && mine.getPinnedAt() != null;
+                                    boolean isMuted = mine != null && mine.isMuted();
+                                    return mapper.toSummaryResponse(
+                                            c,
+                                            participantsByConversation.getOrDefault(
+                                                    c.getId(), List.of()),
+                                            unreadByConversation.getOrDefault(c.getId(), 0L),
+                                            lastMessageByConversation.get(c.getId()),
+                                            isPinned,
+                                            isMuted);
+                                })
                         .toList();
-        String startCursor = encodeCursor(conversations.get(0));
-        String endCursor = encodeCursor(conversations.get(conversations.size() - 1));
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);
     }
 
@@ -234,7 +267,7 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationResponse getConversation(UUID actorId, UUID conversationId) {
         Conversation conversation = fetchConversation(conversationId);
         requireActiveParticipant(conversationId, actorId);
-        return assembleDetail(conversation);
+        return assembleDetail(conversation, actorId);
     }
 
     @Override
@@ -248,6 +281,54 @@ public class ConversationServiceImpl implements ConversationService {
                         .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
         participant.setLeftAt(OffsetDateTime.now(ZoneOffset.UTC));
         participantRepository.save(participant);
+    }
+
+    @Override
+    @Transactional
+    public void pinConversation(UUID actorId, UUID conversationId) {
+        ConversationParticipant participant = fetchActiveParticipant(conversationId, actorId);
+        participant.setPinnedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        participantRepository.save(participant);
+    }
+
+    @Override
+    @Transactional
+    public void unpinConversation(UUID actorId, UUID conversationId) {
+        ConversationParticipant participant = fetchActiveParticipant(conversationId, actorId);
+        participant.setPinnedAt(null);
+        participantRepository.save(participant);
+    }
+
+    @Override
+    @Transactional
+    public void muteConversation(UUID actorId, UUID conversationId) {
+        ConversationParticipant participant = fetchActiveParticipant(conversationId, actorId);
+        participant.setMuted(true);
+        participantRepository.save(participant);
+    }
+
+    @Override
+    @Transactional
+    public void unmuteConversation(UUID actorId, UUID conversationId) {
+        ConversationParticipant participant = fetchActiveParticipant(conversationId, actorId);
+        participant.setMuted(false);
+        participantRepository.save(participant);
+    }
+
+    @Override
+    @Transactional
+    public void setNickname(UUID actorId, UUID conversationId, String nickname) {
+        ConversationParticipant participant = fetchActiveParticipant(conversationId, actorId);
+        participant.setNickname(nickname == null || nickname.isBlank() ? null : nickname);
+        participantRepository.save(participant);
+    }
+
+    private ConversationParticipant fetchActiveParticipant(UUID conversationId, UUID actorId) {
+        fetchConversation(conversationId);
+        return participantRepository
+                .findByIdConversationIdAndIdUserId(conversationId, actorId)
+                .filter(p -> p.getLeftAt() == null)
+                .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
     }
 
     // Stealth block model: matches assemblePublicProfile's reference behaviour - a block in
@@ -294,9 +375,15 @@ public class ConversationServiceImpl implements ConversationService {
                 .build();
     }
 
-    private ConversationResponse assembleDetail(Conversation conversation) {
+    private ConversationResponse assembleDetail(Conversation conversation, UUID actorId) {
+        ConversationParticipant mine =
+                participantRepository
+                        .findByIdConversationIdAndIdUserId(conversation.getId(), actorId)
+                        .orElse(null);
+        boolean pinned = mine != null && mine.getPinnedAt() != null;
+        boolean muted = mine != null && mine.isMuted();
         return mapper.toConversationResponse(
-                conversation, assembleParticipants(conversation.getId()));
+                conversation, assembleParticipants(conversation.getId()), pinned, muted);
     }
 
     private List<ParticipantResponse> assembleParticipants(UUID conversationId) {
@@ -308,10 +395,8 @@ public class ConversationServiceImpl implements ConversationService {
                 .toList();
     }
 
-    private Map<UUID, List<ParticipantResponse>> batchAssembleActiveParticipants(
-            List<UUID> conversationIds) {
-        List<ConversationParticipant> participants =
-                participantRepository.findByIdConversationIdInAndLeftAtIsNull(conversationIds);
+    private Map<UUID, List<ParticipantResponse>> groupParticipantResponses(
+            List<ConversationParticipant> participants) {
         Map<UUID, User> users = hydrateUsers(participants);
         Map<UUID, List<ParticipantResponse>> result = new LinkedHashMap<>();
         for (ConversationParticipant participant : participants) {
