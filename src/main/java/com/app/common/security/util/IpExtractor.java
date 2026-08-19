@@ -45,6 +45,17 @@ public class IpExtractor {
             }
         }
         this.trustedRanges = List.copyOf(ranges);
+        if (this.trustedRanges.isEmpty()) {
+            // Behind a load balancer with no trusted-proxy entry configured, every extracted IP is
+            // the balancer's own address. That failure is silent by nature: the columns fill in and
+            // every account simply appears to have signed in from one identical address, which
+            // reads as working data. This warning is the only place the cause is visible before
+            // someone tries to interpret that data. Correct and expected when directly exposed.
+            log.warn(
+                    "app.security.trusted-proxy-cidrs is empty: X-Forwarded-For is ignored and"
+                            + " every recorded client IP will be the direct peer address. If this"
+                            + " instance sits behind a proxy, every stored IP will be the proxy's.");
+        }
     }
 
     /**

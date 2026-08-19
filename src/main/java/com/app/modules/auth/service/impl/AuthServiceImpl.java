@@ -127,7 +127,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void register(RegisterRequest request) {
+    public void register(RegisterRequest request, HttpServletRequest httpRequest) {
         // Return a single generic conflict code for both email and username collisions so the
         // response cannot be used to enumerate which emails or usernames are already registered.
         if (userRepository.existsByEmail(request.email())
@@ -138,6 +138,7 @@ public class AuthServiceImpl implements AuthService {
         // Hash the password before opening a transaction so the connection is not held during
         // the BCrypt computation (~200-300ms at cost 12).
         String passwordHash = passwordEncoder.encode(request.password());
+        String registrationIp = ipExtractor.extract(httpRequest);
 
         transactionTemplate.executeWithoutResult(
                 status -> {
@@ -165,6 +166,9 @@ public class AuthServiceImpl implements AuthService {
                                     .status(UserStatus.ACTIVE)
                                     .isPrivate(false)
                                     .isVerified(false)
+                                    // Same transaction as the users insert, so an account can never
+                                    // exist without the origin that created it.
+                                    .registrationIp(registrationIp)
                                     .build();
                     User savedUser = userRepository.save(user);
 
@@ -434,8 +438,17 @@ public class AuthServiceImpl implements AuthService {
         return issueSession(user, emailVerified, httpRequest);
     }
 
+    // Every caller runs this inside a write transaction, which is what lets the last-login write
+    // below commit with the refresh_tokens row rather than as a separate statement.
     private AuthResponse issueSession(
             User user, boolean emailVerified, HttpServletRequest httpRequest) {
+        String clientIp = ipExtractor.extract(httpRequest);
+        // Only a real session issuance advances these. The refresh path deliberately does not call
+        // this method: a "last login" that moved on every token refresh would stop being a login
+        // signal and would report an idle background tab as recent activity.
+        user.setLastLoginAt(OffsetDateTime.now());
+        user.setLastLoginIp(clientIp);
+        userRepository.save(user);
         String accessToken =
                 jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
         String refreshToken =
@@ -443,7 +456,7 @@ public class AuthServiceImpl implements AuthService {
                         user.getId(),
                         null,
                         httpRequest.getHeader(HttpHeaders.USER_AGENT),
-                        ipExtractor.extract(httpRequest));
+                        clientIp);
         return new AuthResponse(
                 accessToken,
                 refreshToken,

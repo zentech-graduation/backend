@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- An administrator can now list, search, and inspect accounts, spanning every account status including removed accounts, which no public surface shows.
+- The account detail view shows where an account was created from, where and when it last signed in, its live sessions, and the reports filed against it.
+- An administrator can now end every one of an account's sessions in one action, and the audit entry records how many were ended.
+- An administrator can now change an account's role between user and moderator, and promote a moderator to administrator.
+The change ends the account's sessions in the same operation, so a demotion takes effect immediately rather than when the old session expires.
+- A suspension can now be given a duration in days, after which the account returns to active by itself.
+The first sign-in attempt after the term lapses restores the account, and a periodic sweep does the same for an account nobody signs into, so an expired suspension never lingers.
+- The moderation audit log now records role changes and forced logouts, and the action registry lists every action type the moderation surface is planned to record.
+
+### Changed
+- A moderator reading the moderation audit log now sees only the entries it wrote; an administrator still sees everything.
+Requesting another actor's entries returns nothing rather than their contents, and requesting one by identifier reports it as not found.
+- Moderation requests no longer accept a caller-supplied metadata object.
+The audit log records server-derived facts only, and a request that still sends one is rejected rather than silently stripped.
+- The application now takes its schema-migration lock without holding a transaction open, which is what allows an index to be built without blocking writes to the table.
+
+### Fixed
+- A moderation action's response now carries its creation timestamp, which was previously always null even though the stored entry had one.
+
 ### Security
 - A container image started without an explicit profile now runs the production profile instead of the development one, so a deployment that forgets to set a profile no longer serves API documentation anonymously, marks the refresh cookie non-Secure, or routes outbound mail to localhost.
 - The development profile no longer shadows the configured cookie signing secret with a value published in this repository, so the operator's secret is authoritative in every profile.

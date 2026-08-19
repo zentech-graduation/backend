@@ -34,11 +34,24 @@ spring:
         stringtype: unspecified
   flyway:
     enabled: true
-    # The migration set is a contiguous V01-V43 sequence with no gaps; out-of-order would only
+    # The migration set is a contiguous V01-V57 sequence with no gaps; out-of-order would only
     # suppress Flyway's own check against an out-of-order apply, which has no branch-merge
     # workflow here to justify disabling.
     out-of-order: false
     locations: classpath:db/migration
+    postgresql:
+      # Required for V57, which builds indexes with CREATE INDEX CONCURRENTLY.
+      #
+      # With the default (true), Flyway holds its schema-history lock inside an open transaction on
+      # a second connection for the whole migration run. CREATE INDEX CONCURRENTLY waits for every
+      # transaction that could see the table to finish, so it waits on that connection, which will
+      # not commit until the migration it is guarding completes. Observed directly: the migration
+      # hung indefinitely with the builder backend on wait_event virtualxid and Flyway's own lock
+      # connection reported "idle in transaction" with a live backend_xmin.
+      #
+      # With false, Flyway takes a session-level advisory lock instead. Concurrent Flyway runs are
+      # still mutually excluded; the lock simply no longer pins a transaction snapshot open.
+      transactional-lock: false
   data:
     redis:
       host: ${REDIS_HOST}

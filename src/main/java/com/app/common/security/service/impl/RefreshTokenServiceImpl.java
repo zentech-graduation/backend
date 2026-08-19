@@ -7,6 +7,7 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -128,8 +129,24 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     @Override
     @Transactional
-    public void revokeAllForUser(UUID userId) {
-        repository.revokeAllActiveByUserId(userId, OffsetDateTime.now());
+    public int revokeAllForUser(UUID userId) {
+        return repository.revokeAllActiveByUserId(userId, OffsetDateTime.now());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ActiveSession> listActiveSessions(UUID userId, int limit) {
+        return repository.findActiveByUserId(userId, OffsetDateTime.now(), limit).stream()
+                .map(
+                        token ->
+                                new ActiveSession(
+                                        token.getId(),
+                                        token.getDeviceId(),
+                                        token.getUserAgent(),
+                                        token.getIpAddress(),
+                                        token.getCreatedAt(),
+                                        token.getExpiresAt()))
+                .toList();
     }
 
     private static String sha256(String value) {

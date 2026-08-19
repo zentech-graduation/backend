@@ -242,7 +242,11 @@ public class SecurityConfig {
     private void configureRoleBasedEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
-        auth.requestMatchers("/api/v1/admin/users/**").hasRole("ADMIN");
+        // The collection path is listed alongside the sub-tree pattern rather than relying on
+        // "/users/**" also matching zero trailing segments. It does under both of Spring's matcher
+        // implementations, but the ADMIN-only guarantee for the account list should not rest
+        // on that detail surviving a future matcher change.
+        auth.requestMatchers("/api/v1/admin/users", "/api/v1/admin/users/**").hasRole("ADMIN");
         auth.requestMatchers("/api/v1/admin/**").hasAnyRole("MODERATOR", "ADMIN");
         auth.requestMatchers(
                         HttpMethod.GET,

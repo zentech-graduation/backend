@@ -1,5 +1,7 @@
 package com.app.common.security.service;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -44,9 +46,45 @@ public interface RefreshTokenService {
     /**
      * Revokes every active refresh token belonging to the given user.
      *
+     * <p>Terminates refresh capability immediately. It does not invalidate an access token already
+     * in the user's hands: the blacklist is keyed on {@code jti} and no caller other than the token
+     * holder knows it, so access capability survives for up to the remaining access-token lifetime.
+     *
      * @param userId owner whose sessions should be terminated
+     * @return number of sessions that were active and are now revoked
      */
-    void revokeAllForUser(UUID userId);
+    int revokeAllForUser(UUID userId);
+
+    /**
+     * Lists the user's live sessions, newest first.
+     *
+     * <p>A session is live when its refresh token is neither revoked nor past its expiry. The raw
+     * token is never returned; only the row identifier and the device metadata recorded at
+     * issuance.
+     *
+     * @param userId owner whose sessions to list
+     * @param limit maximum sessions to return
+     * @return live sessions ordered by issuance time descending
+     */
+    List<ActiveSession> listActiveSessions(UUID userId, int limit);
 
     record RotationResult(String newRawToken, UUID userId) {}
+
+    /**
+     * One live session, without the token value.
+     *
+     * @param id refresh-token row identifier
+     * @param deviceId opaque device identifier supplied at issuance, or null
+     * @param userAgent user agent recorded at issuance, or null
+     * @param ipAddress client IP recorded at issuance, or null
+     * @param createdAt issuance timestamp
+     * @param expiresAt expiry timestamp
+     */
+    record ActiveSession(
+            UUID id,
+            String deviceId,
+            String userAgent,
+            String ipAddress,
+            OffsetDateTime createdAt,
+            OffsetDateTime expiresAt) {}
 }

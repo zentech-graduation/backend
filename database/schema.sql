@@ -40,7 +40,11 @@ CREATE TYPE admin_action_type AS ENUM (
     'ban_user', 'unban_user', 'suspend_user', 'unsuspend_user',
     'remove_post', 'restore_post',
     'remove_comment', 'restore_comment',
-    'resolve_report', 'dismiss_report'
+    'resolve_report', 'dismiss_report',
+    'change_user_role', 'force_logout',
+    'warn_user', 'revoke_warning', 'issue_strike', 'revoke_strike',
+    'escalate_report',
+    'create_hashtag', 'edit_hashtag', 'ban_hashtag', 'unban_hashtag', 'delete_hashtag'
 );
 CREATE TYPE event_type AS ENUM (
     'post_view', 'post_like', 'post_unlike',
@@ -75,6 +79,14 @@ CREATE TABLE users (
     follower_count      INT             NOT NULL DEFAULT 0 CHECK (follower_count >= 0),
     following_count     INT             NOT NULL DEFAULT 0 CHECK (following_count >= 0),
     post_count          INT             NOT NULL DEFAULT 0 CHECK (post_count >= 0),
+    -- Administrative visibility (V56). Written through IpExtractor, which honours
+    -- X-Forwarded-For only from a configured trusted proxy.
+    registration_ip     INET,
+    last_login_ip       INET,
+    -- Advances on a real login only, never on a token refresh
+    last_login_at       TIMESTAMPTZ,
+    -- Meaningful only while status = 'suspended'; NULL means indefinite
+    suspended_until     TIMESTAMPTZ,
     -- Timestamps
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -747,7 +759,19 @@ INSERT INTO moderation_action_configs (action_key, display_name, requires_reason
     ('remove_comment',  'Remove Comment',  TRUE,  TRUE,  TRUE),
     ('restore_comment', 'Restore Comment', FALSE, TRUE,  TRUE),
     ('resolve_report',  'Resolve Report',  FALSE, FALSE, TRUE),
-    ('dismiss_report',  'Dismiss Report',  FALSE, FALSE, TRUE);
+    ('dismiss_report',  'Dismiss Report',  FALSE, FALSE, TRUE),
+    ('change_user_role', 'Change User Role', TRUE,  TRUE,  TRUE),
+    ('warn_user',        'Warn User',        TRUE,  TRUE,  TRUE),
+    ('revoke_warning',   'Revoke Warning',   FALSE, FALSE, TRUE),
+    ('issue_strike',     'Issue Strike',     TRUE,  TRUE,  TRUE),
+    ('revoke_strike',    'Revoke Strike',    FALSE, FALSE, TRUE),
+    ('escalate_report',  'Escalate Report',  TRUE,  FALSE, TRUE),
+    ('force_logout',     'Force Logout',     TRUE,  FALSE, TRUE),
+    ('create_hashtag',   'Create Hashtag',   FALSE, TRUE,  TRUE),
+    ('edit_hashtag',     'Edit Hashtag',     TRUE,  TRUE,  TRUE),
+    ('ban_hashtag',      'Ban Hashtag',      TRUE,  TRUE,  TRUE),
+    ('unban_hashtag',    'Unban Hashtag',    FALSE, TRUE,  TRUE),
+    ('delete_hashtag',   'Delete Hashtag',   TRUE,  FALSE, TRUE);
 
 -- Feature enable/disable control with optional environment scoping
 CREATE TABLE feature_flags (
@@ -818,6 +842,17 @@ CREATE UNIQUE INDEX idx_users_username_lower ON users (lower(username));
 -- major mail provider's practice. users_email_key (raw UNIQUE column constraint above) is retained
 -- as a structural guard and is implied by this index.
 CREATE UNIQUE INDEX idx_users_email_lower ON users (lower(email));
+-- Administrative account surface (V57). Built CONCURRENTLY by the migration; plain here because
+-- this file describes the final state rather than how to reach it on a live database.
+-- Email had no trigram index before this, so an administrator searching by address paid a parallel
+-- sequential scan of the whole table: measured at 77 ms against 200,000 rows, 0.3 ms with it.
+CREATE INDEX idx_users_email_trgm       ON users USING gin (email gin_trgm_ops);
+-- Turns a status-filtered account page from an Incremental Sort that discards over a thousand rows
+-- per page into a single index seek that carries the keyset tiebreaker.
+CREATE INDEX idx_users_status_created   ON users (status, created_at DESC, id DESC);
+-- Partial, so an indefinite suspension (null deadline) is absent from the index rather than
+-- filtered out of it. Bounds the reinstatement sweep's candidate scan.
+CREATE INDEX idx_users_suspended_until  ON users (suspended_until) WHERE suspended_until IS NOT NULL;
 
 -- follows
 CREATE INDEX idx_follows_following      ON follows (following_id, status, created_at DESC);

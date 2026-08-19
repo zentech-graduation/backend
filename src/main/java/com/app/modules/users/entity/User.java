@@ -81,6 +81,28 @@ public class User {
     @Column(name = "is_verified", nullable = false)
     private boolean isVerified;
 
+    /** Client IP captured at account creation; null for every account created before V56. */
+    @Column(name = "registration_ip", columnDefinition = "inet")
+    private String registrationIp;
+
+    /** Client IP of the most recent real login; not advanced by a token refresh. */
+    @Column(name = "last_login_ip", columnDefinition = "inet")
+    private String lastLoginIp;
+
+    /** Timestamp of the most recent real login; not advanced by a token refresh. */
+    @Column(name = "last_login_at")
+    private OffsetDateTime lastLoginAt;
+
+    /**
+     * Moment a suspension lapses, or null for an indefinite one.
+     *
+     * <p>Meaningful only while {@code status = 'suspended'}. {@code status} remains authoritative
+     * for the authorization decision on any request; this column decides only when a suspended
+     * status ends, and every path that leaves the suspended state clears it.
+     */
+    @Column(name = "suspended_until")
+    private OffsetDateTime suspendedUntil;
+
     /** Maintained exclusively by Postgres trigger {@code trg_follow_counts} (V16). */
     @Column(name = "follower_count", insertable = false, updatable = false)
     private int followerCount;

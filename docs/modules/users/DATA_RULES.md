@@ -10,7 +10,7 @@ The `push_tokens` table has no Java code at all — no entity, no repository, no
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `users` | `id`, `username`, `email`, `display_name`, `bio`, `avatar_url`, `banner_url`, `website_url`, `is_private`, `is_verified`, `status`, `role`, `deleted_at` | Profile fields. Shared with auth module (auth owns the row lifecycle; users module manages profile fields). |
+| `users` | `id`, `username`, `email`, `display_name`, `bio`, `avatar_url`, `banner_url`, `website_url`, `is_private`, `is_verified`, `status`, `role`, `deleted_at`, `registration_ip`, `last_login_ip`, `last_login_at`, `suspended_until` | Profile fields. Shared with auth module (auth owns the row lifecycle; users module manages profile fields). The four columns added in V56 are written by the auth and admin modules only and are never exposed on a public profile shape; see `auth/DATA_RULES.md` and `admin/DATA_RULES.md`. |
 | `user_settings` | `user_id` (PK/FK), `notify_*`, `show_activity_status`, `allow_story_replies`, `allow_message_requests` | Per-user notification and privacy preferences. Created alongside the user account. |
 | `push_tokens` | `id`, `user_id`, `token`, `platform`, `last_used_at` | Device push notification tokens. Multiple tokens per user (one per device). **Schema only — no application code reads or writes this table.** |
 

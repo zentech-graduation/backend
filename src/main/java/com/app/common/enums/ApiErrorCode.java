@@ -122,7 +122,11 @@ public enum ApiErrorCode {
     // No API caller may change an administrator's account status. Removing a rogue administrator is
     // deliberately a database-level operation: an in-application lockout of the whole administrator
     // tier has no recovery path, whereas an escalation requiring database access does.
-    ADMIN_TARGET_PROTECTED("ADMIN_TARGET_PROTECTED", "This account's status cannot be changed through the API", HttpStatus.FORBIDDEN);
+    ADMIN_TARGET_PROTECTED("ADMIN_TARGET_PROTECTED", "This account's status cannot be changed through the API", HttpStatus.FORBIDDEN),
+    // Covers every rejected role transition: a skip-level promotion, an administrator target, and a
+    // no-op. The three are one class of error to the caller - the requested transition is not one
+    // the policy permits - and splitting them would let a caller map out the matrix by probing.
+    ADMIN_ROLE_TRANSITION_FORBIDDEN("ADMIN_ROLE_TRANSITION_FORBIDDEN", "The requested role transition is not permitted", HttpStatus.CONFLICT);
 
     // spotless:on
 

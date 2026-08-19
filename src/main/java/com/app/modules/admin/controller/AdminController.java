@@ -23,6 +23,7 @@ import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.admin.api.AdminApi;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.enums.AdminActionType;
@@ -67,7 +68,8 @@ public class AdminController extends BaseController implements AdminApi {
     @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
-            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request) {
+            @PathVariable("userId") UUID userId,
+            @Valid @RequestBody AdminSuspendUserRequest request) {
         return ok(adminService.suspendUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
@@ -149,7 +151,9 @@ public class AdminController extends BaseController implements AdminApi {
             @RequestParam(required = false) AdminActionType actionType,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
-        return page(adminService.getActions(adminId, actionType, cursor, limit));
+        return page(
+                adminService.getActions(
+                        SecurityUtils.getCurrentUserId(), adminId, actionType, cursor, limit));
     }
 
     /** Returns one audit event to an authenticated moderator or administrator. */
@@ -158,7 +162,7 @@ public class AdminController extends BaseController implements AdminApi {
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> getActionById(
             @PathVariable("actionId") UUID actionId) {
-        return ok(adminService.getActionById(actionId));
+        return ok(adminService.getActionById(SecurityUtils.getCurrentUserId(), actionId));
     }
 
     /** Returns a cursor page of audit summaries for one affected user. */
@@ -170,7 +174,9 @@ public class AdminController extends BaseController implements AdminApi {
                     @PathVariable("userId") UUID userId,
                     @RequestParam(required = false) String cursor,
                     @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
-        return page(adminService.getActionsForUser(userId, cursor, limit));
+        return page(
+                adminService.getActionsForUser(
+                        SecurityUtils.getCurrentUserId(), userId, cursor, limit));
     }
 
     private ResponseEntity<ApiResponse<AdminActionResponse>> ok(AdminActionResponse response) {

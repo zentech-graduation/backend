@@ -3,6 +3,8 @@ package com.app.modules.admin.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,12 +25,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
 import com.app.modules.admin.repository.AdminActionRepository;
+import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.report.entity.Report;
@@ -63,6 +67,7 @@ class AdminServiceImplTest {
                         commentRepository,
                         reportRepository,
                         adminActionMapper,
+                        new AdminActionRecorder(adminActionRepository, adminActionMapper),
                         new AdminAuthorizationServiceImpl());
     }
 
@@ -89,7 +94,7 @@ class AdminServiceImplTest {
 
         AdminActionResponse result =
                 service.suspendUser(
-                        actorId, userId, new AdminActionRequest("Policy breach", null, Map.of()));
+                        actorId, userId, new AdminSuspendUserRequest("Policy breach", null, null));
 
         assertThat(result).isEqualTo(expected);
         assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
@@ -117,9 +122,7 @@ class AdminServiceImplTest {
         assertThatThrownBy(
                         () ->
                                 service.unbanUser(
-                                        actorId,
-                                        userId,
-                                        new AdminActionRequest("Review", null, null)))
+                                        actorId, userId, new AdminActionRequest("Review", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
@@ -136,7 +139,7 @@ class AdminServiceImplTest {
                                 service.suspendUser(
                                         actorId,
                                         actorId,
-                                        new AdminActionRequest("Self action", null, null)))
+                                        new AdminSuspendUserRequest("Self action", null, null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
@@ -156,7 +159,7 @@ class AdminServiceImplTest {
                                 service.banUser(
                                         actorId,
                                         targetId,
-                                        new AdminActionRequest("Admin on admin", null, null)))
+                                        new AdminActionRequest("Admin on admin", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_TARGET_PROTECTED);
@@ -176,7 +179,7 @@ class AdminServiceImplTest {
                                 service.banUser(
                                         actorId,
                                         targetId,
-                                        new AdminActionRequest("Moderator escalation", null, null)))
+                                        new AdminActionRequest("Moderator escalation", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.FORBIDDEN);
@@ -196,7 +199,7 @@ class AdminServiceImplTest {
 
         AdminActionResponse result =
                 service.removePost(
-                        UUID.randomUUID(), postId, new AdminActionRequest("Violation", null, null));
+                        UUID.randomUUID(), postId, new AdminActionRequest("Violation", null));
 
         assertThat(result).isEqualTo(expected);
         verify(postRepository)
@@ -219,7 +222,7 @@ class AdminServiceImplTest {
                 service.restoreComment(
                         UUID.randomUUID(),
                         commentId,
-                        new AdminActionRequest("Appeal accepted", null, null));
+                        new AdminActionRequest("Appeal accepted", null));
 
         assertThat(result).isEqualTo(expected);
         verify(commentRepository).applyAdminModeration(commentId, null);
@@ -242,8 +245,7 @@ class AdminServiceImplTest {
         stubAudit(expected);
 
         AdminActionResponse result =
-                service.resolveReport(
-                        actorId, reportId, new AdminActionRequest("Confirmed", null, null));
+                service.resolveReport(actorId, reportId, new AdminActionRequest("Confirmed", null));
 
         assertThat(result).isEqualTo(expected);
         assertThat(report.getStatus()).isEqualTo(ReportStatus.RESOLVED);
@@ -263,7 +265,7 @@ class AdminServiceImplTest {
                                 service.resolveReport(
                                         UUID.randomUUID(),
                                         reportId,
-                                        new AdminActionRequest("Reopen not allowed", null, null)))
+                                        new AdminActionRequest("Reopen not allowed", null)))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
@@ -271,6 +273,8 @@ class AdminServiceImplTest {
 
     @Test
     void getActions_firstPage_mapsContentAndProbeRow() {
+        UUID actorId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
         AdminAction first = action(AdminActionType.BAN_USER);
         AdminAction probe = action(AdminActionType.REMOVE_POST);
         AdminActionSummaryResponse mapped = summary(AdminActionType.BAN_USER);
@@ -278,11 +282,108 @@ class AdminServiceImplTest {
                 .thenReturn(List.of(first, probe));
         when(adminActionMapper.toSummaryResponseList(List.of(first))).thenReturn(List.of(mapped));
 
-        var result = service.getActions(null, null, null, 1);
+        var result = service.getActions(actorId, null, null, null, 1);
 
         assertThat(result.getContent()).containsExactly(mapped);
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
         assertThat(result.getPageInfo().getEndCursor()).isNotBlank();
+    }
+
+    // The predicate is asserted on the argument reaching the repository, not on the page that comes
+    // back, so the test fails if the filter is ever moved to the web layer or dropped.
+    @Test
+    void getActions_moderatorActor_forcesTheActorFilterToItselfEvenWhenAnotherIsRequested() {
+        UUID actorId = UUID.randomUUID();
+        UUID otherAdminId = UUID.randomUUID();
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findActions(actorId, null, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActions(actorId, otherAdminId, null, null, 1);
+
+        verify(adminActionRepository).findActions(actorId, null, null, null, null, 2);
+        verify(adminActionRepository, never())
+                .findActions(eq(otherAdminId), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void getActions_administratorActor_passesTheRequestedActorFilterThrough() {
+        UUID actorId = UUID.randomUUID();
+        UUID otherAdminId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+        when(adminActionRepository.findActions(otherAdminId, null, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActions(actorId, otherAdminId, null, null, 1);
+
+        verify(adminActionRepository).findActions(otherAdminId, null, null, null, null, 2);
+    }
+
+    @Test
+    void getActions_administratorActorWithNoFilter_readsEveryActorsRows() {
+        UUID actorId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+        when(adminActionRepository.findActions(null, null, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActions(actorId, null, null, null, 1);
+
+        verify(adminActionRepository).findActions(null, null, null, null, null, 2);
+    }
+
+    @Test
+    void getActionsForUser_moderatorActor_narrowsToItsOwnRows() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetUserId = UUID.randomUUID();
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findActions(actorId, targetUserId, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActionsForUser(actorId, targetUserId, null, 1);
+
+        verify(adminActionRepository).findActions(actorId, targetUserId, null, null, null, 2);
+    }
+
+    @Test
+    void getActionsForUser_administratorActor_readsEveryActorsRows() {
+        UUID actorId = UUID.randomUUID();
+        UUID targetUserId = UUID.randomUUID();
+        stubActor(actorId, UserRole.ADMIN);
+        when(adminActionRepository.findActions(null, targetUserId, null, null, null, 2))
+                .thenReturn(List.of());
+
+        service.getActionsForUser(actorId, targetUserId, null, 1);
+
+        verify(adminActionRepository).findActions(null, targetUserId, null, null, null, 2);
+    }
+
+    @Test
+    void getActionById_moderatorActorReadingItsOwnRow_returnsIt() {
+        UUID actorId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AdminAction own = action(AdminActionType.REMOVE_POST);
+        own.setAdminId(actorId);
+        AdminActionResponse expected = response(AdminActionType.REMOVE_POST);
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findById(actionId)).thenReturn(Optional.of(own));
+        when(adminActionMapper.toResponse(own)).thenReturn(expected);
+
+        assertThat(service.getActionById(actorId, actionId)).isEqualTo(expected);
+    }
+
+    @Test
+    void getActionById_moderatorActorReadingAnotherActorsRow_throwsNotFound() {
+        UUID actorId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AdminAction foreign = action(AdminActionType.BAN_USER);
+        foreign.setAdminId(UUID.randomUUID());
+        stubActor(actorId, UserRole.MODERATOR);
+        when(adminActionRepository.findById(actionId)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.getActionById(actorId, actionId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);
     }
 
     @Test
@@ -290,7 +391,7 @@ class AdminServiceImplTest {
         UUID actionId = UUID.randomUUID();
         when(adminActionRepository.findById(actionId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getActionById(actionId))
+        assertThatThrownBy(() -> service.getActionById(UUID.randomUUID(), actionId))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);

@@ -29,7 +29,7 @@ This table cannot be rebuilt from any other source if lost.
 
 | Rule | Enforced By |
 |------|-------------|
-| `action_type` must be one of the 10 values in `admin_action_type` enum | `admin_action_type` enum |
+| `action_type` must be one of the 22 values in `admin_action_type` enum | `admin_action_type` enum |
 | `admin_actions` is an append-only log; there is no `updated_at` and no soft delete | Schema design — no such columns |
 | `target_user_id` becomes NULL if the target user's account is deleted | `ON DELETE SET NULL` on `target_user_id` FK |
 | `report_id` becomes NULL if the associated report is deleted | `ON DELETE SET NULL` on `report_id` FK |
@@ -46,8 +46,14 @@ This table cannot be rebuilt from any other source if lost.
 | Nobody may change an administrator's account `status` through the API, whoever the actor is | `AdminAuthorizationService.assertMayChangeUserStatus` |
 | `ban_user` action must update `users.status = 'banned'` in the same transaction | `AdminServiceImpl.banUser` |
 | `unban_user` action must update `users.status = 'active'` in the same transaction | `AdminServiceImpl.unbanUser` |
-| `suspend_user` action must update `users.status = 'suspended'` in the same transaction | `AdminServiceImpl.suspendUser` |
-| `unsuspend_user` action must update `users.status = 'active'` in the same transaction | `AdminServiceImpl.unsuspendUser` |
+| `suspend_user` action must update `users.status = 'suspended'` in the same transaction, and set `users.suspended_until` when the request carries a duration | `AdminServiceImpl.suspendUser` |
+| `unsuspend_user` action must update `users.status = 'active'` in the same transaction, and clear `users.suspended_until` so the reinstatement sweep cannot re-fire on the row | `AdminServiceImpl.unsuspendUser` |
+| `change_user_role` action must write `users.role` and revoke the target's refresh tokens in the same transaction | `AdminUserServiceImpl.changeRole` |
+| `force_logout` action must revoke every non-revoked `refresh_tokens` row for the target and record the count in `metadata` | `AdminUserServiceImpl.forceLogout` |
+| Only the transitions `user -> moderator`, `moderator -> user` and `moderator -> admin` are permitted; an administrator is never a valid target, a skip-level `user -> admin` promotion is refused, and a request naming the role already held is refused | `RoleTransitionPolicy` |
+| A moderator reading the audit log sees only rows where `admin_id` equals its own id; an administrator sees every row | `AdminServiceImpl.getActions`, `getActionById`, `getActionsForUser` |
+| A lapsed fixed-term suspension returns the account to active and records one `unsuspend_user` row with a null `admin_id` | `SuspensionExpiryServiceImpl`, driven by `UserStateValidator.enforceActive` and `SuspensionExpiryJob` |
+| `metadata` is written from server-derived facts only and is never accepted from a request body | `AdminActionRecorder`, `AdminActionRequest` |
 | `remove_post` action must set `posts.status = 'removed'` and `posts.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removePost` |
 | `restore_post` action must clear `posts.deleted_at` and reset `posts.status = 'published'` in the same transaction | `AdminServiceImpl.restorePost` |
 | `remove_comment` action must set `comments.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removeComment` |
@@ -61,7 +67,8 @@ This table cannot be rebuilt from any other source if lost.
 
 ### C. Scope Simplifications
 
-- Role-based action restrictions are coarse: an administrator may perform every `action_type`, and a moderator may perform every one except the four account-status transitions (`ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`).
+- Role-based action restrictions are coarse: an administrator may perform every `action_type`, and a moderator may perform every one except the four account-status transitions (`ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`), `change_user_role`, and `force_logout`.
+  The boundary is structural rather than per-action: every administrator-only endpoint lives under `/api/v1/admin/users/`, which a single matcher restricts to ADMIN.
   There is no finer-grained per-action permission model.
 - An administrator's account status cannot be changed through the API by anyone, so removing a rogue administrator is a database-level operation.
   This is deliberate.
@@ -69,6 +76,13 @@ This table cannot be rebuilt from any other source if lost.
 - No approval workflow for high-impact actions (e.g., banning a user does not require a second admin to confirm).
 - `metadata` JSONB schema per `action_type` is convention-based, not enforced by the database.
 - No admin audit log UI; audit data is exposed through role-restricted query endpoints in v1.
+- The audit log is row-scoped by actor for a moderator only.
+  An administrator's view is unrestricted, and there is no per-target or per-module scoping beyond that.
+- `suspended_until` is meaningful only while `status = 'suspended'`, and `status` alone decides the authorization outcome on any request.
+  A row with `status <> 'suspended'` and a non-null `suspended_until` is a defect, not a state to interpret.
+- Force logout ends refresh capability immediately but not access capability.
+  The access-token blacklist is keyed on the token's own `jti`, which no administrator holds, so an access token already issued keeps working for the remainder of `ACCESS_TOKEN_TTL`.
+  `WebSocketRevocationSweepService` does not close the target's live realtime sessions either, because it re-validates the access token and that token is still valid.
 
 ---
 

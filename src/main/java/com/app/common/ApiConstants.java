@@ -143,6 +143,15 @@ public final class ApiConstants {
         private Admin() {}
 
         public static final String ROOT = ADMIN;
+        public static final String USERS = "/users";
+        // Declared before USER_BY_ID for readability only. The literal segment wins over the
+        // "/users/{userId}" template in Spring MVC's pattern comparator regardless of declaration
+        // order, and both live under the ADMIN-only "/api/v1/admin/users/**" matcher, so no
+        // authorization outcome depends on which one matches.
+        public static final String USER_SEARCH = "/users/search";
+        public static final String USER_BY_ID = "/users/{userId}";
+        public static final String USER_ROLE = "/users/{userId}/role";
+        public static final String USER_FORCE_LOGOUT = "/users/{userId}/force-logout";
         public static final String BAN_USER = "/users/{userId}/ban";
         public static final String UNBAN_USER = "/users/{userId}/unban";
         public static final String SUSPEND_USER = "/users/{userId}/suspend";
