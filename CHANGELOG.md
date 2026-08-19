@@ -27,6 +27,8 @@ The endpoints, the group fields on conversation responses, and the underlying co
 Existing group conversations are deleted by the upgrade, after being copied into archive tables so the content is recoverable.
 
 ### Fixed
+- Two people following each other back at the same instant no longer deadlock in the database, which previously failed one of the two follows outright.
+The follower and following counters are updated in a fixed order now, so the two directions of a pair queue behind each other instead of colliding.
 - Ending a follow no longer leaves an empty conversation behind.
 A conversation that already has messages in it is kept, because unfollowing someone should not destroy the record of what was said.
 

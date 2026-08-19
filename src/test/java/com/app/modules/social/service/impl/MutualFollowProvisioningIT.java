@@ -166,36 +166,44 @@ class MutualFollowProvisioningIT {
 
     @Test
     void concurrentFollowBacks_produceOneConversation() throws Exception {
-        // Without the advisory lock inside the provisioner both transactions observe no
-        // conversation and insert one each, leaving the pair with two threads and no way to merge.
-        UUID alice = insertUser("prov_race_a");
-        UUID bob = insertUser("prov_race_b");
-
+        // Two guards in one: the advisory lock inside the provisioner (without it both transactions
+        // observe no conversation and insert one each), and the counter trigger's lock strength
+        // (with the wrong one the two follows deadlock and one fails outright).
+        //
+        // Repeated because a single pass is not a reliable reproduction: the interleaving that
+        // deadlocks showed up only under full-suite load the first time it was seen.
         ExecutorService pool = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
         try {
-            Future<?> first =
-                    pool.submit(
-                            () -> {
-                                start.await();
-                                socialService.followUser(alice, bob);
-                                return null;
-                            });
-            Future<?> second =
-                    pool.submit(
-                            () -> {
-                                start.await();
-                                socialService.followUser(bob, alice);
-                                return null;
-                            });
-            start.countDown();
-            first.get();
-            second.get();
+            for (int attempt = 0; attempt < 12; attempt++) {
+                UUID alice = insertUser("prov_race_a" + attempt);
+                UUID bob = insertUser("prov_race_b" + attempt);
+                CountDownLatch start = new CountDownLatch(1);
+
+                Future<?> first =
+                        pool.submit(
+                                () -> {
+                                    start.await();
+                                    socialService.followUser(alice, bob);
+                                    return null;
+                                });
+                Future<?> second =
+                        pool.submit(
+                                () -> {
+                                    start.await();
+                                    socialService.followUser(bob, alice);
+                                    return null;
+                                });
+                start.countDown();
+                first.get();
+                second.get();
+
+                assertThat(countConversations(alice, bob))
+                        .as("attempt %d must leave exactly one conversation", attempt)
+                        .isEqualTo(1);
+            }
         } finally {
             pool.shutdown();
         }
-
-        assertThat(countConversations(alice, bob)).isEqualTo(1);
     }
 
     private long countConversations(UUID userA, UUID userB) {
