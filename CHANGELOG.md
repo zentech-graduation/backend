@@ -30,6 +30,7 @@ The endpoints, the group fields on conversation responses, and the underlying co
 Existing group conversations are deleted by the upgrade, after being copied into archive tables so the content is recoverable.
 
 ### Fixed
+- Marking a conversation unread now has a visible effect even when the caller sent its own newest messages. It previously cleared the read marker, which only changes the count when the other participant has newer messages to count; it is now an independent flag, cleared the next time the caller opens the conversation.
 - Two people following each other back at the same instant no longer deadlock in the database, which previously failed one of the two follows outright.
 The follower and following counters are updated in a fixed order now, so the two directions of a pair queue behind each other instead of colliding.
 - Ending a follow no longer leaves an empty conversation behind.

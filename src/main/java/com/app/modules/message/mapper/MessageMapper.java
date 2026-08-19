@@ -62,6 +62,7 @@ public interface MessageMapper {
      * @param lastMessage the conversation's newest message, or null if none yet
      * @param pinned whether the requesting caller has pinned this conversation
      * @param muted whether the requesting caller has muted this conversation
+     * @param manuallyUnread whether the requesting caller manually flagged this conversation unread
      * @return the conversation summary response
      */
     @Mapping(source = "conversation.id", target = "id")
@@ -71,7 +72,8 @@ public interface MessageMapper {
             long unreadCount,
             MessageResponse lastMessage,
             boolean pinned,
-            boolean muted);
+            boolean muted,
+            boolean manuallyUnread);
 
     /**
      * Projects a message entity onto its API response shape, including a tombstoned one.

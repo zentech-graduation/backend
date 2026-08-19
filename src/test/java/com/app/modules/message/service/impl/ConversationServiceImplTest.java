@@ -127,6 +127,7 @@ class ConversationServiceImplTest {
                                 org.mockito.ArgumentMatchers.anyLong(),
                                 any(),
                                 org.mockito.ArgumentMatchers.anyBoolean(),
+                                org.mockito.ArgumentMatchers.anyBoolean(),
                                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(
                         inv -> {
@@ -136,6 +137,7 @@ class ConversationServiceImplTest {
                             MessageResponse lastMessage = inv.getArgument(3);
                             boolean pinned = inv.getArgument(4);
                             boolean muted = inv.getArgument(5);
+                            boolean manuallyUnread = inv.getArgument(6);
                             return new ConversationSummaryResponse(
                                     c.getId(),
                                     participants,
@@ -143,7 +145,8 @@ class ConversationServiceImplTest {
                                     c.getLastMessageAt(),
                                     lastMessage,
                                     pinned,
-                                    muted);
+                                    muted,
+                                    manuallyUnread);
                         });
     }
 
@@ -488,6 +491,26 @@ class ConversationServiceImplTest {
 
         assertThat(actorParticipant.getNickname()).isEqualTo("Best Friend");
         verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void listMyConversations_manuallyUnreadRow_carriesFlagIntoSummary() {
+        UUID actorId = UUID.randomUUID();
+        UUID convId = UUID.randomUUID();
+        Conversation conv = Conversation.builder().id(convId).build();
+        ConversationParticipant myRow = participant(convId, actorId, null);
+        myRow.setManuallyUnread(true);
+        when(conversationRepository.findFirstMyConversations(eq(actorId), any(Pageable.class)))
+                .thenReturn(List.of(conv));
+        when(participantRepository.findByIdConversationIdInAndLeftAtIsNull(List.of(convId)))
+                .thenReturn(List.of(myRow));
+        when(messageRepository.countUnreadPerConversation(eq(actorId), eq(List.of(convId))))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ConversationSummaryResponse> result =
+                service.listMyConversations(actorId, null, 20);
+
+        assertThat(result.getContent().get(0).manuallyUnread()).isTrue();
     }
 
     @Test

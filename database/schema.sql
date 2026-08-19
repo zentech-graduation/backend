@@ -422,6 +422,7 @@ CREATE TABLE conversation_participants (
     pinned_at           TIMESTAMPTZ,    -- non-null pins the conversation to the top of this user's list
     is_muted            BOOLEAN         NOT NULL DEFAULT FALSE,
     nickname            VARCHAR(50),    -- this user's private label for the other participant
+    is_manually_unread  BOOLEAN         NOT NULL DEFAULT FALSE, -- visual-only flag, independent of last_read_at
     PRIMARY KEY (conversation_id, user_id)
 );
 

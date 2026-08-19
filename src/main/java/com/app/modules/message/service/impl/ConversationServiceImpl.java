@@ -249,6 +249,8 @@ public class ConversationServiceImpl implements ConversationService {
                                             myParticipantByConversation.get(c.getId());
                                     boolean isPinned = mine != null && mine.getPinnedAt() != null;
                                     boolean isMuted = mine != null && mine.isMuted();
+                                    boolean isManuallyUnread =
+                                            mine != null && mine.isManuallyUnread();
                                     return mapper.toSummaryResponse(
                                             c,
                                             participantsByConversation.getOrDefault(
@@ -256,7 +258,8 @@ public class ConversationServiceImpl implements ConversationService {
                                             unreadByConversation.getOrDefault(c.getId(), 0L),
                                             lastMessageByConversation.get(c.getId()),
                                             isPinned,
-                                            isMuted);
+                                            isMuted,
+                                            isManuallyUnread);
                                 })
                         .toList();
         return CursorPageResponse.of(content, hasNextPage, startCursor, endCursor, cursor != null);

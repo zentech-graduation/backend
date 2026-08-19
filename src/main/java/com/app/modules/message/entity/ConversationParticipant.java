@@ -61,4 +61,11 @@ public class ConversationParticipant {
      */
     @Column(name = "nickname")
     private String nickname;
+
+    /**
+     * Visual-only unread marker this row's user set on themselves, independent of {@code
+     * last_read_at}. Cleared the next time they open the conversation.
+     */
+    @Column(name = "is_manually_unread", nullable = false)
+    private boolean manuallyUnread;
 }

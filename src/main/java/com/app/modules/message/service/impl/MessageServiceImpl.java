@@ -221,6 +221,7 @@ public class MessageServiceImpl implements MessageService {
                         .filter(p -> p.getLeftAt() == null)
                         .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
         participant.setLastReadAt(OffsetDateTime.now(ZoneOffset.UTC));
+        participant.setManuallyUnread(false);
         participantRepository.save(participant);
     }
 
@@ -233,10 +234,10 @@ public class MessageServiceImpl implements MessageService {
                         .findByIdConversationIdAndIdUserId(conversationId, actorId)
                         .filter(p -> p.getLeftAt() == null)
                         .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
-        // The unread-count query already treats a null last_read_at as "every message unread", the
-        // same rule a conversation nobody has opened yet relies on, so clearing it here reuses that
-        // rule rather than introducing a second way to mean the same thing.
-        participant.setLastReadAt(null);
+        // last_read_at is left untouched: it drives the real unread count, and clearing it finds
+        // nothing to count when the actor sent the conversation's own newest messages. This flag is
+        // the independent, purely visual marker "mark as unread" actually means.
+        participant.setManuallyUnread(true);
         participantRepository.save(participant);
     }
 

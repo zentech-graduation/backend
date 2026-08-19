@@ -507,6 +507,22 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void markRead_manuallyUnreadParticipant_clearsManualFlag() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(directConversation(conversationId)));
+        ConversationParticipant participant = participant(conversationId, actorId, null);
+        participant.setManuallyUnread(true);
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(participant));
+
+        service.markRead(actorId, conversationId);
+
+        assertThat(participant.isManuallyUnread()).isFalse();
+    }
+
+    @Test
     void markRead_nonParticipant_throwsConversationForbidden() {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -522,19 +538,21 @@ class MessageServiceImplTest {
     }
 
     @Test
-    void markUnread_activeParticipant_clearsLastReadAt() {
+    void markUnread_activeParticipant_setsManualFlagWithoutTouchingLastReadAt() {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
                 .thenReturn(Optional.of(directConversation(conversationId)));
         ConversationParticipant participant = participant(conversationId, actorId, null);
-        participant.setLastReadAt(OffsetDateTime.now(ZoneOffset.UTC));
+        OffsetDateTime lastReadAt = OffsetDateTime.now(ZoneOffset.UTC);
+        participant.setLastReadAt(lastReadAt);
         when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
                 .thenReturn(Optional.of(participant));
 
         service.markUnread(actorId, conversationId);
 
-        assertThat(participant.getLastReadAt()).isNull();
+        assertThat(participant.isManuallyUnread()).isTrue();
+        assertThat(participant.getLastReadAt()).isEqualTo(lastReadAt);
         verify(participantRepository).save(participant);
     }
 

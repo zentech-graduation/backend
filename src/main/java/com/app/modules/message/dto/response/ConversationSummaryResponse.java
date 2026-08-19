@@ -23,4 +23,9 @@ public record ConversationSummaryResponse(
                         nullable = true)
                 MessageResponse lastMessage,
         @Schema(description = "Whether the caller has pinned this conversation.") boolean pinned,
-        @Schema(description = "Whether the caller has muted this conversation.") boolean muted) {}
+        @Schema(description = "Whether the caller has muted this conversation.") boolean muted,
+        @Schema(
+                        description =
+                                "Whether the caller manually flagged this conversation unread,"
+                                        + " independent of unreadCount.")
+                boolean manuallyUnread) {}
