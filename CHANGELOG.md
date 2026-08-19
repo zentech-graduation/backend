@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- A moderator can now warn an account, giving moderation a step between doing nothing and banning.
+Three warnings that still count produce a strike; the first strike suspends for seven days, the second for thirty, the third and any after it ban permanently.
+- A warning counts toward the next strike while it stands, was issued after the account's most recent strike, and is less than ninety days old, so an account that behaves for long enough starts again.
+- A strike never weakens a penalty already in force, so warning an account that is already banned records the strike without shortening the ban, and the response says which happened.
+- An administrator can now reverse a single warning or a single strike. Neither reversal changes the account's status: lifting a suspension or a ban stays a separate, explicit decision.
+- A warned account is now told, and can review its own warnings afterwards. It never sees its strikes, nor who issued anything.
+- The reasons a moderator may cite when warning an account are drawn from the report-reason registry, so retiring a reason is a configuration change rather than a release.
+- A moderator can now hand a report up to an administrator instead of closing it or leaving it, and must say why.
+An escalated report leaves the moderator queue, stays readable to the moderator that escalated it, and can be closed only by an administrator.
+- An administrator can now see how many reports are waiting on them. Escalation pushes no notification, so this count is the only signal one has arrived.
+- A moderator can now see the content a report points at, even when the author's account is private or the author has blocked them.
+The report is the only way in, so a moderator sees what somebody flagged and nothing else.
 - An administrator can now list, search, and inspect accounts, spanning every account status including removed accounts, which no public surface shows.
 - The account detail view shows where an account was created from, where and when it last signed in, its live sessions, and the reports filed against it.
 - An administrator can now end every one of an account's sessions in one action, and the audit entry records how many were ended.
@@ -17,6 +29,14 @@ The first sign-in attempt after the term lapses restores the account, and a peri
 - The moderation audit log now records role changes and forced logouts, and the action registry lists every action type the moderation surface is planned to record.
 
 ### Changed
+- A moderator's report list now covers the open part of the review lifecycle only. Asking for closed or escalated reports returns an empty page; an administrator's view is unchanged.
+- Resolving or dismissing a report is no longer possible through the triage endpoint, which now only claims a report for review.
+Both closures already had audited endpoints of their own, and the triage path wrote nothing, so a report could previously be closed with no record of who closed it.
+- Restoring a post removed by moderation now returns it to the status it held before the removal, instead of publishing everything it touches.
+A post that was a draft when it was removed comes back a draft, and the response says where it landed.
+- Removing a post by moderation now does everything removing it as its owner does: its hashtag associations are detached and it leaves the search index.
+Previously a moderated post kept contributing to trending counts and kept answering searches.
+- The error code for a refused role change is renamed to match the status it answers with. Behaviour is unchanged.
 - A moderator reading the moderation audit log now sees only the entries it wrote; an administrator still sees everything.
 Requesting another actor's entries returns nothing rather than their contents, and requesting one by identifier reports it as not found.
 - Moderation requests no longer accept a caller-supplied metadata object.
@@ -27,6 +47,9 @@ The audit log records server-derived facts only, and a request that still sends 
 - A moderation action's response now carries its creation timestamp, which was previously always null even though the stored entry had one.
 
 ### Security
+- Ending an account's sessions, whether by forcing a logout or by changing its role, now takes effect on the account's very next request.
+Previously the account kept whatever access it already held until that access expired on its own, which could be a further fifteen minutes.
+Sessions already open when this ships stay valid; an ordinary logout still ends only the session it was sent from.
 - A container image started without an explicit profile now runs the production profile instead of the development one, so a deployment that forgets to set a profile no longer serves API documentation anonymously, marks the refresh cookie non-Secure, or routes outbound mail to localhost.
 - The development profile no longer shadows the configured cookie signing secret with a value published in this repository, so the operator's secret is authoritative in every profile.
 - A direct-message WebSocket session is now closed when the session is revoked by logout, ban, or suspension, instead of surviving until its access token expired on its own.
