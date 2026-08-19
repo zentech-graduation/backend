@@ -522,6 +522,68 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void markUnread_activeParticipant_clearsLastReadAt() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(directConversation(conversationId)));
+        ConversationParticipant participant = participant(conversationId, actorId, null);
+        participant.setLastReadAt(OffsetDateTime.now(ZoneOffset.UTC));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(participant));
+
+        service.markUnread(actorId, conversationId);
+
+        assertThat(participant.getLastReadAt()).isNull();
+        verify(participantRepository).save(participant);
+    }
+
+    @Test
+    void markUnread_nonParticipant_throwsConversationForbidden() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(directConversation(conversationId)));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.markUnread(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void sendMessage_success_reactivatesOtherParticipantWhoHadLeft() {
+        UUID actorId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        ConversationParticipant otherParticipant =
+                participant(
+                        conversationId, otherId, OffsetDateTime.now(ZoneOffset.UTC).minusDays(2));
+        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
+                .thenReturn(List.of(participant(conversationId, actorId, null), otherParticipant));
+        when(messageRepository.saveAndFlush(any()))
+                .thenReturn(
+                        Message.builder()
+                                .id(UUID.randomUUID())
+                                .conversationId(conversationId)
+                                .senderId(actorId)
+                                .messageType(MessageType.TEXT)
+                                .content("hello")
+                                .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
+                                .build());
+
+        service.sendMessage(actorId, conversationId, textRequest("hello"), null);
+
+        // Deleting a conversation only hides it for the deleter; a new message from the other side
+        // is what un-hides it again, so the recipient's own left_at must be cleared here.
+        assertThat(otherParticipant.getLeftAt()).isNull();
+        verify(participantRepository).save(otherParticipant);
+    }
+
+    @Test
     void getUnreadCount_delegatesToRepository() {
         UUID actorId = UUID.randomUUID();
         when(messageRepository.countTotalUnreadForUser(actorId)).thenReturn(7L);

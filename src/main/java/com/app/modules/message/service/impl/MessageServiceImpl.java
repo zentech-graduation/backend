@@ -142,8 +142,28 @@ public class MessageServiceImpl implements MessageService {
                     actorId, idempotencyKey, objectMapper.writeValueAsString(response));
         }
 
+        reactivateOtherParticipants(conversationId, actorId);
         enqueueSent(conversationId, saved, actorId, response);
         return response;
+    }
+
+    /**
+     * Un-hides the conversation for any other participant who had deleted it.
+     *
+     * <p>Deleting a conversation only sets {@code left_at} for the deleting user's own row - it
+     * never touches the conversation or the other participant's state, matching the DATA_RULES note
+     * that hiding is per-user. A new message is the signal that revives it for them, the same
+     * behaviour the reference chat apps this feature was modelled on use.
+     */
+    private void reactivateOtherParticipants(UUID conversationId, UUID actorId) {
+        for (ConversationParticipant participant :
+                participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId)) {
+            if (participant.getLeftAt() != null
+                    && !participant.getId().getUserId().equals(actorId)) {
+                participant.setLeftAt(null);
+                participantRepository.save(participant);
+            }
+        }
     }
 
     @Override
@@ -201,6 +221,22 @@ public class MessageServiceImpl implements MessageService {
                         .filter(p -> p.getLeftAt() == null)
                         .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
         participant.setLastReadAt(OffsetDateTime.now(ZoneOffset.UTC));
+        participantRepository.save(participant);
+    }
+
+    @Override
+    @Transactional
+    public void markUnread(UUID actorId, UUID conversationId) {
+        fetchConversation(conversationId);
+        ConversationParticipant participant =
+                participantRepository
+                        .findByIdConversationIdAndIdUserId(conversationId, actorId)
+                        .filter(p -> p.getLeftAt() == null)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
+        // The unread-count query already treats a null last_read_at as "every message unread", the
+        // same rule a conversation nobody has opened yet relies on, so clearing it here reuses that
+        // rule rather than introducing a second way to mean the same thing.
+        participant.setLastReadAt(null);
         participantRepository.save(participant);
     }
 

@@ -49,4 +49,17 @@ public interface ConversationService {
      *     CONVERSATION_FORBIDDEN when the caller is not an active participant
      */
     ConversationResponse getConversation(UUID actorId, UUID conversationId);
+
+    /**
+     * Deletes a conversation for the caller only, by setting their own {@code left_at}. The other
+     * participant, the conversation row, and its message history are untouched; a new message from
+     * them reactivates the caller's membership, so the conversation reappears the next time it has
+     * activity.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to leave
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void leaveConversation(UUID actorId, UUID conversationId);
 }

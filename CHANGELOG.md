@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Added
+- A conversation can now be deleted from the caller's own inbox only, and marked unread again.
+Deleting only hides it for the caller; the other participant and the message history are untouched, and a new message from them reactivates it for the caller automatically.
 - Two people who follow each other now get a conversation automatically, so writing to someone no longer depends on one of them starting a thread first.
 Pairs who already followed each other before this release are given one by the upgrade.
 - A message that carries an attachment now includes the attachment's URL, dimensions, duration, and blurhash in the message response, so a client can render it without a second request per message.

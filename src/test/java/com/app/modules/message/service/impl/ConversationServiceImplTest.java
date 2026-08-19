@@ -307,6 +307,56 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void leaveConversation_activeParticipant_setsLeftAt() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant actorParticipant = participant(conversationId, actorId, null);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(actorParticipant));
+
+        service.leaveConversation(actorId, conversationId);
+
+        assertThat(actorParticipant.getLeftAt()).isNotNull();
+        verify(participantRepository).save(actorParticipant);
+    }
+
+    @Test
+    void leaveConversation_alreadyLeft_throwsConversationForbidden() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        ConversationParticipant leftParticipant =
+                participant(
+                        conversationId, actorId, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(leftParticipant));
+
+        assertThatThrownBy(() -> service.leaveConversation(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+        verify(participantRepository, never()).save(any());
+    }
+
+    @Test
+    void leaveConversation_nonParticipant_throwsConversationForbidden() {
+        UUID conversationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.leaveConversation(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
     void listMyConversations_firstPage_returnsSummariesWithCursors() {
         UUID actorId = UUID.randomUUID();
         UUID conv1Id = UUID.randomUUID();

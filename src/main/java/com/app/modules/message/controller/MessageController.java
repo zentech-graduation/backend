@@ -85,6 +85,16 @@ public class MessageController extends BaseController implements MessageApi {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
     }
 
+    /** Deletes a conversation from the caller's own inbox, leaving the other side untouched. */
+    @Override
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> leaveConversation(
+            @PathVariable("conversationId") UUID conversationId) {
+        conversationService.leaveConversation(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
     /** Sends a message into a conversation for an active participant; returns 201. */
     @Override
     @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.CONVERSATION_MESSAGES)
@@ -132,6 +142,16 @@ public class MessageController extends BaseController implements MessageApi {
     public ResponseEntity<ApiResponse<Void>> markRead(
             @PathVariable("conversationId") UUID conversationId) {
         messageService.markRead(SecurityUtils.getCurrentUserId(), conversationId);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
+    }
+
+    /** Clears the authenticated caller's read marker for a conversation. */
+    @Override
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<Void>> markUnread(
+            @PathVariable("conversationId") UUID conversationId) {
+        messageService.markUnread(SecurityUtils.getCurrentUserId(), conversationId);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK));
     }
 

@@ -1,6 +1,7 @@
 package com.app.modules.message.service.impl;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -234,6 +235,19 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation conversation = fetchConversation(conversationId);
         requireActiveParticipant(conversationId, actorId);
         return assembleDetail(conversation);
+    }
+
+    @Override
+    @Transactional
+    public void leaveConversation(UUID actorId, UUID conversationId) {
+        fetchConversation(conversationId);
+        ConversationParticipant participant =
+                participantRepository
+                        .findByIdConversationIdAndIdUserId(conversationId, actorId)
+                        .filter(p -> p.getLeftAt() == null)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.CONVERSATION_FORBIDDEN));
+        participant.setLeftAt(OffsetDateTime.now(ZoneOffset.UTC));
+        participantRepository.save(participant);
     }
 
     // Stealth block model: matches assemblePublicProfile's reference behaviour - a block in

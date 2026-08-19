@@ -68,6 +68,17 @@ public interface MessageService {
     void markRead(UUID actorId, UUID conversationId);
 
     /**
+     * Marks a conversation unread for the caller by clearing their read marker, so every message in
+     * it counts toward their unread total again.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to mark unread
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void markUnread(UUID actorId, UUID conversationId);
+
+    /**
      * Returns the caller's total unread message count across every active conversation.
      *
      * @param actorId the authenticated caller

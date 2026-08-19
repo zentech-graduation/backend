@@ -97,6 +97,7 @@ public final class ApiConstants {
         public static final String CONVERSATION_MESSAGES = "/{conversationId}/messages";
         public static final String MESSAGE_BY_ID = "/{conversationId}/messages/{messageId}";
         public static final String READ = "/{conversationId}/read";
+        public static final String UNREAD = "/{conversationId}/unread";
         public static final String UNREAD_COUNT = "/unread-count";
     }
 

@@ -123,6 +123,37 @@ public interface MessageApi {
             @PathVariable("conversationId") UUID conversationId);
 
     @Operation(
+            summary = "Delete a conversation for the caller",
+            description =
+                    "Deletes a conversation from the caller's own inbox only, leaving the other"
+                            + " participant and the message history untouched. A new message from"
+                            + " them reactivates it. Requires authentication as an active"
+                            + " participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation deleted for the caller"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Conversation not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
+    ResponseEntity<ApiResponse<Void>> leaveConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
             summary = "Send a message",
             description =
                     "Sends a message into a conversation. Required fields depend on {@code"
@@ -240,6 +271,29 @@ public interface MessageApi {
     @AuthenticationRequiredResponse
     @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.READ)
     ResponseEntity<ApiResponse<Void>> markRead(@PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Mark a conversation unread",
+            description =
+                    "Clears the caller's read marker for a conversation, so every message in it"
+                            + " counts toward their unread total again. Requires authentication as"
+                            + " an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation marked unread"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD)
+    ResponseEntity<ApiResponse<Void>> markUnread(
+            @PathVariable("conversationId") UUID conversationId);
 
     @Operation(
             summary = "Get the caller's total unread message count",
