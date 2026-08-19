@@ -7,7 +7,6 @@ import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
@@ -116,13 +115,10 @@ public class ReportServiceImpl implements ReportService {
             UUID reportId, UUID reviewerId, UpdateReportStatusRequest request) {
         Report report = findReport(reportId);
         validateTransition(report.getStatus(), request.status());
-        validateResolutionNote(request.status(), request.resolutionNote());
 
         report.setStatus(request.status());
         report.setReviewedBy(reviewerId);
         report.setReviewedAt(OffsetDateTime.now());
-        report.setResolutionNote(
-                isTerminal(request.status()) ? request.resolutionNote().trim() : null);
         return reportMapper.toResponse(reportRepository.save(report));
     }
 
@@ -145,30 +141,20 @@ public class ReportServiceImpl implements ReportService {
                 .orElseThrow(() -> new AppException(ApiErrorCode.REPORT_NOT_FOUND));
     }
 
+    // This endpoint reaches only the non-terminal part of the lifecycle. Claiming a report for
+    // triage is not a moderation decision and needs no audit row, so it stays here. Closing one is,
+    // and it belongs to the admin module, which writes the admin_actions row in the same
+    // transaction as the status change. Allowing a close here as well would give the same audit row
+    // two writers and leave one of them silent, which is the defect this narrowing removes.
     private void validateTransition(ReportStatus current, ReportStatus target) {
         boolean valid =
                 switch (current) {
-                    case PENDING ->
-                            target == ReportStatus.REVIEWING
-                                    || target == ReportStatus.RESOLVED
-                                    || target == ReportStatus.DISMISSED;
-                    case REVIEWING ->
-                            target == ReportStatus.RESOLVED || target == ReportStatus.DISMISSED;
-                    case RESOLVED, DISMISSED -> false;
+                    case PENDING -> target == ReportStatus.REVIEWING;
+                    case REVIEWING, RESOLVED, DISMISSED -> false;
                 };
         if (!valid) {
             throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
         }
-    }
-
-    private void validateResolutionNote(ReportStatus target, String resolutionNote) {
-        if (isTerminal(target) && !StringUtils.hasText(resolutionNote)) {
-            throw new AppException(ApiErrorCode.REPORT_RESOLUTION_NOTE_REQUIRED);
-        }
-    }
-
-    private boolean isTerminal(ReportStatus status) {
-        return status == ReportStatus.RESOLVED || status == ReportStatus.DISMISSED;
     }
 
     private java.util.List<Report> findFirstReportPage(

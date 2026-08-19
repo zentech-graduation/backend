@@ -43,8 +43,8 @@ This table cannot be rebuilt from any other source if lost.
 | A user may not report the same entity more than once | `ReportServiceImpl.validateDuplicateReport` — enforced via `ReportRepository.existsByReporterIdAndReportTypeAndEntityId`, with the unique index `uq_reports_reporter_type_entity` (V30) as the authoritative guard against a concurrent double-submit |
 | A user may not report their own content | `ReportServiceImpl.submitReport` — throws `REPORT_SELF_NOT_ALLOWED` when `reporterId` equals the entity owner |
 | `entity_id` must correspond to an existing entity of the declared `report_type`; validate before insert | `ReportServiceImpl.validateEntityExists` — resolves owner via `ReportRepository.findOwnerId`; throws `REPORT_TARGET_NOT_FOUND` if absent |
-| Transitioning `status` to `'reviewing'` must record `reviewed_by` and `reviewed_at` | `ReportServiceImpl.updateStatus` — sets both fields on every valid transition |
-| Transitioning `status` to `'resolved'` or `'dismissed'` must include a `resolution_note` | `ReportServiceImpl.validateResolutionNote` — throws `REPORT_RESOLUTION_NOTE_REQUIRED` for terminal targets with blank note |
+| `PATCH /reports/{reportId}/status` performs exactly one transition, `pending` to `reviewing`, and records `reviewed_by` and `reviewed_at` | `ReportServiceImpl.validateTransition`, `ReportServiceImpl.updateStatus` |
+| Resolving or dismissing a report is refused by `PATCH /reports/{reportId}/status` with `REPORT_INVALID_TRANSITION` | `ReportServiceImpl.validateTransition` — a terminal transition writes an `admin_actions` row, so it belongs to the admin module and giving that row a second, silent writer here is what this refusal prevents |
 | Only users with `role = 'moderator'` or `role = 'admin'` may update report status | `SecurityConfig`, `ReportController` — role enforcement via Spring Security |
 | Resolving a report with action `remove_post` or `ban_user` must be coordinated with the admin module's `admin_actions` log | Coordination delegated to `AdminServiceImpl.resolveReport` and `AdminServiceImpl.dismissReport` — the admin module is the entry point for resolution actions that carry moderation consequences |
 
@@ -53,6 +53,8 @@ This table cannot be rebuilt from any other source if lost.
 - The application pre-check cannot close the race between two concurrent submissions; the unique index added in V30 is what actually rejects the second one, surfaced as `REPORT_DUPLICATE`.
 - `entity_id` has no FK enforcement — if the reported entity is deleted before the report is reviewed, the `entity_id` will reference a non-existent row.
 - No automatic escalation or SLA on report review time.
+- `resolution_note` is written only by the admin close endpoints. The `resolutionNote` field on the triage request body is retained for wire compatibility and is ignored, because the one transition that endpoint still performs carries no resolution.
+- `REPORT_RESOLUTION_NOTE_REQUIRED` is unreachable now that the note requirement lives behind `AdminActionRequest.reason`, which is `@NotBlank`. The constant is kept because an error code is part of the published contract and a client may still branch on it.
 
 ---
 

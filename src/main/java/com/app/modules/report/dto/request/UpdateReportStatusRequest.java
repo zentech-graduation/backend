@@ -16,7 +16,11 @@ public record UpdateReportStatusRequest(
                 @NotNull
                 ReportStatus status,
         @Schema(
-                        description = "Required explanation when resolving or dismissing a report",
+                        description =
+                                "Retained for wire compatibility and ignored. The only transition"
+                                        + " this endpoint performs is pending to reviewing, which"
+                                        + " carries no resolution. The note for a resolved or dismissed"
+                                        + " report is the reason sent to the admin close endpoints.",
                         example = "Content removed after confirming the violation")
                 @Size(max = 2000)
                 String resolutionNote) {}

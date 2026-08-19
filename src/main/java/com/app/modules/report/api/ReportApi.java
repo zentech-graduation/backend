@@ -193,9 +193,12 @@ public interface ReportApi {
     @Operation(
             summary = "Update report status",
             description =
-                    "Starts review or closes a report while recording reviewer metadata."
-                            + " Resolution and dismissal require a note. Requires MODERATOR or"
-                            + " ADMIN.")
+                    "Claims a pending report for triage, moving it to reviewing and recording"
+                            + " reviewer metadata. This is the only transition this endpoint"
+                            + " performs. Resolving or dismissing a report is a moderation decision"
+                            + " that must be audited, so it is done through"
+                            + " /api/v1/admin/reports/{reportId}/resolve or /dismiss and is refused"
+                            + " here with 409. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "415",

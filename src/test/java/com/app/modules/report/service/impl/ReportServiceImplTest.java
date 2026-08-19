@@ -203,9 +203,9 @@ class ReportServiceImplTest {
     }
 
     @Test
-    void updateStatus_terminalWithoutNote_throwsResolutionNoteRequired() {
+    void updateStatus_pendingToResolved_throwsInvalidTransition() {
         UUID reportId = UUID.randomUUID();
-        Report report = Report.builder().id(reportId).status(ReportStatus.REVIEWING).build();
+        Report report = Report.builder().id(reportId).status(ReportStatus.PENDING).build();
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
 
         assertThatThrownBy(
@@ -213,15 +213,35 @@ class ReportServiceImplTest {
                                 service.updateStatus(
                                         reportId,
                                         UUID.randomUUID(),
-                                        new UpdateReportStatusRequest(ReportStatus.RESOLVED, " ")))
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.RESOLVED, "Handled")))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.REPORT_RESOLUTION_NOTE_REQUIRED);
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
         verify(reportRepository, never()).save(any());
     }
 
     @Test
-    void updateStatus_dismissedWithoutNote_throwsResolutionNoteRequired() {
+    void updateStatus_pendingToDismissed_throwsInvalidTransition() {
+        UUID reportId = UUID.randomUUID();
+        Report report = Report.builder().id(reportId).status(ReportStatus.PENDING).build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(
+                        () ->
+                                service.updateStatus(
+                                        reportId,
+                                        UUID.randomUUID(),
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.DISMISSED, "Not actionable")))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_reviewingToResolved_throwsInvalidTransition() {
         UUID reportId = UUID.randomUUID();
         Report report = Report.builder().id(reportId).status(ReportStatus.REVIEWING).build();
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
@@ -232,10 +252,29 @@ class ReportServiceImplTest {
                                         reportId,
                                         UUID.randomUUID(),
                                         new UpdateReportStatusRequest(
-                                                ReportStatus.DISMISSED, null)))
+                                                ReportStatus.RESOLVED, "Handled")))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.REPORT_RESOLUTION_NOTE_REQUIRED);
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_reviewingToDismissed_throwsInvalidTransition() {
+        UUID reportId = UUID.randomUUID();
+        Report report = Report.builder().id(reportId).status(ReportStatus.REVIEWING).build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(
+                        () ->
+                                service.updateStatus(
+                                        reportId,
+                                        UUID.randomUUID(),
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.DISMISSED, "Not actionable")))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
         verify(reportRepository, never()).save(any());
     }
 
