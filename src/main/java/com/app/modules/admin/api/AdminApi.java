@@ -209,7 +209,13 @@ public interface AdminApi {
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
 
     /** Removes a post and returns the persisted audit event. */
-    @Operation(summary = "Remove a post")
+    @Operation(
+            summary = "Remove a post",
+            description =
+                    "Performs the same side effects as an owner removal: the post is soft-deleted,"
+                            + " its hashtag associations are detached, and its search-index document is"
+                            + " deleted. The status it held is recorded so restore can return it"
+                            + " there.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -249,8 +255,17 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<AdminActionResponse>> removePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
 
-    /** Restores a removed post and returns the persisted audit event. */
-    @Operation(summary = "Restore a post")
+    /** Restores a removed post to its pre-removal status and returns the persisted audit event. */
+    @Operation(
+            summary = "Restore a post",
+            description =
+                    "Returns the post to the status it held before the moderation removal, which is"
+                            + " not necessarily published: a post that was a draft when it was removed"
+                            + " comes back a draft. A post removed before that status was recorded"
+                            + " comes back published. The resulting status is reported in the audit"
+                            + " event's metadata as resultingStatus. Hashtag associations are"
+                            + " re-derived and the search index is refreshed only when the post comes"
+                            + " back published.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

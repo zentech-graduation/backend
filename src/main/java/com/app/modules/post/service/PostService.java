@@ -83,6 +83,44 @@ public interface PostService {
     void deletePost(UUID requesterId, UUID postId);
 
     /**
+     * Removes a post by moderation, performing every side effect owner removal performs.
+     *
+     * <p>The one entry point for a moderation removal. Before it existed the administrative path
+     * wrote the row itself and left the hashtag associations and the search-index document behind,
+     * so a removed post kept contributing to trending counts and kept answering searches.
+     *
+     * <p>Records the status the post held, so {@link #applyModerationRestore} returns it there
+     * rather than publishing it; detaches the hashtag associations; enqueues a search-index delete.
+     * Does not check whether the post is already removed: that is the caller's transition guard.
+     *
+     * <p>Joins the caller's transaction. The index event goes through the outbox, whose enqueue is
+     * MANDATORY, so there must already be one.
+     *
+     * @param postId post to remove
+     * @return the post's author and its resulting status
+     * @throws com.app.common.exception.AppException with {@code POST_NOT_FOUND} when no row holds
+     *     that id
+     */
+    PostModerationResult applyModerationRemoval(UUID postId);
+
+    /**
+     * Returns a moderation-removed post to the status it held before the removal.
+     *
+     * <p>A post removed before that status was recorded comes back published, which is what restore
+     * did for every post at the time, so nothing about those rows changes.
+     *
+     * <p>Hashtag associations are re-derived and a search-index upsert is enqueued only when the
+     * resulting status is published. A draft or an archived post belongs in neither, and the owner
+     * path keeps both out of both as well.
+     *
+     * @param postId post to restore
+     * @return the post's author and the status it now holds, which is not necessarily published
+     * @throws com.app.common.exception.AppException with {@code POST_NOT_FOUND} when no row holds
+     *     that id
+     */
+    PostModerationResult applyModerationRestore(UUID postId);
+
+    /**
      * Cursor-paginated published posts of a user, newest first.
      *
      * <p>Throws when a block exists between viewer and target, or when the target account is

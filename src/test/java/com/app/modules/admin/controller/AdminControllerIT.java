@@ -93,6 +93,9 @@ class AdminControllerIT {
         jdbcTemplate.update("DELETE FROM admin_actions");
         jdbcTemplate.update("DELETE FROM reports");
         jdbcTemplate.update("DELETE FROM comments");
+        jdbcTemplate.update("DELETE FROM post_hashtags");
+        jdbcTemplate.update("DELETE FROM hashtags");
+        jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM posts");
         jdbcTemplate.update("DELETE FROM users");
     }
@@ -626,6 +629,81 @@ class AdminControllerIT {
                 .isZero();
     }
 
+    @Test
+    void removePost_moderatedPost_detachesHashtagsAndEnqueuesIndexDelete() {
+        TestUser actor = createUser("hashtag_detach_mod", "moderator");
+        TestUser owner = createUser("hashtag_detach_owner", "user");
+        UUID postId = insertPost(owner.id());
+        attachHashtag(postId, "moderationparity");
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/posts/" + postId + "/remove",
+                        Map.of("reason", "Removal must match the owner path"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM post_hashtags WHERE post_id = ?",
+                                Integer.class,
+                                postId))
+                .isZero();
+        assertThat(outboxCount("post.index.delete.v1", postId)).isOne();
+    }
+
+    @Test
+    void restorePost_moderatedPost_reDerivesHashtagsAndEnqueuesIndexUpsert() {
+        TestUser actor = createUser("hashtag_rederive_mod", "moderator");
+        TestUser owner = createUser("hashtag_reder_owner", "user");
+        UUID postId = insertPostWithCaption(owner.id(), "back online #moderationparity");
+        attachHashtag(postId, "moderationparity");
+        patch(
+                "/api/v1/admin/posts/" + postId + "/remove",
+                Map.of("reason", "Staged for restore"),
+                actor);
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/posts/" + postId + "/restore",
+                        Map.of("reason", "Restore must match the owner path"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM post_hashtags WHERE post_id = ?",
+                                Integer.class,
+                                postId))
+                .isOne();
+        assertThat(outboxCount("post.index.upsert.v1", postId)).isOne();
+    }
+
+    @Test
+    void restorePost_removedFromDraft_returnsPostToDraft() {
+        TestUser actor = createUser("draft_restore_mod", "moderator");
+        TestUser owner = createUser("draft_restore_owner", "user");
+        UUID postId = insertDraftPost(owner.id());
+        patch(
+                "/api/v1/admin/posts/" + postId + "/remove",
+                Map.of("reason", "Draft removed by moderation"),
+                actor);
+
+        ResponseEntity<Map> response =
+                patch(
+                        "/api/v1/admin/posts/" + postId + "/restore",
+                        Map.of("reason", "Restore must not publish a draft"),
+                        actor);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT status::text FROM posts WHERE id = ?",
+                                String.class,
+                                postId))
+                .isEqualTo("draft");
+    }
+
     private TestUser createUser(String prefix, String role) {
         UUID id = UUID.randomUUID();
         String username = prefix + "_" + id.toString().substring(0, 8);
@@ -648,6 +726,48 @@ class AdminControllerIT {
                 id,
                 ownerId);
         return id;
+    }
+
+    private UUID insertPostWithCaption(UUID ownerId, String caption) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO posts (id, user_id, caption, post_type, status) "
+                        + "VALUES (?, ?, ?, 'text', 'published')",
+                id,
+                ownerId,
+                caption);
+        return id;
+    }
+
+    private UUID insertDraftPost(UUID ownerId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO posts (id, user_id, caption, post_type, status) "
+                        + "VALUES (?, ?, 'Draft moderation target', 'text', 'draft')",
+                id,
+                ownerId);
+        return id;
+    }
+
+    private void attachHashtag(UUID postId, String name) {
+        UUID hashtagId = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO hashtags (id, name) VALUES (?, ?) ON CONFLICT (name) DO NOTHING",
+                hashtagId,
+                name);
+        UUID resolved =
+                jdbcTemplate.queryForObject(
+                        "SELECT id FROM hashtags WHERE name = ?", UUID.class, name);
+        jdbcTemplate.update(
+                "INSERT INTO post_hashtags (post_id, hashtag_id) VALUES (?, ?)", postId, resolved);
+    }
+
+    private int outboxCount(String eventType, UUID aggregateId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND aggregate_id = ?",
+                Integer.class,
+                eventType,
+                aggregateId);
     }
 
     private UUID insertComment(UUID postId, UUID ownerId) {

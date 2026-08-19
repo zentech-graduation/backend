@@ -227,6 +227,9 @@ CREATE TABLE posts (
     caption             TEXT,
     post_type           post_type       NOT NULL DEFAULT 'image',
     status              post_status     NOT NULL DEFAULT 'published',
+    -- Status held before a moderation removal, so restore returns the post there instead of
+    -- publishing it (V59). Non-null only while the post sits removed by moderation.
+    status_before_moderation post_status,
     -- Denormalized counters for read performance
     like_count          INT             NOT NULL DEFAULT 0 CHECK (like_count >= 0),
     comment_count       INT             NOT NULL DEFAULT 0 CHECK (comment_count >= 0),

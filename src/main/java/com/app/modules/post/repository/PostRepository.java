@@ -21,15 +21,6 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     Optional<Post> findByIdAndDeletedAtIsNull(UUID id);
 
     /**
-     * Reads the author of a post regardless of its soft-delete state.
-     *
-     * @param postId post identifier
-     * @return author identifier when the post exists
-     */
-    @Query(value = "SELECT user_id FROM posts WHERE id = :postId", nativeQuery = true)
-    Optional<UUID> findOwnerIdIncludingDeleted(@Param("postId") UUID postId);
-
-    /**
      * Reads the persisted status of a post regardless of its soft-delete state.
      *
      * @param postId post identifier
@@ -39,23 +30,50 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     Optional<String> findStatusIncludingDeleted(@Param("postId") UUID postId);
 
     /**
-     * Applies an administrator-controlled status and soft-delete state to a post.
+     * Reads everything the moderation removal and restore paths need, regardless of soft-delete.
      *
      * @param postId post identifier
-     * @param status lowercase PostgreSQL post status
-     * @param deletedAt soft-delete timestamp, or null when restoring
+     * @return the moderation view when the post exists
+     */
+    @Query(
+            value =
+                    "SELECT user_id AS userId, caption AS caption, created_at AS createdAt,"
+                            + " status::text AS status, status_before_moderation::text AS"
+                            + " statusBeforeModeration FROM posts WHERE id = :postId",
+            nativeQuery = true)
+    Optional<PostModerationProjection> findModerationViewIncludingDeleted(
+            @Param("postId") UUID postId);
+
+    /**
+     * Removes a post by moderation, recording the status it held so restore can return it there.
+     *
+     * @param postId post identifier
+     * @param deletedAt soft-delete timestamp
      * @return number of updated posts
      */
     @Modifying
     @Query(
             value =
-                    "UPDATE posts SET status = CAST(:status AS post_status), "
-                            + "deleted_at = :deletedAt WHERE id = :postId",
+                    "UPDATE posts SET status_before_moderation = status, status = 'removed',"
+                            + " deleted_at = :deletedAt WHERE id = :postId",
             nativeQuery = true)
-    int applyAdminModeration(
-            @Param("postId") UUID postId,
-            @Param("status") String status,
-            @Param("deletedAt") OffsetDateTime deletedAt);
+    int applyModerationRemoval(
+            @Param("postId") UUID postId, @Param("deletedAt") OffsetDateTime deletedAt);
+
+    /**
+     * Restores a moderation-removed post to the given status and clears the recorded prior status.
+     *
+     * @param postId post identifier
+     * @param status lowercase PostgreSQL post status to restore to
+     * @return number of updated posts
+     */
+    @Modifying
+    @Query(
+            value =
+                    "UPDATE posts SET status = CAST(:status AS post_status),"
+                            + " status_before_moderation = NULL, deleted_at = NULL WHERE id = :postId",
+            nativeQuery = true)
+    int applyModerationRestore(@Param("postId") UUID postId, @Param("status") String status);
 
     /**
      * First keyset page of a user's published posts, newest first.

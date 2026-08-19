@@ -54,8 +54,8 @@ This table cannot be rebuilt from any other source if lost.
 | A moderator reading the audit log sees only rows where `admin_id` equals its own id; an administrator sees every row | `AdminServiceImpl.getActions`, `getActionById`, `getActionsForUser` |
 | A lapsed fixed-term suspension returns the account to active and records one `unsuspend_user` row with a null `admin_id` | `SuspensionExpiryServiceImpl`, driven by `UserStateValidator.enforceActive` and `SuspensionExpiryJob` |
 | `metadata` is written from server-derived facts only and is never accepted from a request body | `AdminActionRecorder`, `AdminActionRequest` |
-| `remove_post` action must set `posts.status = 'removed'` and `posts.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removePost` |
-| `restore_post` action must clear `posts.deleted_at` and reset `posts.status = 'published'` in the same transaction | `AdminServiceImpl.restorePost` |
+| `remove_post` must perform every side effect an owner removal performs, in the same transaction | `AdminServiceImpl.removePost` delegating to `PostService.applyModerationRemoval`. The admin module owns the transition guard and the audit row; the post module owns the side effects, so the administrative and owner removal paths cannot drift apart |
+| `restore_post` must return the post to the status it held before the removal, and report that status in the audit row's `metadata.resultingStatus` | `AdminServiceImpl.restorePost` delegating to `PostService.applyModerationRestore` |
 | `remove_comment` action must set `comments.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removeComment` |
 | `restore_comment` action must clear `comments.deleted_at` in the same transaction | `AdminServiceImpl.restoreComment` |
 | `resolve_report` and `dismiss_report` must update `reports.status` and `reports.reviewed_by` / `reviewed_at` in the same transaction | `AdminServiceImpl.resolveReport`, `AdminServiceImpl.dismissReport` |
