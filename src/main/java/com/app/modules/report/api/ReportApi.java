@@ -163,7 +163,11 @@ public interface ReportApi {
     /** Returns one report for moderator or administrator review. */
     @Operation(
             summary = "Get report details",
-            description = "Returns one report by identifier. Requires MODERATOR or ADMIN.")
+            description =
+                    "Returns one report by identifier. Requires MODERATOR or ADMIN. A moderator"
+                            + " reads a pending or reviewing report, and any report it escalated"
+                            + " itself; every other report answers 404, matching the way the"
+                            + " listing hides them. An administrator reads every report.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -177,7 +181,7 @@ public interface ReportApi {
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "Report not found",
+                description = "Report not found, or outside a moderator's reach",
                 content =
                         @Content(
                                 mediaType = "application/json",

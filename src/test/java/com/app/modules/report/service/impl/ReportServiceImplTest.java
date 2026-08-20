@@ -307,10 +307,79 @@ class ReportServiceImplTest {
         UUID reportId = UUID.randomUUID();
         when(reportRepository.findById(reportId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getReport(reportId))
+        assertThatThrownBy(() -> service.getReport(UserRole.MODERATOR, UUID.randomUUID(), reportId))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.REPORT_NOT_FOUND);
+    }
+
+    @Test
+    void getReport_moderatorAndClosedReportItDidNotEscalate_throwsNotFound() {
+        UUID reportId = UUID.randomUUID();
+        Report report =
+                Report.builder()
+                        .id(reportId)
+                        .status(ReportStatus.RESOLVED)
+                        .escalatedBy(UUID.randomUUID())
+                        .build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(() -> service.getReport(UserRole.MODERATOR, UUID.randomUUID(), reportId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_NOT_FOUND);
+    }
+
+    @Test
+    void getReport_moderatorAndReportItEscalated_returnsReport() {
+        UUID reportId = UUID.randomUUID();
+        UUID moderatorId = UUID.randomUUID();
+        Report report =
+                Report.builder()
+                        .id(reportId)
+                        .status(ReportStatus.ESCALATED)
+                        .escalatedBy(moderatorId)
+                        .build();
+        ReportResponse mapped = response(ReportStatus.ESCALATED);
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+        when(reportMapper.toResponse(report)).thenReturn(mapped);
+
+        assertThat(service.getReport(UserRole.MODERATOR, moderatorId, reportId)).isEqualTo(mapped);
+    }
+
+    @Test
+    void getReport_moderatorAndOpenReport_returnsReport() {
+        for (ReportStatus status : List.of(ReportStatus.PENDING, ReportStatus.REVIEWING)) {
+            UUID reportId = UUID.randomUUID();
+            Report report = Report.builder().id(reportId).status(status).build();
+            ReportResponse mapped = response(status);
+            when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+            when(reportMapper.toResponse(report)).thenReturn(mapped);
+
+            assertThat(service.getReport(UserRole.MODERATOR, UUID.randomUUID(), reportId))
+                    .as("moderator reading a %s report", status)
+                    .isEqualTo(mapped);
+        }
+    }
+
+    @Test
+    void getReport_administrator_readsEveryStatus() {
+        for (ReportStatus status : ReportStatus.values()) {
+            UUID reportId = UUID.randomUUID();
+            Report report =
+                    Report.builder()
+                            .id(reportId)
+                            .status(status)
+                            .escalatedBy(UUID.randomUUID())
+                            .build();
+            ReportResponse mapped = response(status);
+            when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+            when(reportMapper.toResponse(report)).thenReturn(mapped);
+
+            assertThat(service.getReport(UserRole.ADMIN, UUID.randomUUID(), reportId))
+                    .as("administrator reading a %s report", status)
+                    .isEqualTo(mapped);
+        }
     }
 
     @Test
