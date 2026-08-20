@@ -69,6 +69,8 @@ The audit log records server-derived facts only, and a request that still sends 
 - The application now takes its schema-migration lock without holding a transaction open, which is what allows an index to be built without blocking writes to the table.
 
 ### Fixed
+- The API description of the own-warnings listing now declares the page it returns. It previously described only the two ways the call can fail, so a client generated from the description had no type for the success payload.
+- The API description of creating a post, editing a caption, and publishing a drafted or archived post now declares the rejection each answers when the caption names a banned hashtag, and points at the field carrying the offending names.
 - The monthly partitions behind the behavioural event table now cover the current month and the two ahead of it at all times, and a gap left by an earlier release is closed.
 A write into an uncovered month never failed; it was absorbed silently and made that month's partition impossible to create afterwards, so the problem only became visible once it could no longer be repaired.
 - Listing accounts by role and listing hashtags without a status filter no longer read the whole table. At two hundred thousand rows the account listing filtered to moderators took fifteen milliseconds and touched fifty thousand pages; it now takes a tenth of a millisecond and touches twenty-four.
