@@ -72,12 +72,18 @@ public enum ApiErrorCode {
 
     // Hashtag
     HASHTAG_NOT_FOUND("HASHTAG_NOT_FOUND", "Hashtag not found", HttpStatus.NOT_FOUND),
+    HASHTAG_ALREADY_EXISTS("HASHTAG_ALREADY_EXISTS", "Hashtag already exists", HttpStatus.CONFLICT),
 
     // Post
     POST_NOT_FOUND("POST_NOT_FOUND", "Post not found", HttpStatus.NOT_FOUND),
     POST_FORBIDDEN("POST_FORBIDDEN", "You do not have access to this post", HttpStatus.FORBIDDEN),
     POST_ALREADY_LIKED("POST_ALREADY_LIKED", "Post already liked", HttpStatus.CONFLICT),
     POST_ALREADY_SAVED("POST_ALREADY_SAVED", "Post already saved", HttpStatus.CONFLICT),
+    // 422 rather than 400: the caption is syntactically fine and the request is well formed, but a
+    // tag it names is one an administrator has taken out of circulation. The response body carries
+    // the offending names under data.bannedTags, in normalized form, so a client can highlight them
+    // in the caption instead of making the author guess which tag was refused.
+    POST_BANNED_HASHTAG("POST_BANNED_HASHTAG", "Caption contains banned hashtags", HttpStatus.UNPROCESSABLE_ENTITY),
 
     // Comment
     COMMENT_NOT_FOUND("COMMENT_NOT_FOUND", "Comment not found", HttpStatus.NOT_FOUND),

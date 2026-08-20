@@ -46,7 +46,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<?>> handleAppException(AppException ex) {
         return ResponseEntity.status(ex.getHttpStatus())
-                .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage(), null));
+                .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
