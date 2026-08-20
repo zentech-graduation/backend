@@ -25,8 +25,8 @@ import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminUserMapper;
 import com.app.modules.admin.repository.AdminUserRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
+import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminUserService;
-import com.app.modules.admin.service.RoleTransitionPolicy;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.users.entity.User;
@@ -56,7 +56,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final RefreshTokenService refreshTokenService;
     private final AdminUserMapper adminUserMapper;
     private final AdminActionRecorder adminActionRecorder;
-    private final RoleTransitionPolicy roleTransitionPolicy;
+    private final AdminAuthorizationService adminAuthorizationService;
 
     public AdminUserServiceImpl(
             AdminUserRepository adminUserRepository,
@@ -65,14 +65,14 @@ public class AdminUserServiceImpl implements AdminUserService {
             RefreshTokenService refreshTokenService,
             AdminUserMapper adminUserMapper,
             AdminActionRecorder adminActionRecorder,
-            RoleTransitionPolicy roleTransitionPolicy) {
+            AdminAuthorizationService adminAuthorizationService) {
         this.adminUserRepository = adminUserRepository;
         this.userRepository = userRepository;
         this.reportRepository = reportRepository;
         this.refreshTokenService = refreshTokenService;
         this.adminUserMapper = adminUserMapper;
         this.adminActionRecorder = adminActionRecorder;
-        this.roleTransitionPolicy = roleTransitionPolicy;
+        this.adminAuthorizationService = adminAuthorizationService;
     }
 
     @Override
@@ -170,7 +170,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 userRepository
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
-        roleTransitionPolicy.assertAllowed(
+        adminAuthorizationService.assertMayChangeUserRole(
                 actorId, actorRole, target.getId(), target.getRole(), request.role());
 
         UserRole previousRole = target.getRole();

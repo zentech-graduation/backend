@@ -123,7 +123,6 @@ public enum ApiErrorCode {
     // entity it points at has since been hard-deleted: entity_id carries no foreign key, so
     // that leaves the report pointing at nothing.
     REPORT_TARGET_GONE("REPORT_TARGET_GONE", "The reported entity no longer exists", HttpStatus.GONE),
-    REPORT_RESOLUTION_NOTE_REQUIRED("REPORT_RESOLUTION_NOTE_REQUIRED", "A resolution note is required to close a report", HttpStatus.BAD_REQUEST),
 
     // Admin
     ADMIN_ACTION_NOT_FOUND("ADMIN_ACTION_NOT_FOUND", "Admin action not found", HttpStatus.NOT_FOUND),
