@@ -170,6 +170,10 @@ public final class ApiConstants {
         public static final String REPORT_TARGET = "/reports/{reportId}/target";
         // Literal segments, so no template can shadow it whatever the matcher ordering.
         public static final String ESCALATED_REPORT_COUNT = "/reports/escalated/count";
+        // A literal segment outside the "/users/**" sub-tree, so the broader "/api/v1/admin/**"
+        // matcher applies and admits a moderator. The activity log is administrator-only, which
+        // method-level @PreAuthorize on the controller enforces, as the hashtag registry does.
+        public static final String USER_EVENTS = "/user-events";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
         // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the
