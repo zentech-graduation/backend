@@ -43,6 +43,7 @@ import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.entity.UserSettings;
 import com.app.modules.users.enums.UserRole;
@@ -74,6 +75,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserStateValidator userStateValidator;
     private final OAuth2ExchangeCodeService oauth2ExchangeCodeService;
     private final TransactionTemplate transactionTemplate;
+    private final UserEventRecorder userEventRecorder;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -97,7 +99,8 @@ public class AuthServiceImpl implements AuthService {
             IpExtractor ipExtractor,
             UserStateValidator userStateValidator,
             OAuth2ExchangeCodeService oauth2ExchangeCodeService,
-            TransactionTemplate transactionTemplate) {
+            TransactionTemplate transactionTemplate,
+            UserEventRecorder userEventRecorder) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -116,6 +119,7 @@ public class AuthServiceImpl implements AuthService {
         this.userStateValidator = userStateValidator;
         this.oauth2ExchangeCodeService = oauth2ExchangeCodeService;
         this.transactionTemplate = transactionTemplate;
+        this.userEventRecorder = userEventRecorder;
     }
 
     @PostConstruct
@@ -459,6 +463,10 @@ public class AuthServiceImpl implements AuthService {
                         null,
                         httpRequest.getHeader(HttpHeaders.USER_AGENT),
                         clientIp);
+        // Placed here rather than in login() so every route that issues a session is covered:
+        // password login, the verify-and-sign-in link, and the OAuth2 code exchange. The refresh
+        // path does not reach this method, which is exactly right - a token refresh is not a login.
+        userEventRecorder.recordSessionStart(user.getId());
         return new AuthResponse(
                 accessToken,
                 refreshToken,

@@ -62,6 +62,7 @@ import com.app.modules.auth.service.AuthResendVerificationEventService;
 import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.entity.UserSettings;
 import com.app.modules.users.enums.UserRole;
@@ -96,6 +97,7 @@ class AuthServiceImplTest {
     @Mock private UserStateValidator userStateValidator;
     @Mock private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
     @Mock private TransactionTemplate transactionTemplate;
+    @Mock private UserEventRecorder userEventRecorder;
 
     private AuthServiceImpl service;
 
@@ -156,7 +158,8 @@ class AuthServiceImplTest {
                         ipExtractor,
                         userStateValidator,
                         oauth2ExchangeCodeService,
-                        transactionTemplate);
+                        transactionTemplate,
+                        userEventRecorder);
     }
 
     private MockHttpServletRequest stubRequest() {
