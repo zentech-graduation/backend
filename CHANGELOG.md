@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- An administrator can now manage the hashtag registry: list and search it across every lifecycle state, create a hashtag ahead of any post using it, ban one, return one to circulation, and delete one.
+Every action is recorded in the moderation audit log with who decided and why.
+- A hashtag can now be banned, which takes the term out of discovery and refuses it on new posts, or deleted, which additionally drops it from the hashtag list shown on a post.
+Neither removes anything: the posts that already used the tag, their associations, and the usage counter all survive, so both decisions are reversible.
+- Banning a hashtag now clears it from the trending list immediately rather than at the next snapshot.
+A term is usually banned while it is trending, which is the worst moment to leave it there.
+- A post whose caption names a banned hashtag is now refused, and the response names the offending tags so they can be highlighted in the caption rather than guessed at.
+This covers creating a post, editing a caption, and publishing a post that was drafted or archived before the ban.
+- A post now lists the hashtags it is associated with, so a client knows which parts of a caption to render as links.
+A hashtag an administrator has deleted is left out while the caption keeps its literal text.
+- A hashtag can now be created directly in a banned state, which reserves a term before anyone can use it.
 - A moderator can now warn an account, giving moderation a step between doing nothing and banning.
 Three warnings that still count produce a strike; the first strike suspends for seven days, the second for thirty, the third and any after it ban permanently.
 - A warning counts toward the next strike while it stands, was issued after the account's most recent strike, and is less than ninety days old, so an account that behaves for long enough starts again.
@@ -29,6 +40,11 @@ The first sign-in attempt after the term lapses restores the account, and a peri
 - The moderation audit log now records role changes and forced logouts, and the action registry lists every action type the moderation surface is planned to record.
 
 ### Changed
+- Restoring a post whose caption names a banned hashtag now succeeds without that association instead of failing.
+A moderator undoing its own removal is not blocked by an unrelated decision it cannot reverse, and the audit entry records which tags were left off.
+- A moderator reading a single report by identifier now reaches the same reports its queue shows, plus any report it escalated itself.
+Anything else answers as if the report did not exist. The queue already hid closed and escalated reports; reading one by identifier did not.
+- Hashtag search and the trending list now show active hashtags only.
 - A moderator's report list now covers the open part of the review lifecycle only. Asking for closed or escalated reports returns an empty page; an administrator's view is unchanged.
 - Resolving or dismissing a report is no longer possible through the triage endpoint, which now only claims a report for review.
 Both closures already had audited endpoints of their own, and the triage path wrote nothing, so a report could previously be closed with no record of who closed it.

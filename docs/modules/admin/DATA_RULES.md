@@ -61,6 +61,10 @@ This table cannot be rebuilt from any other source if lost.
 | `metadata` is written from server-derived facts only and is never accepted from a request body | `AdminActionRecorder`, `AdminActionRequest` |
 | `remove_post` must perform every side effect an owner removal performs, in the same transaction | `AdminServiceImpl.removePost` delegating to `PostService.applyModerationRemoval`. The admin module owns the transition guard and the audit row; the post module owns the side effects, so the administrative and owner removal paths cannot drift apart |
 | `restore_post` must return the post to the status it held before the removal, and report that status in the audit row's `metadata.resultingStatus` | `AdminServiceImpl.restorePost` delegating to `PostService.applyModerationRestore` |
+| A restore whose caption names a banned hashtag succeeds without that association, and names it in the audit row's `metadata.strippedHashtags` | `AdminServiceImpl.moderatePost` - the names are a fact the transaction established, which is the only thing `AdminActionRecorder` accepts. Refusing the restore instead would leave a moderator unable to undo its own removal because of an administrator decision it cannot reverse |
+| `create_hashtag`, `ban_hashtag`, `unban_hashtag`, `edit_hashtag` and `delete_hashtag` must write the decision onto the hashtag row in the same transaction as the audit row | `AdminHashtagServiceImpl` delegating to `HashtagLifecycleService`. The admin module owns the transition guard and the audit row; the hashtag module owns the table and every side effect, the same division `remove_post` uses with the post module |
+| The hashtag audit action follows the transition, not the target alone | `AdminHashtagServiceImpl.auditActionFor` - reaching `banned` is a ban and reaching `deleted` is a delete whichever state it came from, but reaching `active` is an unban only when it came from `banned`. Returning from `deleted` has no audit value of its own, and `edit_hashtag` is what that value is for |
+| `delete_hashtag` never removes the hashtag row | `HashtagLifecycleServiceImpl.changeStatus` - a physical delete cascades to `post_hashtags` and drives the `post_count` trigger over every post that used the tag, which rewrites history nothing asked to rewrite and cannot be undone |
 | `remove_comment` action must set `comments.deleted_at = NOW()` in the same transaction | `AdminServiceImpl.removeComment` |
 | `restore_comment` action must clear `comments.deleted_at` in the same transaction | `AdminServiceImpl.restoreComment` |
 | `resolve_report` and `dismiss_report` must update `reports.status` and `reports.reviewed_by` / `reviewed_at` in the same transaction | `AdminServiceImpl.resolveReport`, `AdminServiceImpl.dismissReport` |
@@ -83,9 +87,11 @@ This table cannot be rebuilt from any other source if lost.
 
 ### C. Scope Simplifications
 
-- Role-based action restrictions are coarse: an administrator may perform every `action_type`, and a moderator may perform every one except the four account-status transitions (`ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`), `change_user_role`, and `force_logout`.
-  The boundary is structural rather than per-action: every administrator-only endpoint lives under `/api/v1/admin/users/`, which a single matcher restricts to ADMIN.
-  There is no finer-grained per-action permission model.
+- Role-based action restrictions are coarse: an administrator may perform every `action_type`, and a moderator may perform every one except the four account-status transitions (`ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`), `change_user_role`, `force_logout`, the warning and strike revocations, and the five hashtag lifecycle actions.
+  The boundary was originally structural: every administrator-only endpoint lived under `/api/v1/admin/users/`, which a single matcher restricts to ADMIN.
+  That is no longer the whole of it. Endpoints a moderator must not reach but that are not account administration - the warning and strike revocations, and the hashtag registry - sit outside that sub-tree deliberately, because moving them under `/users/` would mean adding exceptions ahead of the ADMIN matcher and making authorization depend on matcher ordering.
+  Those endpoints are narrowed by a class-level `@PreAuthorize` instead. The rule to follow is that the `/users/` sub-tree stays ADMIN-only with no exceptions, and anything else administrator-only declares it on the controller.
+  There is still no finer-grained per-action permission model.
 - An administrator's account status cannot be changed through the API by anyone, so removing a rogue administrator is a database-level operation.
   This is deliberate.
   A lockout of the whole administrator tier has no in-application recovery path, because a banned account cannot authenticate and unbanning requires authentication; an escalation that requires database access does have one.
@@ -110,4 +116,5 @@ This table cannot be rebuilt from any other source if lost.
 | `report` | inbound | `report_id` links an admin action to the report that prompted it; `report_reason_configs` supplies the reason keys a warning may cite |
 | `notification` | outbound | A warning enqueues `user.warned.v1`, which `AdminNotificationConsumer` turns into a `warning` notification |
 | `post` | outbound | `remove_post` / `restore_post` actions mutate `posts.status` and `posts.deleted_at` |
+| `hashtag` | outbound | The five hashtag lifecycle actions mutate `hashtags.status` and purge `hashtag_trending`, through `HashtagLifecycleService` |
 | `comment` | outbound | `remove_comment` / `restore_comment` actions mutate `comments.deleted_at` |

@@ -68,7 +68,42 @@ These tables cannot be rebuilt from any other source if lost.
 | Posts from private accounts are only visible to accepted followers | Enforced by `PostVisibilityServiceImpl.isVisibleTo`. |
 | `posts.view_count` is updated by a background job, not a trigger. It may lag real-time activity. See `GLOBAL_RULES.md` — Counter Policy Exception. | `[NOT YET IMPLEMENTED]` — no job exists; `view_count` is never written anywhere in the codebase today |
 | Hashtags in `caption` are parsed and written to `post_hashtags` at publish time | Implemented in `PostServiceImpl.upsertCaptionHashtags`, called from `createPost` (when initially published) and `updateCaption` (when the post is already published). |
+| A caption naming a banned hashtag is refused with `422 POST_BANNED_HASHTAG`, before any mutation | Implemented in `PostServiceImpl.rejectBannedHashtags`, called from `createPost` on both branches, from `updateCaption` before the edit-history row, and from `transitionStatus` on the publish arm. The response body carries the offending names under `data.bannedTags`, normalized, so a client can highlight them in the caption |
+| A moderation restore strips banned hashtags rather than refusing | Implemented in `PostServiceImpl.applyModerationRestore` via `HashtagService.upsertHashtagsForPostSkippingBanned`; the stripped names travel back on `PostModerationResult` and `AdminServiceImpl` records them in the audit row's `metadata.strippedHashtags` |
+| A post response lists the hashtags it is associated with, omitting any the administrator has deleted | Implemented in `PostResponseAssembler`, one batched query per page through `HashtagService.getVisibleHashtagsForPosts`. The `post_hashtags` row is left in place, so nothing is lost if the tag is restored, and the caption keeps its literal `#tag` text either way. A banned hashtag is still listed |
 | User mentions in `caption` generate `mention_post` notifications | `[NOT YET IMPLEMENTED]` — no mention parsing exists in the post module |
+
+#### The banned-hashtag boundary
+
+Five write paths could put a hashtag into `post_hashtags`. Four of them refuse a banned tag and one strips it.
+
+| Path | On a banned tag |
+|------|-----------------|
+| `createPost`, text branch | `422`, before the post row is written |
+| `createPost`, media branch | `422`, before the media assets are even looked up |
+| `updateCaption` | `422`, before the `post_edit_history` row is written |
+| `transitionStatus`, target `published` | `422`, covering `draft -> published` and `archived -> published` |
+| `applyModerationRestore` | the banned associations are not created, the rest are, and the names are recorded |
+
+The publish arm is the one a check on the create routes alone would miss.
+A post drafted or archived before the ban still carries the tag in its caption, and publishing is when that tag would reach `post_hashtags` and the search index for the first time since.
+
+Creating a draft is refused as well, not only publishing it.
+A draft naming a banned tag could never be published, so refusing it at the point it is written tells the author while the caption is still in front of them.
+Every check reads the caption being submitted, never the stored one, so removing the offending tag and retrying always succeeds; no author is trapped in a post it cannot edit.
+
+`HashtagService.upsertHashtagsForPost` refuses a banned name too, but that check is the last line rather than the first.
+By the time it runs the post has been persisted and flushed, so it cannot produce the `422` body and would depend on transaction rollback for correctness.
+It exists so a future caller that forgets the check fails loudly instead of silently associating a banned tag.
+
+Restore is the single exception, and it is deliberate.
+A moderator restoring a post it removed by mistake is correcting its own error.
+Blocking that on an administrator's unrelated decision, which the moderator has no power to reverse, would leave the post removed with no in-role way back.
+
+**None of this touches which posts are visible.**
+Banning a hashtag changes what the hashtag surfaces show and what new writes accept.
+It does not change the feed, the profile listing, post search, or any other query that filters posts, and a post carrying a banned tag keeps appearing exactly where it did before.
+See `hashtag/DATA_RULES.md` section D for the full statement of that boundary.
 
 #### Mixed-media carousels
 
@@ -100,7 +135,7 @@ A change that made carousels type-homogeneous would break a client feature built
 |------------|-----------|--------|
 | `users` | inbound | Every post belongs to a `user_id`; author identity comes from `users` |
 | `media` | outbound | `post_media` references `media_assets` for each attached media item |
-| `hashtag` | outbound | Hashtags extracted from `caption` are written to `post_hashtags` + `hashtags` |
+| `hashtag` | outbound | Hashtags extracted from `caption` are written to `post_hashtags` + `hashtags`. Also read for the banned-name check on every write path and for the hashtag list on a post response |
 | `comment` | inbound | Comments reference `posts.id`; `comment_count` trigger fires on comment table |
 | `social` | inbound | Follow/block state governs post visibility; no direct FK dependency |
 | `notification` | none today | `[NOT YET IMPLEMENTED]` — the post module enqueues only `post.index.upsert.v1` / `post.index.delete.v1` (Elasticsearch sync); no publish, like, or mention event reaches the `notification` module |
