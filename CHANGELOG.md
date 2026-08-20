@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- An administrator can now read what an account did: session starts, searches with the term that was used, and views of another account's profile.
+The read requires a time window of at most thirty days, because the underlying table is partitioned by time and a query without one reads the whole history of the platform.
+- Behavioural events are now recorded at all. Three kinds are written, chosen for what they answer per unit of write volume; every other kind the schema allows for is deliberately still unwritten, and the endpoint's documentation says so, so an administrator seeing three kinds does not report it as a defect.
+Recording a view of one's own profile is skipped, since it would bury the views that matter.
+- An administrator can now see a platform snapshot: accounts by status and by role, totals for posts, comments and stories, reports by status and by reason, and the most used hashtags.
+The snapshot carries the time it was computed, so a client can show how fresh it is rather than implying the numbers are live.
+- An administrator can now chart any of those figures over time. Omitting both bounds gives the last day; the server picks the bucket width from how far back the window reaches and says which it used.
 - An administrator can now manage the hashtag registry: list and search it across every lifecycle state, create a hashtag ahead of any post using it, ban one, return one to circulation, and delete one.
 Every action is recorded in the moderation audit log with who decided and why.
 - A hashtag can now be banned, which takes the term out of discovery and refuses it on new posts, or deleted, which additionally drops it from the hashtag list shown on a post.
@@ -40,6 +47,8 @@ The first sign-in attempt after the term lapses restores the account, and a peri
 - The moderation audit log now records role changes and forced logouts, and the action registry lists every action type the moderation surface is planned to record.
 
 ### Changed
+- Statistics that count whole tables are now computed by a background job rather than on the request, which is the difference between milliseconds and seconds once the platform is large.
+Counts of things that happened in an interval are counted directly rather than derived by subtracting two snapshots, so a moderation sweep can never make "new posts this half hour" read as a negative number.
 - Restoring a post whose caption names a banned hashtag now succeeds without that association instead of failing.
 A moderator undoing its own removal is not blocked by an unrelated decision it cannot reverse, and the audit entry records which tags were left off.
 - A moderator reading a single report by identifier now reaches the same reports its queue shows, plus any report it escalated itself.
@@ -60,7 +69,13 @@ The audit log records server-derived facts only, and a request that still sends 
 - The application now takes its schema-migration lock without holding a transaction open, which is what allows an index to be built without blocking writes to the table.
 
 ### Fixed
+- The monthly partitions behind the behavioural event table now cover the current month and the two ahead of it at all times, and a gap left by an earlier release is closed.
+A write into an uncovered month never failed; it was absorbed silently and made that month's partition impossible to create afterwards, so the problem only became visible once it could no longer be repaired.
+- Listing accounts by role and listing hashtags without a status filter no longer read the whole table. At two hundred thousand rows the account listing filtered to moderators took fifteen milliseconds and touched fifty thousand pages; it now takes a tenth of a millisecond and touches twenty-four.
 - A moderation action's response now carries its creation timestamp, which was previously always null even though the stored entry had one.
+
+### Removed
+- The error code for a missing report resolution note, which no path had been able to raise since the requirement moved behind a mandatory field. An error code nothing can produce is a promise the API cannot keep.
 
 ### Security
 - Ending an account's sessions, whether by forcing a logout or by changing its role, now takes effect on the account's very next request.

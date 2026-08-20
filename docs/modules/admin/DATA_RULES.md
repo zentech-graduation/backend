@@ -11,8 +11,9 @@
 | `admin_actions` | `id`, `admin_id`, `action_type`, `target_user_id`, `target_entity_type`, `target_entity_id`, `report_id`, `reason`, `metadata`, `created_at` | Immutable audit log of every moderation action taken by an admin or moderator. `target_user_id` and `report_id` become NULL if the referenced records are deleted. |
 | `user_warnings` | `id`, `user_id`, `issued_by`, `reason_key`, `note`, `admin_action_id`, `revoked_at`, `revoked_by`, `created_at` | One warning issued against an account. `admin_action_id` is NOT NULL, so a warning that no audit row explains cannot exist. `reason_key` references `report_reason_configs`, which is that table's only runtime reader. |
 | `user_strikes` | `id`, `user_id`, `strike_number`, `triggered_by`, `admin_action_id`, `revoked_at`, `revoked_by`, `created_at` | One strike, the consequence of three active warnings. `strike_number` is `CHECK (>= 1)` and uncapped. |
+| `platform_stats` | `bucket_start`, `granularity`, `metric_key`, `dimension`, `value`, `computed_at` | One value per metric, dimension and bucket. Long format rather than wide, because most metrics are dimensional breakdowns and a wide table would need a migration every time an enum gains a value. The composite primary key is the idempotency guard for a re-run. |
 
-This table cannot be rebuilt from any other source if lost.
+These tables cannot be rebuilt from any other source if lost. `platform_stats` in particular has **no backfill**: a bucket that was never collected can never be collected later, because a gauge is bounded by a bucket end that has already passed and the rows it counted may since have been deleted. Losing a row loses that point permanently.
 
 ---
 
@@ -22,6 +23,9 @@ This table cannot be rebuilt from any other source if lost.
 |------|----------|--------------|-----------------|
 | Action history per admin | Computed at query time | `SELECT` from `admin_actions` where `admin_id = ?` ordered by `created_at DESC` | Query-time |
 | Action history per target user | Computed at query time | `SELECT` from `admin_actions` where `target_user_id = ?` | Query-time (index `idx_admin_actions_target`) |
+| Platform statistics, fine grain | `platform_stats` rows at `granularity = 'half_hour'` | Counted directly from `users`, `posts`, `comments`, `stories`, `reports`, `follows`, `post_likes` and `admin_actions` | `StatsCollectionJob`, one completed bucket at a time. Never written from a Controller or Service on a request path. |
+| Platform statistics, daily grain | `platform_stats` rows at `granularity = 'day'` | Aggregated from that day's fine buckets: flows summed, gauges taking the last bucket | `StatsRollupJob`, once a day, for days older than the fine retention |
+| The current snapshot endpoint | Read straight from the newest fine bucket | Nothing is computed at request time except the most-used hashtag list | Request-time read of stored rows |
 
 ---
 
@@ -79,6 +83,14 @@ This table cannot be rebuilt from any other source if lost.
 | Revoking a strike leaves `users.status` exactly as it is; lifting the penalty is a separate decision through the account-status endpoints | `UserDisciplineServiceImpl.revokeStrike` |
 | A warned account is notified through the outbox in the same transaction as the warning, with a null actor | `UserDisciplineServiceImpl.enqueueWarningNotification`, `AdminNotificationConsumer` - a named actor would run the notification block guard, so an account that had blocked the moderator would never learn it had been warned |
 | An account may read its own unrevoked warnings, never its strikes and never another account's | `UserDisciplineServiceImpl.listOwnWarnings` |
+| Every actor-and-target rule for a status change and for a role change is evaluated in one place | `AdminAuthorizationServiceImpl` - the two used to hold their own copies of the same three rules, so one would eventually have been updated alone. Each caller still maps the shared outcome to the error code its own contract publishes |
+| A gauge metric is bounded by the bucket end, never by the moment the job happens to run | `PlatformMetric` - this is what lets the job be re-run for a past bucket after an incident and restate history rather than overwrite it with the present |
+| A flow metric is a direct count over the bucket window, never a difference between consecutive gauges | `PlatformMetric` - a deletion would make such a difference negative, and a missed run would fold two intervals into one bucket with no way to detect it afterwards |
+| The roll-up sums flows and takes the last bucket for gauges | `PlatformStatsRepositoryImpl.rollUpDay` - summing 48 snapshots of a total multiplies it by 48, and it looks plausible enough to ship |
+| The roll-up aggregates and deletes in one transaction, in that order | `PlatformStatsRollupServiceImpl.rollUpDay` - deleting first and then failing would lose a day of history with nothing able to reconstruct it |
+| The bucket a process starts inside is never written | `StatsCollectionJob` - a partial bucket records a fraction of an interval as a whole one, and with no backfill that low point sits at the left edge of every chart for as long as the data is kept |
+| Day boundaries in the roll-up are pinned to UTC, not to the database session timezone | `PlatformStatsRepositoryImpl` - `date_trunc` on a `timestamptz` truncates in the session timezone, so leaving it implicit would make two deployments in different zones disagree about where a day starts |
+| The activity log read requires a bounded time window of at most 30 days | `AdminUserEventServiceImpl` - `user_events` is partitioned on `created_at`, so the window is the only predicate that prunes; a read bounded only by account touches every partition ever declared |
 | The violation listing's cursor is scoped per role | `CursorScope.ADMIN_VIOLATIONS_WARNINGS` and `ADMIN_VIOLATIONS_FULL` - the listing returns different rows to a moderator and an administrator, so a shared tag would let a moderator replay an administrator's cursor into strike rows |
 
 **`admin_id` cascade behavior** `[RESOLVED IN V29]`:
@@ -102,6 +114,11 @@ This table cannot be rebuilt from any other source if lost.
   An administrator's view is unrestricted, and there is no per-target or per-module scoping beyond that.
 - `suspended_until` is meaningful only while `status = 'suspended'`, and `status` alone decides the authorization outcome on any request.
   A row with `status <> 'suspended'` and a non-null `suspended_until` is a defect, not a state to interpret.
+- **A single application instance is assumed for both statistics jobs.**
+  There is no distributed scheduler lock anywhere in this codebase, so two instances would each run the collection job and the roll-up job.
+  The composite primary key on `platform_stats` together with `ON CONFLICT DO UPDATE` keeps that harmless rather than duplicative: a double run writes the same numbers twice rather than doubling them.
+  It is not free of consequence though, because a double run doubles the whole-table aggregate cost, and the roll-up's aggregate-then-delete pair is only atomic within one transaction and not across two instances racing.
+  Scaling this deployment out requires a scheduler lock first.
 - Force logout ends refresh capability immediately but not access capability.
   The access-token blacklist is keyed on the token's own `jti`, which no administrator holds, so an access token already issued keeps working for the remainder of `ACCESS_TOKEN_TTL`.
   `WebSocketRevocationSweepService` does not close the target's live realtime sessions either, because it re-validates the access token and that token is still valid.
@@ -116,5 +133,6 @@ This table cannot be rebuilt from any other source if lost.
 | `report` | inbound | `report_id` links an admin action to the report that prompted it; `report_reason_configs` supplies the reason keys a warning may cite |
 | `notification` | outbound | A warning enqueues `user.warned.v1`, which `AdminNotificationConsumer` turns into a `warning` notification |
 | `post` | outbound | `remove_post` / `restore_post` actions mutate `posts.status` and `posts.deleted_at` |
-| `hashtag` | outbound | The five hashtag lifecycle actions mutate `hashtags.status` and purge `hashtag_trending`, through `HashtagLifecycleService` |
+| `hashtag` | outbound | The five hashtag lifecycle actions mutate `hashtags.status` and purge `hashtag_trending`, through `HashtagLifecycleService`. The statistics snapshot also reads the most-used active hashtags live |
+| `recommendation` | inbound | The activity log reads `user_events`, which `recommendation` owns and is the sole writer of |
 | `comment` | outbound | `remove_comment` / `restore_comment` actions mutate `comments.deleted_at` |
