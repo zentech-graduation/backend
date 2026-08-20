@@ -174,6 +174,11 @@ public final class ApiConstants {
         // matcher applies and admits a moderator. The activity log is administrator-only, which
         // method-level @PreAuthorize on the controller enforces, as the hashtag registry does.
         public static final String USER_EVENTS = "/user-events";
+        // Literal segments outside the "/users/**" sub-tree, so the broader "/api/v1/admin/**"
+        // matcher applies and admits a moderator. Both are administrator-only, which method-level
+        // @PreAuthorize on the controller enforces.
+        public static final String STATS_CURRENT = "/stats/current";
+        public static final String STATS_TIMESERIES = "/stats/timeseries";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
         // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the

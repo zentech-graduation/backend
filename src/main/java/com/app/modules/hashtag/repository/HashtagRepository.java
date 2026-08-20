@@ -88,6 +88,24 @@ public interface HashtagRepository extends JpaRepository<Hashtag, UUID>, Hashtag
             @Param("query") String query, @Param("limit") int limit, @Param("offset") int offset);
 
     /**
+     * Returns the most used active hashtags, most used first.
+     *
+     * <p>Served by {@code idx_hashtags_active_post_count} as an index scan with a limit, which is
+     * why the administrative statistics surface computes this one metric live instead of reading a
+     * snapshot: it is the metric where staleness is most visible and the only one cheap enough to
+     * answer on a request path.
+     *
+     * @param limit maximum number of rows to return
+     * @return active hashtags ordered by {@code post_count} descending, then {@code name} ascending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM hashtags WHERE status = 'active'"
+                            + " ORDER BY post_count DESC, name ASC LIMIT :limit",
+            nativeQuery = true)
+    List<Hashtag> findTopActiveByPostCount(@Param("limit") int limit);
+
+    /**
      * Returns the subset of the supplied names that name a banned hashtag.
      *
      * <p>One statement for a whole caption. Served by the unique index on {@code name} as an index
