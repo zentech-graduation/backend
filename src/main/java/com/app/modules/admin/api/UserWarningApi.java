@@ -17,6 +17,9 @@ import com.app.modules.admin.dto.response.UserWarningResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -39,6 +42,18 @@ public interface UserWarningApi {
                             + " first. Warnings only: strikes are moderation state and are never"
                             + " exposed here, and neither is the moderator who issued the warning. Any"
                             + " authenticated caller may read this, about itself and nothing else.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Cursor page of the caller's own warnings"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
     @CursorErrorResponses
     @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Users.ME_WARNINGS)
