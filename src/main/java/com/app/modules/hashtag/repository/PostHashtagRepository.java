@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import com.app.modules.hashtag.entity.PostHashtag;
 import com.app.modules.hashtag.entity.PostHashtagId;
+import com.app.modules.hashtag.enums.HashtagStatus;
 
 @Repository
 public interface PostHashtagRepository extends JpaRepository<PostHashtag, PostHashtagId> {
@@ -38,4 +39,26 @@ public interface PostHashtagRepository extends JpaRepository<PostHashtag, PostHa
     List<UUID> findHashtagIdsByPostId(@Param("postId") UUID postId);
 
     List<PostHashtag> findAllByIdPostIdIn(Collection<UUID> postIds);
+
+    /**
+     * Returns the hashtag associations of the given posts, narrowed to the supplied statuses and
+     * carrying the hashtag name.
+     *
+     * <p>One statement for a whole page of posts, so hydrating a listing costs no query per row.
+     * The status filter is what keeps a deleted hashtag off a post response while leaving its
+     * {@code post_hashtags} row in place, so nothing is lost if the tag is ever restored.
+     *
+     * @param postIds the posts to hydrate
+     * @param statuses hashtag statuses eligible to appear on a post
+     * @return associations ordered by hashtag name; posts without eligible hashtags are absent
+     */
+    @Query(
+            "SELECT ph.id.postId AS postId, h.id AS hashtagId, h.name AS name"
+                    + " FROM PostHashtag ph, Hashtag h"
+                    + " WHERE h.id = ph.id.hashtagId AND ph.id.postId IN :postIds"
+                    + " AND h.status IN :statuses"
+                    + " ORDER BY h.name ASC")
+    List<PostHashtagNameProjection> findNamedByPostIdIn(
+            @Param("postIds") Collection<UUID> postIds,
+            @Param("statuses") Collection<HashtagStatus> statuses);
 }

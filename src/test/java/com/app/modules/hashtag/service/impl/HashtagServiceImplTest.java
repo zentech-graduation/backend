@@ -1,10 +1,10 @@
 package com.app.modules.hashtag.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -23,20 +23,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.app.common.outbox.service.OutboxService;
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.modules.hashtag.entity.Hashtag;
 import com.app.modules.hashtag.entity.PostHashtag;
 import com.app.modules.hashtag.entity.PostHashtagId;
 import com.app.modules.hashtag.repository.HashtagIndexProjection;
 import com.app.modules.hashtag.repository.HashtagRepository;
 import com.app.modules.hashtag.repository.PostHashtagRepository;
+import com.app.modules.hashtag.service.HashtagIndexEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class HashtagServiceImplTest {
 
     @Mock private HashtagRepository hashtagRepository;
     @Mock private PostHashtagRepository postHashtagRepository;
-    @Mock private OutboxService outboxService;
+    @Mock private HashtagIndexEventPublisher indexEventPublisher;
     @Mock private EntityManager entityManager;
 
     private HashtagServiceImpl service;
@@ -45,7 +47,10 @@ class HashtagServiceImplTest {
     void setUp() {
         service =
                 new HashtagServiceImpl(
-                        hashtagRepository, postHashtagRepository, entityManager, outboxService);
+                        hashtagRepository,
+                        postHashtagRepository,
+                        entityManager,
+                        indexEventPublisher);
     }
 
     @Test
@@ -123,14 +128,7 @@ class HashtagServiceImplTest {
 
         service.upsertHashtagsForPost(postId, List.of("#Spring"));
 
-        verify(outboxService)
-                .enqueue(
-                        eq("hashtag.index.upsert.v1"),
-                        eq("hashtag.index.upsert.v1"),
-                        eq("hashtag"),
-                        any(UUID.class),
-                        isNull(),
-                        anyMap());
+        verify(indexEventPublisher).enqueueSync(hashtagId);
     }
 
     @Test
@@ -144,14 +142,7 @@ class HashtagServiceImplTest {
         service.removeHashtagsForPost(postId);
 
         verify(postHashtagRepository).deleteAllByPostId(postId);
-        verify(outboxService)
-                .enqueue(
-                        eq("hashtag.index.delete.v1"),
-                        eq("hashtag.index.delete.v1"),
-                        eq("hashtag"),
-                        eq(hashtagId),
-                        isNull(),
-                        anyMap());
+        verify(indexEventPublisher).enqueueDelete(hashtagId);
     }
 
     @Test
@@ -166,14 +157,7 @@ class HashtagServiceImplTest {
         service.removeHashtagsForPost(postId);
 
         verify(postHashtagRepository).deleteAllByPostId(postId);
-        verify(outboxService)
-                .enqueue(
-                        eq("hashtag.index.upsert.v1"),
-                        eq("hashtag.index.upsert.v1"),
-                        eq("hashtag"),
-                        eq(hashtagId),
-                        isNull(),
-                        anyMap());
+        verify(indexEventPublisher).enqueueSync(hashtagId);
     }
 
     @Test
@@ -200,6 +184,97 @@ class HashtagServiceImplTest {
     @Test
     void getHashtagIdsForPosts_emptyInput_returnsEmptyMap() {
         assertThat(service.getHashtagIdsForPosts(List.of())).isEmpty();
+        verifyNoInteractions(postHashtagRepository);
+    }
+
+    @Test
+    void findBannedNames_mixedInput_returnsOnlyTheBannedSubsetNormalized() {
+        when(hashtagRepository.findBannedNames(List.of("spring", "banned", "java")))
+                .thenReturn(List.of("banned"));
+
+        assertThat(service.findBannedNames(List.of("#Spring", "BANNED", " java ")))
+                .containsExactly("banned");
+    }
+
+    @Test
+    void findBannedNames_emptyInput_returnsEmptyWithoutQuerying() {
+        assertThat(service.findBannedNames(List.of())).isEmpty();
+
+        verifyNoInteractions(hashtagRepository);
+    }
+
+    @Test
+    void findBannedNames_allTagsActive_returnsEmpty() {
+        when(hashtagRepository.findBannedNames(List.of("spring", "java"))).thenReturn(List.of());
+
+        assertThat(service.findBannedNames(List.of("spring", "java"))).isEmpty();
+    }
+
+    @Test
+    void findBannedNames_blankAndOverLongTags_areDroppedBeforeQuerying() {
+        when(hashtagRepository.findBannedNames(List.of("spring"))).thenReturn(List.of());
+
+        assertThat(service.findBannedNames(List.of("#", "  ", "spring", "x".repeat(101))))
+                .isEmpty();
+
+        verify(hashtagRepository).findBannedNames(List.of("spring"));
+    }
+
+    @Test
+    void upsertHashtagsForPost_bannedTag_throwsAndAssociatesNothing() {
+        UUID postId = UUID.randomUUID();
+        when(hashtagRepository.findBannedNames(List.of("spring", "banned")))
+                .thenReturn(List.of("banned"));
+
+        assertThatThrownBy(
+                        () -> service.upsertHashtagsForPost(postId, List.of("#spring", "#banned")))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.POST_BANNED_HASHTAG);
+
+        verify(hashtagRepository, never()).upsertByName(any());
+        verifyNoInteractions(postHashtagRepository);
+        verifyNoInteractions(indexEventPublisher);
+    }
+
+    @Test
+    void upsertHashtagsForPost_bannedTag_carriesTheOffendingNamesOnTheFailure() {
+        when(hashtagRepository.findBannedNames(List.of("one", "two"))).thenReturn(List.of("two"));
+
+        AppException thrown =
+                catchThrowableOfType(
+                        AppException.class,
+                        () ->
+                                service.upsertHashtagsForPost(
+                                        UUID.randomUUID(), List.of("#one", "#two")));
+
+        assertThat(thrown.getDetails()).isEqualTo(Map.of("bannedTags", List.of("two")));
+    }
+
+    @Test
+    void upsertHashtagsForPostSkippingBanned_bannedTag_associatesTheRestAndReportsTheSkipped() {
+        UUID postId = UUID.randomUUID();
+        UUID keptId = UUID.randomUUID();
+        Hashtag kept = Hashtag.builder().id(keptId).name("spring").build();
+        when(hashtagRepository.findBannedNames(List.of("spring", "banned")))
+                .thenReturn(List.of("banned"));
+        when(hashtagRepository.findByName("spring")).thenReturn(Optional.of(kept));
+
+        assertThat(
+                        service.upsertHashtagsForPostSkippingBanned(
+                                postId, List.of("#spring", "#banned")))
+                .containsExactly("banned");
+
+        verify(hashtagRepository).upsertByName("spring");
+        verify(hashtagRepository, never()).upsertByName("banned");
+        verify(postHashtagRepository, times(1)).save(any(PostHashtag.class));
+        verify(indexEventPublisher).enqueueSync(keptId);
+    }
+
+    @Test
+    void getVisibleHashtagsForPosts_emptyInput_returnsEmptyWithoutQuerying() {
+        assertThat(service.getVisibleHashtagsForPosts(List.of())).isEmpty();
+
         verifyNoInteractions(postHashtagRepository);
     }
 

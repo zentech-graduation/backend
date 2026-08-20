@@ -26,6 +26,7 @@ import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
+import com.app.modules.hashtag.enums.HashtagStatus;
 import com.app.modules.hashtag.event.HashtagIndexDeleteEvent;
 import com.app.modules.hashtag.event.HashtagIndexUpsertEvent;
 import com.app.modules.hashtag.messaging.HashtagEventTypes;
@@ -158,10 +159,18 @@ public class HashtagIndexSyncConsumer {
                 Optional<HashtagIndexProjection> projection =
                         hashtagRepository.findIndexProjectionsByIdIn(List.of(hashtagId)).stream()
                                 .findFirst();
-                // post_count gate: only index a hashtag with live posts. A missing row or zero
-                // count means a concurrent delete won the race; drop any stale doc rather than
-                // resurrecting it from an out-of-order upsert.
-                if (projection.isPresent() && projection.get().getPostCount() > 0) {
+                // Two gates, both read from the source of truth rather than from the envelope,
+                // which carries only the id.
+                //   post_count: only index a hashtag with live posts. A missing row or zero count
+                //     means a concurrent delete won the race; drop any stale doc rather than
+                //     resurrecting it from an out-of-order upsert.
+                //   status: a banned or deleted hashtag belongs on no discovery surface, and
+                //     Elasticsearch is the primary path behind hashtag search. Reading the status
+                //     here is why banning needs no new event type: the same upsert event turns
+                //     into a delete the moment the row says the tag is out of circulation.
+                if (projection.isPresent()
+                        && projection.get().getPostCount() > 0
+                        && projection.get().getStatus() == HashtagStatus.ACTIVE) {
                     HashtagIndexProjection source = projection.get();
                     HashtagDocument document =
                             HashtagDocument.builder()

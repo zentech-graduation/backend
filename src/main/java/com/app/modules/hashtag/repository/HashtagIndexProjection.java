@@ -3,6 +3,8 @@ package com.app.modules.hashtag.repository;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.app.modules.hashtag.enums.HashtagStatus;
+
 /**
  * Read projection of a hashtag for search-index synchronization.
  *
@@ -17,6 +19,11 @@ public interface HashtagIndexProjection {
     String getName();
 
     int getPostCount();
+
+    /**
+     * Lifecycle state; anything other than {@code ACTIVE} means the document must not be indexed.
+     */
+    HashtagStatus getStatus();
 
     OffsetDateTime getCreatedAt();
 }
