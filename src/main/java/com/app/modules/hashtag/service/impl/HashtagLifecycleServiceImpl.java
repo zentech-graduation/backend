@@ -104,17 +104,28 @@ public class HashtagLifecycleServiceImpl implements HashtagLifecycleService {
             throw new AppException(
                     ApiErrorCode.BAD_REQUEST, "A hashtag cannot be created already deleted");
         }
+        Hashtag hashtag =
+                Hashtag.builder()
+                        .name(name)
+                        .status(status)
+                        .statusNote(note)
+                        .statusAt(OffsetDateTime.now())
+                        .statusBy(actorId)
+                        .build();
         try {
-            hashtagRepository.insertWithStatus(
-                    name, status.toJson(), note, OffsetDateTime.now(), actorId);
             // The unique index on name is the authoritative guard against a concurrent create;
-            // flush here so the violation surfaces as a conflict rather than a late 500 from the
-            // commit.
-            entityManager.flush();
+            // flushing here makes the violation surface as a conflict rather than a late 500 from
+            // the commit. There is no ON CONFLICT clause on purpose: this is the administrative
+            // create and it must report a conflict, not silently succeed against a row somebody
+            // else owns. Ordinary first-use traffic goes through upsertByName, which does the
+            // opposite for exactly the same reason.
+            hashtagRepository.saveAndFlush(hashtag);
         } catch (DataIntegrityViolationException ex) {
             throw new AppException(ApiErrorCode.HASHTAG_ALREADY_EXISTS);
         }
-        Hashtag hashtag = hashtagRepository.findByName(name).orElseThrow();
+        // created_at is database-defaulted and mapped insertable = false, so the persisted instance
+        // does not carry it until the row is read back.
+        entityManager.refresh(hashtag);
         log.info("Hashtag created by administrator: name={}, status={}", name, status);
         // No index event. A hashtag nothing has used has a zero post_count, and the consumer's
         // post_count gate would drop the document anyway, so the event would be pure noise.

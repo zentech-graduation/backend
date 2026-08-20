@@ -102,17 +102,36 @@ class HashtagRepositoryIT {
     }
 
     @Test
-    void insertWithStatus_duplicateName_failsAtTheDatabaseLayer() {
-        hashtagRepository.insertWithStatus(
-                "dupetag", "banned", "first", OffsetDateTime.now(), null);
+    void administrativeCreate_duplicateName_failsAtTheDatabaseLayer() {
+        // The administrative create carries no ON CONFLICT clause, unlike upsertByName, so a second
+        // create of the same name must surface a conflict rather than silently report success
+        // against a row somebody else owns.
+        hashtagRepository.saveAndFlush(adminCreated("dupetag", HashtagStatus.BANNED, "first"));
 
         assertThatThrownBy(
-                        () -> {
-                            hashtagRepository.insertWithStatus(
-                                    "dupetag", "banned", "second", OffsetDateTime.now(), null);
-                            hashtagRepository.flush();
-                        })
+                        () ->
+                                hashtagRepository.saveAndFlush(
+                                        adminCreated("dupetag", HashtagStatus.BANNED, "second")))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void administrativeCreate_assignsAnIdentifierWithoutANativeInsert() {
+        Hashtag created =
+                hashtagRepository.saveAndFlush(
+                        adminCreated("generatedid", HashtagStatus.ACTIVE, "seeded"));
+
+        assertThat(created.getId()).isNotNull();
+        assertThat(hashtagRepository.findByName("generatedid")).isPresent();
+    }
+
+    private static Hashtag adminCreated(String name, HashtagStatus status, String note) {
+        return Hashtag.builder()
+                .name(name)
+                .status(status)
+                .statusNote(note)
+                .statusAt(OffsetDateTime.now())
+                .build();
     }
 
     @Test
