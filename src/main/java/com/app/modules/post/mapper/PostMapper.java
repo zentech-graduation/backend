@@ -6,6 +6,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.hashtag.dto.response.HashtagSummaryResponse;
 import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
@@ -33,7 +34,8 @@ public interface PostMapper {
      *     service
      * @param hasReported whether the requesting viewer has already reported this post,
      *     batch-resolved by the service
-     * @return the post response with media, the embedded author, and viewer state
+     * @param hashtags the post's listable hashtags, batch-resolved by the service
+     * @return the post response with media, the embedded author, viewer state, and hashtags
      */
     @Mapping(source = "post.id", target = "id")
     @Mapping(source = "post.status", target = "status")
@@ -44,13 +46,15 @@ public interface PostMapper {
     @Mapping(source = "isLiked", target = "isLiked")
     @Mapping(source = "isSaved", target = "isSaved")
     @Mapping(source = "hasReported", target = "hasReported")
+    @Mapping(source = "hashtags", target = "hashtags")
     PostResponse toResponse(
             Post post,
             List<PostMediaResponse> media,
             UserSummaryResponse author,
             boolean isLiked,
             boolean isSaved,
-            boolean hasReported);
+            boolean hasReported,
+            List<HashtagSummaryResponse> hashtags);
 
     /**
      * Builds the feed-specific post response from the entity, the separately hydrated media items,

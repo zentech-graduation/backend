@@ -2,6 +2,7 @@ package com.app.modules.admin.service.impl;
 
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -299,6 +300,14 @@ public class AdminServiceImpl implements AdminService {
                 restore
                         ? postService.applyModerationRestore(postId)
                         : postService.applyModerationRemoval(postId);
+        // Server-derived facts only, which is the whole contract AdminActionRecorder enforces. The
+        // stripped names are recorded when a restore re-derived a caption naming a banned hashtag:
+        // the post came back without that association, and the audit row is where that shows.
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("resultingStatus", result.status().toJson());
+        if (!result.strippedHashtags().isEmpty()) {
+            metadata.put("strippedHashtags", result.strippedHashtags());
+        }
         return adminActionRecorder.record(
                 actorId,
                 actionType,
@@ -307,7 +316,7 @@ public class AdminServiceImpl implements AdminService {
                 postId,
                 request.reportId(),
                 request.reason(),
-                Map.of("resultingStatus", result.status().toJson()));
+                metadata);
     }
 
     private AdminActionResponse moderateComment(

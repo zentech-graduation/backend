@@ -126,6 +126,7 @@ public class PostServiceImpl implements PostService {
                 throw new AppException(
                         ApiErrorCode.BAD_REQUEST, "Text posts must not include media");
             }
+            rejectBannedHashtags(request.caption());
             Post post =
                     Post.builder()
                             .userId(authorId)
@@ -146,6 +147,7 @@ public class PostServiceImpl implements PostService {
             log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
             return postResponseAssembler.assemble(authorId, post);
         }
+        rejectBannedHashtags(request.caption());
         List<UUID> mediaIds = request.mediaIds();
         if (mediaIds == null || mediaIds.isEmpty()) {
             throw new AppException(
@@ -227,6 +229,7 @@ public class PostServiceImpl implements PostService {
         if (!requesterId.equals(post.getUserId())) {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
+        rejectBannedHashtags(request.caption());
         // The audit row records the pre-edit caption before any mutation.
         postEditHistoryRepository.save(
                 PostEditHistory.builder()
@@ -272,6 +275,12 @@ public class PostServiceImpl implements PostService {
         if (!allowed) {
             throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid status transition");
         }
+        if (target == PostStatus.PUBLISHED) {
+            // The path a check on the create routes alone would miss: a post drafted or archived
+            // before the ban carries the tag, and publishing is when that tag would reach
+            // post_hashtags and the search index for the first time since.
+            rejectBannedHashtags(post.getCaption());
+        }
         post.setStatus(target);
         if (target == PostStatus.PUBLISHED) {
             upsertCaptionHashtags(post.getId(), post.getCaption());
@@ -310,7 +319,7 @@ public class PostServiceImpl implements PostService {
         postRepository.applyModerationRemoval(postId, OffsetDateTime.now());
         enqueuePostIndexDelete(postId, post.getUserId());
         log.info("Post removed by moderation: postId={}, from={}", postId, post.getStatus());
-        return new PostModerationResult(post.getUserId(), PostStatus.REMOVED);
+        return new PostModerationResult(post.getUserId(), PostStatus.REMOVED, List.of());
     }
 
     @Override
@@ -326,16 +335,31 @@ public class PostServiceImpl implements PostService {
                         : PostStatus.fromJson(post.getStatusBeforeModeration());
         postRepository.applyModerationRestore(postId, restored.toJson());
         // Only a published post belongs in post_hashtags and in the search index; the owner path
-        // keeps a draft and an archived post out of both. A hashtag-eligibility check, when one
-        // exists, belongs on this re-derivation rather than on the removal arm, because removal
-        // detaches every association regardless of which tag it is.
+        // keeps a draft and an archived post out of both. The hashtag-eligibility check belongs on
+        // this re-derivation rather than on the removal arm, because removal detaches every
+        // association regardless of which tag it is.
+        //
+        // This is the one write path that strips a banned tag instead of refusing. A moderator
+        // restoring a post it removed by mistake is correcting its own error and must not be
+        // blocked by an unrelated administrator decision it has no power to reverse; refusing here
+        // would leave the post removed with no in-role way to bring it back. The stripped names
+        // travel back to the caller so the audit row records exactly what was dropped and the
+        // moderator is told rather than finding out later.
+        List<String> strippedHashtags = List.of();
         if (restored == PostStatus.PUBLISHED) {
-            upsertCaptionHashtags(postId, post.getCaption());
+            List<String> tags = extractHashtags(post.getCaption());
+            if (!tags.isEmpty()) {
+                strippedHashtags = hashtagService.upsertHashtagsForPostSkippingBanned(postId, tags);
+            }
             enqueuePostIndexUpsert(
                     postId, post.getUserId(), post.getCreatedAt().atOffset(ZoneOffset.UTC));
         }
-        log.info("Post restored by moderation: postId={}, to={}", postId, restored);
-        return new PostModerationResult(post.getUserId(), restored);
+        log.info(
+                "Post restored by moderation: postId={}, to={}, strippedHashtags={}",
+                postId,
+                restored,
+                strippedHashtags);
+        return new PostModerationResult(post.getUserId(), restored, strippedHashtags);
     }
 
     @Override
@@ -528,6 +552,26 @@ public class PostServiceImpl implements PostService {
         List<String> tags = extractHashtags(caption);
         if (!tags.isEmpty()) {
             hashtagService.upsertHashtagsForPost(postId, tags);
+        }
+    }
+
+    /**
+     * Refuses a caption naming a banned hashtag, before the caller mutates anything.
+     *
+     * <p>Called on every write path that could put a tag into {@code post_hashtags}, including the
+     * draft ones. A draft carrying a banned tag could never be published, so refusing it at the
+     * point it is written tells the author while the caption is still in front of them rather than
+     * at publish time. The check reads the caption being submitted, so removing the offending tag
+     * and retrying always succeeds; it never traps an author in a post it cannot edit.
+     */
+    private void rejectBannedHashtags(String caption) {
+        List<String> tags = extractHashtags(caption);
+        if (tags.isEmpty()) {
+            return;
+        }
+        List<String> banned = hashtagService.findBannedNames(tags);
+        if (!banned.isEmpty()) {
+            throw new AppException(ApiErrorCode.POST_BANNED_HASHTAG, Map.of("bannedTags", banned));
         }
     }
 

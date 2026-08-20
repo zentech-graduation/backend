@@ -200,7 +200,7 @@ class AdminServiceImplTest {
         when(postRepository.findStatusIncludingDeleted(postId))
                 .thenReturn(Optional.of("published"));
         when(postService.applyModerationRemoval(postId))
-                .thenReturn(new PostModerationResult(ownerId, PostStatus.REMOVED));
+                .thenReturn(new PostModerationResult(ownerId, PostStatus.REMOVED, List.of()));
         stubAudit(expected);
 
         AdminActionResponse result =
@@ -218,7 +218,7 @@ class AdminServiceImplTest {
         AdminActionResponse expected = response(AdminActionType.RESTORE_POST);
         when(postRepository.findStatusIncludingDeleted(postId)).thenReturn(Optional.of("removed"));
         when(postService.applyModerationRestore(postId))
-                .thenReturn(new PostModerationResult(ownerId, PostStatus.DRAFT));
+                .thenReturn(new PostModerationResult(ownerId, PostStatus.DRAFT, List.of()));
         stubAudit(expected);
 
         AdminActionResponse result =

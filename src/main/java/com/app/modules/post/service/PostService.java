@@ -113,8 +113,16 @@ public interface PostService {
      * resulting status is published. A draft or an archived post belongs in neither, and the owner
      * path keeps both out of both as well.
      *
+     * <p>A caption naming a banned hashtag does not block the restore. The banned association is
+     * simply not created and its name comes back on the result, so the caller can record it and
+     * tell the moderator. This is the only write path that tolerates a banned tag: every other one
+     * refuses with {@code POST_BANNED_HASHTAG}. A moderator restoring a post it removed by mistake
+     * is correcting its own error, and blocking it on an administrator decision it cannot reverse
+     * would leave the post removed with no in-role way back.
+     *
      * @param postId post to restore
-     * @return the post's author and the status it now holds, which is not necessarily published
+     * @return the post's author, the status it now holds, which is not necessarily published, and
+     *     any banned hashtag names the restore left unassociated
      * @throws com.app.common.exception.AppException with {@code POST_NOT_FOUND} when no row holds
      *     that id
      */
