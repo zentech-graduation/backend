@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- A post in the personalized ranked feed now keeps its hashtags. They were dropped from every ranked post while the chronological feed kept them, so the same post rendered differently depending on which feed it came from.
 - The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
 
 ### Added
@@ -126,6 +127,7 @@ Sessions already open when this ships stay valid; an ordinary logout still ends 
 - Every administrative controller now asserts that its endpoints refuse a request carrying no token at all. The suite previously checked only that a revoked token was refused.
 - The permitted-operations payload is checked by agreeing with the component that enforces the rules, for every combination of actor role and target role, rather than by restating the rules a third time.
 - The report queue's plan is asserted directly, so neither adding a status to the queue without extending the index nor removing the apparently redundant cursor bound can silently return it to a full scan.
+- The ranked feed's copy of a post is checked component by component against the original, walking the response's fields reflectively rather than naming them, so a field added later is covered without editing the test and a field silently swapped with a neighbour of the same type is caught.
 
 ### Fixed
 - Corrected `database/schema.sql`, which still had the group-conversation columns, a stale follow-counter function, and no record of the new conversation-customization columns despite Flyway having already migrated past all of it.
