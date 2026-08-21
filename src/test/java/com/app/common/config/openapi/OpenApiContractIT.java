@@ -653,6 +653,24 @@ class OpenApiContractIT {
     }
 
     @Test
+    void theDocumentPointsAtTheRealTimeSurfaceItCannotDescribe() {
+        JsonNode doc = document();
+        // OpenAPI has no vocabulary for a STOMP destination, so a consumer reading this document
+        // alone found no mention of WebSockets at all and polled for the four domains that are
+        // pushed. The document cannot describe the surface; it must at least name it and say where
+        // it is described.
+        String description = doc.path("info").path("description").asString("");
+        assertThat(description)
+                .as("the document must name the real-time surface it cannot describe")
+                .contains("/ws/")
+                .contains("ws-ticket")
+                .contains("docs/modules/WEBSOCKET_GUIDE.md");
+        assertThat(doc.path("externalDocs").path("url").asString(""))
+                .as("and link to it")
+                .isEqualTo("docs/modules/WEBSOCKET_GUIDE.md");
+    }
+
+    @Test
     void everyErrorCodeCarryingAPayloadHasAReachableDetailSchema() {
         JsonNode doc = document();
         // Two error codes reach ApiResponse.data with a non-null payload: POST_BANNED_HASHTAG and
