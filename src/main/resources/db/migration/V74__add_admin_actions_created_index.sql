@@ -1,0 +1,38 @@
+-- The index the administrator audit listing needs. admin_actions is append-only and has no
+-- retention, so the scan it replaces grows monotonically and forever.
+--
+-- Runs outside a transaction, declared in the accompanying V74__*.sql.conf, so the build can be
+-- CONCURRENTLY. Every moderation action writes a row here, so a plain build would block moderation
+-- for the whole of it.
+--
+-- The listing is
+--   SELECT ... FROM admin_actions ORDER BY created_at DESC, id DESC LIMIT n
+-- with the optional actor, target and action-type filters left unset, which is the administrator's
+-- default view. idx_admin_actions_admin leads with admin_id, so an unfiltered listing cannot use it
+-- at all; the moderator path, which always filters by actor, already could and still does.
+--
+-- Measured on PostgreSQL 18.6 against 100,000 rows, the size the audit reported the scan at, with
+-- only 2,000 distinct created_at values so page boundaries land on fifty-row ties:
+--
+--   first page
+--     without: Parallel Seq Scan reading 100,000 rows plus a top-N heapsort
+--              10.4 ms, 1,588 buffers
+--     with:    Index Scan, no sort node
+--              0.045 ms, 24 buffers
+--   page 48,000 rows deep
+--     without: Parallel Bitmap Heap Scan reading 52,000 rows
+--              11.1 ms, 1,024 buffers
+--     with:    Index Scan with the cursor bound as an index condition
+--              0.065 ms, 24 buffers
+--   moderator path, filtered by actor
+--     without: Index Scan on idx_admin_actions_admin, 0.083 ms, 56 buffers
+--     with:    unchanged, 0.111 ms, 56 buffers
+--
+-- The deep-page figure depends on the accompanying repository change, which adds a
+-- created_at <= cursor bound alongside the existing tie-breaking disjunction. With the index and
+-- without that bound the deep page is 23.3 ms and 48,248 buffers, which is worse than no index at
+-- all: the planner switches to walking this index and then discards 48,000 entries with a filter,
+-- because an OR cannot be an index condition. Index and predicate are one change.
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_admin_actions_created
+    ON admin_actions (created_at DESC, id DESC);
