@@ -169,7 +169,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `message` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `admin` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
-| `recommendation` | **Implemented** | converter, dto/response, entity, enums, repository, service/impl |
+| `recommendation` | **Implemented** | api, client/{dto,impl}, config, consumer, controller, converter, dto/response, entity, enums, messaging, repository, service/impl/feed |
 
 **Module responsibilities:**
 - **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
@@ -177,13 +177,13 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`users`**: Public and private user profiles, user settings, role/status management.
 - **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
-- **`post`**: Post CRUD (image/video/carousel), likes, saves, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
+- **`post`**: Post CRUD (image/video/carousel), likes, saves, view recording, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
 - **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback, and the `active`/`banned`/`deleted` lifecycle that governs what every hashtag surface shows and what every post write path accepts. `HashtagLifecycleService` owns the status transitions, the immediate `hashtag_trending` purge, and the status-spanning administrative reads.
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
 - **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
 - **`admin`**: Immutable moderation audit log, atomic moderation actions, the warning and strike discipline ladder, report escalation, the report-anchored moderation view of a reported entity, the administrative hashtag registry, the behavioural activity log read surface, and platform statistics; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss, and `AdminHashtagServiceImpl` handles hashtag create/ban/unban/delete — each writing an `admin_actions` row and mutating the target entity in the same transaction. `AdminAuthorizationServiceImpl` holds every actor-and-target rule for both status and role changes. `StatsCollectionJob` fills `platform_stats` one completed bucket at a time and `StatsRollupJob` compacts fine buckets into daily rows and enforces retention; `AdminStatsServiceImpl` and `AdminUserEventServiceImpl` are the administrator-only read paths.
-- **`recommendation`**: Owns `user_events`. `UserEventRecorder` is the single writer and produces exactly three event types — `session_start`, `search`, `profile_view` — off the request thread, never failing or extending the caller's request. `UserEventsPartitionJob` maintains a rolling window of monthly partitions covering the current month and the next two.
+- **`recommendation`**: Owns `user_events` and the personalized ranked feed. The feed is backed by the external Gorse recommender, reached over REST through `GorseClient`; `RecommendationFeedServiceImpl` runs a Source → Hydrator → Filter → Scorer → Selector pipeline with a `gorse` circuit breaker and degrades to the popularity ranking then the chronological feed. `user_events` has two writers with opposite durability contracts: `UserEventRecorder` produces `session_start`, `search`, and `profile_view` off the request thread, dropping rows rather than failing or extending the caller's request; `RecommendationFeedbackConsumer` turns `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, and `comment.created.v1` into idempotent append-only rows plus Gorse feedback, because those are the canonical record Gorse is rebuilt from. `UserEventsPartitionJob` maintains a rolling window of monthly partitions covering the current month and the next two. See `docs/modules/recommendation/README.md`.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -476,6 +476,7 @@ PostgreSQL enum types:
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
 | `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
 | `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
+| `recommendation.feedback.queue` | `recommendation.feedback.dlq` | `recommendation.feedback.dead-letter` |
 
 | `admin.notification.queue` | `admin.notification.dlq` | `admin.notification.dead-letter` |
 
@@ -495,7 +496,7 @@ PostgreSQL enum types:
 | `comment.notification.queue` | `comment.created.v1` | `CommentRabbitBindingConfig` |
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
 | `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
-
+| `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
 | `admin.notification.queue` | `user.warned.v1` | `AdminRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |

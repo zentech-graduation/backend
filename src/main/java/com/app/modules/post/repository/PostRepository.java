@@ -1,6 +1,7 @@
 package com.app.modules.post.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +20,27 @@ import com.app.modules.post.enums.PostStatus;
 public interface PostRepository extends JpaRepository<Post, UUID> {
 
     Optional<Post> findByIdAndDeletedAtIsNull(UUID id);
+
+    /**
+     * Loads posts by id with their media collections fetch-joined.
+     *
+     * <p>Callers that consume {@code Post.media} outside an open persistence session (detached
+     * hydration in ranking pipelines) must use this instead of {@code findAllById}.
+     *
+     * @param ids post identifiers
+     * @return matching non-deleted posts in no particular order
+     */
+    @Query("SELECT DISTINCT p FROM Post p LEFT JOIN FETCH p.media WHERE p.id IN :ids")
+    List<Post> findAllWithMediaByIdIn(@Param("ids") Collection<UUID> ids);
+
+    /**
+     * Reads the author of a post regardless of its soft-delete state.
+     *
+     * @param postId post identifier
+     * @return author identifier when the post exists
+     */
+    @Query(value = "SELECT user_id FROM posts WHERE id = :postId", nativeQuery = true)
+    Optional<UUID> findOwnerIdIncludingDeleted(@Param("postId") UUID postId);
 
     /**
      * Reads the persisted status of a post regardless of its soft-delete state.

@@ -246,6 +246,15 @@ app:
       enabled: ${MESSAGE_CONSUMER_ENABLED:false}
     live:
       enabled: ${MESSAGE_LIVE_ENABLED:false}
+  gorse:
+    base-url: ${APP_GORSE_BASE_URL:http://localhost:8088}
+    api-key: ${GORSE_API_KEY:}
+    connect-timeout: ${GORSE_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${GORSE_READ_TIMEOUT:PT3S}
+    recommend-multiplier: ${GORSE_RECOMMEND_MULTIPLIER:2}
+  recommendation:
+    consumer:
+      enabled: ${RECOMMENDATION_CONSUMER_ENABLED:false}
   websocket:
     revocation:
       interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}

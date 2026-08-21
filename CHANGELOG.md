@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
+
 ### Added
 - Every display vocabulary the API asks a client to send back is now readable in one call: report reasons, notification types, and moderation action types, each with its label, its behavioural flags, and whether it is currently enabled.
 A disabled row is returned and flagged rather than filtered out, so a client can show it as unavailable instead of offering it and meeting a rejection.
@@ -62,6 +65,8 @@ The first sign-in attempt after the term lapses restores the account, and a peri
 The two genuine conflicts on the role path, a skip-level promotion and a request naming the role the account already holds, keep their own code.
 - An administrator's account detail no longer says only what the account is; it also says what may be done to it.
 
+- The administrative activity log now also covers engagement: post likes, saves, views, and comments appear alongside session starts, searches, and profile views, and answer to the same event-type filter.
+Both kinds of event are recorded under one vocabulary, so the filter cannot name a value that no writer produces.
 - Statistics that count whole tables are now computed by a background job rather than on the request, which is the difference between milliseconds and seconds once the platform is large.
 Counts of things that happened in an interval are counted directly rather than derived by subtracting two snapshots, so a moderation sweep can never make "new posts this half hour" read as a negative number.
 - Restoring a post whose caption names a banned hashtag now succeeds without that association instead of failing.
@@ -289,6 +294,11 @@ A conversation that already has messages in it is kept, because unfollowing some
 - Internal comment-style guidance no longer cites a pre-commit hook that does not exist in this repository.
 
 ### Added
+- A post view can now be recorded via `POST /api/v1/posts/{postId}/view`; the view is captured as a behavioral event and feeds the recommendation engine as a read signal, without synchronously changing any counter on the post.
+- Liking or saving a post now feeds the recommendation engine: each action is recorded as a behavioral event and forwarded to the recommender asynchronously, so the personalized feed reflects real engagement, not only the seeded interaction history.
+- A personalized "for you" post feed at GET /api/v1/recommendations/feed, ranked by the Gorse recommender with per-post ranking scores, degrading to the popularity ranking and then the chronological following feed whenever the recommender is unavailable.
+- A deterministic synthetic seed tool generates demo users, text posts, a follow graph, and interaction history for the recommendation demo, and can push or rebuild the Gorse dataset from the same source.
+- The Gorse recommender (v0.5.11) now runs as a dedicated service through a compose overlay, storing data in its own PostgreSQL database, secured by an API key and a loopback-bound authenticated dashboard.
 - The first page of a post's comments now begins with up to three pinned top comments, ordered by like count; each comment carries a `pinned` flag so a client can tell them apart from the newest-first list rather than inferring it from position. Only comments with at least one like are eligible, a pinned comment is never repeated in the same page's newest-first body, and the pinned block is additional to the requested page size. Page two onward is unchanged.
 - Notifications are now delivered in real time over a WebSocket connection, in addition to the existing REST endpoints; a client may subscribe only to its own notification stream, and a missed push is always recoverable by re-fetching the notification list.
 - A WebSocket connection is now terminated automatically if the underlying account is banned, suspended, or logged out, rather than remaining open until the access token naturally expires.
@@ -297,15 +307,32 @@ A conversation that already has messages in it is kept, because unfollowing some
 - The users a caller has blocked can now be listed as a paginated page, newest block first.
 - A user's public profile can now be fetched by username as well as by id; the username match is case-insensitive.
 
-### Removed
-- The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
-
 ### Changed
+- Local development containers now persist PostgreSQL and RabbitMQ data across container recreation, declare healthchecks and restart policies, and the RabbitMQ image now ships the management UI bound to loopback.
 - Usernames now identify an account case-insensitively while preserving the casing they were registered with. `Alice` and `alice` are the same person, so only one of them can exist, and logging in or looking up a profile works with any casing. The profile continues to display the casing the account was created with rather than a lowercased form.
 - Registering or renaming to a username that differs from an existing one only by case is now rejected with the same generic conflict returned for any other duplicate. Previously it slipped past the availability check and surfaced as a different, more specific error, which allowed a caller to distinguish a taken username from a taken email.
 - Notification push delivery latency is significantly reduced by polling for new events roughly five times more often.
 - A comment or story WebSocket session established before an account is banned, suspended, or logged out is no longer left open until its access token naturally expires; the session is now terminated shortly after the account status changes.
 - The user object returned by login, register, and refresh is renamed in the API schema from `UserSummaryResponse` to `AuthenticatedUserResponse` to distinguish the authenticated-self object (which carries email and role) from the shared public author summary; the emitted JSON fields are unchanged.
+
+### Fixed
+- A recommendation feedback message that can never be processed no longer redelivers onto the same queue indefinitely; it is dead-lettered directly instead.
+- The personalized feed's per-post visibility check no longer issues additional database queries per post as the page size grows.
+- A clean checkout can now start the full local Docker stack; the PostgreSQL container no longer fails to start on the currently resolved image version.
+
+### Removed
+- The development-only feed seed data script is no longer part of the application; local development databases no longer receive this seed data automatically.
+
+### Documentation
+- A module guide for the recommendation feature covering its architecture, endpoint contract, configuration, operational runbook, degradation behavior, and known limitations.
+
+### Tests
+- Regression coverage for the recommendation feedback consumer, covering successful processing of each supported engagement type, unknown event types, missing required fields, transient-versus-permanent recommender failures, and duplicate-delivery handling.
+- Regression coverage for the personalized feed pipeline, covering pagination, visibility and ownership filtering across multiple candidate rounds, ranking-score attachment, and fallback to the popularity ranking and then the chronological feed.
+- Regression coverage for the recommender REST client, covering request shape, authentication headers, and response parsing for every supported operation.
+- Regression coverage asserting that liking or saving a post enqueues the corresponding recommendation event with the correct payload, and that no event is enqueued on a conflicting or duplicate action.
+- Regression coverage for the batched post-visibility check used by the personalized feed, and for the recommendation feedback consumer's broker-dead-letter behavior on a permanent failure.
+- Regression coverage for post view recording, including self-view suppression, and for the resulting read-class recommendation feedback.
 - The follower, following, and pending follow-request lists now use the shared user summary object; the emitted JSON is unchanged, only the shared shape is reused.
 - Post responses (single post, feed, saved posts, and a user's posts) now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of separate top-level author id, username, display-name, and avatar fields; the post likers endpoint now returns that same user summary shape, and a post caption edit history entry embeds the editor the same way instead of a bare editor id. A post by a deleted author is hidden as before; a deleted liker now appears as a placeholder rather than silently vanishing from the likers list.
 - Comment responses now embed the author as a nested user summary object (id, username, display name, avatar URL, verified flag) instead of a bare author id; the previous top-level `userId` field is removed, and a comment by a deleted author returns a placeholder author rather than a dangling id. The same author object arrives over the live comment WebSocket feed, so a live-rendered comment shows the same author as one fetched over REST.

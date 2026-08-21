@@ -1,11 +1,15 @@
 # Recommendation Module — Data Rules
 
-**Implementation status**: Partially implemented. `user_events` has a writer, a repository and a read path; nothing else in this module does.
+**Implementation status**: Partially implemented. `user_events` has two writers, a repository and a read path, and the personalized feed is built on top; nothing else in this module does.
 
-Implemented: `UserEventRecorder` (the single writer to `user_events`), `UserEventRepository` (read, keyset-paged), `UserEventsPartitionJob` (partition maintenance), and the `UserEvent` entity with its enum and converters.
-The read surface lives in the `admin` module as the administrative activity log; this module owns the table and the write path.
+Implemented: `RecommendationFeedService` (the Gorse-backed ranked feed, see `README.md` in this folder), `GorseClient`, `RecommendationFeedbackConsumer` and `UserEventJdbcRepository` (durable engagement writes to `user_events` plus Gorse feedback), `UserEventRecorder` (fire-and-forget analytics writes to `user_events`), `UserEventRepository` (read, keyset-paged), `UserEventsPartitionJob` (partition maintenance), and the `UserEvent` entity with its enum and converters.
+The activity-log read surface lives in the `admin` module; this module owns the table and both write paths.
 
-Not implemented: `categories`, `user_interests`, `post_categories`, `post_interaction_scores`, `user_similarity`. No Controller exists in this module.
+The two writers exist because their durability contracts are opposites and cannot be met by one component.
+`UserEventRecorder` must never fail or slow the request that triggered it, so it drops rows under pressure.
+`RecommendationFeedbackConsumer` writes the canonical engagement record that Gorse is rebuilt from, so it must not drop anything and must be idempotent across redelivery.
+
+Not implemented: `categories`, `user_interests`, `post_categories`, `post_interaction_scores`, `user_similarity`.
 
 ---
 
@@ -74,11 +78,13 @@ The last row is the read the activity log's mandatory window exists to make impo
 
 | Rule | Service / Component |
 |------|---------------------|
-| `user_events` rows are append-only; existing events must never be updated or deleted | `UserEventRecorder` issues only `INSERT`; the `UserEvent` entity is `@Immutable` and has no persist path |
-| Event writes must be fire-and-forget (non-blocking to the user action that triggered them) | `UserEventRecorder` - the insert runs on a virtual thread of its own, so it neither joins nor extends the caller's transaction, and every failure ends in a warn log and a dropped row |
+| `user_events` rows are append-only; existing events must never be updated or deleted | `UserEventRecorder` and `UserEventJdbcRepository` issue only `INSERT`; the `UserEvent` entity is `@Immutable` and has no persist path |
+| Analytics event writes must be fire-and-forget (non-blocking to the user action that triggered them) | `UserEventRecorder` - the insert runs on a virtual thread of its own, so it neither joins nor extends the caller's transaction, and every failure ends in a warn log and a dropped row |
 | An analytics write must never fail the request that triggered it | `UserEventRecorder` - no retry, no outbox, no dead letter. `OutboxService` exists for events that must reach RabbitMQ; these are not those |
 | Event writes must not be able to exhaust the connection pool | `UserEventRecorder` - submission is bounded by a permit count well under the Hikari pool size, and a submission with no permit free is dropped immediately rather than queued or blocked, because backpressure onto a request thread would defeat the rule above |
-| Only three event types are ever written | `UserEventRecorder` - `session_start` on any route that issues a session, `search` on both search surfaces carrying the term, `profile_view` for another account's profile. Chosen for investigative value per unit of write volume; `post_view` is an order of magnitude larger than all three together and belongs to a later cycle |
+| `UserEventRecorder` writes only three event types | `session_start` on any route that issues a session, `search` on both search surfaces carrying the term, `profile_view` for another account's profile. Chosen for investigative value per unit of write volume |
+| Engagement event writes must not drop rows and must survive redelivery | `RecommendationFeedbackConsumer` with `UserEventJdbcRepository.insertIgnoreDuplicate` - the row id is the domain event id and the insert is `ON CONFLICT DO NOTHING`, so a replay is a no-op. These rows are the canonical record Gorse is rebuilt from, which is why they take the durable path rather than the dropping one |
+| An engagement write must never fail the user action that triggered it | `PostLikeServiceImpl` / `PostSaveServiceImpl` enqueue an outbox row inside the domain transaction; the event reaches `user_events` and Gorse later, off the request thread |
 | A view of one's own profile is not recorded | `UserServiceImpl.assemblePublicProfile` - excluded at the call site rather than filtered out later, so the table does not fill with the views that answer no question |
 | A read of `user_events` must be bounded by `created_at` | `AdminUserEventServiceImpl` - the window is the only predicate that prunes partitions; a read bounded only by `user_id` touches every partition ever declared |
 | `post_interaction_scores.engagement_score` is computed as: `likes + comments * 2 + saves * 3` | `[NOT YET IMPLEMENTED]` — defined in schema comment |

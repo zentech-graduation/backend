@@ -47,6 +47,9 @@ app:
   story:
     consumer:
       enabled: true
+  recommendation:
+    consumer:
+      enabled: true
   # Absent until now, so both flags fell back to the false defaults in application.yaml and direct
   # messaging had no real-time delivery in production. This tier has not carried production traffic
   # before, so its behaviour under load is unproven.

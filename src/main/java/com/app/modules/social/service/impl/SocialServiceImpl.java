@@ -615,6 +615,12 @@ public class SocialServiceImpl implements SocialService {
         return result;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Set<UUID> findBlockedEitherDirection(UUID viewerId) {
+        return new HashSet<>(blockRepository.findBlockedCounterpartyIds(viewerId));
+    }
+
     private void checkCanViewSocialGraph(UUID currentUserId, UUID targetUserId, User targetUser) {
         // Stealth block model: matches assemblePublicProfile's reference behaviour exactly - a
         // block in either direction must be indistinguishable from targetUserId not existing.

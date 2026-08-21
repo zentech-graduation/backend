@@ -20,19 +20,25 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      # $$ defers expansion to the container shell, so the probe reads the credentials the
+      # container was actually started with rather than whatever Compose interpolated at parse time.
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 10s
       timeout: 5s
       retries: 5
 
   rabbitmq:
-    image: 'rabbitmq:latest'
+    # The -management tag is what serves the UI published below; the plain tag omits the plugin.
+    image: 'rabbitmq:4-management'
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
       - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
       interval: 15s
@@ -85,5 +91,6 @@ services:
       retries: 10
 
 volumes:
-  elasticsearch_data:
   postgres_data:
+  rabbitmq_data:
+  elasticsearch_data:

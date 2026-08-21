@@ -90,6 +90,16 @@ public class PostLikeServiceImpl implements PostLikeService {
             // already recorded the like, so surface the same clean conflict rather than a 500.
             throw new AppException(ApiErrorCode.POST_ALREADY_LIKED);
         }
+        outboxService.enqueue(
+                PostEventTypes.POST_LIKED_V1,
+                PostEventTypes.POST_LIKED_V1,
+                "post",
+                postId,
+                userId,
+                Map.of(
+                        "postId", postId.toString(),
+                        "postOwnerId", post.getUserId().toString(),
+                        "userId", userId.toString()));
         enqueueLiveEvent(PostEventTypes.POST_LIVE_LIKED_V1, post, userId);
         return new LikeActionResponse(postId, true, postRepository.findLikeCount(postId));
     }

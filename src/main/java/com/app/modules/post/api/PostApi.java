@@ -29,6 +29,7 @@ import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
+import com.app.modules.post.dto.response.PostViewResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -447,6 +448,37 @@ public interface PostApi {
                     @Min(1)
                     @Max(100)
                     int limit);
+
+    @Operation(
+            summary = "Record a post view",
+            description =
+                    "Records that the authenticated viewer has seen a published, visible post."
+                            + " Accepted but not counted when the viewer is the post owner. The"
+                            + " view is recorded as a behavioral event for asynchronous"
+                            + " processing; it does not synchronously change any counter on the"
+                            + " post.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "202",
+                description = "View accepted"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Post not found or not visible to the viewer",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Posts.VIEW)
+    ResponseEntity<ApiResponse<PostViewResponse>> recordView(@PathVariable("postId") UUID postId);
 
     @Operation(
             summary = "Search posts",

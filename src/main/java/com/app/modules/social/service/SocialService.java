@@ -3,6 +3,7 @@ package com.app.modules.social.service;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.app.common.exception.AppException;
@@ -199,4 +200,19 @@ public interface SocialService {
      */
     Map<UUID, ViewerRelationshipResponse> loadRelationships(
             UUID viewerId, Collection<UUID> userIds);
+
+    /**
+     * Every user id blocking or blocked by the viewer, in either direction, in one query.
+     *
+     * <p>For internal visibility decisions only - never render this on a response surface. The
+     * stealth block model requires that a blocked viewer cannot distinguish "this account does not
+     * exist" from "this account has blocked me"; {@link #loadRelationships} therefore deliberately
+     * omits the incoming-block direction from what it exposes. This method restores that direction
+     * for callers that need the full bidirectional truth to decide whether content is visible at
+     * all, as opposed to deciding what to display about a relationship that is already visible.
+     *
+     * @param viewerId the user whose block relationships are resolved
+     * @return every id blocking or blocked by {@code viewerId}; empty when there are none
+     */
+    Set<UUID> findBlockedEitherDirection(UUID viewerId);
 }

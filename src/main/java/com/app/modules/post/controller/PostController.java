@@ -30,8 +30,10 @@ import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostEditHistoryResponse;
 import com.app.modules.post.dto.response.PostResponse;
+import com.app.modules.post.dto.response.PostViewResponse;
 import com.app.modules.post.service.PostSearchService;
 import com.app.modules.post.service.PostService;
+import com.app.modules.post.service.PostViewService;
 import com.app.modules.post.validation.PostTypeFilter;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -42,10 +44,15 @@ public class PostController extends BaseController implements PostApi {
 
     private final PostService postService;
     private final PostSearchService postSearchService;
+    private final PostViewService postViewService;
 
-    public PostController(PostService postService, PostSearchService postSearchService) {
+    public PostController(
+            PostService postService,
+            PostSearchService postSearchService,
+            PostViewService postViewService) {
         this.postService = postService;
         this.postSearchService = postSearchService;
+        this.postViewService = postViewService;
     }
 
     /** Creates a post for the authenticated user; returns 201 with the created post. */
@@ -146,6 +153,18 @@ public class PostController extends BaseController implements PostApi {
                 postService.listEditHistory(
                         SecurityUtils.getCurrentUserId(), postId, cursor, limit);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /** Records that the authenticated viewer has seen a post; returns 202. */
+    @Override
+    @PostMapping(ApiConstants.Posts.VIEW)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<PostViewResponse>> recordView(
+            @PathVariable("postId") UUID postId) {
+        PostViewResponse body =
+                postViewService.recordView(SecurityUtils.getCurrentUserId(), postId);
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.success(ApiSuccessCode.ACCEPTED, body));
     }
 
     /** Searches published posts by caption; degrades to an empty page when search is down. */

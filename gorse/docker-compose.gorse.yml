@@ -1,0 +1,36 @@
+## Gorse recommender service overlay.
+## Run merged with the root compose file so gorse joins the same network as postgres/redis:
+##   docker compose -f docker-compose.yaml -f gorse/docker-compose.gorse.yml up -d
+
+services:
+  gorse:
+    image: zhenghaoz/gorse-in-one:0.5.11
+    restart: unless-stopped
+    # --cache-path is a folder in v0.5.11 (default /var/lib/gorse/master, holds the SQLite
+    # meta db); passing a file path breaks startup with SQLITE_CANTOPEN
+    command: >
+      -c /etc/gorse/config.toml
+      --log-path /var/lib/gorse/gorse.log
+    environment:
+      # Cache store is Postgres, not the app Redis: Gorse v0.5.x Redis cache requires the
+      # RediSearch module (FT.* commands) which plain redis:7-alpine does not ship
+      GORSE_DATA_STORE: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/gorse?sslmode=disable
+      GORSE_CACHE_STORE: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/gorse?sslmode=disable
+      GORSE_SERVER_API_KEY: ${GORSE_API_KEY}
+      GORSE_DASHBOARD_USER_NAME: ${GORSE_DASHBOARD_USER}
+      GORSE_DASHBOARD_PASSWORD: ${GORSE_DASHBOARD_PASSWORD}
+    ports:
+      # Dashboard + REST API. Loopback-only so the VPS never exposes it publicly;
+      # access the dashboard through an SSH tunnel (ssh -L 8088:localhost:8088 <vps>).
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - ./gorse/config/config.toml:/etc/gorse/config.toml:ro
+      - gorse_data:/var/lib/gorse
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  gorse_data:
