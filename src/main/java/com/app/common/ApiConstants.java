@@ -47,6 +47,7 @@ public final class ApiConstants {
         public static final String LIKES = "/{postId}/likes";
         public static final String SAVE = "/{postId}/save";
         public static final String SAVED = "/saved";
+        public static final String VIEW = "/{postId}/view";
         public static final String LIKED = "/liked";
         public static final String SEARCH = "/search";
         public static final String COMMENTS = "/{postId}/comments";
@@ -120,6 +121,13 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/hashtags";
         public static final String TRENDING = "/trending";
         public static final String SEARCH = "/search";
+    }
+
+    public static final class Recommendations {
+        private Recommendations() {}
+
+        public static final String ROOT = API_V1 + "/recommendations";
+        public static final String FEED = "/feed";
     }
 
     public static final class Media {

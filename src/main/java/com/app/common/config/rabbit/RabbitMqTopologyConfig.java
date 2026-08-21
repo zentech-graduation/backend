@@ -54,6 +54,12 @@ public class RabbitMqTopologyConfig {
     public static final String STORY_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
             "story.notification.dead-letter";
 
+    public static final String RECOMMENDATION_FEEDBACK_QUEUE = "recommendation.feedback.queue";
+    public static final String RECOMMENDATION_FEEDBACK_DEAD_LETTER_QUEUE =
+            "recommendation.feedback.dlq";
+    public static final String RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY =
+            "recommendation.feedback.dead-letter";
+
     public static final String MESSAGE_NOTIFICATION_QUEUE = "message.notification.queue";
     public static final String MESSAGE_NOTIFICATION_DEAD_LETTER_QUEUE = "message.notification.dlq";
     public static final String MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY =
@@ -235,12 +241,36 @@ public class RabbitMqTopologyConfig {
     }
 
     @Bean
+    Queue recommendationFeedbackQueue() {
+        return QueueBuilder.durable(RECOMMENDATION_FEEDBACK_QUEUE)
+                .withArgument("x-dead-letter-exchange", SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE)
+                .withArgument(
+                        "x-dead-letter-routing-key",
+                        RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
     Queue messageNotificationQueue() {
         return QueueBuilder.durable(MESSAGE_NOTIFICATION_QUEUE)
                 .withArgument("x-dead-letter-exchange", SOCIAL_EVENTS_DEAD_LETTER_EXCHANGE)
                 .withArgument(
                         "x-dead-letter-routing-key", MESSAGE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY)
                 .build();
+    }
+
+    @Bean
+    Queue recommendationFeedbackDeadLetterQueue() {
+        return QueueBuilder.durable(RECOMMENDATION_FEEDBACK_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding recommendationFeedbackDeadLetterBinding(
+            Queue recommendationFeedbackDeadLetterQueue,
+            TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(recommendationFeedbackDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(RECOMMENDATION_FEEDBACK_DEAD_LETTER_ROUTING_KEY);
     }
 
     @Bean

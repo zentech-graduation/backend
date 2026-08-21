@@ -1,10 +1,18 @@
 package com.app.modules.post.service.impl;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.app.common.response.ViewerRelationshipResponse;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
@@ -42,5 +50,47 @@ public class PostVisibilityServiceImpl implements PostVisibilityService {
             return socialService.hasAcceptedFollow(viewerId, ownerId);
         }
         return true;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<UUID> filterVisibleOwnerIds(UUID viewerId, Collection<UUID> ownerIds) {
+        if (ownerIds.isEmpty()) {
+            return Set.of();
+        }
+        // Three fixed-count batched round trips (blocks, follows, owners) replace what would
+        // otherwise be up to three queries per candidate owner if isVisibleTo were called in a
+        // loop. Block direction comes from findBlockedEitherDirection, not loadRelationships: the
+        // latter is scoped to the stealth-block UI surface and deliberately omits the incoming
+        // direction, which this internal visibility decision still needs in full.
+        Set<UUID> blockedEitherDirection = socialService.findBlockedEitherDirection(viewerId);
+        Map<UUID, ViewerRelationshipResponse> relationships =
+                socialService.loadRelationships(viewerId, ownerIds);
+        List<User> owners = postUserRepository.findAllByIdInAndDeletedAtIsNull(ownerIds);
+        Map<UUID, User> ownersById =
+                owners.stream().collect(Collectors.toMap(User::getId, Function.identity()));
+
+        Set<UUID> visible = new HashSet<>();
+        for (UUID ownerId : ownerIds) {
+            if (viewerId.equals(ownerId)) {
+                visible.add(ownerId);
+                continue;
+            }
+            if (blockedEitherDirection.contains(ownerId)) {
+                continue;
+            }
+            // A soft-deleted owner is absent from ownersById and hides all of their content.
+            User owner = ownersById.get(ownerId);
+            if (owner == null) {
+                continue;
+            }
+            ViewerRelationshipResponse relationship =
+                    relationships.getOrDefault(ownerId, ViewerRelationshipResponse.NONE);
+            if (owner.isPrivate() && !relationship.isFollowing()) {
+                continue;
+            }
+            visible.add(ownerId);
+        }
+        return visible;
     }
 }

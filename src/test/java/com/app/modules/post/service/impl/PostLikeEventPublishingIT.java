@@ -92,8 +92,7 @@ class PostLikeEventPublishingIT {
 
         postLikeService.likePost(liker, post);
 
-        Map<String, Object> row = singleOutboxRow();
-        assertThat(row.get("event_type")).isEqualTo("post.live.liked.v1");
+        Map<String, Object> row = outboxRow("post.live.liked.v1");
         assertThat(row.get("routing_key")).isEqualTo("post.live.liked.v1");
         String payload = String.valueOf(row.get("payload"));
         assertThat(payload).contains(post.toString());
@@ -122,7 +121,7 @@ class PostLikeEventPublishingIT {
 
         postLikeService.likePost(owner, post);
 
-        assertThat(singleOutboxRow().get("event_type")).isEqualTo("post.live.liked.v1");
+        outboxRow("post.live.liked.v1");
     }
 
     @Test
@@ -134,7 +133,8 @@ class PostLikeEventPublishingIT {
         postLikeService.likePost(liker, post);
 
         // The count is re-read at push time, so carrying one here would be a stale duplicate.
-        assertThat(String.valueOf(singleOutboxRow().get("payload"))).doesNotContain("likeCount");
+        assertThat(String.valueOf(outboxRow("post.live.liked.v1").get("payload")))
+                .doesNotContain("likeCount");
     }
 
     private Map<String, Object> singleOutboxRow() {
@@ -142,6 +142,20 @@ class PostLikeEventPublishingIT {
                 jdbcTemplate.queryForList(
                         "SELECT event_type, routing_key, payload::text AS payload"
                                 + " FROM outbox_events ORDER BY created_at DESC");
+        assertThat(rows).hasSize(1);
+        return rows.get(0);
+    }
+
+    // The like path enqueues both the live-fanout event asserted here and a separate
+    // recommendation-feedback event outside this class's concern, so a row count must be scoped
+    // to the event type under test rather than the whole table.
+    private Map<String, Object> outboxRow(String eventType) {
+        List<Map<String, Object>> rows =
+                jdbcTemplate.queryForList(
+                        "SELECT event_type, routing_key, payload::text AS payload"
+                                + " FROM outbox_events WHERE event_type = ? ORDER BY created_at"
+                                + " DESC",
+                        eventType);
         assertThat(rows).hasSize(1);
         return rows.get(0);
     }

@@ -12,12 +12,12 @@ import com.app.modules.post.enums.PostType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * API response for a post in the following feed, including ordered media, trigger-maintained
- * counters, and a reserved ranking field for forward compatibility.
+ * API response for a post in a feed, including ordered media, trigger-maintained counters, and an
+ * optional ranking score populated by the recommendation feed.
  */
 @Schema(
         description =
-                "Post entry in the following feed, with engagement counters and a reserved ranking field")
+                "Post entry in a feed, with engagement counters and an optional ranking score")
 public record FeedPostResponse(
         @Schema(description = "Post identifier.") UUID id,
         @Schema(description = "Post author.") UserSummaryResponse author,
@@ -52,8 +52,37 @@ public record FeedPostResponse(
         @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt,
         @Schema(
                         description =
-                                "Reserved for a future ranking score; always null in the current"
-                                        + " chronological implementation. Present to keep the"
-                                        + " contract forward-compatible with ranked ordering.",
+                                "Ranking score assigned by the recommendation feed; null in the"
+                                        + " chronological following feed.",
                         nullable = true)
-                Double rankingScore) {}
+                Double rankingScore) {
+
+    /**
+     * Returns a copy of this response carrying the given ranking score.
+     *
+     * @param score ranking score assigned by the recommendation pipeline; may be null
+     * @return a new instance identical to this one except for {@code rankingScore}
+     */
+    public FeedPostResponse withRankingScore(Double score) {
+        return new FeedPostResponse(
+                id,
+                author,
+                caption,
+                postType,
+                status,
+                likeCount,
+                commentCount,
+                saveCount,
+                isLiked,
+                isSaved,
+                hasReported,
+                viewCount,
+                locationName,
+                latitude,
+                longitude,
+                media,
+                createdAt,
+                updatedAt,
+                score);
+    }
+}

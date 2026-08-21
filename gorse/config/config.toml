@@ -1,0 +1,67 @@
+# Gorse v0.5.11 configuration for the Luvax recommendation module.
+# Derived from the sample config shipped with the v0.5.11 tag; keys not listed here keep
+# their built-in defaults. Connection strings and secrets are injected via GORSE_* env vars
+# in gorse/docker-compose.gorse.yml and must never be committed to this file.
+
+[database]
+# cache_store / data_store are provided by GORSE_CACHE_STORE / GORSE_DATA_STORE env vars
+
+[master]
+port = 8086
+host = "0.0.0.0"
+http_port = 8088
+http_host = "0.0.0.0"
+# Single-node deployment; more jobs only help multi-core fit on large datasets
+n_jobs = 1
+meta_timeout = "10s"
+# dashboard_user_name / dashboard_password are provided by env vars
+
+[server]
+default_n = 20
+# api_key is provided by GORSE_SERVER_API_KEY env var
+clock_error = "5s"
+auto_insert_user = true
+auto_insert_item = true
+cache_expire = "10s"
+
+[recommend]
+cache_size = 200
+cache_expire = "1h"
+
+[recommend.data_source]
+positive_feedback_types = ["like", "save", "comment"]
+read_feedback_types = ["read"]
+positive_feedback_ttl = 0
+item_ttl = 0
+
+# Popularity over all positive feedback; queried through the non-personalized API as a
+# cold-start and circuit-breaker fallback source
+[[recommend.non-personalized]]
+name = "popular"
+score = "count(feedback)"
+
+# Topic labels on seeded items make tag-based neighbors align with persona topics
+[[recommend.item-to-item]]
+name = "neighbors"
+type = "tags"
+column = "item.Labels"
+
+[[recommend.user-to-user]]
+name = "neighbors"
+type = "items"
+
+[recommend.collaborative]
+type = "mf"
+# Demo-friendly cadence so live feedback visibly shifts the feed; raise to 60m outside demos
+fit_period = "2m"
+fit_epoch = 100
+
+[recommend.ranker]
+# No FM ranker: synthetic data has no read-but-not-positive signal to train it on.
+# v0.5.11 constraint: with type = "none" the recommenders list must hold exactly one entry;
+# cold-start users fall through to [recommend.fallback] instead of a merged candidate list.
+type = "none"
+recommenders = ["collaborative"]
+
+[recommend.fallback]
+recommenders = ["latest"]
