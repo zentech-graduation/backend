@@ -89,6 +89,7 @@ public record FeedPostResponse(
                 latitude,
                 longitude,
                 media,
+                hashtags,
                 createdAt,
                 updatedAt,
                 score);
