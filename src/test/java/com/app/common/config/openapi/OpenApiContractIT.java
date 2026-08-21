@@ -653,6 +653,68 @@ class OpenApiContractIT {
     }
 
     @Test
+    void everyErrorCodeCarryingAPayloadHasAReachableDetailSchema() {
+        JsonNode doc = document();
+        // Two error codes reach ApiResponse.data with a non-null payload: POST_BANNED_HASHTAG and
+        // VALIDATION_ERROR. ApiResponse.data is declared as an empty schema, which permits anything
+        // and constrains nothing, so without a typed envelope a generated client hands back an
+        // untyped value and the detail has to be parsed by hand.
+        JsonNode schemas = doc.path("components").path("schemas");
+
+        JsonNode bannedTags =
+                schemas.path("BannedHashtagErrorResponse")
+                        .path("properties")
+                        .path("data")
+                        .path("$ref");
+        assertThat(bannedTags.asString(""))
+                .as("the banned-hashtag envelope must type its data")
+                .isEqualTo("#/components/schemas/BannedHashtagDetail");
+        JsonNode detail = schemas.path("BannedHashtagDetail").path("properties").path("bannedTags");
+        assertThat(detail.path("type").asString(""))
+                .as("data.bannedTags must be reachable and typed")
+                .isEqualTo("array");
+        assertThat(detail.path("items").path("type").asString("")).isEqualTo("string");
+
+        assertThat(schemas.has("ValidationErrorResponse"))
+                .as("the validation envelope must be present even though no operation names it")
+                .isTrue();
+        assertThat(
+                        schemas.path("ValidationErrorResponse")
+                                .path("properties")
+                                .path("data")
+                                .path("additionalProperties")
+                                .path("type")
+                                .asString(""))
+                .as("validation detail maps a field name to its message")
+                .isEqualTo("string");
+
+        // Every operation that documents the banned-hashtag 422 must name the typed envelope,
+        // otherwise the detail is declared in one place and untyped in another.
+        List<String> offenders = new ArrayList<>();
+        forEachOperation(
+                doc,
+                (operationId, operation) -> {
+                    JsonNode response = operation.path("responses").path("422");
+                    if (response.isMissingNode()) {
+                        return;
+                    }
+                    String ref =
+                            response.path("content")
+                                    .path("application/json")
+                                    .path("schema")
+                                    .path("$ref")
+                                    .asString("");
+                    if (response.path("description").asString("").contains("banned hashtag")
+                            && !ref.endsWith("/BannedHashtagErrorResponse")) {
+                        offenders.add(operationId + " 422 -> " + ref);
+                    }
+                });
+        assertThat(offenders)
+                .as("a banned-hashtag 422 must declare the typed envelope, not the bare one")
+                .isEmpty();
+    }
+
+    @Test
     void violationHistoryIsDeclaredAsADiscriminatedUnion() {
         JsonNode doc = document();
         // A violation page interleaves two row shapes. Declared as one flat schema, the fields
