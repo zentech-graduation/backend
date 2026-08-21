@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,6 +27,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.modules.admin.enums.PlatformMetric;
 import com.app.modules.mail.service.MailService;
 
 import tools.jackson.databind.JsonNode;
@@ -617,6 +619,37 @@ class OpenApiContractIT {
                 index++;
             }
         }
+    }
+
+    @Test
+    void closedSetRequestParametersAreEnumeratedNotDescribedInProse() {
+        JsonNode doc = document();
+        // A request parameter whose accepted values are a closed set must be declared as that set.
+        // Declared as a bare string, the server still refuses everything outside it, so a client
+        // discovers the set by guessing and a generator has no type to emit. The metric parameter
+        // is the case the audit found: fourteen keys, named in the operation description where a
+        // human can read them and a code generator cannot.
+        JsonNode parameters =
+                doc.path("paths")
+                        .path("/api/v1/admin/stats/timeseries")
+                        .path("get")
+                        .path("parameters");
+        assertThat(parameters.isArray()).as("timeseries must declare its parameters").isTrue();
+
+        JsonNode metricSchema = null;
+        for (JsonNode parameter : parameters) {
+            if ("metric".equals(parameter.path("name").asString(""))) {
+                metricSchema = parameter.path("schema");
+            }
+        }
+        assertThat(metricSchema).as("the metric parameter must be declared").isNotNull();
+
+        List<String> values = new ArrayList<>();
+        metricSchema.path("enum").forEach(node -> values.add(node.asString("")));
+        assertThat(values)
+                .as("metric must enumerate every key PlatformMetric declares, and nothing else")
+                .containsExactlyInAnyOrderElementsOf(
+                        Arrays.stream(PlatformMetric.values()).map(PlatformMetric::key).toList());
     }
 
     @Test

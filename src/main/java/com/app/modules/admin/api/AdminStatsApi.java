@@ -13,6 +13,8 @@ import com.app.common.config.openapi.AuthenticationRequiredResponse;
 import com.app.common.response.ApiResponse;
 import com.app.modules.admin.dto.response.AdminStatsCurrentResponse;
 import com.app.modules.admin.dto.response.AdminStatsTimeseriesResponse;
+import com.app.modules.admin.enums.PlatformMetric;
+import com.app.modules.admin.enums.StatGranularity;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -82,12 +84,13 @@ public interface AdminStatsApi {
                     "Returns one metric's stored values, oldest first. Omitting both bounds gives"
                             + " the last 24 hours; supplying exactly one is refused rather than"
                             + " silently defaulting the other. Bucket width is decided by the"
-                            + " server and stated in the response: fine buckets inside the fine"
-                            + " retention window, rolled-up daily rows beyond it. Metric keys are"
-                            + " users_total, users_by_status, users_by_role, posts_total,"
-                            + " comments_total, stories_total, reports_by_status,"
-                            + " reports_by_reason, registrations, posts_created, comments_created,"
-                            + " follows_created, likes_created and admin_actions_by_type.")
+                            + " server when granularity is omitted and stated in the response"
+                            + " either way: fine buckets inside the fine retention window,"
+                            + " rolled-up daily rows beyond it. Requesting half_hour for a window"
+                            + " that reaches further back is refused rather than answered with an"
+                            + " empty series, because those rows were rolled up and deleted and an"
+                            + " empty chart would read as a quiet period. Both metric and"
+                            + " granularity are closed sets the document enumerates.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -95,8 +98,10 @@ public interface AdminStatsApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description =
-                        "Unknown metric, only one bound supplied, 'to' not after 'from', or a"
-                                + " window longer than one year",
+                        "Metric or granularity outside its enumerated set, only one bound"
+                                + " supplied, 'to' not after 'from', a window longer than one"
+                                + " year, or half_hour requested for a window reaching past the"
+                                + " fine retention horizon",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -121,11 +126,19 @@ public interface AdminStatsApi {
     ResponseEntity<ApiResponse<AdminStatsTimeseriesResponse>> getStatsTimeseries(
             @Parameter(
                             description =
-                                    "Metric key to read. Defaults to registrations when omitted, so"
-                                            + " a bare call returns something rather than an error.",
+                                    "Metric to read. Defaults to registrations when omitted, so a"
+                                            + " bare call returns something rather than an error.",
                             example = "registrations")
                     @RequestParam(defaultValue = "registrations")
-                    String metric,
+                    PlatformMetric metric,
+            @Parameter(
+                            description =
+                                    "Bucket width to read at. Omit to let the server choose from"
+                                            + " the window, which is what it did unconditionally"
+                                            + " before this parameter was honoured.",
+                            example = "half_hour")
+                    @RequestParam(required = false)
+                    StatGranularity granularity,
             @Parameter(
                             description = "Inclusive lower bound, ISO-8601 with offset",
                             example = "2026-08-18T00:00:00Z")

@@ -3,6 +3,9 @@ package com.app.modules.admin.enums;
 import java.util.Arrays;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 /**
  * Every metric {@code platform_stats} carries, with the statement that computes it.
  *
@@ -120,8 +123,38 @@ public enum PlatformMetric {
         this.selectSql = selectSql;
     }
 
+    /**
+     * The metric's wire form, which is also its {@code platform_stats.metric_key} value.
+     *
+     * <p>Annotated so the enum crosses the wire as its key rather than its Java constant name, and
+     * so the generated document enumerates the closed set instead of describing it in prose.
+     *
+     * @return the metric key
+     */
+    @JsonValue
     public String key() {
         return key;
+    }
+
+    /**
+     * Resolves a wire key to its metric.
+     *
+     * @param value the wire key, case-insensitive and trimmed
+     * @return the matching metric
+     * @throws IllegalArgumentException when no metric carries that key, which Spring MVC surfaces
+     *     as a 400 on a request parameter
+     */
+    @JsonCreator
+    public static PlatformMetric fromJson(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("metric key is required");
+        }
+        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        return Arrays.stream(values())
+                .filter(metric -> metric.key.equals(normalized))
+                .findFirst()
+                .orElseThrow(
+                        () -> new IllegalArgumentException("unknown metric key '" + value + "'"));
     }
 
     public Kind kind() {
