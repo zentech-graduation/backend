@@ -22,12 +22,14 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.admin.api.AdminApi;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminPostRestoreResponse;
 import com.app.modules.admin.dto.response.AdminReportTargetResponse;
 import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
@@ -104,7 +106,7 @@ public class AdminController extends BaseController implements AdminApi {
     @Override
     @PatchMapping(ApiConstants.Admin.RESTORE_POST)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
-    public ResponseEntity<ApiResponse<AdminActionResponse>> restorePost(
+    public ResponseEntity<ApiResponse<AdminPostRestoreResponse>> restorePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request) {
         return ok(adminService.restorePost(SecurityUtils.getCurrentUserId(), postId, request));
     }
@@ -153,6 +155,7 @@ public class AdminController extends BaseController implements AdminApi {
     /** Returns a filtered cursor page of audit summaries to a moderation actor. */
     @Override
     @GetMapping(ApiConstants.Admin.ACTIONS)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActions(
             @RequestParam(required = false) UUID adminId,
@@ -167,6 +170,7 @@ public class AdminController extends BaseController implements AdminApi {
     /** Returns one audit event to an authenticated moderator or administrator. */
     @Override
     @GetMapping(ApiConstants.Admin.ACTION_BY_ID)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> getActionById(
             @PathVariable("actionId") UUID actionId) {
@@ -176,6 +180,7 @@ public class AdminController extends BaseController implements AdminApi {
     /** Returns a cursor page of audit summaries for one affected user. */
     @Override
     @GetMapping(ApiConstants.Admin.ACTIONS_FOR_USER)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>>
             getActionsForUser(
@@ -201,6 +206,7 @@ public class AdminController extends BaseController implements AdminApi {
     @Override
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping(ApiConstants.Admin.ESCALATED_REPORT_COUNT)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<EscalatedReportCountResponse>> countEscalatedReports() {
         return ResponseEntity.ok(
@@ -210,6 +216,7 @@ public class AdminController extends BaseController implements AdminApi {
     /** Returns the reported entity for moderation review, uncacheable by design. */
     @Override
     @GetMapping(ApiConstants.Admin.REPORT_TARGET)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminReportTargetResponse>> getReportTarget(
             @PathVariable("reportId") UUID reportId) {
@@ -225,7 +232,10 @@ public class AdminController extends BaseController implements AdminApi {
                                         SecurityUtils.getCurrentUserId(), reportId)));
     }
 
-    private ResponseEntity<ApiResponse<AdminActionResponse>> ok(AdminActionResponse response) {
+    // Generic rather than typed to AdminActionResponse: the post restore answers a different shape,
+    // and a helper that only fits fourteen of the fifteen handlers invites the fifteenth to build
+    // its envelope by hand and drift.
+    private <T> ResponseEntity<ApiResponse<T>> ok(T response) {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, response));
     }
 

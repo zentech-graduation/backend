@@ -25,6 +25,7 @@ import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminPostRestoreResponse;
 import com.app.modules.admin.dto.response.AdminReportTargetResponse;
 import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
@@ -258,7 +259,7 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<AdminActionResponse>> removePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
 
-    /** Restores a removed post to its pre-removal status and returns the persisted audit event. */
+    /** Restores a removed post to its pre-removal status and reports what the restore dropped. */
     @Operation(
             summary = "Restore a post",
             description =
@@ -268,7 +269,10 @@ public interface AdminApi {
                             + " comes back published. The resulting status is reported in the audit"
                             + " event's metadata as resultingStatus. Hashtag associations are"
                             + " re-derived and the search index is refreshed only when the post comes"
-                            + " back published.")
+                            + " back published. Restore is the one write path that strips a banned"
+                            + " hashtag instead of refusing, so the post can come back carrying"
+                            + " fewer tags than its caption names; droppedHashtags names them."
+                            + " Moderator or administrator role required.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -305,7 +309,7 @@ public interface AdminApi {
     @MalformedBodyErrorResponses
     @AuthenticationRequiredResponse
     @PatchMapping(ApiConstants.Admin.RESTORE_POST)
-    ResponseEntity<ApiResponse<AdminActionResponse>> restorePost(
+    ResponseEntity<ApiResponse<AdminPostRestoreResponse>> restorePost(
             @PathVariable("postId") UUID postId, @Valid @RequestBody AdminActionRequest request);
 
     /** Removes a comment and returns the persisted audit event. */
