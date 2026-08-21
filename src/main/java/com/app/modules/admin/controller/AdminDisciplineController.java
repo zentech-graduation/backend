@@ -22,6 +22,7 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.admin.api.AdminDisciplineApi;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminWarnUserRequest;
@@ -66,6 +67,7 @@ public class AdminDisciplineController extends BaseController implements AdminDi
     /** Returns a cursor page of the account's violation history, scoped to the caller's role. */
     @Override
     @GetMapping(ApiConstants.Admin.VIOLATIONS_FOR_USER)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<AdminViolationResponse>>> listViolations(
             @PathVariable("userId") UUID userId,

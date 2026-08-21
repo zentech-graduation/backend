@@ -1238,4 +1238,19 @@ class AdminControllerIT {
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void undeclaredQueryParameter_isRejectedOnEveryAuditListing() {
+        // A client that misspells a filter must be told, not handed a full unfiltered page that it
+        // then renders as if the filter had applied.
+        TestUser admin = createUser("bogusparam_admin", "admin");
+
+        assertThat(get("/api/v1/admin/actions?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(
+                        get("/api/v1/admin/actions/for-user/" + admin.id() + "?bogus=1", admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(get("/api/v1/admin/reports/escalated/count?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }

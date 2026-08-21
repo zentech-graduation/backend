@@ -291,6 +291,21 @@ class AdminStatsControllerIT {
     }
 
     @Test
+    void timeseries_undeclaredQueryParameter_isRejected() {
+        // A mistyped filter that returns an unfiltered 200 is the worst possible answer: the
+        // client shows the result as if the filter had been applied.
+        TestUser admin = createUser("stats_bogus_admin", "admin");
+
+        assertThat(
+                        getWithAuth(
+                                        "/api/v1/admin/stats/timeseries?metric=registrations"
+                                                + "&bogus=1",
+                                        admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void unauthenticatedRequest_isRejectedOnEveryStatisticsRead() {
         assertThat(rest.getForEntity("/api/v1/admin/stats/current", Map.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);

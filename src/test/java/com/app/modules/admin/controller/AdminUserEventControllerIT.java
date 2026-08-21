@@ -290,4 +290,21 @@ class AdminUserEventControllerIT {
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void undeclaredQueryParameter_isRejected() {
+        // The window is supplied so the only thing left to reject is the undeclared parameter. A
+        // bare ?bogus=1 answers 400 for the missing window instead, which would pass whether the
+        // parameter was rejected or silently ignored.
+        TestUser admin = createUser("events_bogus_admin", "admin");
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        String window = "from=" + iso(now.minusDays(1)) + "&to=" + iso(now);
+
+        assertThat(getWithAuth("/api/v1/admin/user-events?" + window, admin).getStatusCode())
+                .as("the same request without the undeclared parameter is accepted")
+                .isEqualTo(HttpStatus.OK);
+        assertThat(
+                        getWithAuth("/api/v1/admin/user-events?" + window + "&bogus=1", admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }

@@ -8,7 +8,9 @@ import java.util.TreeSet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.MethodParameter;
+import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -69,6 +71,9 @@ public class StrictQueryParameterInterceptor implements HandlerInterceptor {
 
     private static final String WILDCARD = "*";
 
+    private static final ParameterNameDiscoverer PARAMETER_NAME_DISCOVERER =
+            new DefaultParameterNameDiscoverer();
+
     private boolean isStrict(HandlerMethod handlerMethod) {
         if (handlerMethod.getMethodAnnotation(StrictQueryParameters.class) != null) {
             return true;
@@ -93,10 +98,18 @@ public class StrictQueryParameterInterceptor implements HandlerInterceptor {
     private Set<String> declaredParameterNames(HandlerMethod handlerMethod) {
         Set<String> names = new TreeSet<>();
         for (MethodParameter parameter : handlerMethod.getMethodParameters()) {
+            // A MethodParameter carries no name discoverer unless one is set, and a HandlerMethod
+            // held by the handler mapping never has one: Spring installs it on the per-request
+            // invocable copy instead. Without this, an @RequestParam that does not name itself -
+            // which is most of them - resolves to a null name, and the declared set silently loses
+            // a parameter that a real request legitimately sends. Cloned so the shared instance the
+            // handler mapping caches is left alone.
+            MethodParameter named = parameter.clone();
+            named.initParameterNameDiscovery(PARAMETER_NAME_DISCOVERER);
             collect(
-                    parameter.getParameter().getType(),
-                    parameter.getParameterAnnotation(RequestParam.class),
-                    parameter.getParameterName(),
+                    named.getParameter().getType(),
+                    named.getParameterAnnotation(RequestParam.class),
+                    named.getParameterName(),
                     names);
         }
         for (Method interfaceMethod : interfaceMethods(handlerMethod)) {
@@ -123,7 +136,15 @@ public class StrictQueryParameterInterceptor implements HandlerInterceptor {
         }
         String declared =
                 StringUtils.hasText(annotation.value()) ? annotation.value() : annotation.name();
-        names.add(StringUtils.hasText(declared) ? declared : parameterName);
+        if (StringUtils.hasText(declared)) {
+            names.add(declared);
+        } else if (StringUtils.hasText(parameterName)) {
+            names.add(parameterName);
+        }
+        // A parameter that names itself nowhere contributes nothing rather than a null entry. It
+        // cannot happen with -parameters on and an interface to read from, and the two reads
+        // reinforce each other, but a set that throws on one unnamed parameter would take the
+        // whole endpoint down rather than degrade.
     }
 
     private Set<Method> interfaceMethods(HandlerMethod handlerMethod) {

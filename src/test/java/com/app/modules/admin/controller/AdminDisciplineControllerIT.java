@@ -656,4 +656,13 @@ class AdminDisciplineControllerIT {
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void undeclaredQueryParameter_isRejectedOnTheViolationListing() {
+        TestUser admin = createUser("viol_bogus_admin", "admin");
+
+        assertThat(
+                        get("/api/v1/admin/violations/for-user/" + admin.id() + "?bogus=1", admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }

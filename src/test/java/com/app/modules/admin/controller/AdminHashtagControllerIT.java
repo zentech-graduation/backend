@@ -492,4 +492,15 @@ class AdminHashtagControllerIT {
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void undeclaredQueryParameter_isRejectedOnEveryRegistryListing() {
+        TestUser admin = createUser("hashtag_bogus_admin", "admin");
+
+        assertThat(getWithAuth("/api/v1/admin/hashtags?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(
+                        getWithAuth("/api/v1/admin/hashtags/search?q=abc&bogus=1", admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }

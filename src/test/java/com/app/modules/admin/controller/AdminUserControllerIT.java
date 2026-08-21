@@ -942,4 +942,15 @@ class AdminUserControllerIT {
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void undeclaredQueryParameter_isRejectedOnEveryAccountListing() {
+        TestUser admin = createUser("users_bogus_admin", "admin");
+
+        assertThat(get("/api/v1/admin/users?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(get("/api/v1/admin/users/search?q=abc&bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(get("/api/v1/admin/users/" + admin.id() + "?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }
