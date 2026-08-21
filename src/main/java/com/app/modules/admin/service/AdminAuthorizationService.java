@@ -1,5 +1,6 @@
 package com.app.modules.admin.service;
 
+import java.util.List;
 import java.util.UUID;
 
 import com.app.common.exception.AppException;
@@ -35,6 +36,46 @@ public interface AdminAuthorizationService {
         SKIP_LEVEL,
         NO_OP
     }
+
+    /**
+     * The operations one actor may perform against one target, without performing any of them.
+     *
+     * <p>Derived from the same evaluation the assertions use, never restated. Two copies of an
+     * authorization rule is the debt this interface exists to remove, and a copy in a mapper is the
+     * same debt written somewhere harder to find.
+     *
+     * @param canChangeStatus whether ban, unban, suspend and unsuspend are permitted; they share
+     *     one rule, so one flag answers all four
+     * @param canChangeRole whether any role transition at all is permitted
+     * @param assignableRoles the roles this actor may move this target to, empty when none is
+     */
+    record Capabilities(
+            boolean canChangeStatus, boolean canChangeRole, List<UserRole> assignableRoles) {}
+
+    /**
+     * Classifies a requested status change without throwing.
+     *
+     * @param actorId the account performing the action
+     * @param actorRole the actor's role as read from the source of truth, never from a token claim
+     * @param targetId the account whose status would change
+     * @param targetRole the target's current role
+     * @return the outcome; {@link Outcome#ALLOWED} when the actor may change that target's status
+     */
+    Outcome evaluateStatusChange(
+            UUID actorId, UserRole actorRole, UUID targetId, UserRole targetRole);
+
+    /**
+     * Reports what this actor may do to this target, so a client can decide whether to render a
+     * control rather than discover the answer from a rejection after the user has clicked it.
+     *
+     * @param actorId the account that would perform the action
+     * @param actorRole the actor's role as read from the source of truth
+     * @param targetId the account that would be acted on
+     * @param targetRole the target's current role
+     * @return the permitted operations, agreeing exactly with what the assertions allow
+     */
+    Capabilities capabilitiesFor(
+            UUID actorId, UserRole actorRole, UUID targetId, UserRole targetRole);
 
     /**
      * Asserts that the actor may change the target account's status.
@@ -90,9 +131,9 @@ public interface AdminAuthorizationService {
      * @param targetRole the target's current role
      * @param requestedRole the role the caller asked for
      * @throws AppException {@code FORBIDDEN} when the actor is not an administrator, {@code
-     *     ADMIN_SELF_ACTION_NOT_ALLOWED} when the actor targets itself, and {@code
-     *     ADMIN_ROLE_TRANSITION_NOT_ALLOWED} for a protected target, a skip-level promotion, or a
-     *     no-op
+     *     ADMIN_SELF_ACTION_NOT_ALLOWED} when the actor targets itself, {@code
+     *     ADMIN_TARGET_PROTECTED} when the target is an administrator, and {@code
+     *     ADMIN_ROLE_TRANSITION_NOT_ALLOWED} for a skip-level promotion or a no-op
      */
     void assertMayChangeUserRole(
             UUID actorId,

@@ -599,7 +599,7 @@ class AdminUserControllerIT {
     }
 
     @Test
-    void changeRole_administratorTarget_returnsConflictAndChangesNothing() {
+    void changeRole_administratorTarget_returnsForbiddenAndChangesNothing() {
         TestUser admin = createUser("protect_admin", "admin");
         TestUser other = createUser("protect_other", "admin");
 
@@ -609,11 +609,37 @@ class AdminUserControllerIT {
                         Map.of("role", "moderator", "reason", "Demote peer"),
                         admin);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_NOT_ALLOWED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_TARGET_PROTECTED");
         assertThat(roleOf(other.id())).isEqualTo("admin");
         assertThat(auditCount()).isZero();
     }
+
+    @Test
+    void protectedAdministratorTarget_answersTheSameStatusOnBanAndOnRoleChange() {
+        // One cause, one answer. A client that renders a Ban control and a Change role control
+        // has to branch on the same condition for both, and two statuses for the same reason is
+        // what made a client-side copy of the rule the only way to get it right.
+        TestUser admin = createUser("onestatus_admin", "admin");
+        TestUser other = createUser("onestatus_other", "admin");
+
+        ResponseEntity<Map> ban =
+                patch(
+                        "/api/v1/admin/users/" + other.id() + "/ban",
+                        Map.of("reason", "Ban peer"),
+                        admin);
+        ResponseEntity<Map> role =
+                patch(
+                        "/api/v1/admin/users/" + other.id() + "/role",
+                        Map.of("role", "moderator", "reason", "Demote peer"),
+                        admin);
+
+        assertThat(ban.getStatusCode()).isEqualTo(role.getStatusCode());
+        assertThat(ban.getBody().get("code")).isEqualTo(role.getBody().get("code"));
+        assertThat(ban.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ban.getBody().get("code")).isEqualTo("ADMIN_TARGET_PROTECTED");
+    }
+
     @Test
     void changeRole_skipLevelPromotion_returnsConflictAndChangesNothing() {
         TestUser admin = createUser("skip_admin", "admin");

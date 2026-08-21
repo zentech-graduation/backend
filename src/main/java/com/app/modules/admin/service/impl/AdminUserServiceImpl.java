@@ -19,6 +19,7 @@ import com.app.common.security.service.RefreshTokenService;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
+import com.app.modules.admin.dto.response.AdminUserCapabilitiesResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
 import com.app.modules.admin.enums.AdminActionType;
@@ -110,18 +111,34 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminUserDetailResponse getUserDetail(UUID userId) {
+    public AdminUserDetailResponse getUserDetail(UUID actorId, UUID userId) {
         User user =
                 adminUserRepository
                         .findByIdIncludingDeleted(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
+        // The actor's role is read from the source of truth here for the same reason every write
+        // path in this module reads it: a role claim minted before a demotion outlives the
+        // demotion, and a capability set computed from one would offer controls the write endpoint
+        // then refuses.
+        UserRole actorRole =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(actorId)
+                        .map(User::getRole)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.FORBIDDEN));
+        AdminAuthorizationService.Capabilities capabilities =
+                adminAuthorizationService.capabilitiesFor(
+                        actorId, actorRole, user.getId(), user.getRole());
         return adminUserMapper.toDetail(
                 user,
                 adminUserMapper.toSessionResponses(
                         refreshTokenService.listActiveSessions(userId, MAX_SESSIONS)),
                 adminUserMapper.toReportResponses(
                         reportRepository.findFirstReportsAgainstEntity(
-                                ReportType.USER, userId, MAX_REPORTS_AGAINST)));
+                                ReportType.USER, userId, MAX_REPORTS_AGAINST)),
+                new AdminUserCapabilitiesResponse(
+                        capabilities.canChangeStatus(),
+                        capabilities.canChangeRole(),
+                        capabilities.assignableRoles()));
     }
 
     @Override

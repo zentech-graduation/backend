@@ -149,7 +149,11 @@ public interface AdminUserApi {
             description =
                     "Returns one account with its registration and last-login origin, its live"
                             + " sessions, and the most recent reports filed against it. Resolves a"
-                            + " soft-deleted account as well as a live one.")
+                            + " soft-deleted account as well as a live one. Also carries what the"
+                            + " requesting administrator may do to the account, evaluated against"
+                            + " the same component the write endpoints enforce, so a control can be"
+                            + " rendered from the payload rather than from a client-side copy of"
+                            + " the rules.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -229,17 +233,22 @@ public interface AdminUserApi {
             description =
                     "Permitted transitions are user to moderator, moderator to user, and moderator"
                             + " to admin. An administrator is never a valid target, so demoting one"
-                            + " is deliberately a database-level operation. A skip-level promotion"
-                            + " from user to admin and a request naming the role the account"
-                            + " already holds are both refused. The change revokes every session"
-                            + " the account holds in the same transaction as the role write.")
+                            + " is deliberately a database-level operation and is refused with 403"
+                            + " ADMIN_TARGET_PROTECTED, the same answer a status change gives for"
+                            + " the same target. A skip-level promotion from user to admin and a"
+                            + " request naming the role the account already holds are conflicts"
+                            + " with the current state and are refused with 409. The change revokes"
+                            + " every session the account holds in the same transaction as the role"
+                            + " write.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "Role changed"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "Administrator role required",
+                description =
+                        "Administrator role required, or the target is an administrator and"
+                                + " therefore protected",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -254,7 +263,8 @@ public interface AdminUserApi {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description =
-                        "The actor is the target, or the requested transition is not permitted",
+                        "The actor is the target, the promotion skips a level, or the account"
+                                + " already holds the requested role",
                 content =
                         @Content(
                                 mediaType = "application/json",

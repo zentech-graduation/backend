@@ -51,11 +51,17 @@ public interface AdminUserService {
      * Returns the full administrative view of one account, including its live sessions and the most
      * recent reports filed against it.
      *
+     * <p>Also reports what the requesting administrator may do to the account, evaluated against
+     * the same component the write endpoints enforce, so a client can render the controls it can
+     * actually use rather than discovering the answer from a rejection.
+     *
+     * @param actorId the administrator making the request, whose permitted operations are reported
      * @param userId account to inspect
      * @return the account's administrative detail
-     * @throws AppException {@code USER_NOT_FOUND} when no row holds that id
+     * @throws AppException {@code USER_NOT_FOUND} when no row holds that id, {@code FORBIDDEN} when
+     *     the actor no longer resolves to a live account
      */
-    AdminUserDetailResponse getUserDetail(UUID userId);
+    AdminUserDetailResponse getUserDetail(UUID actorId, UUID userId);
 
     /**
      * Revokes every live session of an account and records the action.
@@ -85,8 +91,9 @@ public interface AdminUserService {
      * @return the audit row for the role change
      * @throws AppException {@code FORBIDDEN} when the actor is not an administrator, {@code
      *     USER_NOT_FOUND} when no live account holds that id, {@code ADMIN_SELF_ACTION_NOT_ALLOWED}
-     *     when the actor targets itself, and {@code ADMIN_ROLE_TRANSITION_NOT_ALLOWED} for a
-     *     transition the policy refuses
+     *     when the actor targets itself, {@code ADMIN_TARGET_PROTECTED} when the target is an
+     *     administrator, and {@code ADMIN_ROLE_TRANSITION_NOT_ALLOWED} for a skip-level promotion
+     *     or a no-op
      */
     AdminActionResponse changeRole(UUID actorId, UUID userId, AdminRoleChangeRequest request);
 }

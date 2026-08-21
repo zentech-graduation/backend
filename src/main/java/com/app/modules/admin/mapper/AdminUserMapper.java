@@ -6,6 +6,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.app.common.security.service.RefreshTokenService;
+import com.app.modules.admin.dto.response.AdminUserCapabilitiesResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
 import com.app.modules.admin.dto.response.AdminUserReportResponse;
@@ -38,13 +39,19 @@ public interface AdminUserMapper {
      *
      * <p>Sessions and reports are passed in rather than navigated from the entity: neither is a JPA
      * association on {@code User}, and both are deliberately bounded reads.
+     *
+     * <p>Capabilities are passed in for a stronger reason: they are an authorization answer, and
+     * deriving them here would put a second copy of the actor-and-target rules in a mapper, where
+     * they would drift from the ones the write endpoints enforce.
      */
     @Mapping(target = "isPrivate", source = "user.private")
     @Mapping(target = "isVerified", source = "user.verified")
     @Mapping(target = "sessions", source = "sessions")
     @Mapping(target = "reportsAgainst", source = "reportsAgainst")
+    @Mapping(target = "capabilities", source = "capabilities")
     AdminUserDetailResponse toDetail(
             User user,
             List<AdminUserSessionResponse> sessions,
-            List<AdminUserReportResponse> reportsAgainst);
+            List<AdminUserReportResponse> reportsAgainst,
+            AdminUserCapabilitiesResponse capabilities);
 }
