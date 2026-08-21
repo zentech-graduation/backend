@@ -27,6 +27,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.hashtag.dto.response.HashtagSummaryResponse;
 import com.app.modules.mail.service.MailService;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostResponse;
@@ -88,7 +89,9 @@ class PostAuthorEmbeddingIT {
     @AfterEach
     void cleanup() {
         jdbcTemplate.update("DELETE FROM post_likes");
+        jdbcTemplate.update("DELETE FROM post_hashtags");
         jdbcTemplate.update("DELETE FROM posts");
+        jdbcTemplate.update("DELETE FROM hashtags");
         jdbcTemplate.update("DELETE FROM follows");
         jdbcTemplate.update("DELETE FROM user_settings");
         jdbcTemplate.update("DELETE FROM users");
@@ -119,6 +122,45 @@ class PostAuthorEmbeddingIT {
         long largePage = stats.getPrepareStatementCount();
 
         assertThat(largePage).isEqualTo(smallPage);
+    }
+
+    @Test
+    void getFeed_carriesHashtagsAtAConstantStatementCountFromOneItemToTwenty() {
+        // The same field and the same shape the post detail carries, batched the same way. Adding
+        // the field to the detail payload produced an N+1 the first time, which is why the count
+        // is measured at both ends of a real page rather than asserted to be "batched".
+        UUID viewer = insertUser("hashtagviewer", false);
+        for (int i = 0; i < 20; i++) {
+            UUID author = insertUser("hashtagauthor" + i, false);
+            follow(viewer, author);
+            UUID post = insertPublishedPost(author);
+            attachHashtag(post, "feedtag" + i);
+            attachHashtag(post, "sharedtag");
+        }
+
+        Statistics stats = statistics();
+        // Warm up so one-time metamodel statements do not land inside a measured call.
+        postService.getFeed(viewer, null, 1);
+
+        stats.clear();
+        List<FeedPostResponse> onePost = postService.getFeed(viewer, null, 1).getContent();
+        long oneItem = stats.getPrepareStatementCount();
+
+        stats.clear();
+        List<FeedPostResponse> twentyPosts = postService.getFeed(viewer, null, 20).getContent();
+        long twentyItems = stats.getPrepareStatementCount();
+
+        assertThat(onePost).hasSize(1);
+        assertThat(twentyPosts).hasSize(20);
+        assertThat(twentyItems)
+                .as("statement count at 20 items must equal the count at 1 item")
+                .isEqualTo(oneItem);
+        assertThat(twentyPosts)
+                .allSatisfy(
+                        post ->
+                                assertThat(post.hashtags())
+                                        .extracting(HashtagSummaryResponse::name)
+                                        .contains("sharedtag"));
     }
 
     @Test
@@ -200,6 +242,18 @@ class PostAuthorEmbeddingIT {
         assertThat(posts).hasSize(1);
         assertThat(posts.get(0).author().id()).isEqualTo(owner);
         assertThat(posts.get(0).author().username()).isEqualTo("owner");
+    }
+
+    private void attachHashtag(UUID postId, String name) {
+        UUID hashtagId =
+                jdbcTemplate.queryForObject(
+                        "INSERT INTO hashtags(name) VALUES (?)"
+                                + " ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name"
+                                + " RETURNING id",
+                        UUID.class,
+                        name);
+        jdbcTemplate.update(
+                "INSERT INTO post_hashtags(post_id, hashtag_id) VALUES (?, ?)", postId, hashtagId);
     }
 
     private UUID insertUser(String username, boolean deleted) {

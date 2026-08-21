@@ -789,6 +789,7 @@ class PostServiceImplTest {
                 null,
                 null,
                 List.of(),
+                List.of(),
                 OffsetDateTime.now(),
                 OffsetDateTime.now(),
                 null);

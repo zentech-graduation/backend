@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.hashtag.dto.response.HashtagSummaryResponse;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.enums.PostType;
 
@@ -48,6 +49,13 @@ public record FeedPostResponse(
         @Schema(description = "Longitude in decimal degrees.", nullable = true)
                 BigDecimal longitude,
         @Schema(description = "Ordered media items.") List<PostMediaResponse> media,
+        @Schema(
+                        description =
+                                "Hashtags the caption names, excluding deleted ones. The same set"
+                                        + " and the same shape the post detail carries, so one card"
+                                        + " component renders a feed post and a profile post"
+                                        + " identically.")
+                List<HashtagSummaryResponse> hashtags,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
         @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt,
         @Schema(
