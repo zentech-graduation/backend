@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Every display vocabulary the API asks a client to send back is now readable in one call: report reasons, notification types, and moderation action types, each with its label, its behavioural flags, and whether it is currently enabled.
+A disabled row is returned and flagged rather than filtered out, so a client can show it as unavailable instead of offering it and meeting a rejection.
+Readable by any signed-in caller, because a person filing a report needs the same reason list a moderator needs when issuing a warning.
+- A moderator or administrator can now list an account's posts and its comments while investigating it, including drafts, archived posts, and content moderation has already removed, and regardless of whether the account is private or has blocked the reviewer.
+- A moderator or administrator can now open a single post, comment, account, story, or message by its own identifier, so a link from an audit entry or an account's content listing no longer dead-ends.
+- The account detail an administrator reads now says what that administrator is allowed to do to the account and which roles it may be moved to, so a control can be shown or hidden from the payload instead of from a copy of the rules kept in the client.
+- Restoring a post now names any hashtags the restore dropped because an administrator had banned them in the meantime, so a moderator is told rather than finding out from a later complaint.
+- A post in the following feed now carries its hashtags, the same field and the same shape the post detail already carried, so one post card renders identically wherever it came from.
+- The bucket width of a statistics chart can now be requested rather than only reported. Asking for half-hourly buckets over a window older than the fine-retention horizon is refused rather than answered with an empty chart, because those rows have been rolled up and deleted.
+- The real-time surface is now documented alongside the REST description: the four endpoints, the ticket handshake, every subscribable destination, the events each carries, and the list of what is pushed against what must still be polled.
+
 - An administrator can now read what an account did: session starts, searches with the term that was used, and views of another account's profile.
 The read requires a time window of at most thirty days, because the underlying table is partitioned by time and a query without one reads the whole history of the platform.
 - Behavioural events are now recorded at all. Three kinds are written, chosen for what they answer per unit of write volume; every other kind the schema allows for is deliberately still unwritten, and the endpoint's documentation says so, so an administrator seeing three kinds does not report it as a defect.
@@ -47,6 +58,10 @@ The first sign-in attempt after the term lapses restores the account, and a peri
 - The moderation audit log now records role changes and forced logouts, and the action registry lists every action type the moderation surface is planned to record.
 
 ### Changed
+- Refusing to act on an administrator now answers the same status and the same code whether the request was a status change or a role change. It previously answered two different ones for the same cause, which forced a client to keep its own copy of the rule to tell them apart.
+The two genuine conflicts on the role path, a skip-level promotion and a request naming the role the account already holds, keep their own code.
+- An administrator's account detail no longer says only what the account is; it also says what may be done to it.
+
 - Statistics that count whole tables are now computed by a background job rather than on the request, which is the difference between milliseconds and seconds once the platform is large.
 Counts of things that happened in an interval are counted directly rather than derived by subtracting two snapshots, so a moderation sweep can never make "new posts this half hour" read as a negative number.
 - Restoring a post whose caption names a banned hashtag now succeeds without that association instead of failing.
@@ -69,6 +84,15 @@ The audit log records server-derived facts only, and a request that still sends 
 - The application now takes its schema-migration lock without holding a transaction open, which is what allows an index to be built without blocking writes to the table.
 
 ### Fixed
+- The statistics metric parameter is now published as the closed set of keys it has always accepted, rather than as free text with the keys described in prose where only a human could find them.
+- An account's violation history is now published as what it is, two different kinds of entry told apart by a discriminator, instead of one flat shape in which half the fields were declared present and arrived empty.
+- Fields that can legitimately arrive empty on the discipline and report-target payloads are now described as such. They were previously declared as always present, so a generated client treated them as guaranteed.
+- A reference to another object that can be absent is now described in a way a value can actually satisfy. Four such fields were previously described as being both absent and present at once, which a code generator either rejects or silently reads as always present.
+- The two failure responses that carry structured detail now publish the shape of that detail, so the offending hashtags on a rejected caption can be read from a generated type rather than parsed by hand.
+- The moderator report queue no longer reads every report ever filed to return one page. At five million reports the first page took a quarter of a second and touched sixty-seven thousand pages; it now takes a twentieth of a millisecond and touches twenty-four.
+- Paging deeper into the report queue and the administrator audit log no longer costs more the further in you go.
+- The administrator audit listing no longer reads the whole table to return one page.
+
 - The API description of the own-warnings listing now declares the page it returns. It previously described only the two ways the call can fail, so a client generated from the description had no type for the success payload.
 - The API description of creating a post, editing a caption, and publishing a drafted or archived post now declares the rejection each answers when the caption names a banned hashtag, and points at the field carrying the offending names.
 - The monthly partitions behind the behavioural event table now cover the current month and the two ahead of it at all times, and a gap left by an earlier release is closed.
@@ -80,6 +104,9 @@ A write into an uncovered month never failed; it was absorbed silently and made 
 - The error code for a missing report resolution note, which no path had been able to raise since the requirement moved behind a mandatory field. An error code nothing can produce is a promise the API cannot keep.
 
 ### Security
+- The administrative surface now enforces a per-caller request budget. None of its thirty-three operations carried one, so two hundred requests a second from a single token were accepted; the four most expensive reads carry tighter budgets than the rest.
+- Every administrative read now rejects a query parameter it does not understand instead of ignoring it. A misspelled filter previously returned a full unfiltered page, which a client then displayed as though the filter had been applied.
+- A pagination cursor whose identifier has been truncated is now rejected. Removing characters from it previously produced a different, valid position, so the caller silently received the wrong page instead of an error.
 - Ending an account's sessions, whether by forcing a logout or by changing its role, now takes effect on the account's very next request.
 Previously the account kept whatever access it already held until that access expired on its own, which could be a further fifteen minutes.
 Sessions already open when this ships stay valid; an ordinary logout still ends only the session it was sent from.
@@ -89,6 +116,11 @@ Sessions already open when this ships stay valid; an ordinary logout still ends 
 - The guard that rejects a forged client message aimed at another user's realtime channel is now active whenever any realtime endpoint is enabled, rather than only when the comment, notification, or post endpoints happen to be on.
 - Accepting `SameSite=None` on the refresh cookie now requires an explicit acknowledgement and otherwise fails at startup, because it removes the only cross-site request protection on the refresh and logout endpoints while leaving every request apparently successful.
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
+
+### Tests
+- Every administrative controller now asserts that its endpoints refuse a request carrying no token at all. The suite previously checked only that a revoked token was refused.
+- The permitted-operations payload is checked by agreeing with the component that enforces the rules, for every combination of actor role and target role, rather than by restating the rules a third time.
+- The report queue's plan is asserted directly, so neither adding a status to the queue without extending the index nor removing the apparently redundant cursor bound can silently return it to a full scan.
 
 ### Fixed
 - Corrected `database/schema.sql`, which still had the group-conversation columns, a stale follow-counter function, and no record of the new conversation-customization columns despite Flyway having already migrated past all of it.
