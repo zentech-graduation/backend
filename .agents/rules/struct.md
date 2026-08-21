@@ -534,10 +534,22 @@ Pre-configured Resilience4j (dev and prod profiles):
 |-----------|----------|------------|-------------|
 | Circuit breaker | `default` | 10-call sliding window, 5 min calls, 50% failure threshold, 10s open wait, 3 half-open calls | 20-call sliding window, 10 min calls, 50% threshold, 30s open wait, 5 half-open calls |
 | Circuit breaker | `elasticsearchSearch` | COUNT_BASED 10-call, 50% threshold, 10s open wait, 3 half-open, auto-transition | COUNT_BASED 20-call, 50% threshold, 30s open wait, 5 half-open, auto-transition, 5s slow-call threshold, 80% slow-call rate |
-| Rate limiter | `lowTraffic` | 60 req / 30s, 5s timeout | 30 req / 30s, 5s timeout |
-| Rate limiter | `mediumTraffic` | 120 req / 30s, 5s timeout | 60 req / 30s, 5s timeout |
-| Rate limiter | `highTraffic` | 120 req / 30s, 5s timeout | 90 req / 30s, 5s timeout |
+| Rate limiter | `lowTraffic` | 3,000 req / 30s, 5s timeout | 3,000 req / 30s, 5s timeout |
+| Rate limiter | `mediumTraffic` | 6,000 req / 30s, 5s timeout | 6,000 req / 30s, 5s timeout |
+| Rate limiter | `highTraffic` | 9,000 req / 30s, 5s timeout | 9,000 req / 30s, 5s timeout |
 | Retry | `default` | 3 attempts, 1s initial, ×2 backoff | 3 attempts, 2s initial, ×2 backoff |
+
+The three rate limiter instances are JVM-wide overload backstops, not per-client budgets, and are
+deliberately sized well above any per-client budget so one caller cannot starve the shared bucket.
+Per-caller limiting is the Redis sliding window in `AuthRateLimitFilter`, configured under
+`app.rate-limit.endpoint-rules`, which is where an endpoint's real budget is set.
+The figures above were recorded as 60, 120 and 120 while the files said 3,000, 6,000 and 9,000,
+which made the administrative surface read as throttled when no per-caller rule covered it at all.
+
+`app.rate-limit.endpoint-rules` accepts Ant patterns as well as exact paths, so a path-variable
+route can carry a rule.
+`AuthRateLimitFilter` tries an exact match first, then the most specific matching pattern, and
+buckets on the key that matched rather than on the concrete request path.
 
 ---
 

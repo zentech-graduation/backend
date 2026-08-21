@@ -160,7 +160,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
      *       rules. The matched key equals the concrete path.
      *   <li>Ant-pattern match — covers path-variable templates such as {@code /posts/{id}/likes}
      *       and wildcard surfaces such as {@code /ws/**}. The matched key is the configured
-     *       pattern, not the concrete path.
+     *       pattern, not the concrete path. When more than one pattern matches, the most specific
+     *       one wins, so a broad sub-tree rule never shadows a narrower rule written for one
+     *       expensive endpoint inside it.
      * </ol>
      */
     private RuleMatch resolveRuleMatch(String path, String method) {
@@ -168,13 +170,23 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         if (exact != null) {
             return new RuleMatch(path, exact);
         }
-        for (Map.Entry<String, RateLimitProperties.Rule> entry :
-                properties.endpointRules().entrySet()) {
-            if (pathMatcher.match(entry.getKey(), path)) {
-                return new RuleMatch(entry.getKey(), entry.getValue());
+        // Most specific pattern wins rather than whichever the map happens to yield first. Map
+        // iteration order is the YAML declaration order, which makes a rule's budget depend on
+        // where somebody added it in the file; with a broad /api/v1/admin/** rule alongside
+        // narrower ones that is a silent mis-budgeting rather than a visible mistake.
+        String bestPattern = null;
+        for (String pattern : properties.endpointRules().keySet()) {
+            if (!pathMatcher.match(pattern, path)) {
+                continue;
+            }
+            if (bestPattern == null
+                    || pathMatcher.getPatternComparator(path).compare(pattern, bestPattern) < 0) {
+                bestPattern = pattern;
             }
         }
-        return null;
+        return bestPattern == null
+                ? null
+                : new RuleMatch(bestPattern, properties.endpointRules().get(bestPattern));
     }
 
     private record RuleMatch(String matchedKey, RateLimitProperties.Rule rule) {}
