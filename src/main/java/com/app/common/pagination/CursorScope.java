@@ -24,6 +24,8 @@ public final class CursorScope {
     // One tag per endpoint, not one shared "admin hashtags" tag. The listing and the search apply
     // different predicates over the same keyset ordering, so a shared tag would let a cursor from
     // one be replayed into the other and page into rows that endpoint never produced.
+    public static final String ADMIN_CONTENT_POSTS = "admcp";
+    public static final String ADMIN_CONTENT_COMMENTS = "admcc";
     public static final String ADMIN_HASHTAGS = "admh";
     public static final String ADMIN_HASHTAG_SEARCH = "admhs";
     public static final String COMMENTS_TOP_LEVEL = "cmt";
