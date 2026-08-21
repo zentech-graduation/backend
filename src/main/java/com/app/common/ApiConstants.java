@@ -24,6 +24,14 @@ public final class ApiConstants {
         public static final String WS_TICKET = "/ws-ticket";
     }
 
+    /** Read-only configuration surface shared by every authenticated caller. */
+    public static final class Config {
+        private Config() {}
+
+        public static final String ROOT = API_V1 + "/config";
+        public static final String VOCABULARIES = "/vocabularies";
+    }
+
     public static final class Users {
         private Users() {}
 
@@ -207,6 +215,22 @@ public final class ApiConstants {
         // declaration order, and the two carry different HTTP methods in any case.
         public static final String HASHTAG_SEARCH = "/hashtags/search";
         public static final String HASHTAG_BY_ID = "/hashtags/{hashtagId}";
+        // The content-inspection surface. Under /api/v1/admin/ and outside the /users/** sub-tree
+        // for the same structural reason ACTIONS_FOR_USER is: that sub-tree is reserved for the
+        // ADMIN-only matcher, and investigating an account's content is moderator work. Putting
+        // these under "/users/" would mean adding exceptions ahead of that matcher, which is the
+        // ordering subtlety the split exists to avoid.
+        // "for-user" is a literal segment, so neither listing can ever be shadowed by the
+        // three-segment CONTENT_ENTITY template below whatever the matcher ordering.
+        public static final String CONTENT_POSTS_FOR_USER = "/content/for-user/{userId}/posts";
+        public static final String CONTENT_COMMENTS_FOR_USER =
+                "/content/for-user/{userId}/comments";
+        // A bare entity identifier, which the report-anchored REPORT_TARGET read deliberately
+        // refuses to take. The two are not in conflict: this one is reachable only by an account
+        // that already holds the moderator or administrator role, and the panel has links into
+        // specific posts and comments from the audit log and from an account's content listing,
+        // both of which dead-ended without it.
+        public static final String CONTENT_ENTITY = "/content/{entityType}/{entityId}";
         public static final String WARN_USER = "/warnings/for-user/{userId}";
         public static final String VIOLATIONS_FOR_USER = "/violations/for-user/{userId}";
         public static final String REVOKE_WARNING = "/warnings/{warningId}";

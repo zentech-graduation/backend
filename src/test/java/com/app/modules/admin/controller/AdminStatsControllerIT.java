@@ -219,6 +219,105 @@ class AdminStatsControllerIT {
     }
 
     @Test
+    void timeseries_requestedDayGranularity_isHonouredInsideTheFineWindow() {
+        // The response has always carried a granularity field, so a client reasonably builds a
+        // Half hour / Day toggle and sends one. Accepting the parameter and ignoring it made that
+        // toggle do nothing while still returning 200.
+        TestUser admin = createUser("stats_reqday_admin", "admin");
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        plantDaily(now.minusDays(1).truncatedTo(java.time.temporal.ChronoUnit.DAYS), 5);
+
+        ResponseEntity<Map> response =
+                getWithAuth(
+                        "/api/v1/admin/stats/timeseries?metric=registrations&granularity=day&from="
+                                + iso(now.minusDays(2))
+                                + "&to="
+                                + iso(now),
+                        admin);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(response).get("granularity")).isEqualTo("day");
+        assertThat(pointsOf(response)).hasSize(1);
+    }
+
+    @Test
+    void timeseries_requestedHalfHourGranularity_isHonouredInsideTheFineWindow() {
+        TestUser admin = createUser("stats_reqfine_admin", "admin");
+        OffsetDateTime recent = OffsetDateTime.now(ZoneOffset.UTC).minusHours(2);
+        plantFine(recent, "registrations", "", 11);
+
+        ResponseEntity<Map> response =
+                getWithAuth(
+                        "/api/v1/admin/stats/timeseries?metric=registrations"
+                                + "&granularity=half_hour",
+                        admin);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(dataOf(response).get("granularity")).isEqualTo("half_hour");
+        assertThat(pointsOf(response)).hasSize(1);
+    }
+
+    @Test
+    void timeseries_halfHourRequestedBeyondFineRetention_isRejectedNotAnsweredEmpty() {
+        // Those rows were rolled up and deleted. An empty series would be indistinguishable from a
+        // stretch in which nothing happened, and the response's granularity field would contradict
+        // what was asked for.
+        TestUser admin = createUser("stats_reqfine_old_admin", "admin");
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
+        ResponseEntity<Map> response =
+                getWithAuth(
+                        "/api/v1/admin/stats/timeseries?metric=registrations"
+                                + "&granularity=half_hour&from="
+                                + iso(now.minusDays(120))
+                                + "&to="
+                                + iso(now),
+                        admin);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void timeseries_unknownGranularity_isRejected() {
+        TestUser admin = createUser("stats_badgran_admin", "admin");
+
+        assertThat(
+                        getWithAuth(
+                                        "/api/v1/admin/stats/timeseries?metric=registrations"
+                                                + "&granularity=weekly",
+                                        admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void timeseries_undeclaredQueryParameter_isRejected() {
+        // A mistyped filter that returns an unfiltered 200 is the worst possible answer: the
+        // client shows the result as if the filter had been applied.
+        TestUser admin = createUser("stats_bogus_admin", "admin");
+
+        assertThat(
+                        getWithAuth(
+                                        "/api/v1/admin/stats/timeseries?metric=registrations"
+                                                + "&bogus=1",
+                                        admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void unauthenticatedRequest_isRejectedOnEveryStatisticsRead() {
+        assertThat(rest.getForEntity("/api/v1/admin/stats/current", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.getForEntity(
+                                        "/api/v1/admin/stats/timeseries?metric=registrations",
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void timeseries_unknownMetric_isRejected() {
         TestUser admin = createUser("stats_badmetric_admin", "admin");
 

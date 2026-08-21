@@ -56,6 +56,16 @@ class StrictQueryParameterInterceptorTest {
         }
     }
 
+    /** Declares parameters without naming them, which is how most admin handlers are written. */
+    static class UnnamedParamsHandler {
+        @StrictQueryParameters
+        public String handle(
+                @RequestParam(required = false) String status,
+                @RequestParam(required = false) String cursor) {
+            return "ok";
+        }
+    }
+
     static class WildcardHandler {
         @StrictQueryParameters
         public String handle(@RequestParam Map<String, String> all) {
@@ -135,6 +145,33 @@ class StrictQueryParameterInterceptorTest {
 
         assertThat(interceptor.preHandle(request, response, handlerFor(new WildcardHandler())))
                 .isTrue();
+    }
+
+    @Test
+    void requestParamsThatDoNotNameThemselves_areStillDeclared() throws Exception {
+        // An @RequestParam with no explicit value falls back to the compiled parameter name. A
+        // handler whose parameters are all written that way must accept them, not reject every
+        // request as carrying something undeclared.
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/x");
+        request.setParameter("status", "banned");
+        request.setParameter("cursor", "abc");
+
+        assertThat(interceptor.preHandle(request, response, handlerFor(new UnnamedParamsHandler())))
+                .isTrue();
+    }
+
+    @Test
+    void undeclaredParameter_onAnUnnamedParamsHandler_isRejected() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/x");
+        request.setParameter("staus", "banned");
+
+        assertThatThrownBy(
+                        () ->
+                                interceptor.preHandle(
+                                        request, response, handlerFor(new UnnamedParamsHandler())))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("staus")
+                .hasMessageContaining("status");
     }
 
     @Test

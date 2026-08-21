@@ -1,0 +1,49 @@
+-- The index the moderator report queue needs, and no existing index can serve.
+--
+-- Runs outside a transaction, declared in the accompanying V73__*.sql.conf, so the build can be
+-- CONCURRENTLY. reports is on the write path of every content flag a user submits, and the table is
+-- never pruned, so a plain build would hold a write lock for the whole of it.
+--
+-- The queue read is
+--   SELECT ... FROM reports WHERE status IN ('pending','reviewing')
+--    ORDER BY created_at DESC, id DESC LIMIT n
+-- and the existing idx_reports_status (status, created_at DESC) cannot serve it. A set of statuses
+-- with one global ordering cannot be walked from an index that leads with status: the entries are
+-- ordered within each status, not across them, so the planner has to gather every matching row and
+-- sort. It does not carry the id tie-breaker either.
+--
+-- Measured on PostgreSQL 18.6 against 5,000,000 reports seeded adversarially: 60% pending and 15%
+-- reviewing, so the predicate selects 3,750,000 of the 5,000,000 rows, and only 50,000 distinct
+-- created_at values, so every page boundary lands on a hundred-row tie and the id tie-breaker is
+-- load-bearing.
+--
+--   first page
+--     without: Parallel Seq Scan reading 3,750,000 rows plus a top-N heapsort
+--              245.0 ms, 66,765 buffers
+--     with:    Index Scan, no sort node
+--              0.028 ms, 24 buffers
+--   page roughly a million rows deep
+--     without: the same Parallel Seq Scan
+--              405.9 ms, 66,765 buffers
+--     with:    Index Scan with the keyset as an index condition
+--              0.063 ms, 24 buffers
+--
+-- The deep page only reaches 0.063 ms because the keyset predicate in the accompanying repository
+-- change is a row comparison rather than the equivalent OR. With the OR form the same index is
+-- chosen and then 1,080,000 entries are discarded by a filter, at 673 ms and 1,085,242 buffers. The
+-- index and the predicate form are one change; either alone leaves the deep page linear.
+--
+-- Partial rather than a full (status, created_at DESC, id DESC) index, which was implemented and
+-- measured as the alternative. The full index reaches the same plan quality but costs 237 MB
+-- against this one's 145 MB, and serving the queue from it means one statement per status merged in
+-- the service. That merge has to reproduce PostgreSQL's unsigned uuid ordering in Java to avoid
+-- dropping rows at a page boundary, which is a subtlety the discipline listing already documents at
+-- length as a source of exactly that bug. One statement has no such surface.
+--
+-- The predicate names the same two statuses as ReportStatus.OPEN_QUEUE. A status added to that list
+-- without being added here leaves the queue back on the sequential scan, silently, so
+-- ReportQueueIndexIT asserts the two agree.
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reports_open_queue
+    ON reports (created_at DESC, id DESC)
+    WHERE status IN ('pending', 'reviewing');

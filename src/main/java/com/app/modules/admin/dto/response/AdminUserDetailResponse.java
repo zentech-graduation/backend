@@ -13,7 +13,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * Full administrative view of one account.
  *
  * <p>Adds the origin and session information an administrator needs to investigate an account to
- * the fields carried by the list shape. Reachable only from the ADMIN-only administrative surface.
+ * the fields carried by the list shape, plus what the requesting administrator is permitted to do
+ * to it. Reachable only from the ADMIN-only administrative surface.
  */
 @Schema(description = "Full administrative view of one account")
 public record AdminUserDetailResponse(
@@ -55,4 +56,10 @@ public record AdminUserDetailResponse(
         @Schema(description = "Live sessions, newest first")
                 List<AdminUserSessionResponse> sessions,
         @Schema(description = "Most recent reports filed against this account")
-                List<AdminUserReportResponse> reportsAgainst) {}
+                List<AdminUserReportResponse> reportsAgainst,
+        @Schema(
+                        description =
+                                "What the requesting administrator may do to this account,"
+                                        + " evaluated against the same component the write"
+                                        + " endpoints enforce")
+                AdminUserCapabilitiesResponse capabilities) {}

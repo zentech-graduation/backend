@@ -81,8 +81,10 @@ public class AdminStatsServiceImpl implements AdminStatsService {
     @Override
     @Transactional(readOnly = true)
     public AdminStatsTimeseriesResponse getTimeseries(
-            String metric, OffsetDateTime from, OffsetDateTime to) {
-        String metricKey = validateMetric(metric);
+            PlatformMetric metric,
+            StatGranularity granularity,
+            OffsetDateTime from,
+            OffsetDateTime to) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime effectiveFrom = from;
         OffsetDateTime effectiveTo = to;
@@ -98,10 +100,10 @@ public class AdminStatsServiceImpl implements AdminStatsService {
         }
         validateWindow(effectiveFrom, effectiveTo);
 
-        StatGranularity granularity = granularityFor(effectiveFrom, now);
+        StatGranularity effectiveGranularity = resolveGranularity(granularity, effectiveFrom, now);
         List<StatPointResponse> points =
                 platformStatsRepository
-                        .findSeries(metricKey, granularity, effectiveFrom, effectiveTo)
+                        .findSeries(metric.key(), effectiveGranularity, effectiveFrom, effectiveTo)
                         .stream()
                         .map(
                                 row ->
@@ -109,7 +111,7 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                                                 row.bucketStart(), row.dimension(), row.value()))
                         .toList();
         return new AdminStatsTimeseriesResponse(
-                metricKey, granularity, effectiveFrom, effectiveTo, points);
+                metric.key(), effectiveGranularity, effectiveFrom, effectiveTo, points);
     }
 
     // Fine buckets survive only inside the fine retention window, so a window whose lower bound is
@@ -120,18 +122,25 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                 : StatGranularity.HALF_HOUR;
     }
 
-    private static String validateMetric(String metric) {
-        if (metric == null || metric.isBlank()) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "'metric' is required");
+    // A requested granularity is honoured where the rows exist and refused where they do not.
+    // Answering an unavailable request with an empty series would be worse than refusing it: the
+    // caller cannot tell a stretch that was rolled up and deleted from one in which nothing
+    // happened, and the response's own granularity field would contradict what was asked for.
+    private StatGranularity resolveGranularity(
+            StatGranularity requested, OffsetDateTime from, OffsetDateTime now) {
+        StatGranularity available = granularityFor(from, now);
+        if (requested == null) {
+            return available;
         }
-        String trimmed = metric.trim();
-        boolean known =
-                PlatformMetric.flowKeys().contains(trimmed)
-                        || PlatformMetric.gaugeKeys().contains(trimmed);
-        if (!known) {
-            throw new AppException(ApiErrorCode.BAD_REQUEST, "Unknown metric '" + trimmed + "'");
+        if (requested == StatGranularity.HALF_HOUR && available == StatGranularity.DAY) {
+            throw new AppException(
+                    ApiErrorCode.BAD_REQUEST,
+                    "Fine buckets are kept for "
+                            + properties.fineRetention().toDays()
+                            + " days; a window reaching further back can only be read at day"
+                            + " granularity");
         }
-        return trimmed;
+        return requested;
     }
 
     private static void validateWindow(OffsetDateTime from, OffsetDateTime to) {

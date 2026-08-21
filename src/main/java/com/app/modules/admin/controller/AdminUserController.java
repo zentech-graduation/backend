@@ -22,6 +22,7 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.admin.api.AdminUserApi;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
@@ -55,6 +56,7 @@ public class AdminUserController extends BaseController implements AdminUserApi 
     /** Returns a cursor page of accounts to the authenticated administrator. */
     @Override
     @GetMapping(ApiConstants.Admin.USERS)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<AdminUserListItemResponse>>> listUsers(
             @RequestParam(required = false) UserStatus status,
@@ -67,6 +69,7 @@ public class AdminUserController extends BaseController implements AdminUserApi 
     /** Returns a cursor page of matching accounts to the authenticated administrator. */
     @Override
     @GetMapping(ApiConstants.Admin.USER_SEARCH)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<AdminUserListItemResponse>>> searchUsers(
             @RequestParam("q") String query,
@@ -78,11 +81,14 @@ public class AdminUserController extends BaseController implements AdminUserApi 
     /** Returns one account's full administrative detail. */
     @Override
     @GetMapping(ApiConstants.Admin.USER_BY_ID)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminUserDetailResponse>> getUserDetail(
             @PathVariable("userId") UUID userId) {
         return ResponseEntity.ok(
-                ApiResponse.success(ApiSuccessCode.OK, adminUserService.getUserDetail(userId)));
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        adminUserService.getUserDetail(SecurityUtils.getCurrentUserId(), userId)));
     }
 
     /** Revokes every live session of one account for the authenticated administrator. */

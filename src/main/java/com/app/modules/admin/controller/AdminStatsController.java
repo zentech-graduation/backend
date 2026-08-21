@@ -13,9 +13,12 @@ import com.app.common.ApiConstants;
 import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.admin.api.AdminStatsApi;
 import com.app.modules.admin.dto.response.AdminStatsCurrentResponse;
 import com.app.modules.admin.dto.response.AdminStatsTimeseriesResponse;
+import com.app.modules.admin.enums.PlatformMetric;
+import com.app.modules.admin.enums.StatGranularity;
 import com.app.modules.admin.service.AdminStatsService;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -41,6 +44,7 @@ public class AdminStatsController extends BaseController implements AdminStatsAp
     /** Returns the newest stored statistics snapshot. */
     @Override
     @GetMapping(ApiConstants.Admin.STATS_CURRENT)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminStatsCurrentResponse>> getCurrentStats() {
         return ResponseEntity.ok(
@@ -50,15 +54,18 @@ public class AdminStatsController extends BaseController implements AdminStatsAp
     /** Returns one metric's stored series over a window. */
     @Override
     @GetMapping(ApiConstants.Admin.STATS_TIMESERIES)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminStatsTimeseriesResponse>> getStatsTimeseries(
-            @RequestParam(defaultValue = "registrations") String metric,
+            @RequestParam(defaultValue = "registrations") PlatformMetric metric,
+            @RequestParam(required = false) StatGranularity granularity,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     OffsetDateTime to) {
         return ResponseEntity.ok(
                 ApiResponse.success(
-                        ApiSuccessCode.OK, adminStatsService.getTimeseries(metric, from, to)));
+                        ApiSuccessCode.OK,
+                        adminStatsService.getTimeseries(metric, granularity, from, to)));
     }
 }

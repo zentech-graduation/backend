@@ -1204,4 +1204,53 @@ class AdminControllerIT {
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         return (List<Map<?, ?>>) data.get("content");
     }
+
+    @Test
+    void unauthenticatedRequest_isRejectedOnEveryModerationOperation() {
+        // The cheapest possible guard against a future path-matcher change silently opening the
+        // surface. Every 401 assertion in this module previously concerned token-epoch revocation;
+        // none sent a request with no token at all.
+        UUID any = UUID.randomUUID();
+
+        assertThat(rest.getForEntity("/api/v1/admin/actions", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(rest.getForEntity("/api/v1/admin/actions/" + any, Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.getForEntity("/api/v1/admin/actions/for-user/" + any, Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.getForEntity("/api/v1/admin/reports/escalated/count", Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.getForEntity("/api/v1/admin/reports/" + any + "/target", Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.exchange(
+                                        "/api/v1/admin/posts/" + any + "/remove",
+                                        HttpMethod.PATCH,
+                                        new HttpEntity<>(Map.of("reason", "no token")),
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void undeclaredQueryParameter_isRejectedOnEveryAuditListing() {
+        // A client that misspells a filter must be told, not handed a full unfiltered page that it
+        // then renders as if the filter had applied.
+        TestUser admin = createUser("bogusparam_admin", "admin");
+
+        assertThat(get("/api/v1/admin/actions?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(
+                        get("/api/v1/admin/actions/for-user/" + admin.id() + "?bogus=1", admin)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(get("/api/v1/admin/reports/escalated/count?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }

@@ -599,7 +599,7 @@ class AdminUserControllerIT {
     }
 
     @Test
-    void changeRole_administratorTarget_returnsConflictAndChangesNothing() {
+    void changeRole_administratorTarget_returnsForbiddenAndChangesNothing() {
         TestUser admin = createUser("protect_admin", "admin");
         TestUser other = createUser("protect_other", "admin");
 
@@ -609,10 +609,35 @@ class AdminUserControllerIT {
                         Map.of("role", "moderator", "reason", "Demote peer"),
                         admin);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_ROLE_TRANSITION_NOT_ALLOWED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody().get("code")).isEqualTo("ADMIN_TARGET_PROTECTED");
         assertThat(roleOf(other.id())).isEqualTo("admin");
         assertThat(auditCount()).isZero();
+    }
+
+    @Test
+    void protectedAdministratorTarget_answersTheSameStatusOnBanAndOnRoleChange() {
+        // One cause, one answer. A client that renders a Ban control and a Change role control
+        // has to branch on the same condition for both, and two statuses for the same reason is
+        // what made a client-side copy of the rule the only way to get it right.
+        TestUser admin = createUser("onestatus_admin", "admin");
+        TestUser other = createUser("onestatus_other", "admin");
+
+        ResponseEntity<Map> ban =
+                patch(
+                        "/api/v1/admin/users/" + other.id() + "/ban",
+                        Map.of("reason", "Ban peer"),
+                        admin);
+        ResponseEntity<Map> role =
+                patch(
+                        "/api/v1/admin/users/" + other.id() + "/role",
+                        Map.of("role", "moderator", "reason", "Demote peer"),
+                        admin);
+
+        assertThat(ban.getStatusCode()).isEqualTo(role.getStatusCode());
+        assertThat(ban.getBody().get("code")).isEqualTo(role.getBody().get("code"));
+        assertThat(ban.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ban.getBody().get("code")).isEqualTo("ADMIN_TARGET_PROTECTED");
     }
 
     @Test
@@ -895,5 +920,37 @@ class AdminUserControllerIT {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> contentOf(ResponseEntity<Map> response) {
         return (List<Map<String, Object>>) dataOf(response).get("content");
+    }
+
+    @Test
+    void unauthenticatedRequest_isRejectedOnEveryAccountOperation() {
+        UUID any = UUID.randomUUID();
+
+        assertThat(rest.getForEntity("/api/v1/admin/users", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(rest.getForEntity("/api/v1/admin/users/search?q=abc", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(rest.getForEntity("/api/v1/admin/users/" + any, Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.exchange(
+                                        "/api/v1/admin/users/" + any + "/ban",
+                                        HttpMethod.PATCH,
+                                        new HttpEntity<>(Map.of("reason", "no token")),
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void undeclaredQueryParameter_isRejectedOnEveryAccountListing() {
+        TestUser admin = createUser("users_bogus_admin", "admin");
+
+        assertThat(get("/api/v1/admin/users?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(get("/api/v1/admin/users/search?q=abc&bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(get("/api/v1/admin/users/" + admin.id() + "?bogus=1", admin).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }

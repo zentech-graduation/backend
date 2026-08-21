@@ -22,6 +22,7 @@ import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminPostRestoreResponse;
 import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
@@ -120,13 +121,17 @@ public class AdminServiceImpl implements AdminService {
     @Override
     @Transactional
     public AdminActionResponse removePost(UUID actorId, UUID postId, AdminActionRequest request) {
-        return moderatePost(actorId, postId, AdminActionType.REMOVE_POST, request);
+        return moderatePostAndReport(actorId, postId, AdminActionType.REMOVE_POST, request)
+                .action();
     }
 
     @Override
     @Transactional
-    public AdminActionResponse restorePost(UUID actorId, UUID postId, AdminActionRequest request) {
-        return moderatePost(actorId, postId, AdminActionType.RESTORE_POST, request);
+    public AdminPostRestoreResponse restorePost(
+            UUID actorId, UUID postId, AdminActionRequest request) {
+        ModerationOutcome outcome =
+                moderatePostAndReport(actorId, postId, AdminActionType.RESTORE_POST, request);
+        return new AdminPostRestoreResponse(outcome.action(), outcome.droppedHashtags());
     }
 
     @Override
@@ -285,7 +290,7 @@ public class AdminServiceImpl implements AdminService {
     // of a removal, so the administrative path and the owner path cannot drift apart again the way
     // they had: this method used to write the row directly and left the hashtag associations and
     // the search-index document behind.
-    private AdminActionResponse moderatePost(
+    private ModerationOutcome moderatePostAndReport(
             UUID actorId, UUID postId, AdminActionType actionType, AdminActionRequest request) {
         String currentStatus =
                 postRepository
@@ -308,16 +313,22 @@ public class AdminServiceImpl implements AdminService {
         if (!result.strippedHashtags().isEmpty()) {
             metadata.put("strippedHashtags", result.strippedHashtags());
         }
-        return adminActionRecorder.record(
-                actorId,
-                actionType,
-                result.ownerId(),
-                "post",
-                postId,
-                request.reportId(),
-                request.reason(),
-                metadata);
+        AdminActionResponse action =
+                adminActionRecorder.record(
+                        actorId,
+                        actionType,
+                        result.ownerId(),
+                        "post",
+                        postId,
+                        request.reportId(),
+                        request.reason(),
+                        metadata);
+        return new ModerationOutcome(action, result.strippedHashtags());
     }
+
+    // The audit row plus the one side effect a moderator has to be told about. The audit row alone
+    // cannot carry it in a declared shape: metadata is a free-form map shared by every action.
+    private record ModerationOutcome(AdminActionResponse action, List<String> droppedHashtags) {}
 
     private AdminActionResponse moderateComment(
             UUID actorId, UUID commentId, AdminActionType actionType, AdminActionRequest request) {

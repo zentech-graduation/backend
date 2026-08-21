@@ -5,23 +5,22 @@ import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/**
- * One warning as a moderator sees it.
- *
- * @param id warning identifier
- * @param userId account the warning is against
- * @param issuedBy moderator who issued it, or null once that account is deleted
- * @param reasonKey key of the {@code report_reason_configs} row cited
- * @param note the moderator's own description of what happened
- * @param revokedAt moment the warning was revoked, or null while it stands
- * @param createdAt moment the warning was issued
- */
+/** One warning as a moderator sees it. */
 @Schema(description = "One warning issued against an account")
 public record AdminWarningResponse(
-        UUID id,
-        UUID userId,
-        UUID issuedBy,
-        String reasonKey,
-        String note,
-        OffsetDateTime revokedAt,
-        OffsetDateTime createdAt) {}
+        @Schema(description = "Warning identifier") UUID id,
+        @Schema(description = "Account the warning is against") UUID userId,
+        @Schema(
+                        description = "Moderator who issued it; null once that account is deleted",
+                        nullable = true)
+                UUID issuedBy,
+        @Schema(description = "Key of the report_reason_configs row cited", example = "spam")
+                String reasonKey,
+        @Schema(description = "The moderator's own description of what happened") String note,
+        @Schema(
+                        description =
+                                "Moment the warning was revoked; null while it stands, which is"
+                                        + " the normal case",
+                        nullable = true)
+                OffsetDateTime revokedAt,
+        @Schema(description = "Moment the warning was issued") OffsetDateTime createdAt) {}

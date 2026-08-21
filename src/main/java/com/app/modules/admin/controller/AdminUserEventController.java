@@ -18,6 +18,7 @@ import com.app.common.base.BaseController;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.admin.api.AdminUserEventApi;
 import com.app.modules.admin.service.AdminUserEventService;
 import com.app.modules.recommendation.dto.response.UserEventResponse;
@@ -47,6 +48,7 @@ public class AdminUserEventController extends BaseController implements AdminUse
     /** Returns a cursor page of behavioural events inside a mandatory bounded window. */
     @Override
     @GetMapping(ApiConstants.Admin.USER_EVENTS)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<UserEventResponse>>> listUserEvents(
             @RequestParam(required = false) UUID userId,

@@ -22,6 +22,7 @@ import com.app.common.config.openapi.AuthenticationRequiredResponse;
 import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.error.BannedHashtagErrorResponse;
 import com.app.modules.post.dto.request.CreatePostRequest;
 import com.app.modules.post.dto.request.PostStatusTransitionRequest;
 import com.app.modules.post.dto.request.UpdatePostCaptionRequest;
@@ -81,6 +82,19 @@ public interface PostApi {
                         @Content(
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "422",
+                description =
+                        "Caption names a banned hashtag. The failure payload carries the offending"
+                                + " names in data.bannedTags so a client can point at them in the"
+                                + " caption",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema =
+                                        @Schema(
+                                                implementation =
+                                                        BannedHashtagErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
@@ -175,6 +189,19 @@ public interface PostApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "422",
+                description =
+                        "Caption names a banned hashtag. The failure payload carries the offending"
+                                + " names in data.bannedTags so a client can point at them in the"
+                                + " caption",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema =
+                                        @Schema(
+                                                implementation =
+                                                        BannedHashtagErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
                 content =
@@ -226,6 +253,19 @@ public interface PostApi {
                         @Content(
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "422",
+                description =
+                        "Caption names a banned hashtag. The failure payload carries the offending"
+                                + " names in data.bannedTags so a client can point at them in the"
+                                + " caption",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema =
+                                        @Schema(
+                                                implementation =
+                                                        BannedHashtagErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",

@@ -97,8 +97,9 @@ public class PostResponseAssembler {
     /**
      * Assembles {@link FeedPostResponse} DTOs for the following feed.
      *
-     * <p>Batches the {@code media_assets} lookup identically to {@link #assemble(UUID, List)} to
-     * avoid per-post queries on list pages.
+     * <p>Batches the {@code media_assets}, author, viewer-state and hashtag lookups identically to
+     * {@link #assemble(UUID, List)}, so the statement count for a page of twenty is the same as for
+     * a page of one.
      *
      * @param viewerId the requesting viewer, whose like/save state is batch-resolved
      * @param posts posts to assemble; must not be empty
@@ -117,6 +118,7 @@ public class PostResponseAssembler {
                                 .collect(Collectors.toMap(MediaAsset::getId, a -> a));
         Map<UUID, UserSummaryResponse> authors = batchFetchAuthors(posts);
         PostViewerState viewerState = batchFetchViewerState(viewerId, posts);
+        Map<UUID, List<HashtagSummaryResponse>> hashtags = batchFetchHashtags(posts);
         List<FeedPostResponse> result = new ArrayList<>(posts.size());
         for (Post post : posts) {
             List<PostMediaResponse> media =
@@ -133,7 +135,8 @@ public class PostResponseAssembler {
                             authors.get(post.getUserId()),
                             viewerState.isLiked(post.getId()),
                             viewerState.isSaved(post.getId()),
-                            viewerState.hasReported(post.getId())));
+                            viewerState.hasReported(post.getId()),
+                            hashtags.getOrDefault(post.getId(), List.of())));
         }
         return result;
     }

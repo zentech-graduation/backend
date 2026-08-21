@@ -116,4 +116,21 @@ app:
         # window - generous headroom for real network flakiness while staying bounded.
         max-attempts: 60
         window-seconds: 60
-      # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
+      # The administrative surface. Tighter than the shared default: an administrator's panel is
+      # driven by a human, and a compromised administrator token is the highest-value credential in
+      # the system, so the ceiling is set to what a person can actually generate.
+      "[/api/v1/admin/**]":
+        max-attempts: 120
+        window-seconds: 60
+      "[/api/v1/admin/stats/timeseries]":
+        max-attempts: 20
+        window-seconds: 60
+      "[/api/v1/admin/user-events]":
+        max-attempts: 20
+        window-seconds: 60
+      "[/api/v1/admin/users/search]":
+        max-attempts: 40
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/search]":
+        max-attempts: 40
+        window-seconds: 60

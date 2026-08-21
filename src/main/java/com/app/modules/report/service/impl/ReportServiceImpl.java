@@ -35,8 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ReportServiceImpl implements ReportService {
 
     /** The open part of the lifecycle, and the whole of a moderator's queue. */
-    private static final List<ReportStatus> MODERATOR_STATUSES =
-            List.of(ReportStatus.PENDING, ReportStatus.REVIEWING);
+    private static final List<ReportStatus> MODERATOR_STATUSES = ReportStatus.OPEN_QUEUE;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;

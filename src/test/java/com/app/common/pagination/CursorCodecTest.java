@@ -105,4 +105,39 @@ class CursorCodecTest {
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.INVALID_CURSOR);
     }
+
+    @Test
+    void decode_identifierShorterThanAUuid_throwsInvalidCursor() {
+        // UUID.fromString zero-pads a group that is short, so an identifier with characters
+        // removed parses into a different, entirely valid identifier. Dropping 2, 3, 6 or 8
+        // characters from the canonical rendering all produced a decodable cursor pointing at a
+        // position the caller never held, which returns a wrong page instead of an error.
+        String canonical = ID.toString();
+        for (int removed : new int[] {1, 2, 3, 6, 8}) {
+            String truncated = canonical.substring(0, canonical.length() - removed);
+            String encoded =
+                    java.util.Base64.getUrlEncoder()
+                            .withoutPadding()
+                            .encodeToString((SCOPE + ":123:" + truncated).getBytes());
+
+            assertThatThrownBy(() -> CursorCodec.decode(encoded, SCOPE))
+                    .as("cursor with %s characters removed from its identifier", removed)
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ApiErrorCode.INVALID_CURSOR);
+        }
+    }
+
+    @Test
+    void decode_identifierLongerThanAUuid_throwsInvalidCursor() {
+        String encoded =
+                java.util.Base64.getUrlEncoder()
+                        .withoutPadding()
+                        .encodeToString((SCOPE + ":123:" + ID + "0").getBytes());
+
+        assertThatThrownBy(() -> CursorCodec.decode(encoded, SCOPE))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.INVALID_CURSOR);
+    }
 }

@@ -70,8 +70,9 @@ public interface PostMapper {
      *     service
      * @param hasReported whether the requesting viewer has already reported this post,
      *     batch-resolved by the service
-     * @return the feed post response with media, the embedded author, viewer state, and ranking
-     *     score reserved as null
+     * @param hashtags the post's visible hashtags, batch-resolved by the service
+     * @return the feed post response with media, the embedded author, viewer state, hashtags, and
+     *     ranking score reserved as null
      */
     @Mapping(source = "post.id", target = "id")
     @Mapping(source = "post.status", target = "status")
@@ -82,6 +83,7 @@ public interface PostMapper {
     @Mapping(source = "isLiked", target = "isLiked")
     @Mapping(source = "isSaved", target = "isSaved")
     @Mapping(source = "hasReported", target = "hasReported")
+    @Mapping(source = "hashtags", target = "hashtags")
     @Mapping(target = "rankingScore", ignore = true)
     FeedPostResponse toFeedResponse(
             Post post,
@@ -89,7 +91,8 @@ public interface PostMapper {
             UserSummaryResponse author,
             boolean isLiked,
             boolean isSaved,
-            boolean hasReported);
+            boolean hasReported,
+            List<HashtagSummaryResponse> hashtags);
 
     /**
      * Combines a post media row with its referenced media asset for rendering.

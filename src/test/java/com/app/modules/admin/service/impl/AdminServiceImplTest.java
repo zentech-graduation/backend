@@ -28,6 +28,7 @@ import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminPostRestoreResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
@@ -221,14 +222,36 @@ class AdminServiceImplTest {
                 .thenReturn(new PostModerationResult(ownerId, PostStatus.DRAFT, List.of()));
         stubAudit(expected);
 
-        AdminActionResponse result =
+        AdminPostRestoreResponse result =
                 service.restorePost(
                         UUID.randomUUID(), postId, new AdminActionRequest("Appeal accepted", null));
 
-        assertThat(result).isEqualTo(expected);
+        assertThat(result.action()).isEqualTo(expected);
+        assertThat(result.droppedHashtags()).isEmpty();
         ArgumentCaptor<AdminAction> captor = ArgumentCaptor.forClass(AdminAction.class);
         verify(adminActionRepository).insert(captor.capture());
         assertThat(captor.getValue().getMetadata()).containsEntry("resultingStatus", "draft");
+    }
+
+    @Test
+    void restorePost_captionNamingABannedTag_namesTheDroppedTagInTheResponse() {
+        // The audit row already recorded the stripped names, but a moderator reads a response.
+        // Left only in metadata the names are unreachable from a generated client, because
+        // metadata is a free-form map shared by every action type.
+        UUID postId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        when(postRepository.findStatusIncludingDeleted(postId)).thenReturn(Optional.of("removed"));
+        when(postService.applyModerationRestore(postId))
+                .thenReturn(
+                        new PostModerationResult(
+                                ownerId, PostStatus.PUBLISHED, List.of("laterbanned")));
+        stubAudit(response(AdminActionType.RESTORE_POST));
+
+        AdminPostRestoreResponse result =
+                service.restorePost(
+                        UUID.randomUUID(), postId, new AdminActionRequest("Appeal accepted", null));
+
+        assertThat(result.droppedHashtags()).containsExactly("laterbanned");
     }
 
     @Test

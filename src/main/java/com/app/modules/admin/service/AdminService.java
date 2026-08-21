@@ -9,6 +9,7 @@ import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminPostRestoreResponse;
 import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
@@ -41,8 +42,20 @@ public interface AdminService {
     /** Removes a post and records the action atomically. */
     AdminActionResponse removePost(UUID actorId, UUID postId, AdminActionRequest request);
 
-    /** Restores a removed post and records the action atomically. */
-    AdminActionResponse restorePost(UUID actorId, UUID postId, AdminActionRequest request);
+    /**
+     * Restores a removed post and records the action atomically.
+     *
+     * <p>Returns the names of any hashtags the caption still carries that were not re-associated
+     * because an administrator has banned them. Restore is the one write path that strips rather
+     * than refuses, so it is also the one that can silently give a post back with fewer tags than
+     * its caption names.
+     *
+     * @param actorId the acting moderator or administrator
+     * @param postId the post to restore
+     * @param request the audit reason and any linked report
+     * @return the audit row and the hashtag names the restore dropped
+     */
+    AdminPostRestoreResponse restorePost(UUID actorId, UUID postId, AdminActionRequest request);
 
     /** Removes a comment and records the action atomically. */
     AdminActionResponse removeComment(UUID actorId, UUID commentId, AdminActionRequest request);

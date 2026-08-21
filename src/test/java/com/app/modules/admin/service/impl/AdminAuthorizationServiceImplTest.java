@@ -3,13 +3,16 @@ package com.app.modules.admin.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminAuthorizationService.Outcome;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
@@ -181,7 +184,10 @@ class AdminAuthorizationServiceImplTest {
     }
 
     @Test
-    void assertMayChangeUserRole_adminTarget_throwsRoleTransitionForbidden() {
+    void assertMayChangeUserRole_adminTarget_throwsTargetProtected() {
+        // The same code and status the status-change path answers for the same cause. A protected
+        // target is a property of the target; the two remaining role outcomes are conflicts with
+        // the state the request asks to leave, and those keep their own code.
         assertThatThrownBy(
                         () ->
                                 policy.assertMayChangeUserRole(
@@ -192,7 +198,34 @@ class AdminAuthorizationServiceImplTest {
                                         UserRole.MODERATOR))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.ADMIN_ROLE_TRANSITION_NOT_ALLOWED);
+                .isEqualTo(ApiErrorCode.ADMIN_TARGET_PROTECTED);
+    }
+
+    @Test
+    void protectedTarget_answersTheSameCodeOnBothTheStatusAndRolePaths() {
+        User target = targetUser(TARGET, UserRole.ADMIN);
+
+        ApiErrorCode fromStatusPath =
+                catchThrowableOfType(
+                                AppException.class,
+                                () ->
+                                        policy.assertMayChangeUserStatus(
+                                                ACTOR, UserRole.ADMIN, target))
+                        .getErrorCode();
+        ApiErrorCode fromRolePath =
+                catchThrowableOfType(
+                                AppException.class,
+                                () ->
+                                        policy.assertMayChangeUserRole(
+                                                ACTOR,
+                                                UserRole.ADMIN,
+                                                TARGET,
+                                                UserRole.ADMIN,
+                                                UserRole.MODERATOR))
+                        .getErrorCode();
+
+        assertThat(fromStatusPath).isEqualTo(fromRolePath);
+        assertThat(fromStatusPath.getHttpStatus()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test
@@ -245,8 +278,6 @@ class AdminAuthorizationServiceImplTest {
                 UserRole.ADMIN, ACTOR, UserRole.ADMIN, ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
     }
 
-    // The status contract names the protected target directly while the role contract folds the
-    // same condition into its transition code. Sharing one evaluation must not merge the two.
     @Test
     void assertMayChangeUserStatus_adminTarget_throwsTargetProtected() {
         assertStatusRefusedWith(
@@ -270,6 +301,61 @@ class AdminAuthorizationServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(expected);
+    }
+
+    @Test
+    void capabilitiesFor_agreesWithTheAssertionsForEveryActorAndTargetCombination() {
+        // Asserted by agreement rather than by restating the rules. A test that listed the
+        // expected flags would be the third copy of the same rules, and the second place they
+        // could drift apart from the enforcement.
+        for (UserRole actorRole : UserRole.values()) {
+            for (UserRole targetRole : UserRole.values()) {
+                for (boolean self : new boolean[] {false, true}) {
+                    UUID targetId = self ? ACTOR : TARGET;
+                    AdminAuthorizationService.Capabilities capabilities =
+                            policy.capabilitiesFor(ACTOR, actorRole, targetId, targetRole);
+                    String context =
+                            "actor=" + actorRole + " target=" + targetRole + " self=" + self;
+
+                    assertThat(capabilities.canChangeStatus())
+                            .as("canChangeStatus for " + context)
+                            .isEqualTo(
+                                    permits(
+                                            () ->
+                                                    policy.assertMayChangeUserStatus(
+                                                            ACTOR,
+                                                            actorRole,
+                                                            targetUser(targetId, targetRole))));
+
+                    for (UserRole requested : UserRole.values()) {
+                        assertThat(capabilities.assignableRoles().contains(requested))
+                                .as("assignableRoles contains " + requested + " for " + context)
+                                .isEqualTo(
+                                        permits(
+                                                () ->
+                                                        policy.assertMayChangeUserRole(
+                                                                ACTOR,
+                                                                actorRole,
+                                                                targetId,
+                                                                targetRole,
+                                                                requested)));
+                    }
+
+                    assertThat(capabilities.canChangeRole())
+                            .as("canChangeRole for " + context)
+                            .isEqualTo(!capabilities.assignableRoles().isEmpty());
+                }
+            }
+        }
+    }
+
+    private static boolean permits(Runnable assertion) {
+        try {
+            assertion.run();
+            return true;
+        } catch (AppException ignored) {
+            return false;
+        }
     }
 
     private static User targetUser(UUID id, UserRole role) {

@@ -33,12 +33,35 @@ import io.swagger.v3.oas.annotations.media.Schema;
  */
 @Schema(description = "A reported entity rendered for moderation review")
 public record AdminReportTargetResponse(
-        ReportType reportType,
-        UUID entityId,
-        UUID ownerId,
-        String ownerUsername,
-        String status,
-        String text,
-        List<String> mediaUrls,
-        boolean removed,
-        OffsetDateTime createdAt) {}
+        @Schema(description = "Which kind of entity this is") ReportType reportType,
+        @Schema(description = "The entity's identifier") UUID entityId,
+        @Schema(
+                        description =
+                                "The account that authored it; null once that account is deleted",
+                        nullable = true)
+                UUID ownerId,
+        @Schema(
+                        description = "The author's username; null once that account is deleted",
+                        nullable = true)
+                String ownerUsername,
+        @Schema(
+                        description =
+                                "The entity's own status where it has one: post status or account"
+                                        + " status. Null for a comment, story or message, none of"
+                                        + " which carry one; reportType says which those are.",
+                        example = "published",
+                        nullable = true)
+                String status,
+        @Schema(
+                        description =
+                                "The caption, comment body, message body or profile bio, whichever"
+                                        + " applies; null when the entity carries no text",
+                        nullable = true)
+                String text,
+        @Schema(
+                        description =
+                                "CDN URLs of the attached media, in carousel order; empty when"
+                                        + " there is none")
+                List<String> mediaUrls,
+        @Schema(description = "Whether the entity is already soft-deleted") boolean removed,
+        @Schema(description = "When the entity was created") OffsetDateTime createdAt) {}

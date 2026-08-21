@@ -54,6 +54,13 @@ public class AdminActionRepositoryImpl implements AdminActionRepositoryCustom {
             predicates.add(builder.equal(action.get("actionType"), actionType));
         }
         if (cursorCreatedAt != null && cursorId != null) {
+            // The first conjunct implies nothing the disjunction below does not already imply, and
+            // it is what makes idx_admin_actions_created usable. An OR cannot become an index
+            // condition, so the disjunction alone is applied as a filter after the scan has walked
+            // every entry newer than the cursor. This bounds the scan at the cursor and leaves the
+            // disjunction to decide only within the one timestamp tie. Measured at 100,000 rows on
+            // a page 48,000 deep: without it, 48,248 buffers in 23.3 ms; with it, 24 in 0.07 ms.
+            predicates.add(builder.lessThanOrEqualTo(action.get("createdAt"), cursorCreatedAt));
             predicates.add(
                     builder.or(
                             builder.lessThan(action.get("createdAt"), cursorCreatedAt),

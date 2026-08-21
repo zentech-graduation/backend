@@ -19,8 +19,21 @@ import io.swagger.v3.oas.annotations.media.Schema;
  */
 @Schema(description = "Outcome of issuing one warning")
 public record AdminWarnUserResponse(
-        AdminWarningResponse warning,
-        long activeWarningCount,
-        boolean strikeIssued,
-        AdminStrikeResponse strike,
-        String resultingStatus) {}
+        @Schema(description = "The warning just issued") AdminWarningResponse warning,
+        @Schema(
+                        description =
+                                "Warnings now counting toward the next strike; back to zero when"
+                                        + " this one produced a strike")
+                long activeWarningCount,
+        @Schema(description = "Whether this warning was the third and produced a strike")
+                boolean strikeIssued,
+        @Schema(
+                        description =
+                                "The strike produced; null when this warning produced none, which"
+                                        + " is two warnings in every three",
+                        nullable = true)
+                AdminStrikeResponse strike,
+        @Schema(
+                        description = "The account's status after the operation, as its wire value",
+                        example = "suspended")
+                String resultingStatus) {}

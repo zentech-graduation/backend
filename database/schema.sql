@@ -36,6 +36,7 @@ CREATE TYPE notification_type AS ENUM (
     'story_view', 'message', 'warning'
 );
 CREATE TYPE hashtag_status  AS ENUM ('active', 'banned', 'deleted');
+CREATE TYPE stat_granularity AS ENUM ('half_hour', 'day');
 CREATE TYPE oauth_provider  AS ENUM ('google', 'facebook', 'apple');
 CREATE TYPE admin_action_type AS ENUM (
     'ban_user', 'unban_user', 'suspend_user', 'unsuspend_user',
@@ -391,12 +392,22 @@ CREATE TABLE stories (
     story_type          story_type      NOT NULL DEFAULT 'image',
     caption             TEXT,
     view_count          INT             NOT NULL DEFAULT 0 CHECK (view_count >= 0),
+    like_count          INT             NOT NULL DEFAULT 0 CHECK (like_count >= 0),
     expires_at          TIMESTAMPTZ     NOT NULL DEFAULT (NOW() + INTERVAL '24 hours'),
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     deleted_at          TIMESTAMPTZ
 );
 
 -- Story views (deduplicated per viewer)
+-- Story likes, mirroring post_likes: composite primary key, and a counter on the parent row kept
+-- by a trigger rather than by application code (V49).
+CREATE TABLE story_likes (
+    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    story_id            UUID            NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, story_id)
+);
+
 CREATE TABLE story_views (
     story_id            UUID            NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
     viewer_id           UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -416,6 +427,9 @@ CREATE TABLE notifications (
     -- Polymorphic target entity
     entity_type         VARCHAR(50),    -- 'post' | 'comment' | 'story' | 'follow' | 'message'
     entity_id           UUID,
+    -- Denormalised so a notification can deep-link to the post without the client resolving
+    -- entity_id first; null for a notification with no post (V47).
+    post_id             UUID            REFERENCES posts(id) ON DELETE CASCADE,
     is_read             BOOLEAN             NOT NULL DEFAULT FALSE,
     read_at             TIMESTAMPTZ,
     created_at          TIMESTAMPTZ         NOT NULL DEFAULT NOW()
@@ -508,6 +522,19 @@ CREATE TABLE archived_group_messages (
     archived_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
+-- Write idempotency for message sends (V31). A retried send carrying the same key returns the
+-- stored response rather than creating a second message; request_hash catches a key reused for a
+-- different request.
+CREATE TABLE message_write_idempotency (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    idempotency_key     VARCHAR(100)    NOT NULL,
+    request_hash        VARCHAR(64)     NOT NULL,
+    response_body       JSONB,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, idempotency_key)
+);
+
 -- ============================================================
 -- MODULE: REPORT (Content Flagging)
 -- ============================================================
@@ -530,6 +557,136 @@ CREATE TABLE reports (
     escalation_reason   TEXT,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
+
+-- Declared before the modules that reference it. user_warnings.reason_key carries a foreign
+-- key to report_reason_configs, so this block has to precede it: with the metadata module
+-- further down the file, applying this schema top to bottom failed on that reference.
+-- ============================================================
+-- MODULE: METADATA CONFIG
+-- ============================================================
+
+-- System-wide configurable limits and TTL values
+CREATE TABLE system_settings (
+    key             VARCHAR(100)    PRIMARY KEY,
+    value           TEXT            NOT NULL,
+    description     TEXT,
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO system_settings (key, value, description) VALUES
+    ('max_comment_depth',                '10',  'Maximum nesting depth for comments'),
+    ('story_duration_hours',             '24',  'How long a story remains visible after posting'),
+    ('max_media_size_mb',                '100', 'Maximum allowed media file size in megabytes'),
+    ('max_hashtags_per_post',            '30',  'Maximum number of hashtags allowed per post'),
+    ('max_post_media_items',             '10',  'Maximum media items in a single post or carousel'),
+    ('password_reset_token_ttl_minutes', '15',  'Password reset token validity in minutes'),
+    ('email_verify_token_ttl_hours',     '24',  'Email verification token validity in hours'),
+    ('default_rate_limit_per_minute',    '60',  'Default API rate limit per user per minute');
+
+-- Registry of notification types with display and toggle settings
+-- type_key maps to values in the notification_type enum
+CREATE TABLE notification_type_configs (
+    type_key            VARCHAR(100)    PRIMARY KEY,
+    display_name        VARCHAR(100)    NOT NULL,
+    template_key        VARCHAR(100),
+    is_user_toggleable  BOOLEAN         NOT NULL DEFAULT TRUE,
+    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO notification_type_configs (type_key, display_name, template_key, is_user_toggleable, is_enabled) VALUES
+    ('like_post',       'Like on Post',        'like_post',       TRUE, TRUE),
+    ('like_comment',    'Like on Comment',     'like_comment',    TRUE, TRUE),
+    ('comment_post',    'Comment on Post',     'comment_post',    TRUE, TRUE),
+    ('reply_comment',   'Reply to Comment',    'reply_comment',   TRUE, TRUE),
+    ('follow',          'Follow',              'follow',          TRUE, TRUE),
+    ('follow_request',  'Follow Request',      'follow_request',  TRUE, TRUE),
+    ('mention_post',    'Mention in Post',     'mention_post',    TRUE, TRUE),
+    ('mention_comment', 'Mention in Comment',  'mention_comment', TRUE, TRUE),
+    ('story_view',      'Story View',          'story_view',      TRUE, TRUE),
+    ('message',         'Message',             'message',         TRUE, TRUE);
+
+-- Registry of admin moderation actions with behavioral flags
+-- action_key maps to values in the admin_action_type enum
+CREATE TABLE moderation_action_configs (
+    action_key          VARCHAR(100)    PRIMARY KEY,
+    display_name        VARCHAR(100)    NOT NULL,
+    requires_reason     BOOLEAN         NOT NULL DEFAULT FALSE,
+    is_reversible       BOOLEAN         NOT NULL DEFAULT TRUE,
+    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO moderation_action_configs (action_key, display_name, requires_reason, is_reversible, is_enabled) VALUES
+    ('ban_user',        'Ban User',        TRUE,  FALSE, TRUE),
+    ('unban_user',      'Unban User',      FALSE, FALSE, TRUE),
+    ('suspend_user',    'Suspend User',    TRUE,  TRUE,  TRUE),
+    ('unsuspend_user',  'Unsuspend User',  FALSE, TRUE,  TRUE),
+    ('remove_post',     'Remove Post',     TRUE,  TRUE,  TRUE),
+    ('restore_post',    'Restore Post',    FALSE, TRUE,  TRUE),
+    ('remove_comment',  'Remove Comment',  TRUE,  TRUE,  TRUE),
+    ('restore_comment', 'Restore Comment', FALSE, TRUE,  TRUE),
+    ('resolve_report',  'Resolve Report',  FALSE, FALSE, TRUE),
+    ('dismiss_report',  'Dismiss Report',  FALSE, FALSE, TRUE),
+    ('change_user_role', 'Change User Role', TRUE,  TRUE,  TRUE),
+    ('warn_user',        'Warn User',        TRUE,  TRUE,  TRUE),
+    ('revoke_warning',   'Revoke Warning',   FALSE, FALSE, TRUE),
+    ('issue_strike',     'Issue Strike',     TRUE,  TRUE,  TRUE),
+    ('revoke_strike',    'Revoke Strike',    FALSE, FALSE, TRUE),
+    ('escalate_report',  'Escalate Report',  TRUE,  FALSE, TRUE),
+    ('force_logout',     'Force Logout',     TRUE,  FALSE, TRUE),
+    ('create_hashtag',   'Create Hashtag',   FALSE, TRUE,  TRUE),
+    ('edit_hashtag',     'Edit Hashtag',     TRUE,  TRUE,  TRUE),
+    ('ban_hashtag',      'Ban Hashtag',      TRUE,  TRUE,  TRUE),
+    ('unban_hashtag',    'Unban Hashtag',    FALSE, TRUE,  TRUE),
+    ('delete_hashtag',   'Delete Hashtag',   TRUE,  FALSE, TRUE);
+
+-- Feature enable/disable control with optional environment scoping
+CREATE TABLE feature_flags (
+    flag_key        VARCHAR(100)    PRIMARY KEY,
+    is_enabled      BOOLEAN         NOT NULL DEFAULT FALSE,
+    description     TEXT,
+    environment     VARCHAR(20)     NOT NULL DEFAULT 'all'
+                        CHECK (environment IN ('all', 'dev', 'staging', 'prod')),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO feature_flags (flag_key, is_enabled, description, environment) VALUES
+    ('recommendation',   FALSE, 'Enable personalized feed recommendation',                  'all'),
+    ('story_reply',      TRUE,  'Allow users to reply to stories',                          'all'),
+    ('maintenance_mode', FALSE, 'Put the application into read-only maintenance mode',      'all'),
+    ('video_upload',     TRUE,  'Allow video file uploads',                                 'all');
+
+-- Display metadata and policy configuration for each report reason
+-- reason_key maps to values in the report_reason enum
+-- applies_to: empty array means applies to all report types
+CREATE TABLE report_reason_configs (
+    reason_key          VARCHAR(100)    NOT NULL,
+    display_name        VARCHAR(100)    NOT NULL,
+    description         TEXT,
+    applies_to          VARCHAR(50)[]   NOT NULL DEFAULT '{}',
+    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
+    sort_order          SMALLINT        NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (reason_key)
+);
+
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('spam',             'Spam',                          '{}'::VARCHAR(50)[],                              TRUE, 1);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('nudity',           'Nudity or Sexual Content',      ARRAY['post','comment','story','message'],         TRUE, 2);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('violence',         'Violence or Dangerous Content', ARRAY['post','comment','story','message'],         TRUE, 3);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('hate_speech',      'Hate Speech',                   ARRAY['post','comment','story','message'],         TRUE, 4);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('harassment',       'Harassment or Bullying',        '{}'::VARCHAR(50)[],                              TRUE, 5);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('false_information','False Information',             ARRAY['post','comment','story'],                   TRUE, 6);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('scam',             'Scam or Fraud',                 '{}'::VARCHAR(50)[],                              TRUE, 7);
+INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
+    ('other',            'Other',                         '{}'::VARCHAR(50)[],                              TRUE, 99);
 
 -- ============================================================
 -- MODULE: ADMIN (Moderation Audit Log)
@@ -698,6 +855,23 @@ CREATE TABLE user_similarity (
     CHECK (user_id_a < user_id_b)
 );
 
+-- Pre-aggregated platform statistics (V70).
+-- Written only by the collection and roll-up jobs, never from a request path. A gauge is an
+-- absolute snapshot bounded by the end of its bucket; a flow is a direct count over the bucket
+-- window and is never derived by subtracting consecutive gauges. GROUP BY produces no row for an
+-- empty group, so a dimension nobody holds in a bucket has no row rather than a row holding zero,
+-- and every reader treats a missing dimension as zero. The composite primary key with
+-- ON CONFLICT DO UPDATE is what keeps a double run harmless rather than duplicative.
+CREATE TABLE platform_stats (
+    bucket_start        TIMESTAMPTZ      NOT NULL,
+    granularity         stat_granularity NOT NULL,
+    metric_key          VARCHAR(64)      NOT NULL,
+    dimension           VARCHAR(64)      NOT NULL DEFAULT '',
+    value               BIGINT           NOT NULL,
+    computed_at         TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (bucket_start, granularity, metric_key, dimension)
+);
+
 -- ============================================================
 -- MODULE: COMMON / OUTBOX
 -- ============================================================
@@ -744,132 +918,23 @@ CREATE TABLE processed_messages (
     UNIQUE (consumer_name, event_id)
 );
 
--- ============================================================
--- MODULE: METADATA CONFIG
--- ============================================================
+-- Keeps stories.like_count in step with story_likes, the same way fn_post_like_count does for
+-- posts. Counters are trigger-maintained and never written from application code (V49).
+CREATE OR REPLACE FUNCTION fn_story_like_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE stories SET like_count = like_count + 1 WHERE id = NEW.story_id;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE stories SET like_count = GREATEST(like_count - 1, 0) WHERE id = OLD.story_id;
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
 
--- System-wide configurable limits and TTL values
-CREATE TABLE system_settings (
-    key             VARCHAR(100)    PRIMARY KEY,
-    value           TEXT            NOT NULL,
-    description     TEXT,
-    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO system_settings (key, value, description) VALUES
-    ('max_comment_depth',                '10',  'Maximum nesting depth for comments'),
-    ('story_duration_hours',             '24',  'How long a story remains visible after posting'),
-    ('max_media_size_mb',                '100', 'Maximum allowed media file size in megabytes'),
-    ('max_hashtags_per_post',            '30',  'Maximum number of hashtags allowed per post'),
-    ('max_post_media_items',             '10',  'Maximum media items in a single post or carousel'),
-    ('password_reset_token_ttl_minutes', '15',  'Password reset token validity in minutes'),
-    ('email_verify_token_ttl_hours',     '24',  'Email verification token validity in hours'),
-    ('default_rate_limit_per_minute',    '60',  'Default API rate limit per user per minute');
-
--- Registry of notification types with display and toggle settings
--- type_key maps to values in the notification_type enum
-CREATE TABLE notification_type_configs (
-    type_key            VARCHAR(100)    PRIMARY KEY,
-    display_name        VARCHAR(100)    NOT NULL,
-    template_key        VARCHAR(100),
-    is_user_toggleable  BOOLEAN         NOT NULL DEFAULT TRUE,
-    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO notification_type_configs (type_key, display_name, template_key, is_user_toggleable, is_enabled) VALUES
-    ('like_post',       'Like on Post',        'like_post',       TRUE, TRUE),
-    ('like_comment',    'Like on Comment',     'like_comment',    TRUE, TRUE),
-    ('comment_post',    'Comment on Post',     'comment_post',    TRUE, TRUE),
-    ('reply_comment',   'Reply to Comment',    'reply_comment',   TRUE, TRUE),
-    ('follow',          'Follow',              'follow',          TRUE, TRUE),
-    ('follow_request',  'Follow Request',      'follow_request',  TRUE, TRUE),
-    ('mention_post',    'Mention in Post',     'mention_post',    TRUE, TRUE),
-    ('mention_comment', 'Mention in Comment',  'mention_comment', TRUE, TRUE),
-    ('story_view',      'Story View',          'story_view',      TRUE, TRUE),
-    ('message',         'Message',             'message',         TRUE, TRUE);
-
--- Registry of admin moderation actions with behavioral flags
--- action_key maps to values in the admin_action_type enum
-CREATE TABLE moderation_action_configs (
-    action_key          VARCHAR(100)    PRIMARY KEY,
-    display_name        VARCHAR(100)    NOT NULL,
-    requires_reason     BOOLEAN         NOT NULL DEFAULT FALSE,
-    is_reversible       BOOLEAN         NOT NULL DEFAULT TRUE,
-    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO moderation_action_configs (action_key, display_name, requires_reason, is_reversible, is_enabled) VALUES
-    ('ban_user',        'Ban User',        TRUE,  FALSE, TRUE),
-    ('unban_user',      'Unban User',      FALSE, FALSE, TRUE),
-    ('suspend_user',    'Suspend User',    TRUE,  TRUE,  TRUE),
-    ('unsuspend_user',  'Unsuspend User',  FALSE, TRUE,  TRUE),
-    ('remove_post',     'Remove Post',     TRUE,  TRUE,  TRUE),
-    ('restore_post',    'Restore Post',    FALSE, TRUE,  TRUE),
-    ('remove_comment',  'Remove Comment',  TRUE,  TRUE,  TRUE),
-    ('restore_comment', 'Restore Comment', FALSE, TRUE,  TRUE),
-    ('resolve_report',  'Resolve Report',  FALSE, FALSE, TRUE),
-    ('dismiss_report',  'Dismiss Report',  FALSE, FALSE, TRUE),
-    ('change_user_role', 'Change User Role', TRUE,  TRUE,  TRUE),
-    ('warn_user',        'Warn User',        TRUE,  TRUE,  TRUE),
-    ('revoke_warning',   'Revoke Warning',   FALSE, FALSE, TRUE),
-    ('issue_strike',     'Issue Strike',     TRUE,  TRUE,  TRUE),
-    ('revoke_strike',    'Revoke Strike',    FALSE, FALSE, TRUE),
-    ('escalate_report',  'Escalate Report',  TRUE,  FALSE, TRUE),
-    ('force_logout',     'Force Logout',     TRUE,  FALSE, TRUE),
-    ('create_hashtag',   'Create Hashtag',   FALSE, TRUE,  TRUE),
-    ('edit_hashtag',     'Edit Hashtag',     TRUE,  TRUE,  TRUE),
-    ('ban_hashtag',      'Ban Hashtag',      TRUE,  TRUE,  TRUE),
-    ('unban_hashtag',    'Unban Hashtag',    FALSE, TRUE,  TRUE),
-    ('delete_hashtag',   'Delete Hashtag',   TRUE,  FALSE, TRUE);
-
--- Feature enable/disable control with optional environment scoping
-CREATE TABLE feature_flags (
-    flag_key        VARCHAR(100)    PRIMARY KEY,
-    is_enabled      BOOLEAN         NOT NULL DEFAULT FALSE,
-    description     TEXT,
-    environment     VARCHAR(20)     NOT NULL DEFAULT 'all'
-                        CHECK (environment IN ('all', 'dev', 'staging', 'prod')),
-    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO feature_flags (flag_key, is_enabled, description, environment) VALUES
-    ('recommendation',   FALSE, 'Enable personalized feed recommendation',                  'all'),
-    ('story_reply',      TRUE,  'Allow users to reply to stories',                          'all'),
-    ('maintenance_mode', FALSE, 'Put the application into read-only maintenance mode',      'all'),
-    ('video_upload',     TRUE,  'Allow video file uploads',                                 'all');
-
--- Display metadata and policy configuration for each report reason
--- reason_key maps to values in the report_reason enum
--- applies_to: empty array means applies to all report types
-CREATE TABLE report_reason_configs (
-    reason_key          VARCHAR(100)    NOT NULL,
-    display_name        VARCHAR(100)    NOT NULL,
-    description         TEXT,
-    applies_to          VARCHAR(50)[]   NOT NULL DEFAULT '{}',
-    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
-    sort_order          SMALLINT        NOT NULL DEFAULT 0,
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (reason_key)
-);
-
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('spam',             'Spam',                          '{}'::VARCHAR(50)[],                              TRUE, 1);
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('nudity',           'Nudity or Sexual Content',      ARRAY['post','comment','story','message'],         TRUE, 2);
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('violence',         'Violence or Dangerous Content', ARRAY['post','comment','story','message'],         TRUE, 3);
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('hate_speech',      'Hate Speech',                   ARRAY['post','comment','story','message'],         TRUE, 4);
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('harassment',       'Harassment or Bullying',        '{}'::VARCHAR(50)[],                              TRUE, 5);
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('false_information','False Information',             ARRAY['post','comment','story'],                   TRUE, 6);
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('scam',             'Scam or Fraud',                 '{}'::VARCHAR(50)[],                              TRUE, 7);
-INSERT INTO report_reason_configs (reason_key, display_name, applies_to, is_enabled, sort_order) VALUES
-    ('other',            'Other',                         '{}'::VARCHAR(50)[],                              TRUE, 99);
+CREATE TRIGGER trg_story_like_count
+    AFTER INSERT OR DELETE ON story_likes
+    FOR EACH ROW EXECUTE FUNCTION fn_story_like_count();
 
 -- ============================================================
 -- INDEXES
@@ -904,6 +969,10 @@ CREATE INDEX idx_users_status_created   ON users (status, created_at DESC, id DE
 -- Partial, so an indefinite suspension (null deadline) is absent from the index rather than
 -- filtered out of it. Bounds the reinstatement sweep's candidate scan.
 CREATE INDEX idx_users_suspended_until  ON users (suspended_until) WHERE suspended_until IS NOT NULL;
+-- Role-filtered account listing (V72). The rare role is the decisive case: an administrator
+-- filters by moderator or admin precisely because those are the accounts worth looking at, and
+-- without this the plan discards rows in proportion to the whole table rather than to the role.
+CREATE INDEX idx_users_role_created     ON users (role, created_at DESC, id DESC);
 
 -- follows
 CREATE INDEX idx_follows_following      ON follows (following_id, status, created_at DESC);
@@ -984,6 +1053,9 @@ CREATE INDEX idx_hashtags_name_trgm     ON hashtags USING gin (name gin_trgm_ops
 CREATE INDEX idx_hashtags_post_count    ON hashtags (post_count DESC);
 CREATE INDEX idx_hashtags_active_post_count ON hashtags (post_count DESC, name ASC) WHERE status = 'active';
 CREATE INDEX idx_hashtags_status_created    ON hashtags (status, created_at DESC, id DESC);
+-- Administrative registry listing with no status filter (V72). idx_hashtags_status_created
+-- leads with status, which an unfiltered listing cannot use at all.
+CREATE INDEX idx_hashtags_created           ON hashtags (created_at DESC, id DESC);
 CREATE INDEX idx_post_hashtags_tag      ON post_hashtags (hashtag_id, post_id);
 
 -- stories
@@ -1019,6 +1091,7 @@ CREATE INDEX idx_conv_part_user         ON conversation_participants (user_id, l
 CREATE INDEX idx_messages_conversation  ON messages (conversation_id, created_at DESC)
     WHERE is_deleted = FALSE;
 CREATE INDEX idx_messages_sender        ON messages (sender_id);
+CREATE INDEX idx_message_idempotency_created ON message_write_idempotency (created_at);
 
 -- reports
 CREATE INDEX idx_reports_status         ON reports (status, created_at DESC);
@@ -1028,10 +1101,26 @@ CREATE INDEX idx_reports_reporter       ON reports (reporter_id);
 -- counter that is the only signal an escalated report is waiting (V66).
 CREATE INDEX idx_reports_escalated      ON reports (created_at ASC, id ASC)
     WHERE status = 'escalated';
+-- The moderator queue (V73). A set of statuses with one global ordering cannot be walked from
+-- idx_reports_status, which leads with status: the entries are ordered within each status, not
+-- across them. Partial on the same two statuses ReportStatus.OPEN_QUEUE names; a status added there
+-- without being added here returns the queue to a sequential scan of every report ever filed.
+CREATE INDEX idx_reports_open_queue     ON reports (created_at DESC, id DESC)
+    WHERE status IN ('pending', 'reviewing');
 CREATE UNIQUE INDEX uq_reports_reporter_type_entity ON reports (reporter_id, report_type, entity_id);
 
 -- admin_actions
 CREATE INDEX idx_admin_actions_admin    ON admin_actions (admin_id, created_at DESC);
+-- The administrator audit listing (V74), which sets none of the optional filters and so cannot
+-- use the index above. admin_actions is append-only with no retention, so the scan this replaces
+-- grows monotonically and forever.
+CREATE INDEX idx_admin_actions_created  ON admin_actions (created_at DESC, id DESC);
+
+-- platform_stats
+-- The series read (V71). The primary key leads with bucket_start, so it can bound the range but
+-- cannot narrow to one metric without filtering every metric written in that range. This leads with
+-- the two equality columns and carries the range and the ordering.
+CREATE INDEX idx_platform_stats_series  ON platform_stats (metric_key, granularity, bucket_start DESC);
 
 CREATE INDEX idx_user_warnings_active   ON user_warnings (user_id, created_at DESC)
     WHERE revoked_at IS NULL;

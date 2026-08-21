@@ -299,7 +299,32 @@ app:
       "[/ws/**]":
         max-attempts: 30
         window-seconds: 60
-      # Note: path-variable endpoints (e.g. /posts/{id}/likes) require AuthRateLimitFilter pattern-matching support before per-path rules can be configured.
+      # The administrative surface, which carried no per-caller rule at all until now. The
+      # Resilience4j instances on these controllers are JVM-wide overload backstops sized in the
+      # thousands; they are not a per-client budget and never were.
+      #
+      # One broad rule covers the sub-tree, including every path-variable route under it, because
+      # AuthRateLimitFilter falls back to Ant matching and buckets on the matched pattern. The four
+      # expensive reads carry their own tighter rules; each is a literal path, so the exact-match
+      # fast path resolves it before the sub-tree pattern is ever considered.
+      "[/api/v1/admin/**]":
+        max-attempts: 300
+        window-seconds: 60
+      # Reads a stored series and can span a year of buckets.
+      "[/api/v1/admin/stats/timeseries]":
+        max-attempts: 30
+        window-seconds: 60
+      # Scans a partitioned table; the window is mandatory precisely because the read is expensive.
+      "[/api/v1/admin/user-events]":
+        max-attempts: 30
+        window-seconds: 60
+      # Trigram searches over users and hashtags.
+      "[/api/v1/admin/users/search]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/search]":
+        max-attempts: 60
+        window-seconds: 60
 
 management:
   endpoints:

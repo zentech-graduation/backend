@@ -21,6 +21,9 @@ import com.app.common.exception.AppException;
  */
 public final class CursorCodec {
 
+    /** Canonical 8-4-4-4-12 rendering length; anything else is not a UUID. */
+    private static final int UUID_LENGTH = 36;
+
     private CursorCodec() {}
 
     /**
@@ -69,7 +72,14 @@ public final class CursorCodec {
                 throw new IllegalArgumentException("cursor payload has no value separator");
             }
             long sortValueMicros = Long.parseLong(payload.substring(scopeSeparator + 1, separator));
-            UUID id = UUID.fromString(payload.substring(separator + 1));
+            String identifier = payload.substring(separator + 1);
+            // Length-checked before parsing because UUID.fromString accepts a short group and
+            // zero-pads it, so a cursor with characters removed decodes to a different, valid
+            // position instead of failing. That returns a wrong page rather than an error.
+            if (identifier.length() != UUID_LENGTH) {
+                throw new IllegalArgumentException("cursor identifier is not a UUID");
+            }
+            UUID id = UUID.fromString(identifier);
             return new Cursor(sortValueMicros, id);
         } catch (RuntimeException e) {
             throw new AppException(ApiErrorCode.INVALID_CURSOR);

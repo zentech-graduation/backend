@@ -1,8 +1,11 @@
 package com.app.common.config.openapi;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +27,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.modules.admin.enums.PlatformMetric;
 import com.app.modules.mail.service.MailService;
 
 import tools.jackson.databind.JsonNode;
@@ -419,11 +423,12 @@ class OpenApiContractIT {
     @Test
     void only422IsDocumentedForAKnownUnprocessableOutcome() {
         JsonNode doc = document();
-        // 422 is reserved for a well-formed request whose content cannot be satisfied. Three
+        // 422 is reserved for a well-formed request whose content cannot be satisfied. Four
         // outcomes qualify: COMMENT_MODERATION_REJECTED, the media upload confirmation rejecting a
-        // storage key with no matching stored object, and a warning citing a reason key whose
-        // report_reason_configs row is disabled or absent. All three are requests the server
-        // understood and refused on their content. A 422 documented for anything else (e.g. generic
+        // storage key with no matching stored object, a warning citing a reason key whose
+        // report_reason_configs row is disabled or absent, and POST_BANNED_HASHTAG on the three
+        // post write paths that publish a caption. All four are requests the server understood and
+        // refused on their content. A 422 documented for anything else (e.g. generic
         // bean-validation failure, which the server answers with 400) is a contract defect, not a
         // valid outcome.
         Set<String> allowed422 =
@@ -431,7 +436,10 @@ class OpenApiContractIT {
                         "POST /api/v1/posts/{postId}/comments",
                         "PATCH /api/v1/comments/{commentId}",
                         "POST /api/v1/media/upload-complete",
-                        "POST /api/v1/admin/warnings/for-user/{userId}");
+                        "POST /api/v1/admin/warnings/for-user/{userId}",
+                        "POST /api/v1/posts",
+                        "PATCH /api/v1/posts/{postId}",
+                        "PATCH /api/v1/posts/{postId}/status");
 
         List<String> offenders = new ArrayList<>();
         forEachOperation(
@@ -509,7 +517,22 @@ class OpenApiContractIT {
                         new Expectation("CommentResponse", "rootId"),
                         new Expectation("ParticipantResponse", "leftAt"),
                         new Expectation("PageInfo", "startCursor"),
-                        new Expectation("PageInfo", "endCursor"));
+                        new Expectation("PageInfo", "endCursor"),
+                        // The discipline and report-target payloads, whose declared-non-nullable
+                        // fields were observed null against live responses: a strike issued by a
+                        // since-deleted moderator, a warning nobody has revoked, and a comment
+                        // target, which has no lifecycle status of its own.
+                        new Expectation("AdminWarningViolationResponse", "actorId"),
+                        new Expectation("AdminStrikeViolationResponse", "actorId"),
+                        new Expectation("AdminWarnUserResponse", "strike"),
+                        new Expectation("AdminWarningResponse", "revokedAt"),
+                        new Expectation("AdminWarningResponse", "issuedBy"),
+                        new Expectation("AdminStrikeResponse", "revokedAt"),
+                        new Expectation("AdminStrikeResponse", "triggeredBy"),
+                        new Expectation("AdminReportTargetResponse", "status"),
+                        new Expectation("AdminReportTargetResponse", "ownerId"),
+                        new Expectation("AdminReportTargetResponse", "ownerUsername"),
+                        new Expectation("AdminReportTargetResponse", "text"));
 
         List<String> offenders = new ArrayList<>();
         JsonNode schemas = doc.path("components").path("schemas");
@@ -548,7 +571,221 @@ class OpenApiContractIT {
                 }
             }
         }
+        // A nullable object reference cannot carry its null in the type keyword, because a $ref
+        // keeps its siblings under JSON Schema 2020-12 and the two assertions together are
+        // unsatisfiable. The satisfiable form is a union with a null branch.
+        for (JsonNode branch : property.path("oneOf")) {
+            if ("null".equals(branch.path("type").asString(""))) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    @Test
+    void noNullableReferenceIsDeclaredAsAnUnsatisfiableSchema() {
+        JsonNode doc = document();
+        // springdoc renders @Schema(nullable = true) on an object-typed property as
+        // {"type": "null", "$ref": "..."}. Under the dialect this document declares, a $ref keeps
+        // its sibling keywords instead of replacing them, so that asserts the value is null and is
+        // also the referenced object. Nothing satisfies both, and a generator reading it either
+        // emits an impossible type or drops the nullability and hands back a non-optional field
+        // that arrives null.
+        List<String> offenders = new ArrayList<>();
+        collectUnsatisfiableNullableRefs(doc.path("components").path("schemas"), "", offenders);
+
+        assertThat(offenders)
+                .as("a nullable reference must be a union, not a null-typed $ref")
+                .isEmpty();
+    }
+
+    private static void collectUnsatisfiableNullableRefs(
+            JsonNode node, String path, List<String> offenders) {
+        if (node.isObject()) {
+            if (node.has("$ref") && "null".equals(node.path("type").asString(""))) {
+                offenders.add(path);
+            }
+            node.properties()
+                    .forEach(
+                            entry ->
+                                    collectUnsatisfiableNullableRefs(
+                                            entry.getValue(),
+                                            path + "/" + entry.getKey(),
+                                            offenders));
+        } else if (node.isArray()) {
+            int index = 0;
+            for (JsonNode element : node) {
+                collectUnsatisfiableNullableRefs(element, path + "/" + index, offenders);
+                index++;
+            }
+        }
+    }
+
+    @Test
+    void closedSetRequestParametersAreEnumeratedNotDescribedInProse() {
+        JsonNode doc = document();
+        // A request parameter whose accepted values are a closed set must be declared as that set.
+        // Declared as a bare string, the server still refuses everything outside it, so a client
+        // discovers the set by guessing and a generator has no type to emit. The metric parameter
+        // is the case the audit found: fourteen keys, named in the operation description where a
+        // human can read them and a code generator cannot.
+        JsonNode parameters =
+                doc.path("paths")
+                        .path("/api/v1/admin/stats/timeseries")
+                        .path("get")
+                        .path("parameters");
+        assertThat(parameters.isArray()).as("timeseries must declare its parameters").isTrue();
+
+        JsonNode metricSchema = null;
+        for (JsonNode parameter : parameters) {
+            if ("metric".equals(parameter.path("name").asString(""))) {
+                metricSchema = parameter.path("schema");
+            }
+        }
+        assertThat(metricSchema).as("the metric parameter must be declared").isNotNull();
+
+        List<String> values = new ArrayList<>();
+        metricSchema.path("enum").forEach(node -> values.add(node.asString("")));
+        assertThat(values)
+                .as("metric must enumerate every key PlatformMetric declares, and nothing else")
+                .containsExactlyInAnyOrderElementsOf(
+                        Arrays.stream(PlatformMetric.values()).map(PlatformMetric::key).toList());
+    }
+
+    @Test
+    void theDocumentPointsAtTheRealTimeSurfaceItCannotDescribe() {
+        JsonNode doc = document();
+        // OpenAPI has no vocabulary for a STOMP destination, so a consumer reading this document
+        // alone found no mention of WebSockets at all and polled for the four domains that are
+        // pushed. The document cannot describe the surface; it must at least name it and say where
+        // it is described.
+        String description = doc.path("info").path("description").asString("");
+        assertThat(description)
+                .as("the document must name the real-time surface it cannot describe")
+                .contains("/ws/")
+                .contains("ws-ticket")
+                .contains("docs/modules/WEBSOCKET_GUIDE.md");
+        assertThat(doc.path("externalDocs").path("url").asString(""))
+                .as("and link to it")
+                .isEqualTo("docs/modules/WEBSOCKET_GUIDE.md");
+    }
+
+    @Test
+    void everyErrorCodeCarryingAPayloadHasAReachableDetailSchema() {
+        JsonNode doc = document();
+        // Two error codes reach ApiResponse.data with a non-null payload: POST_BANNED_HASHTAG and
+        // VALIDATION_ERROR. ApiResponse.data is declared as an empty schema, which permits anything
+        // and constrains nothing, so without a typed envelope a generated client hands back an
+        // untyped value and the detail has to be parsed by hand.
+        JsonNode schemas = doc.path("components").path("schemas");
+
+        JsonNode bannedTags =
+                schemas.path("BannedHashtagErrorResponse")
+                        .path("properties")
+                        .path("data")
+                        .path("$ref");
+        assertThat(bannedTags.asString(""))
+                .as("the banned-hashtag envelope must type its data")
+                .isEqualTo("#/components/schemas/BannedHashtagDetail");
+        JsonNode detail = schemas.path("BannedHashtagDetail").path("properties").path("bannedTags");
+        assertThat(detail.path("type").asString(""))
+                .as("data.bannedTags must be reachable and typed")
+                .isEqualTo("array");
+        assertThat(detail.path("items").path("type").asString("")).isEqualTo("string");
+
+        assertThat(schemas.has("ValidationErrorResponse"))
+                .as("the validation envelope must be present even though no operation names it")
+                .isTrue();
+        assertThat(
+                        schemas.path("ValidationErrorResponse")
+                                .path("properties")
+                                .path("data")
+                                .path("additionalProperties")
+                                .path("type")
+                                .asString(""))
+                .as("validation detail maps a field name to its message")
+                .isEqualTo("string");
+
+        // Every operation that documents the banned-hashtag 422 must name the typed envelope,
+        // otherwise the detail is declared in one place and untyped in another.
+        List<String> offenders = new ArrayList<>();
+        forEachOperation(
+                doc,
+                (operationId, operation) -> {
+                    JsonNode response = operation.path("responses").path("422");
+                    if (response.isMissingNode()) {
+                        return;
+                    }
+                    String ref =
+                            response.path("content")
+                                    .path("application/json")
+                                    .path("schema")
+                                    .path("$ref")
+                                    .asString("");
+                    if (response.path("description").asString("").contains("banned hashtag")
+                            && !ref.endsWith("/BannedHashtagErrorResponse")) {
+                        offenders.add(operationId + " 422 -> " + ref);
+                    }
+                });
+        assertThat(offenders)
+                .as("a banned-hashtag 422 must declare the typed envelope, not the bare one")
+                .isEmpty();
+    }
+
+    @Test
+    void violationHistoryIsDeclaredAsADiscriminatedUnion() {
+        JsonNode doc = document();
+        // A violation page interleaves two row shapes. Declared as one flat schema, the fields
+        // belonging to the other shape read as required and arrive null, and a generated client
+        // has nothing to switch on. The document must therefore carry a real union: oneOf over
+        // the two shapes plus a discriminator naming the property that tells them apart.
+        JsonNode violation = doc.path("components").path("schemas").path("AdminViolationResponse");
+        assertThat(violation.isMissingNode())
+                .as("AdminViolationResponse must be present in the document")
+                .isFalse();
+
+        List<String> variants = new ArrayList<>();
+        violation.path("oneOf").forEach(node -> variants.add(node.path("$ref").asString("")));
+        assertThat(variants)
+                .as("the violation payload must be a union of exactly the two row shapes")
+                .containsExactlyInAnyOrder(
+                        "#/components/schemas/AdminWarningViolationResponse",
+                        "#/components/schemas/AdminStrikeViolationResponse");
+
+        JsonNode discriminator = violation.path("discriminator");
+        assertThat(discriminator.path("propertyName").asString(""))
+                .as("the union must be discriminated on kind")
+                .isEqualTo("kind");
+
+        Map<String, String> mapping = new LinkedHashMap<>();
+        discriminator
+                .path("mapping")
+                .properties()
+                .forEach(entry -> mapping.put(entry.getKey(), entry.getValue().asString("")));
+        assertThat(mapping)
+                .as("each kind value must map to the shape it names")
+                .containsOnly(
+                        entry("warning", "#/components/schemas/AdminWarningViolationResponse"),
+                        entry("strike", "#/components/schemas/AdminStrikeViolationResponse"));
+
+        // Each variant must carry only the fields that shape actually has. The whole point of
+        // splitting is that a strike stops declaring a reason key it never holds.
+        JsonNode warningProperties =
+                doc.path("components")
+                        .path("schemas")
+                        .path("AdminWarningViolationResponse")
+                        .path("properties");
+        JsonNode strikeProperties =
+                doc.path("components")
+                        .path("schemas")
+                        .path("AdminStrikeViolationResponse")
+                        .path("properties");
+        assertThat(warningProperties.has("reasonKey")).isTrue();
+        assertThat(warningProperties.has("note")).isTrue();
+        assertThat(warningProperties.has("strikeNumber")).isFalse();
+        assertThat(strikeProperties.has("strikeNumber")).isTrue();
+        assertThat(strikeProperties.has("reasonKey")).isFalse();
+        assertThat(strikeProperties.has("note")).isFalse();
     }
 
     @Test

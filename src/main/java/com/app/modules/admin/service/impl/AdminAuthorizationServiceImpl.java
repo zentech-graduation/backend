@@ -1,5 +1,7 @@
 package com.app.modules.admin.service.impl;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -14,14 +16,40 @@ import com.app.modules.users.enums.UserRole;
 public class AdminAuthorizationServiceImpl implements AdminAuthorizationService {
 
     @Override
+    public Outcome evaluateStatusChange(
+            UUID actorId, UserRole actorRole, UUID targetId, UserRole targetRole) {
+        return evaluateActorAndTarget(actorId, actorRole, targetId, targetRole);
+    }
+
+    @Override
+    public Capabilities capabilitiesFor(
+            UUID actorId, UserRole actorRole, UUID targetId, UserRole targetRole) {
+        boolean canChangeStatus =
+                evaluateStatusChange(actorId, actorRole, targetId, targetRole) == Outcome.ALLOWED;
+        // Derived by asking the same evaluation about every role rather than by restating which
+        // transitions are permitted. A rule added to evaluateRoleTransition is reflected here
+        // without anybody remembering to come back and edit this method.
+        List<UserRole> assignableRoles =
+                Arrays.stream(UserRole.values())
+                        .filter(
+                                candidate ->
+                                        evaluateRoleTransition(
+                                                        actorId,
+                                                        actorRole,
+                                                        targetId,
+                                                        targetRole,
+                                                        candidate)
+                                                == Outcome.ALLOWED)
+                        .toList();
+        return new Capabilities(canChangeStatus, !assignableRoles.isEmpty(), assignableRoles);
+    }
+
+    @Override
     public void assertMayChangeUserStatus(UUID actorId, UserRole actorRole, User target) {
         switch (evaluateActorAndTarget(actorId, actorRole, target.getId(), target.getRole())) {
             case ALLOWED -> {}
             case ACTOR_NOT_ADMIN -> throw new AppException(ApiErrorCode.FORBIDDEN);
             case SELF_TARGET -> throw new AppException(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
-            // A status change publishes a code naming the protected target directly, while a role
-            // change folds the same condition into its transition code. Both are existing contracts
-            // and neither moves just because the rule behind them is now evaluated once.
             default -> throw new AppException(ApiErrorCode.ADMIN_TARGET_PROTECTED);
         }
     }
@@ -57,7 +85,11 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
             case ALLOWED -> {}
             case ACTOR_NOT_ADMIN -> throw new AppException(ApiErrorCode.FORBIDDEN);
             case SELF_TARGET -> throw new AppException(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
-            case TARGET_IS_ADMIN, SKIP_LEVEL, NO_OP ->
+            // The same condition on both paths, so the same code and the same status. A protected
+            // target is a property of the target, not a conflict with the state the request asks
+            // to leave, which is what separates it from the two transition conflicts below.
+            case TARGET_IS_ADMIN -> throw new AppException(ApiErrorCode.ADMIN_TARGET_PROTECTED);
+            case SKIP_LEVEL, NO_OP ->
                     throw new AppException(ApiErrorCode.ADMIN_ROLE_TRANSITION_NOT_ALLOWED);
         }
     }

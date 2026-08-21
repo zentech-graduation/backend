@@ -24,6 +24,7 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.admin.api.AdminHashtagApi;
 import com.app.modules.admin.dto.request.AdminCreateHashtagRequest;
 import com.app.modules.admin.dto.request.AdminDeleteHashtagRequest;
@@ -58,6 +59,7 @@ public class AdminHashtagController extends BaseController implements AdminHasht
     /** Returns a cursor page of hashtags spanning every lifecycle status. */
     @Override
     @GetMapping(ApiConstants.Admin.HASHTAGS)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<HashtagAdminResponse>>> listHashtags(
             @RequestParam(required = false) HashtagStatus status,
@@ -69,6 +71,7 @@ public class AdminHashtagController extends BaseController implements AdminHasht
     /** Returns a cursor page of matching hashtags spanning every lifecycle status. */
     @Override
     @GetMapping(ApiConstants.Admin.HASHTAG_SEARCH)
+    @StrictQueryParameters
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<HashtagAdminResponse>>> searchHashtags(
             @RequestParam("q") String query,

@@ -249,6 +249,62 @@ class AuthRateLimitFilterTest {
     }
 
     @Test
+    void resolveRule_administrativeSubTree_coversEveryPathUnderIt() {
+        // The administrative surface carried no per-caller rule at all, including its 33
+        // path-variable routes. One sub-tree pattern covers all of them, which is only possible
+        // because the filter falls back to Ant matching.
+        Rule adminRule = new Rule(300, 60);
+        AuthRateLimitFilter adminFilter =
+                filterWith(new RateLimitProperties(Map.of("/api/v1/admin/**", adminRule)));
+
+        assertThat(adminFilter.resolveRule("/api/v1/admin/users", "GET")).isEqualTo(adminRule);
+        assertThat(
+                        adminFilter.resolveRule(
+                                "/api/v1/admin/users/6f1d3d1c-0d4a-4a3f-8f2b-2c4a9b7e1a55/ban",
+                                "PATCH"))
+                .isEqualTo(adminRule);
+        assertThat(adminFilter.resolveRule("/api/v1/admin/actions", "GET")).isEqualTo(adminRule);
+        assertThat(adminFilter.resolveRule("/api/v1/posts", "POST")).isNull();
+    }
+
+    @Test
+    void resolveRule_overlappingPatterns_theMostSpecificOneWins() {
+        // Declaration order decides map iteration order, so resolving on first match would make an
+        // endpoint's budget depend on where somebody happened to add its rule in the YAML file.
+        Rule broad = new Rule(300, 60);
+        Rule narrow = new Rule(30, 60);
+        Map<String, Rule> declaredBroadFirst = new java.util.LinkedHashMap<>();
+        declaredBroadFirst.put("/api/v1/admin/**", broad);
+        declaredBroadFirst.put("/api/v1/admin/stats/**", narrow);
+        Map<String, Rule> declaredNarrowFirst = new java.util.LinkedHashMap<>();
+        declaredNarrowFirst.put("/api/v1/admin/stats/**", narrow);
+        declaredNarrowFirst.put("/api/v1/admin/**", broad);
+
+        assertThat(
+                        filterWith(new RateLimitProperties(declaredBroadFirst))
+                                .resolveRule("/api/v1/admin/stats/timeseries", "GET"))
+                .isEqualTo(narrow);
+        assertThat(
+                        filterWith(new RateLimitProperties(declaredNarrowFirst))
+                                .resolveRule("/api/v1/admin/stats/timeseries", "GET"))
+                .isEqualTo(narrow);
+        assertThat(
+                        filterWith(new RateLimitProperties(declaredNarrowFirst))
+                                .resolveRule("/api/v1/admin/users", "GET"))
+                .isEqualTo(broad);
+    }
+
+    private AuthRateLimitFilter filterWith(RateLimitProperties rules) {
+        return new AuthRateLimitFilter(
+                rateLimiterService,
+                rules,
+                objectMapper,
+                ipExtractor,
+                new SecurityProperties(
+                        java.util.List.of(), 2048, "test-cookie-signing-secret-placeholder-32ch"));
+    }
+
+    @Test
     void doFilterInternal_patternMatchedPaths_shareSameBucketKey() throws Exception {
         // Two different concrete paths that both match the same wildcard rule, e.g. two distinct
         // SockJS transport negotiation URLs under /ws/**, must bucket together on the matched
