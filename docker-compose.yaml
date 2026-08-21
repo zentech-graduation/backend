@@ -1,3 +1,7 @@
+# Every published port is bound to the loopback interface. These services carry real credentials
+# and hold real data, and publishing them on all interfaces exposes a developer's database, cache,
+# broker, and search cluster to anyone on the same network. Mailpit already documented this
+# reasoning for itself; the rest of the stack now follows it.
 services:
   postgres:
     build: ./docker/postgres
@@ -8,35 +12,38 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
+    # PGDATA in postgres:18 is /var/lib/postgresql/18/docker, not the pre-18
+    # /var/lib/postgresql/data. Mounting the parent covers it and matches where the image's own
+    # anonymous volume sat. A named volume at the pre-18 path would create an empty directory
+    # nobody reads and leave the real data on a volume discarded with the container.
     volumes:
-      # postgres:latest resolves to PostgreSQL 18+, whose images require a single mount at
-      # /var/lib/postgresql (not .../data) - the entrypoint places versioned data in a
-      # pg_ctlcluster-style subdirectory underneath and refuses to start against the old layout.
-      - pgdata:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql
     healthcheck:
+      # $$ defers expansion to the container shell, so the probe reads the credentials the
+      # container was actually started with rather than whatever Compose interpolated at parse time.
       test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   rabbitmq:
+    # The -management tag is what serves the UI published below; the plain tag omits the plugin.
     image: 'rabbitmq:4-management'
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
-      - '5672:5672'
-      # Management UI: loopback-only so it is never exposed publicly on a VPS
+      - '127.0.0.1:5672:5672'
       - '127.0.0.1:15672:15672'
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -45,12 +52,12 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG']
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Local SMTP sink for development. Bound to the loopback interface only, unlike the services
   # above: Mailpit accepts mail from anyone and serves every message it receives through an
@@ -58,6 +65,7 @@ services:
   # to the local network.
   mailpit:
     image: axllent/mailpit
+    restart: unless-stopped
     ports:
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"
@@ -67,14 +75,22 @@ services:
     restart: unless-stopped
     environment:
       discovery.type: single-node
+      # Left disabled deliberately. Enabling it would require credential wiring through the
+      # application and every integration test for no local benefit, and the loopback bind above
+      # is what actually removes the exposure that mattered.
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:9200/_cluster/health || exit 1']
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
 volumes:
-  pgdata:
+  postgres_data:
   rabbitmq_data:
   elasticsearch_data:

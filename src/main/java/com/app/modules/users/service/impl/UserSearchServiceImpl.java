@@ -14,6 +14,7 @@ import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.common.response.ViewerRelationshipResponse;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.repository.UserRepository;
 import com.app.modules.users.repository.UserSearchProjection;
@@ -36,10 +37,15 @@ public class UserSearchServiceImpl implements UserSearchService {
 
     private final UserRepository userRepository;
     private final SocialService socialService;
+    private final UserEventRecorder userEventRecorder;
 
-    public UserSearchServiceImpl(UserRepository userRepository, SocialService socialService) {
+    public UserSearchServiceImpl(
+            UserRepository userRepository,
+            SocialService socialService,
+            UserEventRecorder userEventRecorder) {
         this.userRepository = userRepository;
         this.socialService = socialService;
+        this.userEventRecorder = userEventRecorder;
     }
 
     @Override
@@ -47,6 +53,9 @@ public class UserSearchServiceImpl implements UserSearchService {
     public CursorPageResponse<UserListItemResponse> searchUsers(
             UUID viewerId, String query, String cursor, int limit) {
         String normalized = normalizeQuery(query);
+        // After normalization, so a query rejected as too short records nothing. Before the read,
+        // because the event records that somebody searched, not that the search returned anything.
+        userEventRecorder.recordSearch(viewerId, "users", normalized);
         int offset = OffsetCursorCodec.decode(cursor);
         int size = normalizeLimit(limit);
 

@@ -33,7 +33,7 @@ class JwtTokenProviderTest {
 
     @Test
     void generateAccessToken_returnsNonBlankCompactToken() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
 
         assertThat(token).isNotBlank();
         assertThat(token.split("\\.")).hasSize(3);
@@ -41,7 +41,7 @@ class JwtTokenProviderTest {
 
     @Test
     void generateAccessToken_payloadDoesNotContainEmailClaim() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
         String payloadJson =
                 new String(
                         java.util.Base64.getUrlDecoder().decode(token.split("\\.")[1]),
@@ -53,7 +53,7 @@ class JwtTokenProviderTest {
     @Test
     void validateAndParse_validToken_returnsCorrectClaims() {
         UUID userId = UUID.randomUUID();
-        String token = provider.generateAccessToken(userId, "USER");
+        String token = provider.generateAccessToken(userId, "USER", 0);
 
         JwtClaims claims = provider.validateAndParse(token);
 
@@ -63,7 +63,7 @@ class JwtTokenProviderTest {
 
     @Test
     void generateAccessToken_containsJtiClaim() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
 
         JwtClaims claims = provider.validateAndParse(token);
 
@@ -74,8 +74,8 @@ class JwtTokenProviderTest {
 
     @Test
     void generateAccessToken_eachInvocationProducesUniqueJti() {
-        String first = provider.generateAccessToken(UUID.randomUUID(), "USER");
-        String second = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String first = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
+        String second = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
 
         JwtClaims firstClaims = provider.validateAndParse(first);
         JwtClaims secondClaims = provider.validateAndParse(second);
@@ -85,7 +85,7 @@ class JwtTokenProviderTest {
 
     @Test
     void validateAndParse_returnsJtiInClaims() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
 
         JwtClaims claims = provider.validateAndParse(token);
 
@@ -94,7 +94,7 @@ class JwtTokenProviderTest {
 
     @Test
     void validateAndParse_returnsExpiresAtInClaims() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
 
         JwtClaims claims = provider.validateAndParse(token);
 
@@ -116,7 +116,7 @@ class JwtTokenProviderTest {
 
     @Test
     void validateAndParse_tamperedSignature_throwsAuthTokenInvalid() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
         String[] parts = token.split("\\.");
         // Flip the first signature character to invalidate the HMAC without breaking the format.
         char first = parts[2].charAt(0);
@@ -181,7 +181,7 @@ class JwtTokenProviderTest {
 
     @Test
     void generateAccessToken_containsIssuerClaim() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
         // Decode without validation to inspect raw claims.
         String payload =
                 new String(
@@ -192,7 +192,7 @@ class JwtTokenProviderTest {
 
     @Test
     void generateAccessToken_containsAudienceClaim() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
         String payload =
                 new String(
                         java.util.Base64.getUrlDecoder().decode(token.split("\\.")[1]),
@@ -202,7 +202,7 @@ class JwtTokenProviderTest {
 
     @Test
     void generateAccessToken_nbfEqualToIat() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "USER");
+        String token = provider.generateAccessToken(UUID.randomUUID(), "USER", 0);
         String payload =
                 new String(
                         java.util.Base64.getUrlDecoder().decode(token.split("\\.")[1]),

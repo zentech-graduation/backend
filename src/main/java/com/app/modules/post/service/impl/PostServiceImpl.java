@@ -1,6 +1,7 @@
 package com.app.modules.post.service.impl;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,8 +46,10 @@ import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostEditHistoryRepository;
 import com.app.modules.post.repository.PostMediaAssetRepository;
+import com.app.modules.post.repository.PostModerationProjection;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
+import com.app.modules.post.service.PostModerationResult;
 import com.app.modules.post.service.PostService;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.post.validation.PostTypeFilter;
@@ -123,6 +126,7 @@ public class PostServiceImpl implements PostService {
                 throw new AppException(
                         ApiErrorCode.BAD_REQUEST, "Text posts must not include media");
             }
+            rejectBannedHashtags(request.caption());
             Post post =
                     Post.builder()
                             .userId(authorId)
@@ -143,6 +147,7 @@ public class PostServiceImpl implements PostService {
             log.info("Post created: postId={}, type={}", post.getId(), post.getPostType());
             return postResponseAssembler.assemble(authorId, post);
         }
+        rejectBannedHashtags(request.caption());
         List<UUID> mediaIds = request.mediaIds();
         if (mediaIds == null || mediaIds.isEmpty()) {
             throw new AppException(
@@ -224,6 +229,7 @@ public class PostServiceImpl implements PostService {
         if (!requesterId.equals(post.getUserId())) {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
+        rejectBannedHashtags(request.caption());
         // The audit row records the pre-edit caption before any mutation.
         postEditHistoryRepository.save(
                 PostEditHistory.builder()
@@ -269,6 +275,12 @@ public class PostServiceImpl implements PostService {
         if (!allowed) {
             throw new AppException(ApiErrorCode.BAD_REQUEST, "Invalid status transition");
         }
+        if (target == PostStatus.PUBLISHED) {
+            // The path a check on the create routes alone would miss: a post drafted or archived
+            // before the ban carries the tag, and publishing is when that tag would reach
+            // post_hashtags and the search index for the first time since.
+            rejectBannedHashtags(post.getCaption());
+        }
         post.setStatus(target);
         if (target == PostStatus.PUBLISHED) {
             upsertCaptionHashtags(post.getId(), post.getCaption());
@@ -297,6 +309,57 @@ public class PostServiceImpl implements PostService {
             throw new AppException(ApiErrorCode.POST_FORBIDDEN);
         }
         softDelete(post);
+    }
+
+    @Override
+    @Transactional
+    public PostModerationResult applyModerationRemoval(UUID postId) {
+        PostModerationProjection post = requireModerationView(postId);
+        hashtagService.removeHashtagsForPost(postId);
+        postRepository.applyModerationRemoval(postId, OffsetDateTime.now());
+        enqueuePostIndexDelete(postId, post.getUserId());
+        log.info("Post removed by moderation: postId={}, from={}", postId, post.getStatus());
+        return new PostModerationResult(post.getUserId(), PostStatus.REMOVED, List.of());
+    }
+
+    @Override
+    @Transactional
+    public PostModerationResult applyModerationRestore(UUID postId) {
+        PostModerationProjection post = requireModerationView(postId);
+        // Null for a post removed before the prior status was recorded. Published is the right
+        // fallback rather than a guess: it is what restore did for every post back then, so a row
+        // from that era lands exactly where it would have.
+        PostStatus restored =
+                post.getStatusBeforeModeration() == null
+                        ? PostStatus.PUBLISHED
+                        : PostStatus.fromJson(post.getStatusBeforeModeration());
+        postRepository.applyModerationRestore(postId, restored.toJson());
+        // Only a published post belongs in post_hashtags and in the search index; the owner path
+        // keeps a draft and an archived post out of both. The hashtag-eligibility check belongs on
+        // this re-derivation rather than on the removal arm, because removal detaches every
+        // association regardless of which tag it is.
+        //
+        // This is the one write path that strips a banned tag instead of refusing. A moderator
+        // restoring a post it removed by mistake is correcting its own error and must not be
+        // blocked by an unrelated administrator decision it has no power to reverse; refusing here
+        // would leave the post removed with no in-role way to bring it back. The stripped names
+        // travel back to the caller so the audit row records exactly what was dropped and the
+        // moderator is told rather than finding out later.
+        List<String> strippedHashtags = List.of();
+        if (restored == PostStatus.PUBLISHED) {
+            List<String> tags = extractHashtags(post.getCaption());
+            if (!tags.isEmpty()) {
+                strippedHashtags = hashtagService.upsertHashtagsForPostSkippingBanned(postId, tags);
+            }
+            enqueuePostIndexUpsert(
+                    postId, post.getUserId(), post.getCreatedAt().atOffset(ZoneOffset.UTC));
+        }
+        log.info(
+                "Post restored by moderation: postId={}, to={}, strippedHashtags={}",
+                postId,
+                restored,
+                strippedHashtags);
+        return new PostModerationResult(post.getUserId(), restored, strippedHashtags);
     }
 
     @Override
@@ -492,40 +555,74 @@ public class PostServiceImpl implements PostService {
         }
     }
 
-    // Must run after upsertCaptionHashtags so the post_hashtags associations are queryable here.
+    /**
+     * Refuses a caption naming a banned hashtag, before the caller mutates anything.
+     *
+     * <p>Called on every write path that could put a tag into {@code post_hashtags}, including the
+     * draft ones. A draft carrying a banned tag could never be published, so refusing it at the
+     * point it is written tells the author while the caption is still in front of them rather than
+     * at publish time. The check reads the caption being submitted, so removing the offending tag
+     * and retrying always succeeds; it never traps an author in a post it cannot edit.
+     */
+    private void rejectBannedHashtags(String caption) {
+        List<String> tags = extractHashtags(caption);
+        if (tags.isEmpty()) {
+            return;
+        }
+        List<String> banned = hashtagService.findBannedNames(tags);
+        if (!banned.isEmpty()) {
+            throw new AppException(ApiErrorCode.POST_BANNED_HASHTAG, Map.of("bannedTags", banned));
+        }
+    }
+
+    private PostModerationProjection requireModerationView(UUID postId) {
+        return postRepository
+                .findModerationViewIncludingDeleted(postId)
+                .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
+    }
+
     private void enqueuePostIndexUpsert(Post post) {
+        enqueuePostIndexUpsert(post.getId(), post.getUserId(), post.getCreatedAt());
+    }
+
+    private void enqueuePostIndexDelete(Post post) {
+        enqueuePostIndexDelete(post.getId(), post.getUserId());
+    }
+
+    // Must run after upsertCaptionHashtags so the post_hashtags associations are queryable here.
+    private void enqueuePostIndexUpsert(UUID postId, UUID userId, OffsetDateTime createdAt) {
         List<String> hashtagIds =
                 hashtagService
-                        .getHashtagIdsForPosts(List.of(post.getId()))
-                        .getOrDefault(post.getId(), List.of())
+                        .getHashtagIdsForPosts(List.of(postId))
+                        .getOrDefault(postId, List.of())
                         .stream()
                         .map(UUID::toString)
                         .toList();
         // User free-text (caption) is excluded from the payload; the consumer reads it from the
         // source-of-truth post row it already loads for the Q4 gate.
         Map<String, Object> data = new HashMap<>();
-        data.put("postId", post.getId().toString());
-        data.put("userId", post.getUserId().toString());
+        data.put("postId", postId.toString());
+        data.put("userId", userId.toString());
         data.put("status", "published");
         data.put("hashtagIds", hashtagIds);
-        data.put("createdAt", post.getCreatedAt().toString());
+        data.put("createdAt", createdAt.toString());
         outboxService.enqueue(
                 PostEventTypes.POST_INDEX_UPSERT_V1,
                 PostEventTypes.POST_INDEX_UPSERT_V1,
                 "post",
-                post.getId(),
-                post.getUserId(),
+                postId,
+                userId,
                 data);
     }
 
-    private void enqueuePostIndexDelete(Post post) {
+    private void enqueuePostIndexDelete(UUID postId, UUID userId) {
         outboxService.enqueue(
                 PostEventTypes.POST_INDEX_DELETE_V1,
                 PostEventTypes.POST_INDEX_DELETE_V1,
                 "post",
-                post.getId(),
-                post.getUserId(),
-                Map.of("postId", post.getId().toString()));
+                postId,
+                userId,
+                Map.of("postId", postId.toString()));
     }
 
     // Tokens are #-prefixed runs of Unicode letters, digits, and underscores; normalization and

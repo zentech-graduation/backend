@@ -23,6 +23,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.story.dto.request.CreateStoryRequest;
 import com.app.modules.story.dto.response.StoryFeedItemResponse;
+import com.app.modules.story.dto.response.StoryLikeActionResponse;
 import com.app.modules.story.dto.response.StoryResponse;
 import com.app.modules.story.dto.response.StoryViewActionResponse;
 import com.app.modules.story.dto.response.StoryViewerResponse;
@@ -232,4 +233,54 @@ public interface StoryApi {
                     @Min(1)
                     @Max(100)
                     int limit);
+
+    @Operation(
+            summary = "Like a story",
+            description =
+                    "Likes an active story visible to the caller. Self-like is permitted. Liking"
+                            + " an already-liked story returns a conflict. Requires"
+                            + " authentication.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "201",
+                description = "Story liked"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Story missing, deleted, expired, or not visible to the caller",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Story already liked",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.LIKES)
+    ResponseEntity<ApiResponse<StoryLikeActionResponse>> likeStory(
+            @PathVariable("storyId") UUID storyId);
+
+    @Operation(
+            summary = "Unlike a story",
+            description = "Removes the caller's like. Unliking a story that is not liked fails.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Story unliked"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Story or like not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @DeleteMapping(ApiConstants.Stories.ROOT + ApiConstants.Stories.LIKES)
+    ResponseEntity<ApiResponse<StoryLikeActionResponse>> unlikeStory(
+            @PathVariable("storyId") UUID storyId);
 }

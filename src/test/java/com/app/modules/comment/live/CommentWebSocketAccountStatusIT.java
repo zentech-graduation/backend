@@ -27,6 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -102,6 +103,9 @@ class CommentWebSocketAccountStatusIT {
 
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private UserRepository userRepository;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     private User userWithStatus(UserStatus status) {
         String username = "ws_status_" + UUID.randomUUID().toString().substring(0, 8);
@@ -118,7 +122,11 @@ class CommentWebSocketAccountStatusIT {
     }
 
     private Throwable attemptConnect(String token) {
-        String wsUrl = "ws://localhost:" + port + "/ws/comments/websocket?token=" + token;
+        String wsUrl =
+                "ws://localhost:"
+                        + port
+                        + "/ws/comments/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         CompletableFuture<StompSession> future =
                 client.connectAsync(wsUrl, new StompSessionHandlerAdapter() {});
@@ -128,7 +136,7 @@ class CommentWebSocketAccountStatusIT {
     @Test
     void handshake_bannedUserValidToken_doesNotEstablishStompSession() {
         User banned = userWithStatus(UserStatus.BANNED);
-        String token = jwtTokenProvider.generateAccessToken(banned.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(banned.getId(), "USER", 0);
 
         Throwable thrown = attemptConnect(token);
 
@@ -143,7 +151,7 @@ class CommentWebSocketAccountStatusIT {
     @Test
     void handshake_suspendedUserValidToken_doesNotEstablishStompSession() {
         User suspended = userWithStatus(UserStatus.SUSPENDED);
-        String token = jwtTokenProvider.generateAccessToken(suspended.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(suspended.getId(), "USER", 0);
 
         Throwable thrown = attemptConnect(token);
 

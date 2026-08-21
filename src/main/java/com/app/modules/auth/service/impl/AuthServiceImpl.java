@@ -43,6 +43,7 @@ import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.entity.UserSettings;
 import com.app.modules.users.enums.UserRole;
@@ -74,6 +75,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserStateValidator userStateValidator;
     private final OAuth2ExchangeCodeService oauth2ExchangeCodeService;
     private final TransactionTemplate transactionTemplate;
+    private final UserEventRecorder userEventRecorder;
 
     // Pre-computed BCrypt hash used to equalize CPU work on login failure paths so that
     // "email not found" is indistinguishable from "wrong password" via response timing.
@@ -97,7 +99,8 @@ public class AuthServiceImpl implements AuthService {
             IpExtractor ipExtractor,
             UserStateValidator userStateValidator,
             OAuth2ExchangeCodeService oauth2ExchangeCodeService,
-            TransactionTemplate transactionTemplate) {
+            TransactionTemplate transactionTemplate,
+            UserEventRecorder userEventRecorder) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.settingsRepository = settingsRepository;
@@ -116,6 +119,7 @@ public class AuthServiceImpl implements AuthService {
         this.userStateValidator = userStateValidator;
         this.oauth2ExchangeCodeService = oauth2ExchangeCodeService;
         this.transactionTemplate = transactionTemplate;
+        this.userEventRecorder = userEventRecorder;
     }
 
     @PostConstruct
@@ -127,7 +131,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void register(RegisterRequest request) {
+    public void register(RegisterRequest request, HttpServletRequest httpRequest) {
         // Return a single generic conflict code for both email and username collisions so the
         // response cannot be used to enumerate which emails or usernames are already registered.
         if (userRepository.existsByEmail(request.email())
@@ -138,6 +142,7 @@ public class AuthServiceImpl implements AuthService {
         // Hash the password before opening a transaction so the connection is not held during
         // the BCrypt computation (~200-300ms at cost 12).
         String passwordHash = passwordEncoder.encode(request.password());
+        String registrationIp = ipExtractor.extract(httpRequest);
 
         transactionTemplate.executeWithoutResult(
                 status -> {
@@ -165,6 +170,9 @@ public class AuthServiceImpl implements AuthService {
                                     .status(UserStatus.ACTIVE)
                                     .isPrivate(false)
                                     .isVerified(false)
+                                    // Same transaction as the users insert, so an account can never
+                                    // exist without the origin that created it.
+                                    .registrationIp(registrationIp)
                                     .build();
                     User savedUser = userRepository.save(user);
 
@@ -271,7 +279,8 @@ public class AuthServiceImpl implements AuthService {
                         .orElse(false);
 
         String accessToken =
-                jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
+                jwtTokenProvider.generateAccessToken(
+                        user.getId(), user.getRole().name(), user.getTokenEpoch());
 
         return new AuthResponse(
                 accessToken,
@@ -434,16 +443,30 @@ public class AuthServiceImpl implements AuthService {
         return issueSession(user, emailVerified, httpRequest);
     }
 
+    // Every caller runs this inside a write transaction, which is what lets the last-login write
+    // below commit with the refresh_tokens row rather than as a separate statement.
     private AuthResponse issueSession(
             User user, boolean emailVerified, HttpServletRequest httpRequest) {
+        String clientIp = ipExtractor.extract(httpRequest);
+        // Only a real session issuance advances these. The refresh path deliberately does not call
+        // this method: a "last login" that moved on every token refresh would stop being a login
+        // signal and would report an idle background tab as recent activity.
+        user.setLastLoginAt(OffsetDateTime.now());
+        user.setLastLoginIp(clientIp);
+        userRepository.save(user);
         String accessToken =
-                jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
+                jwtTokenProvider.generateAccessToken(
+                        user.getId(), user.getRole().name(), user.getTokenEpoch());
         String refreshToken =
                 refreshTokenService.issue(
                         user.getId(),
                         null,
                         httpRequest.getHeader(HttpHeaders.USER_AGENT),
-                        ipExtractor.extract(httpRequest));
+                        clientIp);
+        // Placed here rather than in login() so every route that issues a session is covered:
+        // password login, the verify-and-sign-in link, and the OAuth2 code exchange. The refresh
+        // path does not reach this method, which is exactly right - a token refresh is not a login.
+        userEventRecorder.recordSessionStart(user.getId());
         return new AuthResponse(
                 accessToken,
                 refreshToken,

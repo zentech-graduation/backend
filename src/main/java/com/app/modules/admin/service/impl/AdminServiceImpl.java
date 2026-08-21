@@ -2,6 +2,7 @@ package com.app.modules.admin.service.impl;
 
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,21 +18,29 @@ import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.entity.AdminAction;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminActionMapper;
 import com.app.modules.admin.repository.AdminActionRepository;
+import com.app.modules.admin.service.AdminActionRecorder;
+import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminService;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
+import com.app.modules.post.service.PostModerationResult;
+import com.app.modules.post.service.PostService;
 import com.app.modules.report.entity.Report;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.users.entity.User;
+import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
 
@@ -47,48 +56,65 @@ public class AdminServiceImpl implements AdminService {
     private final AdminActionRepository adminActionRepository;
     private final UserRepository userRepository;
     private final PostRepository postRepository;
+    private final PostService postService;
     private final CommentRepository commentRepository;
     private final ReportRepository reportRepository;
     private final AdminActionMapper adminActionMapper;
+    private final AdminActionRecorder adminActionRecorder;
+    private final AdminAuthorizationService adminAuthorizationService;
 
     public AdminServiceImpl(
             AdminActionRepository adminActionRepository,
             UserRepository userRepository,
             PostRepository postRepository,
+            PostService postService,
             CommentRepository commentRepository,
             ReportRepository reportRepository,
-            AdminActionMapper adminActionMapper) {
+            AdminActionMapper adminActionMapper,
+            AdminActionRecorder adminActionRecorder,
+            AdminAuthorizationService adminAuthorizationService) {
         this.adminActionRepository = adminActionRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
+        this.postService = postService;
         this.commentRepository = commentRepository;
         this.reportRepository = reportRepository;
         this.adminActionMapper = adminActionMapper;
+        this.adminActionRecorder = adminActionRecorder;
+        this.adminAuthorizationService = adminAuthorizationService;
     }
 
     @Override
     @Transactional
     public AdminActionResponse banUser(UUID actorId, UUID userId, AdminActionRequest request) {
-        return changeUserStatus(actorId, userId, AdminActionType.BAN_USER, request);
+        return changeUserStatus(actorId, userId, AdminActionType.BAN_USER, request.reason(), null);
     }
 
     @Override
     @Transactional
     public AdminActionResponse unbanUser(UUID actorId, UUID userId, AdminActionRequest request) {
-        return changeUserStatus(actorId, userId, AdminActionType.UNBAN_USER, request);
+        return changeUserStatus(
+                actorId, userId, AdminActionType.UNBAN_USER, request.reason(), null);
     }
 
     @Override
     @Transactional
-    public AdminActionResponse suspendUser(UUID actorId, UUID userId, AdminActionRequest request) {
-        return changeUserStatus(actorId, userId, AdminActionType.SUSPEND_USER, request);
+    public AdminActionResponse suspendUser(
+            UUID actorId, UUID userId, AdminSuspendUserRequest request) {
+        OffsetDateTime suspendedUntil =
+                request.durationDays() == null
+                        ? null
+                        : OffsetDateTime.now().plusDays(request.durationDays());
+        return changeUserStatus(
+                actorId, userId, AdminActionType.SUSPEND_USER, request.reason(), suspendedUntil);
     }
 
     @Override
     @Transactional
     public AdminActionResponse unsuspendUser(
             UUID actorId, UUID userId, AdminActionRequest request) {
-        return changeUserStatus(actorId, userId, AdminActionType.UNSUSPEND_USER, request);
+        return changeUserStatus(
+                actorId, userId, AdminActionType.UNSUSPEND_USER, request.reason(), null);
     }
 
     @Override
@@ -132,77 +158,165 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public CursorPageResponse<AdminActionSummaryResponse> getActions(
-            UUID adminId, AdminActionType actionType, String cursor, int size) {
-        return findActions(adminId, null, actionType, cursor, size, CursorScope.ADMIN_ACTIONS);
+    @Transactional
+    public AdminActionResponse escalateReport(
+            UUID actorId, UUID reportId, AdminEscalateReportRequest request) {
+        Report report =
+                reportRepository
+                        .findById(reportId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.REPORT_NOT_FOUND));
+        // Only an open report can be escalated. Escalating a closed one would reopen a decision
+        // already taken, and escalating an escalated one would rewrite whose escalation it was.
+        if (report.getStatus() != ReportStatus.PENDING
+                && report.getStatus() != ReportStatus.REVIEWING) {
+            throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        }
+        report.setStatus(ReportStatus.ESCALATED);
+        report.setEscalatedBy(actorId);
+        report.setEscalatedAt(OffsetDateTime.now());
+        report.setEscalationReason(request.reason().trim());
+        reportRepository.save(report);
+        log.info("Report escalated: actorId={}, reportId={}", actorId, reportId);
+        UUID targetUserId = report.getReportType() == ReportType.USER ? report.getEntityId() : null;
+        return adminActionRecorder.record(
+                actorId,
+                AdminActionType.ESCALATE_REPORT,
+                targetUserId,
+                report.getReportType().toJson(),
+                report.getEntityId(),
+                reportId,
+                request.reason(),
+                null);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public AdminActionResponse getActionById(UUID actionId) {
-        return adminActionMapper.toResponse(
+    public EscalatedReportCountResponse countEscalatedReports() {
+        return new EscalatedReportCountResponse(
+                reportRepository.countByStatus(ReportStatus.ESCALATED));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<AdminActionSummaryResponse> getActions(
+            UUID actorId, UUID adminId, AdminActionType actionType, String cursor, int size) {
+        UUID effectiveAdminId = scopeActorFilter(actorId, adminId);
+        return findActions(
+                effectiveAdminId, null, actionType, cursor, size, CursorScope.ADMIN_ACTIONS);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminActionResponse getActionById(UUID actorId, UUID actionId) {
+        AdminAction action =
                 adminActionRepository
                         .findById(actionId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND)));
+                        .orElseThrow(() -> new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND));
+        // Reported as absent rather than forbidden. A 403 here would confirm that an audit row this
+        // moderator may not read exists, which is the same disclosure the list filter prevents.
+        if (isModerator(actorId) && !actorId.equals(action.getAdminId())) {
+            throw new AppException(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);
+        }
+        return adminActionMapper.toResponse(action);
     }
 
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminActionSummaryResponse> getActionsForUser(
-            UUID userId, String cursor, int size) {
-        return findActions(null, userId, null, cursor, size, CursorScope.ADMIN_ACTIONS_FOR_USER);
+            UUID actorId, UUID userId, String cursor, int size) {
+        UUID effectiveAdminId = scopeActorFilter(actorId, null);
+        return findActions(
+                effectiveAdminId, userId, null, cursor, size, CursorScope.ADMIN_ACTIONS_FOR_USER);
+    }
+
+    /**
+     * Narrows an audit read to the caller's own rows when the caller is a moderator.
+     *
+     * <p>Returns the caller's id for a moderator, discarding whatever {@code adminId} the caller
+     * asked for, and the requested filter unchanged for an administrator. The actor's role is read
+     * from the source of truth rather than from a token claim, for the same reason every other
+     * authorization decision in this service is: a claim minted before a demotion is stale.
+     */
+    private UUID scopeActorFilter(UUID actorId, UUID requestedAdminId) {
+        return isModerator(actorId) ? actorId : requestedAdminId;
+    }
+
+    private boolean isModerator(UUID actorId) {
+        return userRepository
+                        .findByIdAndDeletedAtIsNull(actorId)
+                        .map(User::getRole)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.FORBIDDEN))
+                == UserRole.MODERATOR;
     }
 
     private AdminActionResponse changeUserStatus(
-            UUID actorId, UUID userId, AdminActionType actionType, AdminActionRequest request) {
+            UUID actorId,
+            UUID userId,
+            AdminActionType actionType,
+            String reason,
+            OffsetDateTime suspendedUntil) {
+        // The actor's role is read from the source of truth rather than taken from the caller or
+        // from a token claim: a claim minted before a demotion is stale, and a caller-supplied role
+        // would make the guard advisory for any future non-controller caller.
+        UserRole actorRole =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(actorId)
+                        .map(User::getRole)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.FORBIDDEN));
         User user =
                 userRepository
                         .findByIdAndDeletedAtIsNull(userId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
+        // Checked against the entity already loaded above, inside this transaction; a second read
+        // of the target's role would be a race against a concurrent role change.
+        adminAuthorizationService.assertMayChangeUserStatus(actorId, actorRole, user);
         UserStatus targetStatus = targetUserStatus(actionType, user.getStatus());
         user.setStatus(targetStatus);
+        // Written on every status change, not only on suspend. Any transition out of 'suspended'
+        // passes null here, which is what stops the reinstatement sweep from firing on a row an
+        // administrator has already handled.
+        user.setSuspendedUntil(targetStatus == UserStatus.SUSPENDED ? suspendedUntil : null);
         userRepository.save(user);
-        return recordAction(
-                actorId,
-                actionType,
-                userId,
-                "user",
-                userId,
-                null,
-                request.reason(),
-                request.metadata());
+        return adminActionRecorder.record(
+                actorId, actionType, userId, "user", userId, null, reason, null);
     }
 
+    // The mutation itself is deliberately not performed here. PostService owns every side effect
+    // of a removal, so the administrative path and the owner path cannot drift apart again the way
+    // they had: this method used to write the row directly and left the hashtag associations and
+    // the search-index document behind.
     private AdminActionResponse moderatePost(
             UUID actorId, UUID postId, AdminActionType actionType, AdminActionRequest request) {
-        UUID ownerId =
-                postRepository
-                        .findOwnerIdIncludingDeleted(postId)
-                        .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         String currentStatus =
                 postRepository
                         .findStatusIncludingDeleted(postId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.POST_NOT_FOUND));
         boolean restore = actionType == AdminActionType.RESTORE_POST;
-        if ((restore && !PostStatus.REMOVED.toJson().equals(currentStatus))
-                || (!restore && PostStatus.REMOVED.toJson().equals(currentStatus))) {
+        if (restore != PostStatus.REMOVED.toJson().equals(currentStatus)) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
         validateLinkedReport(request.reportId());
-        postRepository.applyAdminModeration(
-                postId,
-                restore ? PostStatus.PUBLISHED.toJson() : PostStatus.REMOVED.toJson(),
-                restore ? null : OffsetDateTime.now());
-        return recordAction(
+        PostModerationResult result =
+                restore
+                        ? postService.applyModerationRestore(postId)
+                        : postService.applyModerationRemoval(postId);
+        // Server-derived facts only, which is the whole contract AdminActionRecorder enforces. The
+        // stripped names are recorded when a restore re-derived a caption naming a banned hashtag:
+        // the post came back without that association, and the audit row is where that shows.
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("resultingStatus", result.status().toJson());
+        if (!result.strippedHashtags().isEmpty()) {
+            metadata.put("strippedHashtags", result.strippedHashtags());
+        }
+        return adminActionRecorder.record(
                 actorId,
                 actionType,
-                ownerId,
+                result.ownerId(),
                 "post",
                 postId,
                 request.reportId(),
                 request.reason(),
-                request.metadata());
+                metadata);
     }
 
     private AdminActionResponse moderateComment(
@@ -221,7 +335,7 @@ public class AdminServiceImpl implements AdminService {
         }
         validateLinkedReport(request.reportId());
         commentRepository.applyAdminModeration(commentId, restore ? null : OffsetDateTime.now());
-        return recordAction(
+        return adminActionRecorder.record(
                 actorId,
                 actionType,
                 ownerId,
@@ -229,7 +343,7 @@ public class AdminServiceImpl implements AdminService {
                 commentId,
                 request.reportId(),
                 request.reason(),
-                request.metadata());
+                null);
     }
 
     private AdminActionResponse closeReport(
@@ -242,6 +356,13 @@ public class AdminServiceImpl implements AdminService {
                 || report.getStatus() == ReportStatus.DISMISSED) {
             throw new AppException(ApiErrorCode.REPORT_INVALID_TRANSITION);
         }
+        // Checked here rather than by a path matcher, because resolve and dismiss are one shared
+        // path for every report and only the report's own state decides who may close it. A
+        // moderator escalated this one because it did not want to decide it; letting a moderator
+        // close it anyway would make the escalation an empty gesture.
+        if (report.getStatus() == ReportStatus.ESCALATED && isModerator(actorId)) {
+            throw new AppException(ApiErrorCode.FORBIDDEN);
+        }
         report.setStatus(
                 actionType == AdminActionType.RESOLVE_REPORT
                         ? ReportStatus.RESOLVED
@@ -251,7 +372,7 @@ public class AdminServiceImpl implements AdminService {
         report.setResolutionNote(request.reason().trim());
         reportRepository.save(report);
         UUID targetUserId = report.getReportType() == ReportType.USER ? report.getEntityId() : null;
-        return recordAction(
+        return adminActionRecorder.record(
                 actorId,
                 actionType,
                 targetUserId,
@@ -259,7 +380,7 @@ public class AdminServiceImpl implements AdminService {
                 report.getEntityId(),
                 reportId,
                 request.reason(),
-                request.metadata());
+                null);
     }
 
     private CursorPageResponse<AdminActionSummaryResponse> findActions(
@@ -283,6 +404,9 @@ public class AdminServiceImpl implements AdminService {
         return toPage(actions, pageSize, cursor != null, scope);
     }
 
+    // UserStatus.DEACTIVATED is deliberately absent from this mapping and is unreachable today. It
+    // is reserved for a future self-service account-deactivation flow, which would be a user action
+    // rather than a moderation one, so it would not enter through an admin_action_type at all.
     private UserStatus targetUserStatus(AdminActionType actionType, UserStatus currentStatus) {
         UserStatus target =
                 switch (actionType) {
@@ -315,29 +439,6 @@ public class AdminServiceImpl implements AdminService {
         if (reportId != null && !reportRepository.existsById(reportId)) {
             throw new AppException(ApiErrorCode.REPORT_NOT_FOUND);
         }
-    }
-
-    private AdminActionResponse recordAction(
-            UUID actorId,
-            AdminActionType actionType,
-            UUID targetUserId,
-            String targetEntityType,
-            UUID targetEntityId,
-            UUID reportId,
-            String reason,
-            Map<String, Object> metadata) {
-        AdminAction action =
-                AdminAction.builder()
-                        .adminId(actorId)
-                        .actionType(actionType)
-                        .targetUserId(targetUserId)
-                        .targetEntityType(targetEntityType)
-                        .targetEntityId(targetEntityId)
-                        .reportId(reportId)
-                        .reason(reason.trim())
-                        .metadata(metadata)
-                        .build();
-        return adminActionMapper.toResponse(adminActionRepository.insert(action));
     }
 
     private CursorPageResponse<AdminActionSummaryResponse> toPage(
@@ -385,10 +486,5 @@ public class AdminServiceImpl implements AdminService {
         return new ActionCursor(TimeCursors.fromMicros(decoded.sortValueMicros()), decoded.id());
     }
 
-    private record ActionCursor(OffsetDateTime createdAt, UUID id) {
-
-        boolean isEmpty() {
-            return createdAt == null || id == null;
-        }
-    }
+    private record ActionCursor(OffsetDateTime createdAt, UUID id) {}
 }

@@ -19,4 +19,6 @@ public interface UserSecurityProjection {
     UserRole getRole();
 
     UserStatus getStatus();
+
+    Integer getTokenEpoch();
 }

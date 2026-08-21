@@ -23,6 +23,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.pagination.OffsetCursorCodec;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.repository.UserRepository;
 import com.app.modules.users.service.UserSearchService;
@@ -32,12 +33,13 @@ class UserSearchServiceImplTest {
 
     @Mock private UserRepository userRepository;
     @Mock private SocialService socialService;
+    @Mock private UserEventRecorder userEventRecorder;
 
     private UserSearchService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserSearchServiceImpl(userRepository, socialService);
+        service = new UserSearchServiceImpl(userRepository, socialService, userEventRecorder);
     }
 
     @Test

@@ -4,6 +4,8 @@ import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.entity.OAuthAccount;
 import com.app.modules.auth.entity.UserCredential;
 import com.app.modules.auth.enums.OAuthProvider;
@@ -59,18 +62,27 @@ public class CustomOidcUserService extends OidcUserService {
     private final UserCredentialRepository userCredentialRepository;
     private final UserSettingsRepository userSettingsRepository;
     private final UserStateValidator userStateValidator;
+    private final IpExtractor ipExtractor;
+
+    // Request-scoped proxy injected into this singleton. Every call reaches loadUser during the
+    // provider callback request, so there is always a current request to read the origin from.
+    private final HttpServletRequest httpRequest;
 
     public CustomOidcUserService(
             OAuthAccountRepository oauthAccountRepository,
             UserRepository userRepository,
             UserCredentialRepository userCredentialRepository,
             UserSettingsRepository userSettingsRepository,
-            UserStateValidator userStateValidator) {
+            UserStateValidator userStateValidator,
+            IpExtractor ipExtractor,
+            HttpServletRequest httpRequest) {
         this.oauthAccountRepository = oauthAccountRepository;
         this.userRepository = userRepository;
         this.userCredentialRepository = userCredentialRepository;
         this.userSettingsRepository = userSettingsRepository;
         this.userStateValidator = userStateValidator;
+        this.ipExtractor = ipExtractor;
+        this.httpRequest = httpRequest;
     }
 
     @Override
@@ -176,6 +188,11 @@ public class CustomOidcUserService extends OidcUserService {
                         .status(UserStatus.ACTIVE)
                         .isPrivate(false)
                         .isVerified(false)
+                        // Written here as well as on local registration. Recording it on only one
+                        // of the two creation paths would leave the column silently meaning
+                        // "created by local signup", which reads as missing data rather than as an
+                        // unrecorded origin.
+                        .registrationIp(ipExtractor.extract(httpRequest))
                         .build();
         user = userRepository.save(user);
 

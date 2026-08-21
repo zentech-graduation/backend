@@ -5,8 +5,10 @@ import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
+import com.app.modules.message.dto.response.MessageMediaResponse;
 import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.dto.response.ParticipantResponse;
 import com.app.modules.message.entity.Conversation;
@@ -27,41 +29,51 @@ public interface MessageMapper {
      * @return the participant summary
      */
     @Mapping(source = "participant.id.userId", target = "userId")
-    @Mapping(source = "participant.admin", target = "isAdmin")
     @Mapping(source = "user.username", target = "username")
     @Mapping(source = "user.displayName", target = "displayName")
     @Mapping(source = "user.avatarUrl", target = "avatarUrl")
+    @Mapping(source = "participant.nickname", target = "nickname")
     ParticipantResponse toParticipantResponse(ConversationParticipant participant, User user);
 
     /**
-     * Builds the conversation detail response from the entity and its already-assembled participant
-     * summaries.
+     * Builds the conversation detail response from the entity, its already-assembled participant
+     * summaries, and the caller's own pin/mute state.
      *
      * @param conversation the source conversation
      * @param participants active and former members, already hydrated
+     * @param pinned whether the requesting caller has pinned this conversation
+     * @param muted whether the requesting caller has muted this conversation
      * @return the conversation detail response
      */
-    @Mapping(source = "conversation.group", target = "isGroup")
     ConversationResponse toConversationResponse(
-            Conversation conversation, List<ParticipantResponse> participants);
+            Conversation conversation,
+            List<ParticipantResponse> participants,
+            boolean pinned,
+            boolean muted);
 
     /**
      * Builds one conversation-list row from the entity, its active participants, a
-     * separately-computed unread count, and its newest message preview.
+     * separately-computed unread count, its newest message preview, and the caller's own pin/mute
+     * state.
      *
      * @param conversation the source conversation
      * @param participants active members, already hydrated
      * @param unreadCount unread-message count for the requesting user, computed by the caller
      * @param lastMessage the conversation's newest message, or null if none yet
+     * @param pinned whether the requesting caller has pinned this conversation
+     * @param muted whether the requesting caller has muted this conversation
+     * @param manuallyUnread whether the requesting caller manually flagged this conversation unread
      * @return the conversation summary response
      */
     @Mapping(source = "conversation.id", target = "id")
-    @Mapping(source = "conversation.group", target = "isGroup")
     ConversationSummaryResponse toSummaryResponse(
             Conversation conversation,
             List<ParticipantResponse> participants,
             long unreadCount,
-            MessageResponse lastMessage);
+            MessageResponse lastMessage,
+            boolean pinned,
+            boolean muted,
+            boolean manuallyUnread);
 
     /**
      * Projects a message entity onto its API response shape, including a tombstoned one.
@@ -70,5 +82,42 @@ public interface MessageMapper {
      * @return the message response
      */
     @Mapping(source = "deleted", target = "isDeleted")
+    @Mapping(target = "media", ignore = true)
     MessageResponse toMessageResponse(Message message);
+
+    /**
+     * Projects a message together with its already-resolved media.
+     *
+     * <p>The asset is passed in rather than looked up here so a page of messages costs one batched
+     * query instead of one per row.
+     *
+     * @param message the source message
+     * @param media the resolved attachment, or null when the message carries none
+     * @return the message response
+     */
+    @Mapping(source = "message.deleted", target = "isDeleted")
+    @Mapping(source = "media", target = "media")
+    // Both sources expose mediaAssetId, so the message is named as the authority for it.
+    @Mapping(source = "message.mediaAssetId", target = "mediaAssetId")
+    MessageResponse toMessageResponse(Message message, MessageMediaResponse media);
+
+    /**
+     * Projects a media asset onto the subset a message needs.
+     *
+     * @param asset the resolved asset, or null
+     * @return the response, or null when no asset was supplied
+     */
+    default MessageMediaResponse toMediaResponse(MediaAsset asset) {
+        if (asset == null) {
+            return null;
+        }
+        return new MessageMediaResponse(
+                asset.getId(),
+                asset.getMediaType(),
+                asset.getCdnUrl(),
+                asset.getWidth(),
+                asset.getHeight(),
+                asset.getDuration(),
+                asset.getBlurhash());
+    }
 }

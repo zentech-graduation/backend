@@ -26,6 +26,7 @@ import com.app.modules.comment.messaging.CommentEventTypes;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.recommendation.client.GorseClient;
 import com.app.modules.recommendation.client.dto.GorseFeedback;
+import com.app.modules.recommendation.enums.UserEventType;
 import com.app.modules.recommendation.repository.UserEventJdbcRepository;
 import com.rabbitmq.client.Channel;
 
@@ -95,7 +96,7 @@ public class RecommendationFeedbackConsumer {
     }
 
     /** Mapping from a domain event type to its user_events enum value and Gorse feedback type. */
-    private record FeedbackMapping(String userEventType, String gorseFeedbackType) {}
+    private record FeedbackMapping(UserEventType userEventType, String gorseFeedbackType) {}
 
     /**
      * Consumes an engagement event and applies it idempotently to user_events and Gorse.
@@ -168,11 +169,14 @@ public class RecommendationFeedbackConsumer {
 
     private static FeedbackMapping mapEventType(String eventType) {
         return switch (eventType) {
-            case PostEventTypes.POST_LIKED_V1 -> new FeedbackMapping("post_like", "like");
-            case PostEventTypes.POST_SAVED_V1 -> new FeedbackMapping("post_save", "save");
-            case PostEventTypes.POST_VIEWED_V1 -> new FeedbackMapping("post_view", "read");
+            case PostEventTypes.POST_LIKED_V1 ->
+                    new FeedbackMapping(UserEventType.POST_LIKE, "like");
+            case PostEventTypes.POST_SAVED_V1 ->
+                    new FeedbackMapping(UserEventType.POST_SAVE, "save");
+            case PostEventTypes.POST_VIEWED_V1 ->
+                    new FeedbackMapping(UserEventType.POST_VIEW, "read");
             case CommentEventTypes.COMMENT_CREATED_V1 ->
-                    new FeedbackMapping("post_comment", "comment");
+                    new FeedbackMapping(UserEventType.POST_COMMENT, "comment");
             default -> throw new PermanentMessageException("unknown event type: " + eventType);
         };
     }

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -19,8 +20,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -29,8 +32,10 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
+import com.app.common.config.security.SecurityProperties;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.enums.OAuthProvider;
 import com.app.modules.auth.repository.OAuthAccountRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
@@ -49,16 +54,22 @@ class CustomOidcUserServiceTest {
     @Mock private UserStateValidator userStateValidator;
 
     private CustomOidcUserService service;
+    private MockHttpServletRequest oauthCallbackRequest;
 
     @BeforeEach
     void setUp() {
+        oauthCallbackRequest = new MockHttpServletRequest();
+        oauthCallbackRequest.setRemoteAddr("198.51.100.20");
         service =
                 new CustomOidcUserService(
                         oauthAccountRepository,
                         userRepository,
                         userCredentialRepository,
                         userSettingsRepository,
-                        userStateValidator);
+                        userStateValidator,
+                        new IpExtractor(
+                                new SecurityProperties(List.of("127.0.0.1"), 2048, "x".repeat(32))),
+                        oauthCallbackRequest);
     }
 
     private OidcUserRequest buildRequestForRegistrationId(String registrationId) {
@@ -176,6 +187,29 @@ class CustomOidcUserServiceTest {
         assertThat(result).isNotNull();
         verify(userRepository).save(any(User.class));
         verify(oauthAccountRepository).save(any());
+    }
+
+    // The OAuth path creates accounts too. Recording the origin on only the local signup path would
+    // leave registration_ip silently meaning "created by local signup" rather than "origin
+    // unknown".
+    @Test
+    void processOidcUser_newUserEmailVerified_recordsTheRegistrationOrigin() {
+        OidcUserRequest request = buildRequestForRegistrationId("google");
+        when(oauthAccountRepository.findByProviderAndProviderId(eq(OAuthProvider.GOOGLE), any()))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase("originuser@example.com"))
+                .thenReturn(Optional.empty());
+        when(userRepository.existsByUsername(any())).thenReturn(false);
+        when(userRepository.save(any(User.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        oauthCallbackRequest.setRemoteAddr("127.0.0.1");
+        oauthCallbackRequest.addHeader("X-Forwarded-For", "198.51.100.99");
+
+        service.processOidcUser(request, oidcUser("originuser@example.com", true));
+
+        ArgumentCaptor<User> created = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(created.capture());
+        assertThat(created.getValue().getRegistrationIp()).isEqualTo("198.51.100.99");
     }
 
     @Test

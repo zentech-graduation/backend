@@ -94,7 +94,12 @@ public interface ReportApi {
             summary = "List reports",
             description =
                     "Returns a cursor-paginated moderation queue filtered by status and target"
-                            + " type, ordered newest first. Requires MODERATOR or ADMIN.")
+                            + " type, ordered newest first. A moderator sees the open part of the"
+                            + " lifecycle only, pending and reviewing; asking for a closed or escalated"
+                            + " status returns an empty page rather than an error. An administrator"
+                            + " sees every status including escalated. The cursor is scoped per role, so"
+                            + " one issued to an administrator is rejected when replayed by a"
+                            + " moderator. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -158,7 +163,11 @@ public interface ReportApi {
     /** Returns one report for moderator or administrator review. */
     @Operation(
             summary = "Get report details",
-            description = "Returns one report by identifier. Requires MODERATOR or ADMIN.")
+            description =
+                    "Returns one report by identifier. Requires MODERATOR or ADMIN. A moderator"
+                            + " reads a pending or reviewing report, and any report it escalated"
+                            + " itself; every other report answers 404, matching the way the"
+                            + " listing hides them. An administrator reads every report.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -172,7 +181,7 @@ public interface ReportApi {
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "Report not found",
+                description = "Report not found, or outside a moderator's reach",
                 content =
                         @Content(
                                 mediaType = "application/json",
@@ -193,9 +202,12 @@ public interface ReportApi {
     @Operation(
             summary = "Update report status",
             description =
-                    "Starts review or closes a report while recording reviewer metadata."
-                            + " Resolution and dismissal require a note. Requires MODERATOR or"
-                            + " ADMIN.")
+                    "Claims a pending report for triage, moving it to reviewing and recording"
+                            + " reviewer metadata. This is the only transition this endpoint"
+                            + " performs. Resolving or dismissing a report is a moderation decision"
+                            + " that must be audited, so it is done through"
+                            + " /api/v1/admin/reports/{reportId}/resolve or /dismiss and is refused"
+                            + " here with 409. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "415",

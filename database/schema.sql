@@ -23,7 +23,7 @@ CREATE TYPE follow_status   AS ENUM ('pending', 'accepted');
 CREATE TYPE story_type      AS ENUM ('image', 'video');
 CREATE TYPE message_type    AS ENUM ('text', 'image', 'video', 'post_share', 'story_share');
 CREATE TYPE report_type     AS ENUM ('post', 'comment', 'user', 'story', 'message');
-CREATE TYPE report_status   AS ENUM ('pending', 'reviewing', 'resolved', 'dismissed');
+CREATE TYPE report_status   AS ENUM ('pending', 'reviewing', 'resolved', 'dismissed', 'escalated');
 CREATE TYPE report_reason   AS ENUM (
     'spam', 'nudity', 'violence', 'hate_speech',
     'harassment', 'false_information', 'scam', 'other'
@@ -33,14 +33,19 @@ CREATE TYPE notification_type AS ENUM (
     'comment_post', 'reply_comment',
     'follow', 'follow_request',
     'mention_post', 'mention_comment',
-    'story_view', 'message'
+    'story_view', 'message', 'warning'
 );
+CREATE TYPE hashtag_status  AS ENUM ('active', 'banned', 'deleted');
 CREATE TYPE oauth_provider  AS ENUM ('google', 'facebook', 'apple');
 CREATE TYPE admin_action_type AS ENUM (
     'ban_user', 'unban_user', 'suspend_user', 'unsuspend_user',
     'remove_post', 'restore_post',
     'remove_comment', 'restore_comment',
-    'resolve_report', 'dismiss_report'
+    'resolve_report', 'dismiss_report',
+    'change_user_role', 'force_logout',
+    'warn_user', 'revoke_warning', 'issue_strike', 'revoke_strike',
+    'escalate_report',
+    'create_hashtag', 'edit_hashtag', 'ban_hashtag', 'unban_hashtag', 'delete_hashtag'
 );
 CREATE TYPE event_type AS ENUM (
     'post_view', 'post_like', 'post_unlike',
@@ -65,6 +70,7 @@ CREATE TABLE users (
     display_name        VARCHAR(100),
     bio                 TEXT,
     avatar_url          TEXT,
+    banner_url          TEXT,
     website_url         TEXT,
     role                user_role       NOT NULL DEFAULT 'user',
     status              user_status     NOT NULL DEFAULT 'active',
@@ -74,6 +80,18 @@ CREATE TABLE users (
     follower_count      INT             NOT NULL DEFAULT 0 CHECK (follower_count >= 0),
     following_count     INT             NOT NULL DEFAULT 0 CHECK (following_count >= 0),
     post_count          INT             NOT NULL DEFAULT 0 CHECK (post_count >= 0),
+    -- Administrative visibility (V56). Written through IpExtractor, which honours
+    -- X-Forwarded-For only from a configured trusted proxy.
+    registration_ip     INET,
+    last_login_ip       INET,
+    -- Advances on a real login only, never on a token refresh
+    last_login_at       TIMESTAMPTZ,
+    -- Meaningful only while status = 'suspended'; NULL means indefinite
+    suspended_until     TIMESTAMPTZ,
+    -- Stamped into every access token at issuance and compared on every authenticated request
+    -- (V58). Advancing it invalidates every token already issued to the account. Written only by
+    -- the atomic increment in AdminUserRepository, never through the User entity.
+    token_epoch         INTEGER         NOT NULL DEFAULT 0,
     -- Timestamps
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -210,6 +228,9 @@ CREATE TABLE posts (
     caption             TEXT,
     post_type           post_type       NOT NULL DEFAULT 'image',
     status              post_status     NOT NULL DEFAULT 'published',
+    -- Status held before a moderation removal, so restore returns the post there instead of
+    -- publishing it (V59). Non-null only while the post sits removed by moderation.
+    status_before_moderation post_status,
     -- Denormalized counters for read performance
     like_count          INT             NOT NULL DEFAULT 0 CHECK (like_count >= 0),
     comment_count       INT             NOT NULL DEFAULT 0 CHECK (comment_count >= 0),
@@ -332,6 +353,12 @@ CREATE TABLE hashtags (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     name                VARCHAR(100)    UNIQUE NOT NULL,  -- stored without #
     post_count          INT             NOT NULL DEFAULT 0 CHECK (post_count >= 0),
+    -- 'deleted' is a state, never a row removal: deleting the row cascades to post_hashtags and
+    -- drives the post_count trigger over every post that used the tag.
+    status              hashtag_status  NOT NULL DEFAULT 'active',
+    status_note         TEXT,
+    status_at           TIMESTAMPTZ,
+    status_by           UUID            REFERENCES users(id) ON DELETE SET NULL,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
@@ -398,12 +425,12 @@ CREATE TABLE notifications (
 -- MODULE: DIRECT MESSAGE / CHAT
 -- ============================================================
 
--- A conversation can be 1-1 or group
+-- Every conversation is 1-1; group conversations were removed (see
+-- archived_group_conversations below). direct_pair_key is the two participants' user_id values
+-- in sorted order, enforced unique so a pair can never hold two separate threads.
 CREATE TABLE conversations (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    is_group            BOOLEAN         NOT NULL DEFAULT FALSE,
-    group_name          VARCHAR(100),
-    group_avatar_url    TEXT,
+    direct_pair_key     TEXT,
     created_by          UUID            REFERENCES users(id) ON DELETE SET NULL,
     last_message_at     TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -414,10 +441,13 @@ CREATE TABLE conversations (
 CREATE TABLE conversation_participants (
     conversation_id     UUID            NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    is_admin            BOOLEAN         NOT NULL DEFAULT FALSE,
     joined_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     left_at             TIMESTAMPTZ,
     last_read_at        TIMESTAMPTZ,    -- for unread badge calculation
+    pinned_at           TIMESTAMPTZ,    -- non-null pins the conversation to the top of this user's list
+    is_muted            BOOLEAN         NOT NULL DEFAULT FALSE,
+    nickname            VARCHAR(50),    -- this user's private label for the other participant
+    is_manually_unread  BOOLEAN         NOT NULL DEFAULT FALSE, -- visual-only flag, independent of last_read_at
     PRIMARY KEY (conversation_id, user_id)
 );
 
@@ -439,6 +469,45 @@ CREATE TABLE messages (
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
+-- Snapshot of every group conversation, its members, and its messages, taken before group chat
+-- was removed as a product decision. No foreign keys back into the live schema: these rows must
+-- outlive the conversations they describe.
+CREATE TABLE archived_group_conversations (
+    id                  UUID            PRIMARY KEY,
+    group_name          VARCHAR(100),
+    group_avatar_url    TEXT,
+    created_by          UUID,
+    last_message_at     TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ,
+    archived_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE archived_group_participants (
+    conversation_id     UUID            NOT NULL,
+    user_id             UUID            NOT NULL,
+    is_admin            BOOLEAN,
+    joined_at           TIMESTAMPTZ,
+    left_at             TIMESTAMPTZ,
+    last_read_at        TIMESTAMPTZ,
+    archived_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (conversation_id, user_id)
+);
+
+CREATE TABLE archived_group_messages (
+    id                  UUID            PRIMARY KEY,
+    conversation_id     UUID            NOT NULL,
+    sender_id           UUID,
+    message_type        TEXT,
+    content             TEXT,
+    media_asset_id      UUID,
+    shared_post_id      UUID,
+    shared_story_id     UUID,
+    reply_to_id         UUID,
+    is_deleted          BOOLEAN,
+    created_at          TIMESTAMPTZ,
+    archived_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
 -- ============================================================
 -- MODULE: REPORT (Content Flagging)
 -- ============================================================
@@ -454,6 +523,11 @@ CREATE TABLE reports (
     reviewed_by         UUID            REFERENCES users(id) ON DELETE SET NULL,
     reviewed_at         TIMESTAMPTZ,
     resolution_note     TEXT,
+    -- Escalation to an administrator (V65). Columns rather than a join to admin_actions, so
+    -- the queue read that shows the reason does not depend on the audit log.
+    escalated_by        UUID            REFERENCES users(id) ON DELETE SET NULL,
+    escalated_at        TIMESTAMPTZ,
+    escalation_reason   TEXT,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
@@ -472,6 +546,38 @@ CREATE TABLE admin_actions (
     reason                  TEXT,
     metadata                JSONB,
     created_at              TIMESTAMPTZ         NOT NULL DEFAULT NOW()
+);
+
+-- Warnings a moderator issues against an account. Three active warnings produce a strike.
+-- admin_action_id is NOT NULL: every row here is explained by an audit row written in the same
+-- transaction, and the foreign key is what makes that impossible to skip.
+-- reason_key references report_reason_configs, which is that table's only runtime reader.
+CREATE TABLE user_warnings (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    issued_by           UUID            REFERENCES users(id) ON DELETE SET NULL,
+    reason_key          VARCHAR(50)     NOT NULL REFERENCES report_reason_configs(reason_key),
+    note                TEXT            NOT NULL,
+    admin_action_id     UUID            NOT NULL REFERENCES admin_actions(id),
+    revoked_at          TIMESTAMPTZ,
+    revoked_by          UUID            REFERENCES users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    CONSTRAINT user_warnings_note_not_blank CHECK (length(btrim(note)) > 0)
+);
+
+-- Strikes, the consequence three active warnings produce.
+-- strike_number is CHECK (>= 1), deliberately not capped at 3: an administrator may unban a
+-- strike-3 account by hand, and a cap would make that account's next strike fail to insert.
+-- Strike 3 and every strike above it carry the same consequence, so a cap would buy nothing.
+CREATE TABLE user_strikes (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    strike_number       SMALLINT        NOT NULL CHECK (strike_number >= 1),
+    triggered_by        UUID            REFERENCES users(id) ON DELETE SET NULL,
+    admin_action_id     UUID            NOT NULL REFERENCES admin_actions(id),
+    revoked_at          TIMESTAMPTZ,
+    revoked_by          UUID            REFERENCES users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
@@ -704,7 +810,19 @@ INSERT INTO moderation_action_configs (action_key, display_name, requires_reason
     ('remove_comment',  'Remove Comment',  TRUE,  TRUE,  TRUE),
     ('restore_comment', 'Restore Comment', FALSE, TRUE,  TRUE),
     ('resolve_report',  'Resolve Report',  FALSE, FALSE, TRUE),
-    ('dismiss_report',  'Dismiss Report',  FALSE, FALSE, TRUE);
+    ('dismiss_report',  'Dismiss Report',  FALSE, FALSE, TRUE),
+    ('change_user_role', 'Change User Role', TRUE,  TRUE,  TRUE),
+    ('warn_user',        'Warn User',        TRUE,  TRUE,  TRUE),
+    ('revoke_warning',   'Revoke Warning',   FALSE, FALSE, TRUE),
+    ('issue_strike',     'Issue Strike',     TRUE,  TRUE,  TRUE),
+    ('revoke_strike',    'Revoke Strike',    FALSE, FALSE, TRUE),
+    ('escalate_report',  'Escalate Report',  TRUE,  FALSE, TRUE),
+    ('force_logout',     'Force Logout',     TRUE,  FALSE, TRUE),
+    ('create_hashtag',   'Create Hashtag',   FALSE, TRUE,  TRUE),
+    ('edit_hashtag',     'Edit Hashtag',     TRUE,  TRUE,  TRUE),
+    ('ban_hashtag',      'Ban Hashtag',      TRUE,  TRUE,  TRUE),
+    ('unban_hashtag',    'Unban Hashtag',    FALSE, TRUE,  TRUE),
+    ('delete_hashtag',   'Delete Hashtag',   TRUE,  FALSE, TRUE);
 
 -- Feature enable/disable control with optional environment scoping
 CREATE TABLE feature_flags (
@@ -717,7 +835,6 @@ CREATE TABLE feature_flags (
 );
 
 INSERT INTO feature_flags (flag_key, is_enabled, description, environment) VALUES
-    ('group_chat',       FALSE, 'Enable group conversation feature',                        'all'),
     ('recommendation',   FALSE, 'Enable personalized feed recommendation',                  'all'),
     ('story_reply',      TRUE,  'Allow users to reply to stories',                          'all'),
     ('maintenance_mode', FALSE, 'Put the application into read-only maintenance mode',      'all'),
@@ -776,6 +893,17 @@ CREATE UNIQUE INDEX idx_users_username_lower ON users (lower(username));
 -- major mail provider's practice. users_email_key (raw UNIQUE column constraint above) is retained
 -- as a structural guard and is implied by this index.
 CREATE UNIQUE INDEX idx_users_email_lower ON users (lower(email));
+-- Administrative account surface (V57). Built CONCURRENTLY by the migration; plain here because
+-- this file describes the final state rather than how to reach it on a live database.
+-- Email had no trigram index before this, so an administrator searching by address paid a parallel
+-- sequential scan of the whole table: measured at 77 ms against 200,000 rows, 0.3 ms with it.
+CREATE INDEX idx_users_email_trgm       ON users USING gin (email gin_trgm_ops);
+-- Turns a status-filtered account page from an Incremental Sort that discards over a thousand rows
+-- per page into a single index seek that carries the keyset tiebreaker.
+CREATE INDEX idx_users_status_created   ON users (status, created_at DESC, id DESC);
+-- Partial, so an indefinite suspension (null deadline) is absent from the index rather than
+-- filtered out of it. Bounds the reinstatement sweep's candidate scan.
+CREATE INDEX idx_users_suspended_until  ON users (suspended_until) WHERE suspended_until IS NOT NULL;
 
 -- follows
 CREATE INDEX idx_follows_following      ON follows (following_id, status, created_at DESC);
@@ -854,6 +982,8 @@ CREATE INDEX idx_comment_likes_user     ON comment_likes (user_id);
 CREATE INDEX idx_hashtags_name          ON hashtags USING btree (name);
 CREATE INDEX idx_hashtags_name_trgm     ON hashtags USING gin (name gin_trgm_ops);
 CREATE INDEX idx_hashtags_post_count    ON hashtags (post_count DESC);
+CREATE INDEX idx_hashtags_active_post_count ON hashtags (post_count DESC, name ASC) WHERE status = 'active';
+CREATE INDEX idx_hashtags_status_created    ON hashtags (status, created_at DESC, id DESC);
 CREATE INDEX idx_post_hashtags_tag      ON post_hashtags (hashtag_id, post_id);
 
 -- stories
@@ -875,6 +1005,11 @@ CREATE INDEX idx_notifications_unread    ON notifications (recipient_id, created
 
 -- conversations
 CREATE INDEX idx_conversations_updated  ON conversations (last_message_at DESC NULLS LAST);
+-- Every conversation is 1-1, so the pair key alone identifies it; losing this index would let a
+-- pair silently hold two separate threads.
+CREATE UNIQUE INDEX idx_conversations_direct_pair_key
+    ON conversations (direct_pair_key)
+    WHERE direct_pair_key IS NOT NULL;
 
 -- conversation_participants
 CREATE INDEX idx_conv_part_user         ON conversation_participants (user_id, last_read_at DESC)
@@ -889,10 +1024,24 @@ CREATE INDEX idx_messages_sender        ON messages (sender_id);
 CREATE INDEX idx_reports_status         ON reports (status, created_at DESC);
 CREATE INDEX idx_reports_entity         ON reports (entity_id, report_type);
 CREATE INDEX idx_reports_reporter       ON reports (reporter_id);
+-- Serves both readers of the escalated queue: the administrator listing, oldest first, and the
+-- counter that is the only signal an escalated report is waiting (V66).
+CREATE INDEX idx_reports_escalated      ON reports (created_at ASC, id ASC)
+    WHERE status = 'escalated';
 CREATE UNIQUE INDEX uq_reports_reporter_type_entity ON reports (reporter_id, report_type, entity_id);
 
 -- admin_actions
 CREATE INDEX idx_admin_actions_admin    ON admin_actions (admin_id, created_at DESC);
+
+CREATE INDEX idx_user_warnings_active   ON user_warnings (user_id, created_at DESC)
+    WHERE revoked_at IS NULL;
+CREATE INDEX idx_user_strikes_active    ON user_strikes (user_id, created_at DESC)
+    WHERE revoked_at IS NULL;
+-- Correctness guard, not a performance index: two concurrent warnings can both read an active
+-- count of two and both try to issue the same strike number. Partial on revoked_at IS NULL so
+-- revoking a strike frees its number for re-issue.
+CREATE UNIQUE INDEX uq_user_strikes_active_number ON user_strikes (user_id, strike_number)
+    WHERE revoked_at IS NULL;
 CREATE INDEX idx_admin_actions_target   ON admin_actions (target_user_id)
     WHERE target_user_id IS NOT NULL;
 
@@ -963,10 +1112,28 @@ CREATE TRIGGER trg_feature_flags_updated_at
     BEFORE UPDATE ON feature_flags
     FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
 
--- Follow counter maintenance
+-- Follow counter maintenance. Both users rows are locked in id order before either is written,
+-- so two people following each other back at the same instant queue behind each other instead
+-- of deadlocking on the opposite lock order.
 CREATE OR REPLACE FUNCTION fn_follow_counts()
 RETURNS TRIGGER AS $$
+DECLARE
+    follower_key  UUID;
+    following_key UUID;
 BEGIN
+    IF TG_OP = 'DELETE' THEN
+        follower_key  := OLD.follower_id;
+        following_key := OLD.following_id;
+    ELSE
+        follower_key  := NEW.follower_id;
+        following_key := NEW.following_id;
+    END IF;
+
+    PERFORM 1 FROM users
+    WHERE id IN (follower_key, following_key)
+    ORDER BY id
+    FOR NO KEY UPDATE;
+
     IF TG_OP = 'INSERT' AND NEW.status = 'accepted' THEN
         UPDATE users SET following_count = following_count + 1 WHERE id = NEW.follower_id;
         UPDATE users SET follower_count  = follower_count  + 1 WHERE id = NEW.following_id;

@@ -3,6 +3,7 @@ package com.app.modules.report.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,6 +32,7 @@ import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.mapper.ReportMapper;
 import com.app.modules.report.repository.ReportRepository;
+import com.app.modules.users.enums.UserRole;
 
 @ExtendWith(MockitoExtension.class)
 class ReportServiceImplTest {
@@ -148,10 +150,137 @@ class ReportServiceImplTest {
                 .thenReturn(List.of(report));
         when(reportMapper.toSummaryResponseList(List.of(report))).thenReturn(List.of(mapped));
 
-        var result = service.listReports(ReportStatus.PENDING, ReportType.POST, null, 20);
+        var result =
+                service.listReports(
+                        UserRole.ADMIN, ReportStatus.PENDING, ReportType.POST, null, 20);
 
         assertThat(result.getContent()).containsExactly(mapped);
         assertThat(result.getPageInfo().isHasNextPage()).isFalse();
+    }
+
+    @Test
+    void listReports_moderatorWithNoStatusFilter_narrowsToTheOpenStatuses() {
+        when(reportRepository.findFirstReportsByStatusIn(
+                        List.of(ReportStatus.PENDING, ReportStatus.REVIEWING), 21))
+                .thenReturn(List.of());
+
+        var result = service.listReports(UserRole.MODERATOR, null, null, null, 20);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(reportRepository)
+                .findFirstReportsByStatusIn(
+                        List.of(ReportStatus.PENDING, ReportStatus.REVIEWING), 21);
+        verify(reportRepository, never()).findFirstReports(anyInt());
+    }
+
+    @Test
+    void listReports_moderatorAskingForResolved_returnsAnEmptyPageWithoutQuerying() {
+        var result = service.listReports(UserRole.MODERATOR, ReportStatus.RESOLVED, null, null, 20);
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getPageInfo().isHasNextPage()).isFalse();
+        verify(reportRepository, never()).findFirstReportsByStatus(any(), anyInt());
+    }
+
+    @Test
+    void listReports_moderatorAskingForDismissed_returnsAnEmptyPageWithoutQuerying() {
+        var result =
+                service.listReports(UserRole.MODERATOR, ReportStatus.DISMISSED, null, null, 20);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(reportRepository, never()).findFirstReportsByStatus(any(), anyInt());
+    }
+
+    @Test
+    void listReports_moderatorAskingForEscalated_returnsAnEmptyPageWithoutQuerying() {
+        var result =
+                service.listReports(UserRole.MODERATOR, ReportStatus.ESCALATED, null, null, 20);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(reportRepository, never()).findFirstReportsByStatus(any(), anyInt());
+    }
+
+    @Test
+    void listReports_moderatorAskingForReviewing_queriesThatStatus() {
+        when(reportRepository.findFirstReportsByStatus(ReportStatus.REVIEWING, 21))
+                .thenReturn(List.of());
+
+        service.listReports(UserRole.MODERATOR, ReportStatus.REVIEWING, null, null, 20);
+
+        verify(reportRepository).findFirstReportsByStatus(ReportStatus.REVIEWING, 21);
+    }
+
+    @Test
+    void listReports_administratorWithNoStatusFilter_narrowsNothing() {
+        when(reportRepository.findFirstReports(21)).thenReturn(List.of());
+
+        service.listReports(UserRole.ADMIN, null, null, null, 20);
+
+        verify(reportRepository).findFirstReports(21);
+    }
+
+    @Test
+    void listReports_administratorAskingForEscalated_queriesThatStatus() {
+        when(reportRepository.findFirstReportsByStatus(ReportStatus.ESCALATED, 21))
+                .thenReturn(List.of());
+
+        service.listReports(UserRole.ADMIN, ReportStatus.ESCALATED, null, null, 20);
+
+        verify(reportRepository).findFirstReportsByStatus(ReportStatus.ESCALATED, 21);
+    }
+
+    @Test
+    void updateStatus_everyTransition_permitsOnlyPendingToReviewing() {
+        // The whole matrix rather than the arms that changed. Every other pair must be
+        // refused, including the ones that were never allowed, so a future arm added to the
+        // switch cannot quietly widen this endpoint back out.
+        for (ReportStatus current : ReportStatus.values()) {
+            for (ReportStatus target : ReportStatus.values()) {
+                boolean expectedAllowed =
+                        current == ReportStatus.PENDING && target == ReportStatus.REVIEWING;
+                UUID reportId = UUID.randomUUID();
+                Report report = Report.builder().id(reportId).status(current).build();
+                when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+                if (expectedAllowed) {
+                    when(reportRepository.save(report)).thenReturn(report);
+                    when(reportMapper.toResponse(report)).thenReturn(response(target));
+                }
+
+                UpdateReportStatusRequest request = new UpdateReportStatusRequest(target, "note");
+                if (expectedAllowed) {
+                    service.updateStatus(reportId, UUID.randomUUID(), request);
+                    assertThat(report.getStatus()).isEqualTo(target);
+                } else {
+                    assertThatThrownBy(
+                                    () ->
+                                            service.updateStatus(
+                                                    reportId, UUID.randomUUID(), request))
+                            .as("%s -> %s must be refused", current, target)
+                            .isInstanceOf(AppException.class)
+                            .extracting(ex -> ((AppException) ex).getErrorCode())
+                            .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
+                }
+            }
+        }
+    }
+
+    @Test
+    void updateStatus_escalatedReport_throwsInvalidTransition() {
+        UUID reportId = UUID.randomUUID();
+        Report report = Report.builder().id(reportId).status(ReportStatus.ESCALATED).build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(
+                        () ->
+                                service.updateStatus(
+                                        reportId,
+                                        UUID.randomUUID(),
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.REVIEWING, null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        verify(reportRepository, never()).save(any());
     }
 
     @Test
@@ -178,10 +307,79 @@ class ReportServiceImplTest {
         UUID reportId = UUID.randomUUID();
         when(reportRepository.findById(reportId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getReport(reportId))
+        assertThatThrownBy(() -> service.getReport(UserRole.MODERATOR, UUID.randomUUID(), reportId))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.REPORT_NOT_FOUND);
+    }
+
+    @Test
+    void getReport_moderatorAndClosedReportItDidNotEscalate_throwsNotFound() {
+        UUID reportId = UUID.randomUUID();
+        Report report =
+                Report.builder()
+                        .id(reportId)
+                        .status(ReportStatus.RESOLVED)
+                        .escalatedBy(UUID.randomUUID())
+                        .build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(() -> service.getReport(UserRole.MODERATOR, UUID.randomUUID(), reportId))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_NOT_FOUND);
+    }
+
+    @Test
+    void getReport_moderatorAndReportItEscalated_returnsReport() {
+        UUID reportId = UUID.randomUUID();
+        UUID moderatorId = UUID.randomUUID();
+        Report report =
+                Report.builder()
+                        .id(reportId)
+                        .status(ReportStatus.ESCALATED)
+                        .escalatedBy(moderatorId)
+                        .build();
+        ReportResponse mapped = response(ReportStatus.ESCALATED);
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+        when(reportMapper.toResponse(report)).thenReturn(mapped);
+
+        assertThat(service.getReport(UserRole.MODERATOR, moderatorId, reportId)).isEqualTo(mapped);
+    }
+
+    @Test
+    void getReport_moderatorAndOpenReport_returnsReport() {
+        for (ReportStatus status : List.of(ReportStatus.PENDING, ReportStatus.REVIEWING)) {
+            UUID reportId = UUID.randomUUID();
+            Report report = Report.builder().id(reportId).status(status).build();
+            ReportResponse mapped = response(status);
+            when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+            when(reportMapper.toResponse(report)).thenReturn(mapped);
+
+            assertThat(service.getReport(UserRole.MODERATOR, UUID.randomUUID(), reportId))
+                    .as("moderator reading a %s report", status)
+                    .isEqualTo(mapped);
+        }
+    }
+
+    @Test
+    void getReport_administrator_readsEveryStatus() {
+        for (ReportStatus status : ReportStatus.values()) {
+            UUID reportId = UUID.randomUUID();
+            Report report =
+                    Report.builder()
+                            .id(reportId)
+                            .status(status)
+                            .escalatedBy(UUID.randomUUID())
+                            .build();
+            ReportResponse mapped = response(status);
+            when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+            when(reportMapper.toResponse(report)).thenReturn(mapped);
+
+            assertThat(service.getReport(UserRole.ADMIN, UUID.randomUUID(), reportId))
+                    .as("administrator reading a %s report", status)
+                    .isEqualTo(mapped);
+        }
     }
 
     @Test
@@ -203,9 +401,9 @@ class ReportServiceImplTest {
     }
 
     @Test
-    void updateStatus_terminalWithoutNote_throwsResolutionNoteRequired() {
+    void updateStatus_pendingToResolved_throwsInvalidTransition() {
         UUID reportId = UUID.randomUUID();
-        Report report = Report.builder().id(reportId).status(ReportStatus.REVIEWING).build();
+        Report report = Report.builder().id(reportId).status(ReportStatus.PENDING).build();
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
 
         assertThatThrownBy(
@@ -213,15 +411,35 @@ class ReportServiceImplTest {
                                 service.updateStatus(
                                         reportId,
                                         UUID.randomUUID(),
-                                        new UpdateReportStatusRequest(ReportStatus.RESOLVED, " ")))
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.RESOLVED, "Handled")))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.REPORT_RESOLUTION_NOTE_REQUIRED);
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
         verify(reportRepository, never()).save(any());
     }
 
     @Test
-    void updateStatus_dismissedWithoutNote_throwsResolutionNoteRequired() {
+    void updateStatus_pendingToDismissed_throwsInvalidTransition() {
+        UUID reportId = UUID.randomUUID();
+        Report report = Report.builder().id(reportId).status(ReportStatus.PENDING).build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(
+                        () ->
+                                service.updateStatus(
+                                        reportId,
+                                        UUID.randomUUID(),
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.DISMISSED, "Not actionable")))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_reviewingToResolved_throwsInvalidTransition() {
         UUID reportId = UUID.randomUUID();
         Report report = Report.builder().id(reportId).status(ReportStatus.REVIEWING).build();
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
@@ -232,10 +450,29 @@ class ReportServiceImplTest {
                                         reportId,
                                         UUID.randomUUID(),
                                         new UpdateReportStatusRequest(
-                                                ReportStatus.DISMISSED, null)))
+                                                ReportStatus.RESOLVED, "Handled")))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ApiErrorCode.REPORT_RESOLUTION_NOTE_REQUIRED);
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_reviewingToDismissed_throwsInvalidTransition() {
+        UUID reportId = UUID.randomUUID();
+        Report report = Report.builder().id(reportId).status(ReportStatus.REVIEWING).build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(
+                        () ->
+                                service.updateStatus(
+                                        reportId,
+                                        UUID.randomUUID(),
+                                        new UpdateReportStatusRequest(
+                                                ReportStatus.DISMISSED, "Not actionable")))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.REPORT_INVALID_TRANSITION);
         verify(reportRepository, never()).save(any());
     }
 

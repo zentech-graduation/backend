@@ -54,7 +54,7 @@ class TokenPrincipalResolverImplTest {
 
     @Test
     void resolve_activeUser_returnsPrincipal() {
-        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 0, Instant.now().plusSeconds(300));
         UserSecurityProjection projection = buildProjection(UserStatus.ACTIVE);
         UserPrincipal principal = new UserPrincipal(USER_ID, "user@example.com", "USER", "ACTIVE");
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
@@ -70,7 +70,7 @@ class TokenPrincipalResolverImplTest {
 
     @Test
     void resolve_blacklistedJti_returnsEmpty() {
-        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 0, Instant.now().plusSeconds(300));
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(true);
 
@@ -81,7 +81,7 @@ class TokenPrincipalResolverImplTest {
 
     @Test
     void resolve_bannedUser_returnsEmpty() {
-        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 0, Instant.now().plusSeconds(300));
         UserSecurityProjection projection = buildProjection(UserStatus.BANNED);
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
@@ -95,7 +95,7 @@ class TokenPrincipalResolverImplTest {
 
     @Test
     void resolve_suspendedUser_returnsEmpty() {
-        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 0, Instant.now().plusSeconds(300));
         UserSecurityProjection projection = buildProjection(UserStatus.SUSPENDED);
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
@@ -109,7 +109,7 @@ class TokenPrincipalResolverImplTest {
 
     @Test
     void resolve_deactivatedUser_returnsEmpty() {
-        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 0, Instant.now().plusSeconds(300));
         UserSecurityProjection projection = buildProjection(UserStatus.DEACTIVATED);
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
@@ -123,7 +123,7 @@ class TokenPrincipalResolverImplTest {
 
     @Test
     void resolve_userNotFoundOrSoftDeleted_returnsEmpty() {
-        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, Instant.now().plusSeconds(300));
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 0, Instant.now().plusSeconds(300));
         when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
         when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
         when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
@@ -156,6 +156,75 @@ class TokenPrincipalResolverImplTest {
         assertThat(result).isEmpty();
         assertThat(appender.list)
                 .anyMatch(event -> event.getFormattedMessage().contains("AUTH_TOKEN_INVALID"));
+    }
+
+    @Test
+    void resolve_tokenEpochBehindUserRow_returnsEmpty() {
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 0, Instant.now().plusSeconds(300));
+        UserSecurityProjection projection = buildProjection(UserStatus.ACTIVE, 1);
+        when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
+        when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(projection));
+
+        Optional<UserPrincipal> result = resolver.resolve(TOKEN);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void resolve_tokenEpochMatchesUserRow_returnsPrincipal() {
+        JwtClaims claims = new JwtClaims(USER_ID, "USER", JTI, 4, Instant.now().plusSeconds(300));
+        UserSecurityProjection projection = buildProjection(UserStatus.ACTIVE, 4);
+        UserPrincipal principal = new UserPrincipal(USER_ID, "user@example.com", "USER", "ACTIVE");
+        when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
+        when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(projection));
+        when(securityMapper.toUserPrincipal(projection)).thenReturn(principal);
+
+        Optional<UserPrincipal> result = resolver.resolve(TOKEN);
+
+        assertThat(result).contains(principal);
+    }
+
+    @Test
+    void resolve_missingEpochClaim_isReadAsZeroAndAccepted() {
+        JwtClaims claims =
+                new JwtClaims(USER_ID, "USER", JTI, null, Instant.now().plusSeconds(300));
+        UserSecurityProjection projection = buildProjection(UserStatus.ACTIVE, 0);
+        UserPrincipal principal = new UserPrincipal(USER_ID, "user@example.com", "USER", "ACTIVE");
+        when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
+        when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(projection));
+        when(securityMapper.toUserPrincipal(projection)).thenReturn(principal);
+
+        Optional<UserPrincipal> result = resolver.resolve(TOKEN);
+
+        assertThat(result).contains(principal);
+    }
+
+    @Test
+    void resolve_missingEpochClaimAgainstAdvancedUserRow_returnsEmpty() {
+        JwtClaims claims =
+                new JwtClaims(USER_ID, "USER", JTI, null, Instant.now().plusSeconds(300));
+        UserSecurityProjection projection = buildProjection(UserStatus.ACTIVE, 2);
+        when(jwtTokenProvider.validateAndParse(TOKEN)).thenReturn(claims);
+        when(tokenBlacklistService.isBlacklisted(JTI)).thenReturn(false);
+        when(userRepository.findProjectedByIdAndDeletedAtIsNull(USER_ID))
+                .thenReturn(Optional.of(projection));
+
+        Optional<UserPrincipal> result = resolver.resolve(TOKEN);
+
+        assertThat(result).isEmpty();
+    }
+
+    private static UserSecurityProjection buildProjection(UserStatus status, int tokenEpoch) {
+        UserSecurityProjection projection = mock(UserSecurityProjection.class);
+        when(projection.getStatus()).thenReturn(status);
+        when(projection.getTokenEpoch()).thenReturn(tokenEpoch);
+        return projection;
     }
 
     private static UserSecurityProjection buildProjection(UserStatus status) {

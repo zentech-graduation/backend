@@ -21,6 +21,7 @@ public final class ApiConstants {
         public static final String VERIFY_EMAIL = "/verify-email";
         public static final String RESEND_VERIFY = "/verify-email/resend";
         public static final String OAUTH2_EXCHANGE = "/oauth2/exchange";
+        public static final String WS_TICKET = "/ws-ticket";
     }
 
     public static final class Users {
@@ -32,6 +33,7 @@ public final class ApiConstants {
         public static final String BY_USERNAME = "/by-username/{username}";
         public static final String SEARCH = "/search";
         public static final String ME_SETTINGS = "/me/settings";
+        public static final String ME_WARNINGS = "/me/warnings";
     }
 
     public static final class Posts {
@@ -71,6 +73,7 @@ public final class ApiConstants {
         public static final String USER_STORIES = "/user/{userId}";
         public static final String FEED = "/feed";
         public static final String VIEWS = "/{storyId}/views";
+        public static final String LIKES = "/{storyId}/likes";
     }
 
     public static final class Social {
@@ -93,14 +96,14 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/conversations";
         public static final String BY_ID = "/{conversationId}";
-        public static final String GROUP = "/group";
         public static final String CONVERSATION_MESSAGES = "/{conversationId}/messages";
         public static final String MESSAGE_BY_ID = "/{conversationId}/messages/{messageId}";
-        public static final String PARTICIPANTS = "/{conversationId}/participants";
-        public static final String PARTICIPANT_BY_ID = "/{conversationId}/participants/{userId}";
-        public static final String LEAVE = "/{conversationId}/leave";
         public static final String READ = "/{conversationId}/read";
+        public static final String UNREAD = "/{conversationId}/unread";
         public static final String UNREAD_COUNT = "/unread-count";
+        public static final String PIN = "/{conversationId}/pin";
+        public static final String MUTE = "/{conversationId}/mute";
+        public static final String NICKNAME = "/{conversationId}/nickname";
     }
 
     public static final class Notifications {
@@ -149,6 +152,15 @@ public final class ApiConstants {
         private Admin() {}
 
         public static final String ROOT = ADMIN;
+        public static final String USERS = "/users";
+        // Declared before USER_BY_ID for readability only. The literal segment wins over the
+        // "/users/{userId}" template in Spring MVC's pattern comparator regardless of declaration
+        // order, and both live under the ADMIN-only "/api/v1/admin/users/**" matcher, so no
+        // authorization outcome depends on which one matches.
+        public static final String USER_SEARCH = "/users/search";
+        public static final String USER_BY_ID = "/users/{userId}";
+        public static final String USER_ROLE = "/users/{userId}/role";
+        public static final String USER_FORCE_LOGOUT = "/users/{userId}/force-logout";
         public static final String BAN_USER = "/users/{userId}/ban";
         public static final String UNBAN_USER = "/users/{userId}/unban";
         public static final String SUSPEND_USER = "/users/{userId}/suspend";
@@ -159,8 +171,45 @@ public final class ApiConstants {
         public static final String RESTORE_COMMENT = "/comments/{commentId}/restore";
         public static final String RESOLVE_REPORT = "/reports/{reportId}/resolve";
         public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
+        public static final String ESCALATE_REPORT = "/reports/{reportId}/escalate";
+        // Anchored on the report, never on the entity. An endpoint taking a bare entity
+        // identifier here would be a universal privacy bypass rather than a moderation
+        // tool: the report is what limits a moderator to what somebody has flagged.
+        public static final String REPORT_TARGET = "/reports/{reportId}/target";
+        // Literal segments, so no template can shadow it whatever the matcher ordering.
+        public static final String ESCALATED_REPORT_COUNT = "/reports/escalated/count";
+        // A literal segment outside the "/users/**" sub-tree, so the broader "/api/v1/admin/**"
+        // matcher applies and admits a moderator. The activity log is administrator-only, which
+        // method-level @PreAuthorize on the controller enforces, as the hashtag registry does.
+        public static final String USER_EVENTS = "/user-events";
+        // Literal segments outside the "/users/**" sub-tree, so the broader "/api/v1/admin/**"
+        // matcher applies and admits a moderator. Both are administrator-only, which method-level
+        // @PreAuthorize on the controller enforces.
+        public static final String STATS_CURRENT = "/stats/current";
+        public static final String STATS_TIMESERIES = "/stats/timeseries";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
-        public static final String ACTIONS_FOR_USER = "/users/{userId}/actions";
+        // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the
+        // ADMIN-only matcher, and audit reads stay available to moderators. Keeping the path split
+        // structural means no matcher-ordering subtlety decides authorization.
+        public static final String ACTIONS_FOR_USER = "/actions/for-user/{userId}";
+        // Outside the "/users/**" sub-tree for the same structural reason as ACTIONS_FOR_USER: that
+        // sub-tree is reserved for the ADMIN-only matcher, and warning and violation reads are
+        // moderator work. Putting them under "/users/" would mean adding exceptions ahead of that
+        // matcher, which is precisely the ordering subtlety the split exists to avoid.
+        // Under /api/v1/admin/ but outside the /users/** sub-tree, so the broader
+        // "/api/v1/admin/**" matcher applies and admits a moderator. These endpoints are
+        // administrator-only, which method-level @PreAuthorize on the controller enforces, the same
+        // way the administrator-only warning and strike revocations do.
+        public static final String HASHTAGS = "/hashtags";
+        // Declared before HASHTAG_BY_ID for readability only. The literal segment wins over the
+        // "/hashtags/{hashtagId}" template in Spring MVC's pattern comparator regardless of
+        // declaration order, and the two carry different HTTP methods in any case.
+        public static final String HASHTAG_SEARCH = "/hashtags/search";
+        public static final String HASHTAG_BY_ID = "/hashtags/{hashtagId}";
+        public static final String WARN_USER = "/warnings/for-user/{userId}";
+        public static final String VIOLATIONS_FOR_USER = "/violations/for-user/{userId}";
+        public static final String REVOKE_WARNING = "/warnings/{warningId}";
+        public static final String REVOKE_STRIKE = "/strikes/{strikeId}";
     }
 }

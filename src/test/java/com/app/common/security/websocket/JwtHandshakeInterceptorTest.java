@@ -6,6 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
@@ -26,9 +28,12 @@ import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.mock.web.MockHttpServletRequest;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.common.security.service.TokenPrincipalResolver;
 import com.app.common.security.user.UserPrincipal;
 import com.app.common.security.util.IpExtractor;
+import com.app.modules.auth.service.WebSocketTicketService;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -39,6 +44,7 @@ import ch.qos.logback.core.read.ListAppender;
 class JwtHandshakeInterceptorTest {
 
     @Mock private TokenPrincipalResolver tokenPrincipalResolver;
+    @Mock private WebSocketTicketService webSocketTicketService;
     @Mock private IpExtractor ipExtractor;
 
     private JwtHandshakeInterceptor interceptor;
@@ -48,7 +54,9 @@ class JwtHandshakeInterceptorTest {
 
     @BeforeEach
     void setUp() {
-        interceptor = new JwtHandshakeInterceptor(tokenPrincipalResolver, ipExtractor);
+        interceptor =
+                new JwtHandshakeInterceptor(
+                        tokenPrincipalResolver, webSocketTicketService, ipExtractor);
 
         logAppender = new ListAppender<>();
         logAppender.start();
@@ -62,11 +70,47 @@ class JwtHandshakeInterceptorTest {
     }
 
     @Test
+    void handshake_validTicket_redeemsItAndStoresTheRecoveredToken() throws Exception {
+        // The ticket is redeemed server-side and the raw token is what lands in the attributes:
+        // WebSocketRevocationSweepService re-resolves that value to decide whether a live session
+        // is still authenticated, so storing the ticket instead would silently break revocation.
+        UserPrincipal principal = new UserPrincipal(UUID.randomUUID(), null, "USER", "ACTIVE");
+        when(webSocketTicketService.consumeTicket("good-ticket")).thenReturn(TOKEN);
+        when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.of(principal));
+
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+        Map<String, Object> attrs = new HashMap<>();
+
+        boolean result =
+                interceptor.beforeHandshake(
+                        requestWithTicket("good-ticket"), response, null, attrs);
+
+        assertThat(result).isTrue();
+        assertThat(attrs).containsEntry(JwtHandshakeInterceptor.TOKEN_ATTRIBUTE, TOKEN);
+        assertThat(attrs).containsEntry(JwtHandshakeInterceptor.PRINCIPAL_ATTRIBUTE, principal);
+    }
+
+    @Test
+    void handshake_redeemedOrUnknownTicket_returnsFalse() throws Exception {
+        when(webSocketTicketService.consumeTicket("used"))
+                .thenThrow(new AppException(ApiErrorCode.AUTH_TOKEN_INVALID));
+
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+
+        boolean result =
+                interceptor.beforeHandshake(
+                        requestWithTicket("used"), response, null, new HashMap<>());
+
+        assertThat(result).isFalse();
+        verify(response).setStatusCode(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void handshake_resolvedPrincipal_returnsTrue() throws Exception {
         UserPrincipal principal = new UserPrincipal(UUID.randomUUID(), null, "USER", "ACTIVE");
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.of(principal));
 
-        ServerHttpRequest request = requestWithToken(TOKEN);
+        ServerHttpRequest request = requestWithRedeemableTicket(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
         Map<String, Object> attrs = new HashMap<>();
 
@@ -81,7 +125,7 @@ class JwtHandshakeInterceptorTest {
     void handshake_blacklistedToken_returnsFalse() throws Exception {
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.empty());
 
-        ServerHttpRequest request = requestWithToken(TOKEN);
+        ServerHttpRequest request = requestWithRedeemableTicket(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
@@ -106,7 +150,7 @@ class JwtHandshakeInterceptorTest {
     void handshake_invalidToken_returnsFalse() throws Exception {
         when(tokenPrincipalResolver.resolve("bad-token")).thenReturn(Optional.empty());
 
-        ServerHttpRequest request = requestWithToken("bad-token");
+        ServerHttpRequest request = requestWithRedeemableTicket("bad-token");
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
@@ -118,7 +162,7 @@ class JwtHandshakeInterceptorTest {
     void handshake_nonActiveAccountValidToken_returnsFalse() throws Exception {
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.empty());
 
-        ServerHttpRequest request = requestWithToken(TOKEN);
+        ServerHttpRequest request = requestWithRedeemableTicket(TOKEN);
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
         boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
@@ -150,12 +194,15 @@ class JwtHandshakeInterceptorTest {
         assertThat(event.getLevel()).isEqualTo(Level.WARN);
         assertThat(event.getFormattedMessage())
                 .contains("endpoint=/ws/notifications")
-                .contains("reason=missing_token")
+                .contains("reason=missing_credential")
                 .contains("remoteAddress=203.0.113.7");
     }
 
     @Test
     void handshake_resolverRejects_logsWarnWithEndpointAndRemoteAddress() {
+        // The ticket redeems fine; it is the resolver that declines, so the logged reason must be
+        // "rejected" rather than the missing-credential case.
+        when(webSocketTicketService.consumeTicket("redeemable")).thenReturn(TOKEN);
         when(tokenPrincipalResolver.resolve(TOKEN)).thenReturn(Optional.empty());
         MockHttpServletRequest servletRequest = new MockHttpServletRequest("GET", "/ws/comments");
         servletRequest.setRemoteAddr("198.51.100.9");
@@ -164,7 +211,7 @@ class JwtHandshakeInterceptorTest {
                 new ServletServerHttpRequest(servletRequest) {
                     @Override
                     public URI getURI() {
-                        return URI.create("ws://localhost/ws/comments?token=" + TOKEN);
+                        return URI.create("ws://localhost/ws/comments?ticket=redeemable");
                     }
                 };
         ServerHttpResponse response = mock(ServerHttpResponse.class);
@@ -183,9 +230,57 @@ class JwtHandshakeInterceptorTest {
         assertThat(event.getFormattedMessage()).doesNotContain(TOKEN);
     }
 
-    private static ServerHttpRequest requestWithToken(String token) {
+    @Test
+    void handshake_missingToken_nonServletRequest_logsRemoteAddressFromSocketAddress()
+            throws Exception {
         ServerHttpRequest request = mock(ServerHttpRequest.class);
-        when(request.getURI()).thenReturn(URI.create("ws://localhost/ws/comments?token=" + token));
+        when(request.getURI()).thenReturn(URI.create("ws://localhost/ws/comments"));
+        when(request.getRemoteAddress())
+                .thenReturn(new InetSocketAddress(InetAddress.getByName("192.0.2.10"), 5000));
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+
+        boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
+
+        assertThat(result).isFalse();
+        List<ILoggingEvent> events = logAppender.list;
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getFormattedMessage()).contains("remoteAddress=192.0.2.10");
+    }
+
+    @Test
+    void handshake_missingToken_nonServletRequestWithNullSocketAddress_logsUnknown() {
+        ServerHttpRequest request = mock(ServerHttpRequest.class);
+        when(request.getURI()).thenReturn(URI.create("ws://localhost/ws/comments"));
+        when(request.getRemoteAddress()).thenReturn(null);
+        ServerHttpResponse response = mock(ServerHttpResponse.class);
+
+        boolean result = interceptor.beforeHandshake(request, response, null, new HashMap<>());
+
+        assertThat(result).isFalse();
+        List<ILoggingEvent> events = logAppender.list;
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getFormattedMessage()).contains("remoteAddress=unknown");
+    }
+
+    private static ServerHttpRequest requestWithTicket(String ticket) {
+        ServerHttpRequest request = mock(ServerHttpRequest.class);
+        when(request.getURI())
+                .thenReturn(URI.create("ws://localhost/ws/comments?ticket=" + ticket));
+        return request;
+    }
+
+    /**
+     * Builds a handshake carrying a ticket that redeems to {@code token}.
+     *
+     * <p>A raw {@code token} parameter is no longer honoured, so a test about what the resolver
+     * does with a credential has to hand that credential over the way a real client now does.
+     */
+    private ServerHttpRequest requestWithRedeemableTicket(String token) {
+        String ticket = "ticket-for-" + token;
+        when(webSocketTicketService.consumeTicket(ticket)).thenReturn(token);
+        ServerHttpRequest request = mock(ServerHttpRequest.class);
+        when(request.getURI())
+                .thenReturn(URI.create("ws://localhost/ws/comments?ticket=" + ticket));
         return request;
     }
 }

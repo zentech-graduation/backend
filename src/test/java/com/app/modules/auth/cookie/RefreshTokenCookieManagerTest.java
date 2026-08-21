@@ -35,7 +35,7 @@ class RefreshTokenCookieManagerTest {
     void write_maxAgeIsDerivedFromRefreshTokenTtl() {
         MockHttpServletResponse response = new MockHttpServletResponse();
         RefreshCookieProperties cookieProperties =
-                new RefreshCookieProperties("luvax_refresh", "/api/v1/auth", true, "Lax");
+                new RefreshCookieProperties("luvax_refresh", "/api/v1/auth", true, "Lax", false);
         JwtProperties jwtProperties =
                 new JwtProperties("secret", "issuer", "audience", 900L, 1234L);
 
@@ -138,7 +138,14 @@ class RefreshTokenCookieManagerTest {
 
     private static RefreshTokenCookieManager manager(boolean secure, String sameSite) {
         RefreshCookieProperties cookieProperties =
-                new RefreshCookieProperties("luvax_refresh", "/api/v1/auth", secure, sameSite);
+                new RefreshCookieProperties(
+                        "luvax_refresh",
+                        "/api/v1/auth",
+                        secure,
+                        sameSite,
+                        // Mirrors the acknowledgement the validator requires for None, so the
+                        // constructed value is one the binder would actually accept.
+                        "None".equals(sameSite));
         JwtProperties jwtProperties =
                 new JwtProperties("secret", "issuer", "audience", 900L, REFRESH_TTL_SECONDS);
         return new RefreshTokenCookieManager(cookieProperties, jwtProperties);

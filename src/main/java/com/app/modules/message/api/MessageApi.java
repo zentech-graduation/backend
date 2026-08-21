@@ -1,6 +1,5 @@
 package com.app.modules.message.api;
 
-import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -10,9 +9,9 @@ import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,15 +22,12 @@ import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.config.openapi.MalformedBodyErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
-import com.app.modules.message.dto.request.AddParticipantsRequest;
 import com.app.modules.message.dto.request.CreateDirectConversationRequest;
-import com.app.modules.message.dto.request.CreateGroupRequest;
 import com.app.modules.message.dto.request.SendMessageRequest;
-import com.app.modules.message.dto.request.UpdateGroupRequest;
+import com.app.modules.message.dto.request.SetNicknameRequest;
 import com.app.modules.message.dto.response.ConversationResponse;
 import com.app.modules.message.dto.response.ConversationSummaryResponse;
 import com.app.modules.message.dto.response.MessageResponse;
-import com.app.modules.message.dto.response.ParticipantResponse;
 import com.app.modules.message.dto.response.UnreadCountResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -74,42 +70,6 @@ public interface MessageApi {
     @PostMapping(ApiConstants.Messages.ROOT)
     ResponseEntity<ApiResponse<ConversationResponse>> createDirectConversation(
             @Valid @RequestBody CreateDirectConversationRequest request);
-
-    @Operation(
-            summary = "Create a group conversation",
-            description =
-                    "Creates a group conversation with the caller as its first admin. Requires"
-                            + " authentication.")
-    @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "415",
-                description = "Request body was sent with an unsupported Content-Type",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "201",
-                description = "Group conversation created"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "403",
-                description = "Group chat is disabled",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "Invalid participant list",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
-    })
-    @AuthenticationRequiredResponse
-    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.GROUP)
-    ResponseEntity<ApiResponse<ConversationResponse>> createGroupConversation(
-            @Valid @RequestBody CreateGroupRequest request);
 
     @Operation(
             summary = "List the caller's conversations",
@@ -165,149 +125,33 @@ public interface MessageApi {
             @PathVariable("conversationId") UUID conversationId);
 
     @Operation(
-            summary = "Rename a group or change its avatar",
+            summary = "Delete a conversation for the caller",
             description =
-                    "Updates a group conversation's name and/or avatar; fields left null are"
-                            + " unchanged. Requires authentication as an active group admin.")
+                    "Deletes a conversation from the caller's own inbox only, leaving the other"
+                            + " participant and the message history untouched. A new message from"
+                            + " them reactivates it. Requires authentication as an active"
+                            + " participant.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Group updated"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "403",
-                description = "Caller is not an active group admin",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "409",
-                description = "Conversation is not a group",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
-    })
-    @MalformedBodyErrorResponses
-    @AuthenticationRequiredResponse
-    @PatchMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
-    ResponseEntity<ApiResponse<ConversationResponse>> updateGroup(
-            @PathVariable("conversationId") UUID conversationId,
-            @Valid @RequestBody UpdateGroupRequest request);
-
-    @Operation(
-            summary = "List a conversation's members",
-            description =
-                    "Lists a conversation's active and former members. Requires authentication as"
-                            + " an active participant.")
-    @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Member list"),
+                description = "Conversation deleted for the caller"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "Caller is not an active participant",
                 content =
                         @Content(
                                 mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
-    })
-    @AuthenticationRequiredResponse
-    @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
-    ResponseEntity<ApiResponse<List<ParticipantResponse>>> listParticipants(
-            @PathVariable("conversationId") UUID conversationId);
-
-    @Operation(
-            summary = "Add members to a group",
-            description =
-                    "Adds members to a group conversation; an already-active member is a no-op and"
-                            + " a former member is reactivated. Requires authentication as an"
-                            + " active group admin.")
-    @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Members added"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "403",
-                description = "Caller is not an active group admin",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "409",
-                description = "Conversation is not a group",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
-    })
-    @MalformedBodyErrorResponses
-    @AuthenticationRequiredResponse
-    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANTS)
-    ResponseEntity<ApiResponse<Void>> addParticipants(
-            @PathVariable("conversationId") UUID conversationId,
-            @Valid @RequestBody AddParticipantsRequest request);
-
-    @Operation(
-            summary = "Remove a member from a group",
-            description =
-                    "Removes an active member from a group conversation by setting their departure"
-                            + " timestamp; membership history is preserved. Requires"
-                            + " authentication as an active group admin.")
-    @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "409",
-                description = "Target is the last remaining admin of the group",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Member removed"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "403",
-                description = "Caller is not an active group admin",
-                content =
-                        @Content(
-                                mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "Target is not an active member",
+                description = "Conversation not found",
                 content =
                         @Content(
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class)))
     })
     @AuthenticationRequiredResponse
-    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PARTICIPANT_BY_ID)
-    ResponseEntity<ApiResponse<Void>> removeParticipant(
-            @PathVariable("conversationId") UUID conversationId,
-            @PathVariable("userId") UUID userId);
-
-    @Operation(
-            summary = "Leave a conversation",
-            description =
-                    "Leaves a conversation by setting the caller's own departure timestamp;"
-                            + " idempotent. If the caller was a group's last active admin, the"
-                            + " oldest remaining active member is promoted. Requires"
-                            + " authentication.")
-    @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "Left the conversation"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "403",
-                description = "Caller was never a participant",
-                content =
-                        @Content(
-                                mediaType = "application/json",
-                                schema = @Schema(implementation = ApiResponse.class)))
-    })
-    @AuthenticationRequiredResponse
-    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.LEAVE)
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.BY_ID)
     ResponseEntity<ApiResponse<Void>> leaveConversation(
             @PathVariable("conversationId") UUID conversationId);
 
@@ -431,6 +275,29 @@ public interface MessageApi {
     ResponseEntity<ApiResponse<Void>> markRead(@PathVariable("conversationId") UUID conversationId);
 
     @Operation(
+            summary = "Mark a conversation unread",
+            description =
+                    "Clears the caller's read marker for a conversation, so every message in it"
+                            + " counts toward their unread total again. Requires authentication as"
+                            + " an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation marked unread"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD)
+    ResponseEntity<ApiResponse<Void>> markUnread(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
             summary = "Get the caller's total unread message count",
             description =
                     "Returns the caller's total unread message count across every active"
@@ -443,4 +310,119 @@ public interface MessageApi {
     @AuthenticationRequiredResponse
     @GetMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.UNREAD_COUNT)
     ResponseEntity<ApiResponse<UnreadCountResponse>> getUnreadCount();
+
+    @Operation(
+            summary = "Pin a conversation",
+            description =
+                    "Pins a conversation to the top of the caller's own conversation list."
+                            + " Idempotent. Requires authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation pinned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PIN)
+    ResponseEntity<ApiResponse<Void>> pinConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Unpin a conversation",
+            description =
+                    "Unpins a conversation for the caller; a no-op if it was not pinned. Requires"
+                            + " authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation unpinned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.PIN)
+    ResponseEntity<ApiResponse<Void>> unpinConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Mute a conversation",
+            description =
+                    "Suppresses message notifications from this conversation for the caller. The"
+                            + " conversation still counts toward their unread total. Requires"
+                            + " authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation muted"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @PostMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.MUTE)
+    ResponseEntity<ApiResponse<Void>> muteConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Unmute a conversation",
+            description =
+                    "Restores message notifications from this conversation for the caller."
+                            + " Requires authentication as an active participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Conversation unmuted"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @DeleteMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.MUTE)
+    ResponseEntity<ApiResponse<Void>> unmuteConversation(
+            @PathVariable("conversationId") UUID conversationId);
+
+    @Operation(
+            summary = "Set or clear the caller's nickname for a conversation",
+            description =
+                    "Sets the caller's own private label for the other participant in this"
+                            + " conversation, or clears it when the nickname is null or blank."
+                            + " Visible only to the caller. Requires authentication as an active"
+                            + " participant.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Nickname set or cleared"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Caller is not an active participant",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PutMapping(ApiConstants.Messages.ROOT + ApiConstants.Messages.NICKNAME)
+    ResponseEntity<ApiResponse<Void>> setNickname(
+            @PathVariable("conversationId") UUID conversationId,
+            @Valid @RequestBody SetNicknameRequest request);
 }

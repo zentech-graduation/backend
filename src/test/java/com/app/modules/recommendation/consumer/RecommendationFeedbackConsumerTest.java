@@ -43,6 +43,7 @@ import com.app.modules.comment.messaging.CommentEventTypes;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.recommendation.client.GorseClient;
 import com.app.modules.recommendation.client.dto.GorseFeedback;
+import com.app.modules.recommendation.enums.UserEventType;
 import com.app.modules.recommendation.repository.UserEventJdbcRepository;
 import com.rabbitmq.client.Channel;
 
@@ -125,7 +126,7 @@ class RecommendationFeedbackConsumerTest {
 
         verify(userEventJdbcRepository)
                 .insertIgnoreDuplicate(
-                        EVENT_ID, USER_ID, "post_like", "post", POST_ID, OCCURRED_AT);
+                        EVENT_ID, USER_ID, UserEventType.POST_LIKE, "post", POST_ID, OCCURRED_AT);
         verifyFeedbackPushed("like");
         verify(channel).basicAck(1L, false);
     }
@@ -139,7 +140,7 @@ class RecommendationFeedbackConsumerTest {
 
         verify(userEventJdbcRepository)
                 .insertIgnoreDuplicate(
-                        EVENT_ID, USER_ID, "post_save", "post", POST_ID, OCCURRED_AT);
+                        EVENT_ID, USER_ID, UserEventType.POST_SAVE, "post", POST_ID, OCCURRED_AT);
         verifyFeedbackPushed("save");
         verify(channel).basicAck(1L, false);
     }
@@ -153,7 +154,12 @@ class RecommendationFeedbackConsumerTest {
 
         verify(userEventJdbcRepository)
                 .insertIgnoreDuplicate(
-                        EVENT_ID, USER_ID, "post_comment", "post", POST_ID, OCCURRED_AT);
+                        EVENT_ID,
+                        USER_ID,
+                        UserEventType.POST_COMMENT,
+                        "post",
+                        POST_ID,
+                        OCCURRED_AT);
         verifyFeedbackPushed("comment");
         verify(channel).basicAck(1L, false);
     }
@@ -167,7 +173,7 @@ class RecommendationFeedbackConsumerTest {
 
         verify(userEventJdbcRepository)
                 .insertIgnoreDuplicate(
-                        EVENT_ID, USER_ID, "post_view", "post", POST_ID, OCCURRED_AT);
+                        EVENT_ID, USER_ID, UserEventType.POST_VIEW, "post", POST_ID, OCCURRED_AT);
         verifyFeedbackPushed("read");
         verify(channel).basicAck(1L, false);
     }

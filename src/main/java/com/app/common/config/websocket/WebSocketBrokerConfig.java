@@ -25,8 +25,13 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Owns the broker-wide STOMP concerns shared by every WebSocket endpoint in the application: the
  * message broker itself, the one inbound channel's interceptors, and the session-tracking transport
- * decorator that backs revocation. Active when either {@code app.comment.live.enabled} or {@code
- * app.notification.live.enabled} is true.
+ * decorator that backs revocation. Active when any live endpoint flag is true.
+ *
+ * <p>The condition must name every live flag. It originally omitted {@code
+ * app.message.live.enabled}, so enabling messaging on its own produced a STOMP broker with neither
+ * {@link BrokerSendGuardInterceptor} nor the session-tracking decorator: a client could address a
+ * SEND frame straight at a {@code /topic/**} destination and be relayed to every subscriber, and no
+ * session was enrolled for revocation. Adding a live endpoint therefore means adding its flag here.
  *
  * <p>There is exactly one {@code clientInboundChannel} and one simple broker regardless of how many
  * {@code registerStompEndpoints} calls contribute endpoints to it -
@@ -41,7 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableWebSocketMessageBroker
 @ConditionalOnExpression(
         "${app.comment.live.enabled:false} or ${app.notification.live.enabled:false}"
-                + " or ${app.post.live.enabled:false}")
+                + " or ${app.post.live.enabled:false} or ${app.message.live.enabled:false}")
 public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
 
     private final BrokerSendGuardInterceptor brokerSendGuardInterceptor;

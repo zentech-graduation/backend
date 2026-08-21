@@ -31,6 +31,7 @@ import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.message.dto.request.SendMessageRequest;
+import com.app.modules.message.dto.response.MessageMediaResponse;
 import com.app.modules.message.dto.response.MessageResponse;
 import com.app.modules.message.entity.Conversation;
 import com.app.modules.message.entity.ConversationParticipant;
@@ -85,10 +86,11 @@ class MessageServiceImplTest {
                         outboxService,
                         objectMapper);
         lenient()
-                .when(mapper.toMessageResponse(any()))
+                .when(mapper.toMessageResponse(any(), any()))
                 .thenAnswer(
                         inv -> {
                             Message m = inv.getArgument(0);
+                            MessageMediaResponse media = inv.getArgument(1);
                             return new MessageResponse(
                                     m.getId(),
                                     m.getConversationId(),
@@ -96,6 +98,7 @@ class MessageServiceImplTest {
                                     m.getMessageType(),
                                     m.getContent(),
                                     m.getMediaAssetId(),
+                                    media,
                                     m.getSharedPostId(),
                                     m.getSharedStoryId(),
                                     m.getReplyToId(),
@@ -123,7 +126,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
                 .thenReturn(false);
@@ -329,6 +332,8 @@ class MessageServiceImplTest {
                         MessageType.TEXT,
                         "hello",
                         null,
+                        // mediaAssetId, then the resolved media, both absent on a text message
+                        null,
                         null,
                         null,
                         null,
@@ -375,7 +380,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
                 .thenReturn(false);
@@ -490,7 +495,7 @@ class MessageServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         ConversationParticipant participant = participant(conversationId, actorId, null);
         when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
                 .thenReturn(Optional.of(participant));
@@ -502,11 +507,27 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void markRead_manuallyUnreadParticipant_clearsManualFlag() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(directConversation(conversationId)));
+        ConversationParticipant participant = participant(conversationId, actorId, null);
+        participant.setManuallyUnread(true);
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(participant));
+
+        service.markRead(actorId, conversationId);
+
+        assertThat(participant.isManuallyUnread()).isFalse();
+    }
+
+    @Test
     void markRead_nonParticipant_throwsConversationForbidden() {
         UUID actorId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
                 .thenReturn(Optional.empty());
 
@@ -514,6 +535,70 @@ class MessageServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(e -> ((AppException) e).getErrorCode())
                 .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void markUnread_activeParticipant_setsManualFlagWithoutTouchingLastReadAt() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(directConversation(conversationId)));
+        ConversationParticipant participant = participant(conversationId, actorId, null);
+        OffsetDateTime lastReadAt = OffsetDateTime.now(ZoneOffset.UTC);
+        participant.setLastReadAt(lastReadAt);
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.of(participant));
+
+        service.markUnread(actorId, conversationId);
+
+        assertThat(participant.isManuallyUnread()).isTrue();
+        assertThat(participant.getLastReadAt()).isEqualTo(lastReadAt);
+        verify(participantRepository).save(participant);
+    }
+
+    @Test
+    void markUnread_nonParticipant_throwsConversationForbidden() {
+        UUID actorId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        when(conversationRepository.findById(conversationId))
+                .thenReturn(Optional.of(directConversation(conversationId)));
+        when(participantRepository.findByIdConversationIdAndIdUserId(conversationId, actorId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.markUnread(actorId, conversationId))
+                .isInstanceOf(AppException.class)
+                .extracting(e -> ((AppException) e).getErrorCode())
+                .isEqualTo(ApiErrorCode.CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void sendMessage_success_reactivatesOtherParticipantWhoHadLeft() {
+        UUID actorId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        stubActiveGroupParticipant(conversationId, actorId);
+        ConversationParticipant otherParticipant =
+                participant(
+                        conversationId, otherId, OffsetDateTime.now(ZoneOffset.UTC).minusDays(2));
+        when(participantRepository.findByIdConversationIdOrderByJoinedAtAsc(conversationId))
+                .thenReturn(List.of(participant(conversationId, actorId, null), otherParticipant));
+        when(messageRepository.saveAndFlush(any()))
+                .thenReturn(
+                        Message.builder()
+                                .id(UUID.randomUUID())
+                                .conversationId(conversationId)
+                                .senderId(actorId)
+                                .messageType(MessageType.TEXT)
+                                .content("hello")
+                                .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
+                                .build());
+
+        service.sendMessage(actorId, conversationId, textRequest("hello"), null);
+
+        // Deleting a conversation only hides it for the deleter; a new message from the other side
+        // is what un-hides it again, so the recipient's own left_at must be cleared here.
+        assertThat(otherParticipant.getLeftAt()).isNull();
+        verify(participantRepository).save(otherParticipant);
     }
 
     @Test
@@ -526,7 +611,7 @@ class MessageServiceImplTest {
 
     private void stubActiveGroupParticipant(UUID conversationId, UUID actorId) {
         when(conversationRepository.findById(conversationId))
-                .thenReturn(Optional.of(groupConversation(conversationId)));
+                .thenReturn(Optional.of(directConversation(conversationId)));
         when(participantRepository.existsByIdConversationIdAndIdUserIdAndLeftAtIsNull(
                         conversationId, actorId))
                 .thenReturn(true);
@@ -536,12 +621,8 @@ class MessageServiceImplTest {
         return new SendMessageRequest(MessageType.TEXT, content, null, null, null, null);
     }
 
-    private static Conversation groupConversation(UUID id) {
-        return Conversation.builder().id(id).isGroup(true).build();
-    }
-
     private static Conversation directConversation(UUID id) {
-        return Conversation.builder().id(id).isGroup(false).build();
+        return Conversation.builder().id(id).build();
     }
 
     private static ConversationParticipant participant(

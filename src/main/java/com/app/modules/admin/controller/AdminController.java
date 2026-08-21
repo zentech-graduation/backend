@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,9 +24,14 @@ import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
 import com.app.modules.admin.api.AdminApi;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.AdminReportTargetResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
+import com.app.modules.admin.service.AdminReportTargetService;
 import com.app.modules.admin.service.AdminService;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -36,13 +42,17 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 public class AdminController extends BaseController implements AdminApi {
 
     private final AdminService adminService;
+    private final AdminReportTargetService adminReportTargetService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(
+            AdminService adminService, AdminReportTargetService adminReportTargetService) {
         this.adminService = adminService;
+        this.adminReportTargetService = adminReportTargetService;
     }
 
-    /** Bans a user for the authenticated moderator or administrator. */
+    /** Bans a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.BAN_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> banUser(
@@ -50,8 +60,9 @@ public class AdminController extends BaseController implements AdminApi {
         return ok(adminService.banUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
-    /** Unbans a user for the authenticated moderator or administrator. */
+    /** Unbans a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.UNBAN_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> unbanUser(
@@ -59,17 +70,20 @@ public class AdminController extends BaseController implements AdminApi {
         return ok(adminService.unbanUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
-    /** Suspends a user for the authenticated moderator or administrator. */
+    /** Suspends a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.SUSPEND_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> suspendUser(
-            @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request) {
+            @PathVariable("userId") UUID userId,
+            @Valid @RequestBody AdminSuspendUserRequest request) {
         return ok(adminService.suspendUser(SecurityUtils.getCurrentUserId(), userId, request));
     }
 
-    /** Unsuspends a user for the authenticated moderator or administrator. */
+    /** Unsuspends a user for the authenticated administrator. */
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping(ApiConstants.Admin.UNSUSPEND_USER)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> unsuspendUser(
@@ -145,7 +159,9 @@ public class AdminController extends BaseController implements AdminApi {
             @RequestParam(required = false) AdminActionType actionType,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
-        return page(adminService.getActions(adminId, actionType, cursor, limit));
+        return page(
+                adminService.getActions(
+                        SecurityUtils.getCurrentUserId(), adminId, actionType, cursor, limit));
     }
 
     /** Returns one audit event to an authenticated moderator or administrator. */
@@ -154,7 +170,7 @@ public class AdminController extends BaseController implements AdminApi {
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<AdminActionResponse>> getActionById(
             @PathVariable("actionId") UUID actionId) {
-        return ok(adminService.getActionById(actionId));
+        return ok(adminService.getActionById(SecurityUtils.getCurrentUserId(), actionId));
     }
 
     /** Returns a cursor page of audit summaries for one affected user. */
@@ -166,7 +182,47 @@ public class AdminController extends BaseController implements AdminApi {
                     @PathVariable("userId") UUID userId,
                     @RequestParam(required = false) String cursor,
                     @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
-        return page(adminService.getActionsForUser(userId, cursor, limit));
+        return page(
+                adminService.getActionsForUser(
+                        SecurityUtils.getCurrentUserId(), userId, cursor, limit));
+    }
+
+    /** Escalates a report to an administrator for the authenticated moderator. */
+    @Override
+    @PatchMapping(ApiConstants.Admin.ESCALATE_REPORT)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> escalateReport(
+            @PathVariable("reportId") UUID reportId,
+            @Valid @RequestBody AdminEscalateReportRequest request) {
+        return ok(adminService.escalateReport(SecurityUtils.getCurrentUserId(), reportId, request));
+    }
+
+    /** Returns the number of reports waiting on an administrator. */
+    @Override
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping(ApiConstants.Admin.ESCALATED_REPORT_COUNT)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<EscalatedReportCountResponse>> countEscalatedReports() {
+        return ResponseEntity.ok(
+                ApiResponse.success(ApiSuccessCode.OK, adminService.countEscalatedReports()));
+    }
+
+    /** Returns the reported entity for moderation review, uncacheable by design. */
+    @Override
+    @GetMapping(ApiConstants.Admin.REPORT_TARGET)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminReportTargetResponse>> getReportTarget(
+            @PathVariable("reportId") UUID reportId) {
+        // no-store, not no-cache. The body is content a moderator is allowed to see only
+        // because it was reported, and it must not survive in a shared cache or a browser's
+        // back-forward store after the report is closed.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(
+                        ApiResponse.success(
+                                ApiSuccessCode.OK,
+                                adminReportTargetService.getReportTarget(
+                                        SecurityUtils.getCurrentUserId(), reportId)));
     }
 
     private ResponseEntity<ApiResponse<AdminActionResponse>> ok(AdminActionResponse response) {

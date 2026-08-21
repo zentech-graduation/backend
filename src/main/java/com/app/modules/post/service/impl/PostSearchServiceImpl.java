@@ -25,6 +25,7 @@ import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.search.PostDocument;
 import com.app.modules.post.service.PostSearchService;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.recommendation.service.UserEventRecorder;
 
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -47,16 +48,19 @@ public class PostSearchServiceImpl implements PostSearchService {
     private final PostRepository postRepository;
     private final PostVisibilityService postVisibilityService;
     private final PostResponseAssembler postResponseAssembler;
+    private final UserEventRecorder userEventRecorder;
 
     public PostSearchServiceImpl(
             ElasticsearchOperations elasticsearchOperations,
             PostRepository postRepository,
             PostVisibilityService postVisibilityService,
-            PostResponseAssembler postResponseAssembler) {
+            PostResponseAssembler postResponseAssembler,
+            UserEventRecorder userEventRecorder) {
         this.elasticsearchOperations = elasticsearchOperations;
         this.postRepository = postRepository;
         this.postVisibilityService = postVisibilityService;
         this.postResponseAssembler = postResponseAssembler;
+        this.userEventRecorder = userEventRecorder;
     }
 
     @Override
@@ -64,6 +68,7 @@ public class PostSearchServiceImpl implements PostSearchService {
     @CircuitBreaker(name = "elasticsearchSearch", fallbackMethod = "searchFallback")
     public CursorPageResponse<PostResponse> searchPosts(
             UUID viewerId, String query, String cursor, int size) {
+        userEventRecorder.recordSearch(viewerId, "posts", query);
         int offset = OffsetCursorCodec.decode(cursor);
         int effectiveLimit = normalizeLimit(size);
         // Page the ES query by the exact cursor offset. PageRequest derives `from` as page * size,
@@ -132,6 +137,12 @@ public class PostSearchServiceImpl implements PostSearchService {
                 throw runtimeException;
             }
             throw new IllegalStateException("Unexpected post search failure", t);
+        }
+        // An open circuit means the method body above never ran, so the search is unrecorded and
+        // has to be recorded here. Any other availability failure reached the fallback by throwing
+        // out of a body that had already recorded it, and recording again would double-count.
+        if (t instanceof CallNotPermittedException) {
+            userEventRecorder.recordSearch(viewerId, "posts", query);
         }
         log.warn(
                 "Post Elasticsearch search unavailable ({}: {}), returning empty page",

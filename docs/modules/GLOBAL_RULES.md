@@ -19,7 +19,7 @@ Cross-cutting conventions that apply to all modules. Do not duplicate these in p
 
 ## 2. Denormalized Counter Policy
 
-All counters are maintained exclusively by PostgreSQL triggers defined in Flyway V16. Application code (Service, Repository) must never directly increment or decrement these counters.
+All counters are maintained exclusively by PostgreSQL triggers (introduced in Flyway V16, with later modules adding their own in later migrations). Application code (Service, Repository) must never directly increment or decrement these counters.
 
 | Counter | Table | Trigger | Source Table |
 |---------|-------|---------|--------------|
@@ -33,6 +33,7 @@ All counters are maintained exclusively by PostgreSQL triggers defined in Flyway
 | `reply_count` | `comments` | `trg_comment_reply_count` | `comments` (self-referential) |
 | `post_count` | `hashtags` | `trg_hashtag_post_count` | `post_hashtags` |
 | `view_count` | `stories` | `trg_story_view_count` | `story_views` |
+| `like_count` | `stories` | `trg_story_like_count` (V49) | `story_likes` |
 
 If a counter appears stale, the correct action is to recalculate from the source join table — not to patch the counter directly.
 

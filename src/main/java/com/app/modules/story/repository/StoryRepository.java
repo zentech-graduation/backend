@@ -46,6 +46,13 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
     int findViewCount(UUID storyId);
 
     /**
+     * Re-reads the trigger-maintained like counter, bypassing the possibly stale first-level cached
+     * entity.
+     */
+    @Query("SELECT s.likeCount FROM Story s WHERE s.id = :storyId")
+    int findLikeCount(UUID storyId);
+
+    /**
      * Hard-deletes rows that are BOTH soft-deleted AND expired (DATA_RULES §3B); expired-but-live
      * rows are never cleanup targets.
      *

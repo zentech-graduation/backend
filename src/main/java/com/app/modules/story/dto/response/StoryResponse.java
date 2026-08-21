@@ -27,6 +27,9 @@ public record StoryResponse(
                                 "Whether the requesting viewer has seen this story; null for owner.",
                         nullable = true)
                 Boolean seen,
+        @Schema(description = "Number of likes; only populated for the owner.", nullable = true)
+                Integer likeCount,
+        @Schema(description = "Whether the requesting viewer has liked this story.") boolean liked,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
         @Schema(description = "Expiry timestamp; the story is gone from reads after this.")
                 OffsetDateTime expiresAt) {}

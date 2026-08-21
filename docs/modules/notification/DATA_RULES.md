@@ -8,7 +8,7 @@
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `notifications` | `id`, `recipient_id`, `actor_id`, `type`, `entity_type`, `entity_id`, `is_read`, `read_at`, `created_at` | One row per notification event. `actor_id` is SET NULL if the acting user deletes their account. Polymorphic target via `entity_type` + `entity_id`. |
+| `notifications` | `id`, `recipient_id`, `actor_id`, `type`, `entity_type`, `entity_id`, `post_id`, `is_read`, `read_at`, `created_at` | One row per notification event. `actor_id` is SET NULL if the acting user deletes their account. Polymorphic target via `entity_type` + `entity_id`. `post_id` is an additive, insert-only enrichment: for `COMMENT_POST`, `REPLY_COMMENT`, `LIKE_COMMENT`, and `MENTION_COMMENT` it carries the post the comment belongs to (`entity_id` stays the comment id), so a client can open the post without a second lookup. Null for non-content types and for rows created before this column existed. No FK, consistent with `entity_id`. |
 
 This table cannot be rebuilt from any other source if lost.
 
@@ -29,7 +29,7 @@ This table cannot be rebuilt from any other source if lost.
 
 | Rule | Enforced By |
 |------|-------------|
-| `type` must be one of the 10 values in `notification_type` enum | `notification_type` enum |
+| `type` must be one of the 11 values in `notification_type` enum | `notification_type` enum |
 | `is_read` defaults to `FALSE` | `DEFAULT FALSE NOT NULL` |
 | `actor_id` becomes NULL if the acting user deletes their account | `ON DELETE SET NULL` on `actor_id` FK |
 | Deleting a recipient user cascades to all their notifications | `ON DELETE CASCADE` on `recipient_id` FK |
@@ -46,7 +46,8 @@ This table cannot be rebuilt from any other source if lost.
 | Marking a notification as read sets `is_read = TRUE` and `read_at = NOW()` | `NotificationServiceImpl.markAsRead` |
 | Bulk "mark all as read" updates all unread notifications for the recipient | `NotificationServiceImpl.markAllAsRead` |
 | Push delivery uses `push_tokens` from the users module; token failures must not block the notification write to PostgreSQL | `[NOT YET IMPLEMENTED]` — mobile push via `push_tokens` is a distinct, unbuilt feature from the in-app WebSocket live push below |
-| Notification creation is dispatched asynchronously via RabbitMQ from the source event (follow, comment, story view); the row write itself is synchronous within that consumer's transaction | `SocialNotificationConsumer`, `CommentNotificationConsumer`, `StoryNotificationConsumer` |
+| Notification creation is dispatched asynchronously via RabbitMQ from the source event (follow, comment, story view, moderation warning); the row write itself is synchronous within that consumer's transaction | `SocialNotificationConsumer`, `CommentNotificationConsumer`, `StoryNotificationConsumer`, `AdminNotificationConsumer` |
+| A `warning` notification is created with a null `actor_id`, is never suppressed by a user setting, and is never suppressed by a block | `AdminNotificationConsumer`, `NotificationServiceImpl.isTypeEnabled` - a warning comes from the platform rather than a person, and an account that had blocked the moderator would otherwise never learn it had been warned. `notification_type_configs` records it as `is_user_toggleable = FALSE` |
 | Stale notifications (e.g., for a deleted post) must be handled gracefully on read — `entity_id` may reference a soft-deleted or hard-deleted entity | `[NOT YET IMPLEMENTED]` |
 
 **Failure Mode** `[KNOWN GAP — no retry/DLQ implemented]`:

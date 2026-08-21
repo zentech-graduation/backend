@@ -24,13 +24,17 @@ public interface NotificationService {
      * @param type notification type
      * @param entityType polymorphic entity type; null for follow/follow_request
      * @param entityId polymorphic entity id; null for follow/follow_request
+     * @param postId id of the post this notification concerns, so a client can open it directly
+     *     without resolving entityId to a post separately; null for non-content types and for
+     *     LIKE_POST/MENTION_POST notifications where entityId is already the post id
      */
     void create(
             UUID actorId,
             UUID recipientId,
             NotificationType type,
             String entityType,
-            UUID entityId);
+            UUID entityId,
+            UUID postId);
 
     /**
      * Marks the notification as read. Throws {@link com.app.common.exception.AppException} with

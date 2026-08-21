@@ -118,7 +118,8 @@ public class StoryNotificationConsumer {
                 uuid(data.get("ownerId")),
                 NotificationType.STORY_VIEW,
                 ENTITY_TYPE,
-                uuid(data.get("storyId")));
+                uuid(data.get("storyId")),
+                null);
     }
 
     private void validateEnvelope(DomainEventEnvelope event) {

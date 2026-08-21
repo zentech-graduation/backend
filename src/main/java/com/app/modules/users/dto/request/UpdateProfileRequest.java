@@ -33,6 +33,11 @@ public record UpdateProfileRequest(
                 @Size(max = 2048)
                 String avatarUrl,
         @Schema(
+                        description = "CDN URL of the banner image; send empty string to clear",
+                        example = "https://example.com/banners/jane.jpg")
+                @Size(max = 2048)
+                String bannerUrl,
+        @Schema(
                         description = "Personal website URL; send empty string to clear",
                         example = "https://luvax.online")
                 @Size(max = 2048)

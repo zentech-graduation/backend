@@ -53,6 +53,114 @@ public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTar
     List<Report> findFirstReports(@Param("limit") int limit);
 
     /**
+     * Finds the newest reports filed against one target, up to the requested limit.
+     *
+     * <p>Served by {@code idx_reports_entity} (V15). Bounded rather than paginated on purpose: this
+     * answers "has this account been reported, and for what" on an administrative detail view, not
+     * a full report browse, which the reports surface already provides.
+     *
+     * @param reportType target family, for example {@code USER}
+     * @param entityId identifier of the reported target
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.reportType = :reportType AND r.entityId = :entityId "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstReportsAgainstEntity(
+            @Param("reportType") ReportType reportType,
+            @Param("entityId") UUID entityId,
+            @Param("limit") int limit);
+
+    /**
+     * Finds the newest reports in any of the requested statuses.
+     *
+     * <p>Used for the moderator listing with no status filter, which is narrowed to the open
+     * statuses rather than returning everything.
+     *
+     * @param statuses statuses to include
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.status IN :statuses "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstReportsByStatusIn(
+            @Param("statuses") List<ReportStatus> statuses, @Param("limit") int limit);
+
+    /**
+     * Keyset page of reports in any of the requested statuses, after a cursor position.
+     *
+     * @param statuses statuses to include
+     * @param cursorCreatedAt creation time of the last row on the previous page
+     * @param cursorId identifier of the last row on the previous page
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.status IN :statuses "
+                    + "AND (r.createdAt < :cursorCreatedAt "
+                    + "OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId)) "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findAllByStatusInBeforeCursor(
+            @Param("statuses") List<ReportStatus> statuses,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
+
+    /**
+     * Finds the newest reports in any of the requested statuses and of the requested type.
+     *
+     * @param statuses statuses to include
+     * @param reportType type used to filter reports
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.status IN :statuses "
+                    + "AND r.reportType = :reportType "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstReportsByStatusInAndReportType(
+            @Param("statuses") List<ReportStatus> statuses,
+            @Param("reportType") ReportType reportType,
+            @Param("limit") int limit);
+
+    /**
+     * Keyset page of reports in any of the requested statuses and of the requested type.
+     *
+     * @param statuses statuses to include
+     * @param reportType type used to filter reports
+     * @param cursorCreatedAt creation time of the last row on the previous page
+     * @param cursorId identifier of the last row on the previous page
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered newest first with UUID as the stable tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.status IN :statuses "
+                    + "AND r.reportType = :reportType "
+                    + "AND (r.createdAt < :cursorCreatedAt "
+                    + "OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId)) "
+                    + "ORDER BY r.createdAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findAllByStatusInAndReportTypeBeforeCursor(
+            @Param("statuses") List<ReportStatus> statuses,
+            @Param("reportType") ReportType reportType,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
+
+    /**
+     * Counts the reports currently in the requested status.
+     *
+     * <p>Served by {@code idx_reports_escalated} for the escalated status, which is the only one
+     * this is called with.
+     *
+     * @param status status to count
+     * @return number of reports in that status
+     */
+    @Query("SELECT count(r) FROM Report r WHERE r.status = :status")
+    long countByStatus(@Param("status") ReportStatus status);
+
+    /**
      * Finds the newest reports with the requested status up to the requested limit.
      *
      * @param status status used to filter reports

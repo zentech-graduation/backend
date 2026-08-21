@@ -17,11 +17,12 @@ public interface AuthService {
 
     /**
      * Registers a new user and records mail side-effect events for verification and welcome
-     * messages. No session is issued — the user must verify their email before logging in.
+     * messages. No session is issued - the user must verify their email before logging in.
      *
      * @param request validated registration payload
+     * @param httpRequest source request, used to record the origin the account was created from
      */
-    void register(RegisterRequest request);
+    void register(RegisterRequest request, HttpServletRequest httpRequest);
 
     /**
      * Authenticates an existing user by email or username and password and issues a fresh session

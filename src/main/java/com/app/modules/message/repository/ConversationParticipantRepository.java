@@ -37,15 +37,17 @@ public interface ConversationParticipantRepository
     int countByIdConversationIdAndLeftAtIsNull(UUID conversationId);
 
     /**
-     * Active member user ids for one conversation whose account still exists (not soft-deleted),
-     * for notification fan-out recipient lookup.
+     * Active, unmuted member user ids for one conversation whose account still exists (not
+     * soft-deleted), for notification fan-out recipient lookup. A participant who muted this
+     * conversation is excluded here rather than filtered by the consumer, so muting is a single
+     * source of truth instead of a rule duplicated at every call site.
      */
     @Query(
             value =
                     "SELECT p.user_id FROM conversation_participants p "
                             + "JOIN users u ON u.id = p.user_id "
                             + "WHERE p.conversation_id = :conversationId AND p.left_at IS NULL "
-                            + "AND u.deleted_at IS NULL",
+                            + "AND p.is_muted = FALSE AND u.deleted_at IS NULL",
             nativeQuery = true)
     List<UUID> findActiveUserIdsByConversationId(@Param("conversationId") UUID conversationId);
 }

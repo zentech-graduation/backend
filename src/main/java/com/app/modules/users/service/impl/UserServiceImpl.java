@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.ViewerRelationshipResponse;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.dto.request.UpdateProfileRequest;
 import com.app.modules.users.dto.request.UpdateSettingsRequest;
@@ -31,16 +32,19 @@ public class UserServiceImpl implements UserService {
     private final UserSettingsRepository settingsRepository;
     private final UserMapper userMapper;
     private final SocialService socialService;
+    private final UserEventRecorder userEventRecorder;
 
     public UserServiceImpl(
             UserRepository userRepository,
             UserSettingsRepository settingsRepository,
             UserMapper userMapper,
-            SocialService socialService) {
+            SocialService socialService,
+            UserEventRecorder userEventRecorder) {
         this.userRepository = userRepository;
         this.settingsRepository = settingsRepository;
         this.userMapper = userMapper;
         this.socialService = socialService;
+        this.userEventRecorder = userEventRecorder;
     }
 
     @Override
@@ -96,6 +100,11 @@ public class UserServiceImpl implements UserService {
                     StringUtils.hasText(request.avatarUrl()) ? request.avatarUrl() : null);
         }
 
+        if (request.bannerUrl() != null) {
+            user.setBannerUrl(
+                    StringUtils.hasText(request.bannerUrl()) ? request.bannerUrl() : null);
+        }
+
         if (request.websiteUrl() != null) {
             user.setWebsiteUrl(
                     StringUtils.hasText(request.websiteUrl()) ? request.websiteUrl() : null);
@@ -144,6 +153,14 @@ public class UserServiceImpl implements UserService {
                 && viewerId != null
                 && socialService.isBlockedBetween(viewerId, targetUserId)) {
             throw new AppException(ApiErrorCode.NOT_FOUND);
+        }
+
+        // Self-views are excluded rather than filtered out later. Every account reads its own
+        // profile constantly, so recording those would bury the views that matter under the ones
+        // that never do, and make every investigation start by discarding most of the table.
+        // Placed after the block check so a view that resolves to NOT_FOUND records nothing.
+        if (!isOwner && viewerId != null) {
+            userEventRecorder.recordProfileView(viewerId, targetUserId);
         }
 
         // Social counts are relationship-gated: the owner always sees them, a private account

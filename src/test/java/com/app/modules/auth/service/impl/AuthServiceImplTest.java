@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -61,6 +62,7 @@ import com.app.modules.auth.service.AuthResendVerificationEventService;
 import com.app.modules.auth.service.OAuth2ExchangeCodeService;
 import com.app.modules.auth.service.TokenService;
 import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.recommendation.service.UserEventRecorder;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.entity.UserSettings;
 import com.app.modules.users.enums.UserRole;
@@ -95,6 +97,7 @@ class AuthServiceImplTest {
     @Mock private UserStateValidator userStateValidator;
     @Mock private OAuth2ExchangeCodeService oauth2ExchangeCodeService;
     @Mock private TransactionTemplate transactionTemplate;
+    @Mock private UserEventRecorder userEventRecorder;
 
     private AuthServiceImpl service;
 
@@ -155,7 +158,8 @@ class AuthServiceImplTest {
                         ipExtractor,
                         userStateValidator,
                         oauth2ExchangeCodeService,
-                        transactionTemplate);
+                        transactionTemplate,
+                        userEventRecorder);
     }
 
     private MockHttpServletRequest stubRequest() {
@@ -170,7 +174,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail("a@b.c")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null);
 
-        assertThatThrownBy(() -> service.register(req))
+        assertThatThrownBy(() -> service.register(req, stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
@@ -183,7 +187,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByUsername("user1")).thenReturn(true);
         RegisterRequest req = new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null);
 
-        assertThatThrownBy(() -> service.register(req))
+        assertThatThrownBy(() -> service.register(req, stubRequest()))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.USER_ALREADY_EXISTS);
@@ -202,7 +206,7 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn("HASH");
 
-        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
+        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null), stubRequest());
 
         verify(userRepository).save(any(User.class));
         verify(credentialRepository).save(any(UserCredential.class));
@@ -221,7 +225,7 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(anyString())).thenReturn("HASH");
 
-        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
+        service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null), stubRequest());
 
         verify(authMailEventService).publishUserRegistered(any(User.class));
         verify(authMailEventService).publishEmailVerificationRequested(any(User.class), eq(newId));
@@ -245,7 +249,8 @@ class AuthServiceImplTest {
         appender.start();
         logger.addAppender(appender);
         try {
-            service.register(new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null));
+            service.register(
+                    new RegisterRequest("user1", "a@b.c", TEST_PASSWORD, null), stubRequest());
         } finally {
             logger.detachAppender(appender);
         }
@@ -393,7 +398,8 @@ class AuthServiceImplTest {
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp =
@@ -411,7 +417,8 @@ class AuthServiceImplTest {
         when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         Logger logger = (Logger) LoggerFactory.getLogger(AuthServiceImpl.class);
@@ -440,7 +447,8 @@ class AuthServiceImplTest {
         when(userRepository.findByUsernameAndDeletedAtIsNull("alice")).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp = service.login(new LoginRequest("alice", TEST_PASSWORD), stubRequest());
@@ -488,7 +496,8 @@ class AuthServiceImplTest {
         when(userRepository.findByUsernameAndDeletedAtIsNull("ALICE")).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(u.getId())).thenReturn(Optional.of(cred));
         when(passwordEncoder.matches(eq(TEST_PASSWORD), eq("STORED-HASH"))).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"))).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(u.getId()), eq("USER"), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(u.getId()), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp = service.login(new LoginRequest("ALICE", TEST_PASSWORD), stubRequest());
@@ -511,7 +520,8 @@ class AuthServiceImplTest {
                         });
         when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn("HASH");
 
-        service.register(new RegisterRequest("MixedCase", "a@b.c", TEST_PASSWORD, null));
+        service.register(
+                new RegisterRequest("MixedCase", "a@b.c", TEST_PASSWORD, null), stubRequest());
 
         // Deliberate inversion: this asserted the stored value was lowercased. Identity is
         // case-insensitive via idx_users_username_lower, so the column no longer has to carry a
@@ -572,7 +582,8 @@ class AuthServiceImplTest {
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(u));
         when(credentialRepository.findByUserId(userId))
                 .thenReturn(Optional.of(credential(userId, "HASH")));
-        when(jwtTokenProvider.generateAccessToken(eq(userId), eq("USER"))).thenReturn("ACCESS-NEW");
+        when(jwtTokenProvider.generateAccessToken(eq(userId), eq("USER"), anyInt()))
+                .thenReturn("ACCESS-NEW");
 
         AuthResponse resp = service.refresh("OLD", stubRequest());
 
@@ -609,7 +620,7 @@ class AuthServiceImplTest {
         String rawAccessToken = "raw-access";
         String jti = UUID.randomUUID().toString();
         Instant exp = Instant.now().plusSeconds(600);
-        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "USER", jti, exp);
+        JwtClaims claims = new JwtClaims(UUID.randomUUID(), "USER", jti, 0, exp);
         when(jwtTokenProvider.validateAndParse(rawAccessToken)).thenReturn(claims);
 
         SecurityContextHolder.getContext()
@@ -805,7 +816,8 @@ class AuthServiceImplTest {
         User user = activeUser();
         user.setId(userId);
         when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
-        when(jwtTokenProvider.generateAccessToken(eq(userId), anyString())).thenReturn("ACCESS");
+        when(jwtTokenProvider.generateAccessToken(eq(userId), anyString(), anyInt()))
+                .thenReturn("ACCESS");
         when(refreshTokenService.issue(eq(userId), any(), any(), any())).thenReturn("REFRESH");
 
         AuthResponse resp = service.verifyEmail("VALID-TOKEN", stubRequest());

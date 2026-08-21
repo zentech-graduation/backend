@@ -10,11 +10,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Conversation list entry")
 public record ConversationSummaryResponse(
         @Schema(description = "Conversation identifier.") UUID id,
-        @Schema(description = "True for a group conversation, false for 1-1.") boolean isGroup,
-        @Schema(description = "Group display name; null for a 1-1 conversation.", nullable = true)
-                String groupName,
-        @Schema(description = "Group avatar CDN URL; null for a 1-1 conversation.", nullable = true)
-                String groupAvatarUrl,
         @Schema(description = "Active members.") List<ParticipantResponse> participants,
         @Schema(description = "Number of unread messages for the caller.") long unreadCount,
         @Schema(
@@ -26,4 +21,11 @@ public record ConversationSummaryResponse(
                                 "Preview of the newest message, including a tombstoned one; null"
                                         + " if the conversation has no message yet.",
                         nullable = true)
-                MessageResponse lastMessage) {}
+                MessageResponse lastMessage,
+        @Schema(description = "Whether the caller has pinned this conversation.") boolean pinned,
+        @Schema(description = "Whether the caller has muted this conversation.") boolean muted,
+        @Schema(
+                        description =
+                                "Whether the caller manually flagged this conversation unread,"
+                                        + " independent of unreadCount.")
+                boolean manuallyUnread) {}

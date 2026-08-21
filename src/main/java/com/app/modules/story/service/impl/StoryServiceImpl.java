@@ -29,6 +29,7 @@ import com.app.modules.story.dto.response.StoryResponse;
 import com.app.modules.story.entity.Story;
 import com.app.modules.story.entity.StoryViewId;
 import com.app.modules.story.enums.StoryType;
+import com.app.modules.story.repository.StoryLikeRepository;
 import com.app.modules.story.repository.StoryMediaAssetRepository;
 import com.app.modules.story.repository.StoryRepository;
 import com.app.modules.story.repository.StoryUserRepository;
@@ -46,6 +47,7 @@ public class StoryServiceImpl implements StoryService {
 
     private final StoryRepository storyRepository;
     private final StoryViewRepository storyViewRepository;
+    private final StoryLikeRepository storyLikeRepository;
     private final StoryUserRepository storyUserRepository;
     private final StoryMediaAssetRepository storyMediaAssetRepository;
     private final SocialService socialService;
@@ -56,6 +58,7 @@ public class StoryServiceImpl implements StoryService {
     public StoryServiceImpl(
             StoryRepository storyRepository,
             StoryViewRepository storyViewRepository,
+            StoryLikeRepository storyLikeRepository,
             StoryUserRepository storyUserRepository,
             StoryMediaAssetRepository storyMediaAssetRepository,
             SocialService socialService,
@@ -64,6 +67,7 @@ public class StoryServiceImpl implements StoryService {
             StoryResponseAssembler storyResponseAssembler) {
         this.storyRepository = storyRepository;
         this.storyViewRepository = storyViewRepository;
+        this.storyLikeRepository = storyLikeRepository;
         this.storyUserRepository = storyUserRepository;
         this.storyMediaAssetRepository = storyMediaAssetRepository;
         this.socialService = socialService;
@@ -119,7 +123,8 @@ public class StoryServiceImpl implements StoryService {
                                         new StoryViewId(storyId, viewerId))
                         ? Set.of(storyId)
                         : Set.of();
-        return storyResponseAssembler.assemble(viewerId, story, seenIds);
+        Set<UUID> likedIds = likedStoryIds(viewerId, List.of(story));
+        return storyResponseAssembler.assemble(viewerId, story, seenIds, likedIds);
     }
 
     @Override
@@ -146,7 +151,11 @@ public class StoryServiceImpl implements StoryService {
         if (stories.isEmpty()) {
             return List.of();
         }
-        return storyResponseAssembler.assemble(viewerId, stories, seenStoryIds(viewerId, stories));
+        return storyResponseAssembler.assemble(
+                viewerId,
+                stories,
+                seenStoryIds(viewerId, stories),
+                likedStoryIds(viewerId, stories));
     }
 
     @Override
@@ -162,6 +171,7 @@ public class StoryServiceImpl implements StoryService {
             return List.of();
         }
         Set<UUID> seenIds = seenStoryIds(viewerId, stories);
+        Set<UUID> likedIds = likedStoryIds(viewerId, stories);
         // The query orders by (userId, createdAt), so insertion order keeps playback order intact.
         Map<UUID, List<Story>> byAuthor =
                 stories.stream()
@@ -172,7 +182,7 @@ public class StoryServiceImpl implements StoryService {
                 storyUserRepository.findAllByIdInAndDeletedAtIsNull(byAuthor.keySet()).stream()
                         .collect(Collectors.toMap(User::getId, u -> u));
         Map<UUID, StoryResponse> responsesById =
-                storyResponseAssembler.assemble(viewerId, stories, seenIds).stream()
+                storyResponseAssembler.assemble(viewerId, stories, seenIds, likedIds).stream()
                         .collect(Collectors.toMap(StoryResponse::id, r -> r));
         List<StoryFeedItemResponse> items = new ArrayList<>(byAuthor.size());
         for (Map.Entry<UUID, List<Story>> entry : byAuthor.entrySet()) {
@@ -243,5 +253,14 @@ public class StoryServiceImpl implements StoryService {
         return candidateIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(storyViewRepository.findViewedStoryIds(viewerId, candidateIds));
+    }
+
+    // Unlike seenStoryIds, the owner's own stories stay candidates: self-like is permitted, so an
+    // owner who liked their own story must see liked=true on it too.
+    private Set<UUID> likedStoryIds(UUID viewerId, List<Story> stories) {
+        List<UUID> storyIds = stories.stream().map(Story::getId).toList();
+        return storyIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(storyLikeRepository.findLikedStoryIds(viewerId, storyIds));
     }
 }

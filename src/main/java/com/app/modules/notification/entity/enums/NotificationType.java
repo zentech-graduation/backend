@@ -15,7 +15,8 @@ public enum NotificationType {
     MENTION_POST,
     MENTION_COMMENT,
     STORY_VIEW,
-    MESSAGE;
+    MESSAGE,
+    WARNING;
 
     @JsonCreator
     public static NotificationType fromJson(String value) {

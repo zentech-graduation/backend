@@ -35,9 +35,6 @@ public class ConversationParticipant {
 
     @EmbeddedId private ConversationParticipantId id;
 
-    @Column(name = "is_admin", nullable = false)
-    private boolean isAdmin;
-
     @CreationTimestamp
     @Column(name = "joined_at", nullable = false, updatable = false)
     private OffsetDateTime joinedAt;
@@ -49,4 +46,26 @@ public class ConversationParticipant {
     /** Set by the owning user marking the conversation read; drives the unread-count query. */
     @Column(name = "last_read_at")
     private OffsetDateTime lastReadAt;
+
+    /** Non-null pins this conversation to the top of this row's user's own conversation list. */
+    @Column(name = "pinned_at")
+    private OffsetDateTime pinnedAt;
+
+    /** Suppresses {@code message} notifications for this row's user in this conversation only. */
+    @Column(name = "is_muted", nullable = false)
+    private boolean muted;
+
+    /**
+     * This row's user's private label for the other participant, shown only to them; {@code null}
+     * when unset.
+     */
+    @Column(name = "nickname")
+    private String nickname;
+
+    /**
+     * Visual-only unread marker this row's user set on themselves, independent of {@code
+     * last_read_at}. Cleared the next time they open the conversation.
+     */
+    @Column(name = "is_manually_unread", nullable = false)
+    private boolean manuallyUnread;
 }

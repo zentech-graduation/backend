@@ -29,6 +29,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.service.NotificationService;
 import com.app.modules.users.entity.User;
@@ -115,6 +116,9 @@ class NotificationLiveDeliveryIT {
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationService notificationService;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     private User activeUser(String label) {
         String username =
@@ -135,7 +139,11 @@ class NotificationLiveDeliveryIT {
 
     private ConnectedListener connectAndSubscribe(UUID userId, String token) throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
-        String url = "ws://localhost:" + port + "/ws/notifications/websocket?token=" + token;
+        String url =
+                "ws://localhost:"
+                        + port
+                        + "/ws/notifications/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         StompSession session =
                 client.connectAsync(url, new StompSessionHandlerAdapter() {})
                         .get(10, TimeUnit.SECONDS);
@@ -162,8 +170,8 @@ class NotificationLiveDeliveryIT {
         User actor = activeUser("actor");
         User bystander = activeUser("bystander");
 
-        String recipientToken = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER");
-        String bystanderToken = jwtTokenProvider.generateAccessToken(bystander.getId(), "USER");
+        String recipientToken = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER", 0);
+        String bystanderToken = jwtTokenProvider.generateAccessToken(bystander.getId(), "USER", 0);
 
         ConnectedListener recipientListener =
                 connectAndSubscribe(recipient.getId(), recipientToken);
@@ -171,7 +179,7 @@ class NotificationLiveDeliveryIT {
                 connectAndSubscribe(bystander.getId(), bystanderToken);
 
         notificationService.create(
-                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null);
+                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null, null);
 
         byte[] payload = recipientListener.received().get(15, TimeUnit.SECONDS);
         String body = new String(payload);
@@ -186,11 +194,16 @@ class NotificationLiveDeliveryIT {
     @Test
     void selfNotification_producesNoPush() throws Exception {
         User user = activeUser("self");
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
         ConnectedListener listener = connectAndSubscribe(user.getId(), token);
 
         notificationService.create(
-                user.getId(), user.getId(), NotificationType.LIKE_POST, "post", UUID.randomUUID());
+                user.getId(),
+                user.getId(),
+                NotificationType.LIKE_POST,
+                "post",
+                UUID.randomUUID(),
+                null);
 
         assertThatThrownBy(() -> listener.received().get(3, TimeUnit.SECONDS))
                 .as("a self-notification is suppressed before the outbox is ever touched")

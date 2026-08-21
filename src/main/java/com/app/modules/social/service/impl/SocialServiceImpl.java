@@ -29,6 +29,7 @@ import com.app.common.response.CursorPageResponse;
 import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.common.response.ViewerRelationshipResponse;
+import com.app.modules.message.service.DirectConversationProvisioner;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.service.ReportedTargetService;
 import com.app.modules.social.dto.response.FollowRequestResponse;
@@ -58,6 +59,7 @@ public class SocialServiceImpl implements SocialService {
     private final SocialEventService socialEventService;
     private final UserSummaryService userSummaryService;
     private final ReportedTargetService reportedTargetService;
+    private final DirectConversationProvisioner directConversationProvisioner;
 
     public SocialServiceImpl(
             FollowRepository followRepository,
@@ -65,7 +67,9 @@ public class SocialServiceImpl implements SocialService {
             SocialUserRepository socialUserRepository,
             SocialEventService socialEventService,
             UserSummaryService userSummaryService,
-            ReportedTargetService reportedTargetService) {
+            ReportedTargetService reportedTargetService,
+            DirectConversationProvisioner directConversationProvisioner) {
+        this.directConversationProvisioner = directConversationProvisioner;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.socialUserRepository = socialUserRepository;
@@ -129,6 +133,15 @@ public class SocialServiceImpl implements SocialService {
 
         socialEventService.publishFollowCreated(follow);
 
+        // A conversation is the product of a relationship, so it is created the moment the second
+        // edge lands rather than waiting for someone to type. Inside this transaction, so the
+        // follow and the conversation commit together or neither does.
+        if (status == FollowStatus.ACCEPTED
+                && followRepository.existsByIdAndStatus(
+                        new FollowId(targetUserId, currentUserId), FollowStatus.ACCEPTED)) {
+            directConversationProvisioner.ensureDirectConversation(currentUserId, targetUserId);
+        }
+
         return new FollowResponse(currentUserId, targetUserId, status, follow.getCreatedAt());
     }
 
@@ -160,6 +173,10 @@ public class SocialServiceImpl implements SocialService {
         if (deleted == 0) {
             throw new AppException(ApiErrorCode.NOT_FOUND, "Follow relationship not found");
         }
+
+        // Only an empty conversation goes. One carrying messages is history, and history is not a
+        // side effect of a follow button.
+        directConversationProvisioner.discardEmptyDirectConversation(currentUserId, targetUserId);
     }
 
     @Override
@@ -197,6 +214,13 @@ public class SocialServiceImpl implements SocialService {
         if ("approve".equalsIgnoreCase(action)) {
             follow.setStatus(FollowStatus.ACCEPTED);
             followRepository.save(follow);
+
+            // The approved edge runs requester -> approver. The pair is mutual only if the
+            // approver already follows the requester back.
+            if (followRepository.existsByIdAndStatus(
+                    new FollowId(currentUserId, requesterId), FollowStatus.ACCEPTED)) {
+                directConversationProvisioner.ensureDirectConversation(currentUserId, requesterId);
+            }
             return;
         }
 
@@ -228,6 +252,11 @@ public class SocialServiceImpl implements SocialService {
 
         FollowId followIdReverse = new FollowId(targetUserId, currentUserId);
         followRepository.findById(followIdReverse).ifPresent(followRepository::delete);
+
+        // Blocking destroys both follow edges above, so the pair is no longer mutual. An empty
+        // conversation provisioned by that relationship goes with it; one with messages stays and
+        // is hidden by the block filtering on the conversation list instead.
+        directConversationProvisioner.discardEmptyDirectConversation(currentUserId, targetUserId);
     }
 
     @Override

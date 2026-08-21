@@ -25,6 +25,8 @@ public interface StoryMapper {
      *     missed
      * @param viewCount unique-viewer count, populated only when the requester is the owner
      * @param seen whether the requester has viewed the story; null when the requester is the owner
+     * @param likeCount total like count, populated only when the requester is the owner
+     * @param liked whether the requester has liked the story
      * @return the story response with media, author, and viewer-context fields populated
      */
     @Mapping(source = "story.id", target = "id")
@@ -37,8 +39,16 @@ public interface StoryMapper {
     @Mapping(source = "author.avatarUrl", target = "userAvatarUrl")
     @Mapping(source = "viewCount", target = "viewCount")
     @Mapping(source = "seen", target = "seen")
+    @Mapping(source = "likeCount", target = "likeCount")
+    @Mapping(source = "liked", target = "liked")
     StoryResponse toResponse(
-            Story story, StoryMediaResponse media, User author, Integer viewCount, Boolean seen);
+            Story story,
+            StoryMediaResponse media,
+            User author,
+            Integer viewCount,
+            Boolean seen,
+            Integer likeCount,
+            boolean liked);
 
     /**
      * Projects a media asset onto the story media shape.

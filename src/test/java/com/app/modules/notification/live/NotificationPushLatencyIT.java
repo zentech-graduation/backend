@@ -31,6 +31,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.service.NotificationService;
 import com.app.modules.users.entity.User;
@@ -112,6 +113,9 @@ class NotificationPushLatencyIT {
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationService notificationService;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     private User activeUser(String label) {
         String username = "wsnl_" + label + "_" + UUID.randomUUID().toString().substring(0, 8);
@@ -149,10 +153,14 @@ class NotificationPushLatencyIT {
     void steadyStatePushLatency_underDefaultPollingInterval() throws Exception {
         User recipient = activeUser("recipient");
         User actor = activeUser("actor");
-        String token = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER");
+        String token = jwtTokenProvider.generateAccessToken(recipient.getId(), "USER", 0);
 
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
-        String url = "ws://localhost:" + port + "/ws/notifications/websocket?token=" + token;
+        String url =
+                "ws://localhost:"
+                        + port
+                        + "/ws/notifications/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         StompSession session =
                 client.connectAsync(url, new StompSessionHandlerAdapter() {})
                         .get(10, TimeUnit.SECONDS);
@@ -162,7 +170,7 @@ class NotificationPushLatencyIT {
         CompletableFuture<byte[]> warmUp = subscribe(session, recipient.getId());
         Instant warmUpStart = Instant.now();
         notificationService.create(
-                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null);
+                actor.getId(), recipient.getId(), NotificationType.FOLLOW, null, null, null);
         warmUp.get(15, TimeUnit.SECONDS);
         log.info(
                 "Warm-up latency (includes leftover initial-delay): {} ms",
@@ -175,7 +183,8 @@ class NotificationPushLatencyIT {
                 recipient.getId(),
                 NotificationType.LIKE_POST,
                 "post",
-                UUID.randomUUID());
+                UUID.randomUUID(),
+                null);
         measured.get(10, TimeUnit.SECONDS);
         Duration observed = Duration.between(start, Instant.now());
 

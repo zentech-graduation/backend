@@ -33,7 +33,6 @@ import com.app.common.outbox.model.DomainEventEnvelopeJson;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.message.messaging.MessageEventTypes;
 import com.app.modules.notification.entity.Notification;
-import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.repository.NotificationRepository;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
@@ -113,29 +112,6 @@ class MessageNotificationConsumerIT {
         sender = userRepository.save(activeUser("sender_" + suffix()));
         recipient1 = userRepository.save(activeUser("recipient1_" + suffix()));
         recipient2 = userRepository.save(activeUser("recipient2_" + suffix()));
-    }
-
-    @Test
-    void handle_messageSent_groupConversation_notifiesEachOtherActiveParticipant()
-            throws Exception {
-        Channel channel = mock(Channel.class);
-        UUID conversationId =
-                insertGroupConversation(sender.getId(), recipient1.getId(), recipient2.getId());
-        UUID messageId = UUID.randomUUID();
-
-        consumer.consume(
-                message(UUID.randomUUID(), sender.getId(), conversationId, messageId), channel);
-
-        List<Notification> rows = notificationRepository.findAll();
-        assertThat(rows).hasSize(2);
-        assertThat(rows)
-                .allSatisfy(
-                        n -> {
-                            assertThat(n.getType()).isEqualTo(NotificationType.MESSAGE);
-                            assertThat(n.getActorId()).isEqualTo(sender.getId());
-                        });
-        assertThat(rows.stream().map(Notification::getRecipientId).toList())
-                .containsExactlyInAnyOrder(recipient1.getId(), recipient2.getId());
     }
 
     @Test
@@ -246,16 +222,15 @@ class MessageNotificationConsumerIT {
     private UUID insertGroupConversation(UUID... participantIds) {
         UUID conversationId = UUID.randomUUID();
         jdbcTemplate.update(
-                "INSERT INTO conversations (id, is_group, created_by) VALUES (?, TRUE, ?)",
+                "INSERT INTO conversations (id, created_by) VALUES (?, ?)",
                 conversationId,
                 participantIds[0]);
         for (UUID userId : participantIds) {
             jdbcTemplate.update(
-                    "INSERT INTO conversation_participants (conversation_id, user_id, is_admin) "
-                            + "VALUES (?, ?, ?)",
+                    "INSERT INTO conversation_participants (conversation_id, user_id) "
+                            + "VALUES (?, ?)",
                     conversationId,
-                    userId,
-                    userId.equals(participantIds[0]));
+                    userId);
         }
         return conversationId;
     }

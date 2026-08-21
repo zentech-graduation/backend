@@ -115,6 +115,7 @@ public class CommentNotificationConsumer {
         Map<String, Object> data = event.data();
         UUID actor = event.actorId();
         UUID commentId = uuid(data.get("commentId"));
+        UUID postId = uuid(data.get("postId"));
         switch (event.eventType()) {
             case CommentEventTypes.COMMENT_CREATED_V1 -> {
                 int depth = ((Number) data.get("depth")).intValue();
@@ -124,14 +125,16 @@ public class CommentNotificationConsumer {
                             uuid(data.get("postOwnerId")),
                             NotificationType.COMMENT_POST,
                             ENTITY_TYPE,
-                            commentId);
+                            commentId,
+                            postId);
                 } else {
                     notificationService.create(
                             actor,
                             uuid(data.get("parentOwnerId")),
                             NotificationType.REPLY_COMMENT,
                             ENTITY_TYPE,
-                            commentId);
+                            commentId,
+                            postId);
                 }
                 Object mentions = data.getOrDefault("mentionedUserIds", List.of());
                 if (mentions instanceof List<?> ids) {
@@ -141,7 +144,8 @@ public class CommentNotificationConsumer {
                                 uuid(mid),
                                 NotificationType.MENTION_COMMENT,
                                 ENTITY_TYPE,
-                                commentId);
+                                commentId,
+                                postId);
                     }
                 }
             }
@@ -151,7 +155,8 @@ public class CommentNotificationConsumer {
                             uuid(data.get("commentOwnerId")),
                             NotificationType.LIKE_COMMENT,
                             ENTITY_TYPE,
-                            commentId);
+                            commentId,
+                            postId);
             default -> {
                 // Not a notification-bearing event; ignore.
             }

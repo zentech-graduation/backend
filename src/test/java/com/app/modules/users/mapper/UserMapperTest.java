@@ -32,6 +32,7 @@ class UserMapperTest {
                         .displayName("Alice")
                         .bio("Coffee lover")
                         .avatarUrl("https://cdn.example.com/alice.jpg")
+                        .bannerUrl("https://cdn.example.com/alice-banner.jpg")
                         .websiteUrl("https://alice.example.com")
                         .role(UserRole.USER)
                         .status(UserStatus.ACTIVE)
@@ -48,6 +49,7 @@ class UserMapperTest {
         assertThat(response.displayName()).isEqualTo("Alice");
         assertThat(response.bio()).isEqualTo("Coffee lover");
         assertThat(response.avatarUrl()).isEqualTo("https://cdn.example.com/alice.jpg");
+        assertThat(response.bannerUrl()).isEqualTo("https://cdn.example.com/alice-banner.jpg");
         assertThat(response.websiteUrl()).isEqualTo("https://alice.example.com");
         assertThat(response.isPrivate()).isFalse();
         assertThat(response.isVerified()).isTrue();
@@ -67,6 +69,8 @@ class UserMapperTest {
                         .email("bob@example.com")
                         .displayName("Bob")
                         .bio("Dev")
+                        .avatarUrl("https://cdn.example.com/bob.jpg")
+                        .bannerUrl("https://cdn.example.com/bob-banner.jpg")
                         .role(UserRole.ADMIN)
                         .status(UserStatus.ACTIVE)
                         .isPrivate(false)
@@ -80,6 +84,8 @@ class UserMapperTest {
         assertThat(response.username()).isEqualTo("bob");
         assertThat(response.displayName()).isEqualTo("Bob");
         assertThat(response.bio()).isEqualTo("Dev");
+        assertThat(response.avatarUrl()).isEqualTo("https://cdn.example.com/bob.jpg");
+        assertThat(response.bannerUrl()).isEqualTo("https://cdn.example.com/bob-banner.jpg");
         assertThat(response.isPrivate()).isFalse();
         assertThat(response.isVerified()).isFalse();
         assertThat(response.followerCount()).isEqualTo(10);

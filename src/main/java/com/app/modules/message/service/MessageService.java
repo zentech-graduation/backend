@@ -58,7 +58,8 @@ public interface MessageService {
     void deleteMessage(UUID actorId, UUID conversationId, UUID messageId);
 
     /**
-     * Marks a conversation read for the caller as of now, resetting their unread count to zero.
+     * Marks a conversation read for the caller as of now, resetting their unread count to zero and
+     * clearing any manual unread flag set via {@link #markUnread}.
      *
      * @param actorId the authenticated caller, who must be an active participant
      * @param conversationId the conversation to mark read
@@ -66,6 +67,19 @@ public interface MessageService {
      *     CONVERSATION_FORBIDDEN when the caller is not an active participant
      */
     void markRead(UUID actorId, UUID conversationId);
+
+    /**
+     * Flags a conversation unread for the caller. This is a visual-only marker independent of the
+     * counted unread total - it does not touch the caller's read marker, so it still has a visible
+     * effect even when the caller sent the conversation's own newest messages. Cleared
+     * automatically the next time the caller marks the conversation read.
+     *
+     * @param actorId the authenticated caller, who must be an active participant
+     * @param conversationId the conversation to mark unread
+     * @throws com.app.common.exception.AppException CONVERSATION_NOT_FOUND when missing;
+     *     CONVERSATION_FORBIDDEN when the caller is not an active participant
+     */
+    void markUnread(UUID actorId, UUID conversationId);
 
     /**
      * Returns the caller's total unread message count across every active conversation.

@@ -90,6 +90,7 @@ class NotificationLiveFanoutConsumerTest {
                         NotificationType.FOLLOW,
                         null,
                         null,
+                        null,
                         false,
                         null,
                         OffsetDateTime.now(ZoneOffset.UTC));

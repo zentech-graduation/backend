@@ -203,17 +203,18 @@ class ReportControllerIT {
         assertThat(((Map<?, ?>) reviewing.getBody().get("data")).get("status"))
                 .isEqualTo("reviewing");
 
+        // Closing the report is a moderation decision and belongs to the audited admin endpoint;
+        // this one refuses it.
         ResponseEntity<Map> resolved =
                 patchWithAuth(
                         "/api/v1/reports/" + reportId + "/status",
                         Map.of("status", "resolved", "resolutionNote", "Confirmed violation"),
                         moderator);
-        assertThat(resolved.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(resolved.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         Report persisted = reportRepository.findById(reportId).orElseThrow();
-        assertThat(persisted.getStatus()).isEqualTo(ReportStatus.RESOLVED);
+        assertThat(persisted.getStatus()).isEqualTo(ReportStatus.REVIEWING);
         assertThat(persisted.getReviewedBy()).isEqualTo(moderator.id());
         assertThat(persisted.getReviewedAt()).isNotNull();
-        assertThat(persisted.getResolutionNote()).isEqualTo("Confirmed violation");
     }
 
     @Test
@@ -235,7 +236,7 @@ class ReportControllerIT {
     }
 
     @Test
-    void updateStatus_terminalWithoutNote_returnsBadRequest() {
+    void updateStatus_pendingToResolved_returnsConflict() {
         TestUser reporter = createUser("note_reporter", "user");
         TestUser target = createUser("note_target", "user");
         TestUser moderator = createUser("note_moderator", "moderator");
@@ -246,15 +247,15 @@ class ReportControllerIT {
         ResponseEntity<Map> response =
                 patchWithAuth(
                         "/api/v1/reports/" + reportId + "/status",
-                        Map.of("status", "resolved"),
+                        Map.of("status", "resolved", "resolutionNote", "Confirmed violation"),
                         moderator);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("code")).isEqualTo("REPORT_RESOLUTION_NOTE_REQUIRED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_INVALID_TRANSITION");
     }
 
     @Test
-    void updateStatus_dismissedWithoutNote_returnsBadRequest() {
+    void updateStatus_pendingToDismissed_returnsConflict() {
         TestUser reporter = createUser("dismiss_note_reporter", "user");
         TestUser target = createUser("dismiss_note_target", "user");
         TestUser moderator = createUser("dismiss_note_moderator", "moderator");
@@ -265,11 +266,111 @@ class ReportControllerIT {
         ResponseEntity<Map> response =
                 patchWithAuth(
                         "/api/v1/reports/" + reportId + "/status",
-                        Map.of("status", "dismissed"),
+                        Map.of("status", "dismissed", "resolutionNote", "Not actionable"),
                         moderator);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("code")).isEqualTo("REPORT_RESOLUTION_NOTE_REQUIRED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_INVALID_TRANSITION");
+    }
+
+    @Test
+    void getReport_moderatorAndResolvedReportItDidNotEscalate_returnsNotFound() {
+        TestUser reporter = createUser("closed_read_reporter", "user");
+        TestUser target = createUser("closed_read_target", "user");
+        TestUser moderator = createUser("closed_read_moderator", "moderator");
+        UUID reportId = insertReport(reporter.id(), target.id(), "resolved", null);
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/" + reportId, moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void getReport_moderatorAndDismissedReportItDidNotEscalate_returnsNotFound() {
+        TestUser reporter = createUser("dismissed_read_reporter", "user");
+        TestUser target = createUser("dismissed_read_target", "user");
+        TestUser moderator = createUser("dismissed_read_moderator", "moderator");
+        UUID reportId = insertReport(reporter.id(), target.id(), "dismissed", null);
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/" + reportId, moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void getReport_moderatorAndReportAnotherModeratorEscalated_returnsNotFound() {
+        TestUser reporter = createUser("other_esc_reporter", "user");
+        TestUser target = createUser("other_esc_target", "user");
+        TestUser escalator = createUser("other_esc_escalator", "moderator");
+        TestUser moderator = createUser("other_esc_moderator", "moderator");
+        UUID reportId = insertReport(reporter.id(), target.id(), "escalated", escalator.id());
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/" + reportId, moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().get("code")).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void getReport_moderatorAndReportItEscalatedItself_returnsOk() {
+        TestUser reporter = createUser("own_esc_reporter", "user");
+        TestUser target = createUser("own_esc_target", "user");
+        TestUser moderator = createUser("own_esc_moderator", "moderator");
+        UUID reportId = insertReport(reporter.id(), target.id(), "escalated", moderator.id());
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/" + reportId, moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertThat(data.get("id")).isEqualTo(reportId.toString());
+    }
+
+    @Test
+    void getReport_moderatorAndResolvedReportItEscalated_returnsOk() {
+        TestUser reporter = createUser("closed_own_reporter", "user");
+        TestUser target = createUser("closed_own_target", "user");
+        TestUser moderator = createUser("closed_own_moderator", "moderator");
+        UUID reportId = insertReport(reporter.id(), target.id(), "resolved", moderator.id());
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/" + reportId, moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void getReport_moderatorAndOpenReport_returnsOk() {
+        TestUser reporter = createUser("open_read_reporter", "user");
+        TestUser pendingTarget = createUser("open_read_target_a", "user");
+        TestUser reviewingTarget = createUser("open_read_target_b", "user");
+        TestUser moderator = createUser("open_read_moderator", "moderator");
+        UUID pendingId = insertReport(reporter.id(), pendingTarget.id(), "pending", null);
+        UUID reviewingId = insertReport(reporter.id(), reviewingTarget.id(), "reviewing", null);
+
+        assertThat(getWithAuth("/api/v1/reports/" + pendingId, moderator).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(getWithAuth("/api/v1/reports/" + reviewingId, moderator).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void getReport_administrator_readsEveryStatus() {
+        TestUser reporter = createUser("admin_read_reporter", "user");
+        TestUser admin = createUser("admin_read_admin", "admin");
+        TestUser escalator = createUser("admin_read_escalator", "moderator");
+        for (String status : List.of("pending", "reviewing", "resolved", "dismissed")) {
+            TestUser target = createUser("admin_read_target_" + status, "user");
+            UUID reportId = insertReport(reporter.id(), target.id(), status, null);
+            assertThat(getWithAuth("/api/v1/reports/" + reportId, admin).getStatusCode())
+                    .as("administrator reading a %s report", status)
+                    .isEqualTo(HttpStatus.OK);
+        }
+        TestUser escalatedTarget = createUser("admin_read_target_escalated", "user");
+        UUID escalatedId =
+                insertReport(reporter.id(), escalatedTarget.id(), "escalated", escalator.id());
+        assertThat(getWithAuth("/api/v1/reports/" + escalatedId, admin).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
     }
 
     private TestUser createUser(String username, String role) {
@@ -282,7 +383,7 @@ class ReportControllerIT {
                 username,
                 email,
                 role);
-        String token = jwtTokenProvider.generateAccessToken(id, role.toUpperCase());
+        String token = jwtTokenProvider.generateAccessToken(id, role.toUpperCase(), 0);
         return new TestUser(id, token);
     }
 
@@ -313,6 +414,21 @@ class ReportControllerIT {
                 reporterId,
                 targetId,
                 createdAt);
+        return reportId;
+    }
+
+    private UUID insertReport(UUID reporterId, UUID targetId, String status, UUID escalatedBy) {
+        UUID reportId = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO reports "
+                        + "(id, reporter_id, report_type, report_reason, entity_id, status, "
+                        + "escalated_by) "
+                        + "VALUES (?, ?, 'user', 'spam', ?, CAST(? AS report_status), ?)",
+                reportId,
+                reporterId,
+                targetId,
+                status,
+                escalatedBy);
         return reportId;
     }
 

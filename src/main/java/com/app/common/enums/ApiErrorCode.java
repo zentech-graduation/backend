@@ -72,12 +72,18 @@ public enum ApiErrorCode {
 
     // Hashtag
     HASHTAG_NOT_FOUND("HASHTAG_NOT_FOUND", "Hashtag not found", HttpStatus.NOT_FOUND),
+    HASHTAG_ALREADY_EXISTS("HASHTAG_ALREADY_EXISTS", "Hashtag already exists", HttpStatus.CONFLICT),
 
     // Post
     POST_NOT_FOUND("POST_NOT_FOUND", "Post not found", HttpStatus.NOT_FOUND),
     POST_FORBIDDEN("POST_FORBIDDEN", "You do not have access to this post", HttpStatus.FORBIDDEN),
     POST_ALREADY_LIKED("POST_ALREADY_LIKED", "Post already liked", HttpStatus.CONFLICT),
     POST_ALREADY_SAVED("POST_ALREADY_SAVED", "Post already saved", HttpStatus.CONFLICT),
+    // 422 rather than 400: the caption is syntactically fine and the request is well formed, but a
+    // tag it names is one an administrator has taken out of circulation. The response body carries
+    // the offending names under data.bannedTags, in normalized form, so a client can highlight them
+    // in the caption instead of making the author guess which tag was refused.
+    POST_BANNED_HASHTAG("POST_BANNED_HASHTAG", "Caption contains banned hashtags", HttpStatus.UNPROCESSABLE_ENTITY),
 
     // Comment
     COMMENT_NOT_FOUND("COMMENT_NOT_FOUND", "Comment not found", HttpStatus.NOT_FOUND),
@@ -93,14 +99,12 @@ public enum ApiErrorCode {
     // Story
     STORY_NOT_FOUND("STORY_NOT_FOUND", "Story not found", HttpStatus.NOT_FOUND),
     STORY_FORBIDDEN("STORY_FORBIDDEN", "You do not have access to this story", HttpStatus.FORBIDDEN),
+    STORY_ALREADY_LIKED("STORY_ALREADY_LIKED", "Story already liked", HttpStatus.CONFLICT),
 
     // Message
     CONVERSATION_NOT_FOUND("CONVERSATION_NOT_FOUND", "Conversation not found", HttpStatus.NOT_FOUND),
     CONVERSATION_FORBIDDEN("CONVERSATION_FORBIDDEN", "You are not a participant of this conversation", HttpStatus.FORBIDDEN),
     CONVERSATION_INVALID_PARTICIPANTS("CONVERSATION_INVALID_PARTICIPANTS", "Invalid participant list", HttpStatus.BAD_REQUEST),
-    CONVERSATION_NOT_GROUP("CONVERSATION_NOT_GROUP", "This operation requires a group conversation", HttpStatus.CONFLICT),
-    GROUP_CHAT_DISABLED("GROUP_CHAT_DISABLED", "Group chat is not enabled", HttpStatus.FORBIDDEN),
-    GROUP_ADMIN_REQUIRED("GROUP_ADMIN_REQUIRED", "Only a group admin may perform this action", HttpStatus.FORBIDDEN),
     PARTICIPANT_NOT_FOUND("PARTICIPANT_NOT_FOUND", "Participant not found in this conversation", HttpStatus.NOT_FOUND),
     MESSAGE_REQUEST_NOT_ALLOWED("MESSAGE_REQUEST_NOT_ALLOWED", "This user is not accepting message requests", HttpStatus.FORBIDDEN),
     MESSAGE_NOT_FOUND("MESSAGE_NOT_FOUND", "Message not found", HttpStatus.NOT_FOUND),
@@ -114,12 +118,38 @@ public enum ApiErrorCode {
     REPORT_DUPLICATE("REPORT_DUPLICATE", "You have already reported this entity", HttpStatus.CONFLICT),
     REPORT_SELF_NOT_ALLOWED("REPORT_SELF_NOT_ALLOWED", "You cannot report your own content", HttpStatus.BAD_REQUEST),
     REPORT_INVALID_TRANSITION("REPORT_INVALID_TRANSITION", "Invalid report status transition", HttpStatus.CONFLICT),
-    REPORT_RESOLUTION_NOTE_REQUIRED("REPORT_RESOLUTION_NOTE_REQUIRED", "A resolution note is required to close a report", HttpStatus.BAD_REQUEST),
+    // Distinct from REPORT_TARGET_NOT_FOUND, which is raised when a user submits a report
+    // against something that never existed. This one means the report is real and the
+    // entity it points at has since been hard-deleted: entity_id carries no foreign key, so
+    // that leaves the report pointing at nothing.
+    REPORT_TARGET_GONE("REPORT_TARGET_GONE", "The reported entity no longer exists", HttpStatus.GONE),
 
     // Admin
     ADMIN_ACTION_NOT_FOUND("ADMIN_ACTION_NOT_FOUND", "Admin action not found", HttpStatus.NOT_FOUND),
     ADMIN_INVALID_ACTION("ADMIN_INVALID_ACTION", "Action is not valid for this target", HttpStatus.BAD_REQUEST),
-    ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT);
+    ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT),
+    ADMIN_SELF_ACTION_NOT_ALLOWED("ADMIN_SELF_ACTION_NOT_ALLOWED", "You cannot apply a moderation action to your own account", HttpStatus.CONFLICT),
+    // Only an ordinary account can be warned. Three warnings produce a strike and a strike changes
+    // users.status, so a warnable moderator or administrator would hand any moderator a route to
+    // an administrator's account status, which no endpoint grants directly.
+    ADMIN_TARGET_NOT_WARNABLE("ADMIN_TARGET_NOT_WARNABLE", "Only an ordinary account can be warned", HttpStatus.FORBIDDEN),
+    WARNING_NOT_FOUND("WARNING_NOT_FOUND", "Warning not found", HttpStatus.NOT_FOUND),
+    STRIKE_NOT_FOUND("STRIKE_NOT_FOUND", "Strike not found", HttpStatus.NOT_FOUND),
+    // Covers an unknown reason key and a disabled one alike. Splitting them would let a caller
+    // enumerate which reasons exist but are currently switched off.
+    WARNING_REASON_DISABLED("WARNING_REASON_DISABLED", "That reason is not available", HttpStatus.UNPROCESSABLE_ENTITY),
+    // No API caller may change an administrator's account status. Removing a rogue administrator is
+    // deliberately a database-level operation: an in-application lockout of the whole administrator
+    // tier has no recovery path, whereas an escalation requiring database access does.
+    ADMIN_TARGET_PROTECTED("ADMIN_TARGET_PROTECTED", "This account's status cannot be changed through the API", HttpStatus.FORBIDDEN),
+    // Covers every rejected role transition: a skip-level promotion, an administrator target, and a
+    // no-op. The three are one class of error to the caller - the requested transition is not one
+    // the policy permits - and splitting them would let a caller map out the matrix by probing.
+    // Named NOT_ALLOWED rather than FORBIDDEN because it answers 409: every other *_FORBIDDEN
+    // constant here maps to 403, and one that did not would make the naming stop predicting the
+    // status. The status is right as it is - the caller has the authority, the transition is the
+    // problem - so the name moved rather than the code.
+    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT);
 
     // spotless:on
 

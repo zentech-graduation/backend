@@ -153,6 +153,44 @@ class NotificationControllerIT {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void listNotifications_commentPostNotification_includesPostId() {
+        UUID postId = UUID.randomUUID();
+        Notification commentNotification =
+                notificationRepository.save(
+                        Notification.builder()
+                                .recipientId(userA.getId())
+                                .actorId(userB.getId())
+                                .type(NotificationType.COMMENT_POST)
+                                .entityType("comment")
+                                .entityId(UUID.randomUUID())
+                                .postId(postId)
+                                .build());
+
+        ResponseEntity<Map> response = getWithToken("/api/v1/notifications", userA);
+
+        List<?> items = content(response);
+        Map<?, ?> item =
+                items.stream()
+                        .map(i -> (Map<?, ?>) i)
+                        .filter(i -> i.get("id").equals(commentNotification.getId().toString()))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(item.get("postId")).isEqualTo(postId.toString());
+    }
+
+    @Test
+    void listNotifications_followNotification_postIdIsNull() {
+        seedFollow(userA.getId(), userB.getId());
+
+        ResponseEntity<Map> response = getWithToken("/api/v1/notifications", userA);
+
+        List<?> items = content(response);
+        Map<?, ?> item = ((Map<?, ?>) items.get(0));
+        assertThat(item.get("postId")).isNull();
+    }
+
+    @Test
     void markAsRead_ownNotification_returns200() {
         Notification n = seedFollow(userA.getId(), userB.getId());
 
@@ -287,7 +325,7 @@ class NotificationControllerIT {
     }
 
     private String jwtFor(User user) {
-        return jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
+        return jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name(), 0);
     }
 
     private static User activeUser(String username) {

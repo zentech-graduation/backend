@@ -40,6 +40,7 @@ import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
+import com.app.modules.hashtag.enums.HashtagStatus;
 import com.app.modules.hashtag.event.HashtagIndexUpsertEvent;
 import com.app.modules.hashtag.messaging.HashtagEventTypes;
 import com.app.modules.hashtag.repository.HashtagIndexProjection;
@@ -200,6 +201,41 @@ class HashtagIndexSyncConsumerTest {
         when(objectMapper.convertValue(any(), eq(HashtagIndexUpsertEvent.class)))
                 .thenReturn(upsertEvent());
         when(projection.getPostCount()).thenReturn(0);
+        when(hashtagRepository.findIndexProjectionsByIdIn(List.of(HASHTAG_ID)))
+                .thenReturn(List.of(projection));
+
+        consumer.consume(message, channel);
+
+        verify(hashtagSearchRepository).deleteById(HASHTAG_ID.toString());
+        verify(hashtagSearchRepository, never()).save(any());
+        verify(channel).basicAck(1L, false);
+    }
+
+    @Test
+    void consume_upsertBannedHashtag_deletesFromIndexAndAcks() throws Exception {
+        assertUpsertLeavesTheIndexEmptyFor(HashtagStatus.BANNED);
+    }
+
+    @Test
+    void consume_upsertDeletedHashtag_deletesFromIndexAndAcks() throws Exception {
+        assertUpsertLeavesTheIndexEmptyFor(HashtagStatus.DELETED);
+    }
+
+    // A hashtag out of circulation belongs on no discovery surface, and Elasticsearch is the
+    // primary path behind hashtag search. Reading the status here is what lets a status change
+    // reuse the upsert event rather than needing an event type of its own.
+    private void assertUpsertLeavesTheIndexEmptyFor(HashtagStatus status) throws Exception {
+        Message message = message(envelope(HashtagEventTypes.HASHTAG_INDEX_UPSERT_V1));
+        when(processedMessageService.processOnce(any(), any(), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            inv.getArgument(3, Runnable.class).run();
+                            return ProcessedMessageResult.PROCESSED;
+                        });
+        when(objectMapper.convertValue(any(), eq(HashtagIndexUpsertEvent.class)))
+                .thenReturn(upsertEvent());
+        when(projection.getPostCount()).thenReturn(7);
+        when(projection.getStatus()).thenReturn(status);
         when(hashtagRepository.findIndexProjectionsByIdIn(List.of(HASHTAG_ID)))
                 .thenReturn(List.of(projection));
 

@@ -12,6 +12,20 @@ public final class CursorScope {
 
     public static final String ADMIN_ACTIONS = "adma";
     public static final String ADMIN_ACTIONS_FOR_USER = "admu";
+    public static final String ADMIN_USERS = "admul";
+    // One tag per role, not one per endpoint, because the violations listing returns different
+    // rows to a moderator and to an administrator. A shared tag would let a moderator replay an
+    // administrator's cursor and page into strike rows its own listing never produces.
+    public static final String ADMIN_VIOLATIONS_WARNINGS = "admvw";
+    public static final String ADMIN_VIOLATIONS_FULL = "admvf";
+    public static final String OWN_WARNINGS = "ownw";
+    public static final String ADMIN_USER_SEARCH = "admus";
+    public static final String ADMIN_USER_EVENTS = "admue";
+    // One tag per endpoint, not one shared "admin hashtags" tag. The listing and the search apply
+    // different predicates over the same keyset ordering, so a shared tag would let a cursor from
+    // one be replayed into the other and page into rows that endpoint never produced.
+    public static final String ADMIN_HASHTAGS = "admh";
+    public static final String ADMIN_HASHTAG_SEARCH = "admhs";
     public static final String COMMENTS_TOP_LEVEL = "cmt";
     public static final String COMMENTS_TOP_LEVEL_NEWEST = "cmtn";
     public static final String COMMENT_REPLIES = "rpl";
@@ -24,6 +38,10 @@ public final class CursorScope {
     public static final String POST_LIKED_POSTS = "lkd";
     public static final String POST_SAVES = "sav";
     public static final String REPORTS = "rpt";
+    // A moderator's report listing is narrowed to the open statuses, so its cursor is
+    // tagged separately. Sharing REPORTS would let a moderator replay an
+    // administrator's cursor and page into rows its own listing never produces.
+    public static final String REPORTS_MODERATOR = "rptm";
     public static final String PENDING_REPORTS = "prpt";
     public static final String SOCIAL_FOLLOWERS = "flw";
     public static final String SOCIAL_FOLLOWING = "flg";

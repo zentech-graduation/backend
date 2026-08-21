@@ -1,6 +1,6 @@
 # Story Module — Data Rules
 
-**Implementation status**: Fully implemented with story creation, expiry-gated reads, a grouped feed tray, deduplicated view tracking, owner-only soft delete, `story_view` notifications, and a scheduled cleanup job, with unit/integration coverage. Story replies (via the `message` module) remain out of scope — see Section C.
+**Implementation status**: Fully implemented with story creation, expiry-gated reads, a grouped feed tray, deduplicated view tracking, like/unlike (self-like permitted), owner-only soft delete, `story_view` notifications, and a scheduled cleanup job, with unit/integration coverage. Story replies (via the `message` module) remain out of scope — see Section C.
 
 ---
 
@@ -10,6 +10,7 @@
 |-------|-------------|-------|
 | `stories` | `id`, `user_id`, `media_asset_id`, `story_type`, `caption`, `expires_at`, `deleted_at` | Core story entity. 24-hour ephemeral by default (`expires_at = NOW() + INTERVAL '24 hours'`). Soft-deleted via `deleted_at`. |
 | `story_views` | `story_id`, `viewer_id`, `viewed_at` | Deduplicated view records — one row per (story, viewer) pair. Canonical viewer list. |
+| `story_likes` | `user_id`, `story_id`, `created_at` | Like records — one row per (user, story) pair. Canonical liker list. Self-like permitted. |
 
 These tables cannot be rebuilt from any other source if lost.
 
@@ -20,6 +21,7 @@ These tables cannot be rebuilt from any other source if lost.
 | Data | Location | Rebuilt From | Rebuild Trigger |
 |------|----------|--------------|-----------------|
 | `stories.view_count` | `stories` table | `COUNT(*)` from `story_views` where `story_id = story.id` | Trigger `trg_story_view_count` (V16) |
+| `stories.like_count` | `stories` table | `COUNT(*)` from `story_likes` where `story_id = story.id` | Trigger `trg_story_like_count` (V49) |
 | Active stories view | `active_stories` (DB view, V17) | `stories` where `deleted_at IS NULL` and `expires_at > NOW()` | Query-time |
 | Story feed cache | Redis | Rebuild from `stories` joined with `follows` | `[DEFERRED]` — the feed tray is served directly from three indexed queries (`StoryServiceImpl.getStoryFeed`); a Redis cache was not needed at current scale |
 
@@ -33,7 +35,9 @@ These tables cannot be rebuilt from any other source if lost.
 |------|-------------|
 | `story_type` must be one of `'image'`, `'video'` | `story_type` enum |
 | `view_count` is non-negative | `CHECK (view_count >= 0)` |
+| `like_count` is non-negative | `CHECK (like_count >= 0)` |
 | `story_views` allows at most one view record per (story, viewer) pair | Compound `PRIMARY KEY (story_id, viewer_id)` |
+| `story_likes` allows at most one like record per (user, story) pair | Compound `PRIMARY KEY (user_id, story_id)` |
 | `expires_at` defaults to 24 hours after creation | `DEFAULT (NOW() + INTERVAL '24 hours')` |
 | `stories.media_asset_id` references an existing media asset | `REFERENCES media_assets(id)` (no cascade) |
 | Deleting a user cascades to their stories | `ON DELETE CASCADE` on `stories.user_id` |
@@ -52,6 +56,8 @@ These tables cannot be rebuilt from any other source if lost.
 | Viewing a story generates a `story_view` notification for the story owner | `StoryViewServiceImpl.recordView` enqueues `story.viewed.v1` on first view only; `StoryNotificationConsumer.dispatch` creates the `STORY_VIEW` notification via `NotificationService.create` |
 | A background cleanup job removes rows that have already been soft-deleted (`deleted_at IS NOT NULL`) AND have passed their expiry time (`expires_at < NOW()`). Stories that are expired but not yet soft-deleted are NOT targets for the cleanup job. | `StoryCleanupScheduler.purgeSoftDeletedExpiredStories`, backed by the native `StoryRepository.purgeSoftDeletedExpired` query |
 | `user_settings.allow_story_replies` governs whether viewers can reply to a story | `[NOT YET IMPLEMENTED]` — blocked on the `message` module, which has no reply-send path yet; see Section C |
+| Liking an active, visible story inserts into `story_likes`; self-like is permitted; liking an already-liked story is a conflict | `StoryLikeServiceImpl.likeStory` — `STORY_ALREADY_LIKED` on a duplicate, `STORY_NOT_FOUND` when missing/expired/not visible |
+| Unliking removes the caller's row; unliking a story that is not liked is not-found | `StoryLikeServiceImpl.unlikeStory` |
 
 ### C. Scope Simplifications
 

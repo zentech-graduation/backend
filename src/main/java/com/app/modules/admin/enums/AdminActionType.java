@@ -16,7 +16,19 @@ public enum AdminActionType {
     REMOVE_COMMENT,
     RESTORE_COMMENT,
     RESOLVE_REPORT,
-    DISMISS_REPORT;
+    DISMISS_REPORT,
+    CHANGE_USER_ROLE,
+    WARN_USER,
+    REVOKE_WARNING,
+    ISSUE_STRIKE,
+    REVOKE_STRIKE,
+    ESCALATE_REPORT,
+    FORCE_LOGOUT,
+    CREATE_HASHTAG,
+    EDIT_HASHTAG,
+    BAN_HASHTAG,
+    UNBAN_HASHTAG,
+    DELETE_HASHTAG;
 
     @JsonCreator
     public static AdminActionType fromJson(String value) {

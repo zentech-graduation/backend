@@ -48,6 +48,9 @@ app:
       enabled: true
     live:
       enabled: true
+  admin:
+    consumer:
+      enabled: true
   story:
     consumer:
       enabled: true
@@ -74,7 +77,13 @@ app:
       # entry the IPv4 entry above never actually matches during local testing.
       - "::1"
     max-login-body-bytes: 2048
-    cookie-signing-secret: "dev-insecure-cookie-signing-secret-change-me"
+    # Written as a defaulted placeholder, not a bare literal. Profile config outranks the base
+    # application.yaml, so a literal here silently made APP_COOKIE_SIGNING_SECRET inert: the
+    # OAuth2 state cookie was HMAC-signed with a value published in this repository and the
+    # configured secret was never consulted. Resolving the environment variable first restores
+    # it as authoritative in every profile, while the fallback keeps a checkout with no .env
+    # bootable, which is what continuous integration relies on.
+    cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET:dev-insecure-cookie-signing-secret-change-me}
     refresh-cookie:
       # Local development serves the API over plain HTTP, where a Secure cookie is never stored.
       secure: false
@@ -103,6 +112,11 @@ app:
         window-seconds: 300
       "[/api/v1/auth/oauth2/exchange]":
         max-attempts: 10
+        window-seconds: 60
+      "[/api/v1/auth/ws-ticket]":
+        # One per realtime connection and one per reconnect, so the bucket has to tolerate a
+        # reconnect burst while staying bounded.
+        max-attempts: 200
         window-seconds: 60
       "[/api/v1/posts]":
         max-attempts: 200

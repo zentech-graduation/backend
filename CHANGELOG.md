@@ -10,6 +10,135 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
 
 ### Added
+- An administrator can now read what an account did: session starts, searches with the term that was used, and views of another account's profile.
+The read requires a time window of at most thirty days, because the underlying table is partitioned by time and a query without one reads the whole history of the platform.
+- Behavioural events are now recorded at all. Three kinds are written, chosen for what they answer per unit of write volume; every other kind the schema allows for is deliberately still unwritten, and the endpoint's documentation says so, so an administrator seeing three kinds does not report it as a defect.
+Recording a view of one's own profile is skipped, since it would bury the views that matter.
+- An administrator can now see a platform snapshot: accounts by status and by role, totals for posts, comments and stories, reports by status and by reason, and the most used hashtags.
+The snapshot carries the time it was computed, so a client can show how fresh it is rather than implying the numbers are live.
+- An administrator can now chart any of those figures over time. Omitting both bounds gives the last day; the server picks the bucket width from how far back the window reaches and says which it used.
+- An administrator can now manage the hashtag registry: list and search it across every lifecycle state, create a hashtag ahead of any post using it, ban one, return one to circulation, and delete one.
+Every action is recorded in the moderation audit log with who decided and why.
+- A hashtag can now be banned, which takes the term out of discovery and refuses it on new posts, or deleted, which additionally drops it from the hashtag list shown on a post.
+Neither removes anything: the posts that already used the tag, their associations, and the usage counter all survive, so both decisions are reversible.
+- Banning a hashtag now clears it from the trending list immediately rather than at the next snapshot.
+A term is usually banned while it is trending, which is the worst moment to leave it there.
+- A post whose caption names a banned hashtag is now refused, and the response names the offending tags so they can be highlighted in the caption rather than guessed at.
+This covers creating a post, editing a caption, and publishing a post that was drafted or archived before the ban.
+- A post now lists the hashtags it is associated with, so a client knows which parts of a caption to render as links.
+A hashtag an administrator has deleted is left out while the caption keeps its literal text.
+- A hashtag can now be created directly in a banned state, which reserves a term before anyone can use it.
+- A moderator can now warn an account, giving moderation a step between doing nothing and banning.
+Three warnings that still count produce a strike; the first strike suspends for seven days, the second for thirty, the third and any after it ban permanently.
+- A warning counts toward the next strike while it stands, was issued after the account's most recent strike, and is less than ninety days old, so an account that behaves for long enough starts again.
+- A strike never weakens a penalty already in force, so warning an account that is already banned records the strike without shortening the ban, and the response says which happened.
+- An administrator can now reverse a single warning or a single strike. Neither reversal changes the account's status: lifting a suspension or a ban stays a separate, explicit decision.
+- A warned account is now told, and can review its own warnings afterwards. It never sees its strikes, nor who issued anything.
+- The reasons a moderator may cite when warning an account are drawn from the report-reason registry, so retiring a reason is a configuration change rather than a release.
+- A moderator can now hand a report up to an administrator instead of closing it or leaving it, and must say why.
+An escalated report leaves the moderator queue, stays readable to the moderator that escalated it, and can be closed only by an administrator.
+- An administrator can now see how many reports are waiting on them. Escalation pushes no notification, so this count is the only signal one has arrived.
+- A moderator can now see the content a report points at, even when the author's account is private or the author has blocked them.
+The report is the only way in, so a moderator sees what somebody flagged and nothing else.
+- An administrator can now list, search, and inspect accounts, spanning every account status including removed accounts, which no public surface shows.
+- The account detail view shows where an account was created from, where and when it last signed in, its live sessions, and the reports filed against it.
+- An administrator can now end every one of an account's sessions in one action, and the audit entry records how many were ended.
+- An administrator can now change an account's role between user and moderator, and promote a moderator to administrator.
+The change ends the account's sessions in the same operation, so a demotion takes effect immediately rather than when the old session expires.
+- A suspension can now be given a duration in days, after which the account returns to active by itself.
+The first sign-in attempt after the term lapses restores the account, and a periodic sweep does the same for an account nobody signs into, so an expired suspension never lingers.
+- The moderation audit log now records role changes and forced logouts, and the action registry lists every action type the moderation surface is planned to record.
+
+### Changed
+- The administrative activity log now also covers engagement: post likes, saves, views, and comments appear alongside session starts, searches, and profile views, and answer to the same event-type filter.
+Both kinds of event are recorded under one vocabulary, so the filter cannot name a value that no writer produces.
+- Statistics that count whole tables are now computed by a background job rather than on the request, which is the difference between milliseconds and seconds once the platform is large.
+Counts of things that happened in an interval are counted directly rather than derived by subtracting two snapshots, so a moderation sweep can never make "new posts this half hour" read as a negative number.
+- Restoring a post whose caption names a banned hashtag now succeeds without that association instead of failing.
+A moderator undoing its own removal is not blocked by an unrelated decision it cannot reverse, and the audit entry records which tags were left off.
+- A moderator reading a single report by identifier now reaches the same reports its queue shows, plus any report it escalated itself.
+Anything else answers as if the report did not exist. The queue already hid closed and escalated reports; reading one by identifier did not.
+- Hashtag search and the trending list now show active hashtags only.
+- A moderator's report list now covers the open part of the review lifecycle only. Asking for closed or escalated reports returns an empty page; an administrator's view is unchanged.
+- Resolving or dismissing a report is no longer possible through the triage endpoint, which now only claims a report for review.
+Both closures already had audited endpoints of their own, and the triage path wrote nothing, so a report could previously be closed with no record of who closed it.
+- Restoring a post removed by moderation now returns it to the status it held before the removal, instead of publishing everything it touches.
+A post that was a draft when it was removed comes back a draft, and the response says where it landed.
+- Removing a post by moderation now does everything removing it as its owner does: its hashtag associations are detached and it leaves the search index.
+Previously a moderated post kept contributing to trending counts and kept answering searches.
+- The error code for a refused role change is renamed to match the status it answers with. Behaviour is unchanged.
+- A moderator reading the moderation audit log now sees only the entries it wrote; an administrator still sees everything.
+Requesting another actor's entries returns nothing rather than their contents, and requesting one by identifier reports it as not found.
+- Moderation requests no longer accept a caller-supplied metadata object.
+The audit log records server-derived facts only, and a request that still sends one is rejected rather than silently stripped.
+- The application now takes its schema-migration lock without holding a transaction open, which is what allows an index to be built without blocking writes to the table.
+
+### Fixed
+- The monthly partitions behind the behavioural event table now cover the current month and the two ahead of it at all times, and a gap left by an earlier release is closed.
+A write into an uncovered month never failed; it was absorbed silently and made that month's partition impossible to create afterwards, so the problem only became visible once it could no longer be repaired.
+- Listing accounts by role and listing hashtags without a status filter no longer read the whole table. At two hundred thousand rows the account listing filtered to moderators took fifteen milliseconds and touched fifty thousand pages; it now takes a tenth of a millisecond and touches twenty-four.
+- A moderation action's response now carries its creation timestamp, which was previously always null even though the stored entry had one.
+
+### Removed
+- The error code for a missing report resolution note, which no path had been able to raise since the requirement moved behind a mandatory field. An error code nothing can produce is a promise the API cannot keep.
+
+### Security
+- Ending an account's sessions, whether by forcing a logout or by changing its role, now takes effect on the account's very next request.
+Previously the account kept whatever access it already held until that access expired on its own, which could be a further fifteen minutes.
+Sessions already open when this ships stay valid; an ordinary logout still ends only the session it was sent from.
+- A container image started without an explicit profile now runs the production profile instead of the development one, so a deployment that forgets to set a profile no longer serves API documentation anonymously, marks the refresh cookie non-Secure, or routes outbound mail to localhost.
+- The development profile no longer shadows the configured cookie signing secret with a value published in this repository, so the operator's secret is authoritative in every profile.
+- A direct-message WebSocket session is now closed when the session is revoked by logout, ban, or suspension, instead of surviving until its access token expired on its own.
+- The guard that rejects a forged client message aimed at another user's realtime channel is now active whenever any realtime endpoint is enabled, rather than only when the comment, notification, or post endpoints happen to be on.
+- Accepting `SameSite=None` on the refresh cookie now requires an explicit acknowledgement and otherwise fails at startup, because it removes the only cross-site request protection on the refresh and logout endpoints while leaving every request apparently successful.
+- WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
+
+### Fixed
+- Corrected `database/schema.sql`, which still had the group-conversation columns, a stale follow-counter function, and no record of the new conversation-customization columns despite Flyway having already migrated past all of it.
+
+### Added
+- A conversation can now be pinned to the top of the caller's own list, muted to suppress its notifications, and given a private nickname visible only to the caller, all independent of the other participant's own view.
+- A conversation can now be deleted from the caller's own inbox only, and marked unread again.
+Deleting only hides it for the caller; the other participant and the message history are untouched, and a new message from them reactivates it for the caller automatically.
+- Two people who follow each other now get a conversation automatically, so writing to someone no longer depends on one of them starting a thread first.
+Pairs who already followed each other before this release are given one by the upgrade.
+- A message that carries an attachment now includes the attachment's URL, dimensions, duration, and blurhash in the message response, so a client can render it without a second request per message.
+- Prometheus metrics are now exposed for scraping at `/actuator/prometheus`, which previously returned 404 despite the registry being present.
+- Local service containers now declare healthchecks and restart policies, and the application image declares a healthcheck.
+
+### Removed
+- Group conversations.
+The endpoints, the group fields on conversation responses, and the underlying columns are all gone, and messaging is now one to one.
+Existing group conversations are deleted by the upgrade, after being copied into archive tables so the content is recoverable.
+
+### Fixed
+- Marking a conversation unread now has a visible effect even when the caller sent its own newest messages. It previously cleared the read marker, which only changes the count when the other participant has newer messages to count; it is now an independent flag, cleared the next time the caller opens the conversation.
+- Two people following each other back at the same instant no longer deadlock in the database, which previously failed one of the two follows outright.
+The follower and following counters are updated in a fixed order now, so the two directions of a pair queue behind each other instead of colliding.
+- Ending a follow no longer leaves an empty conversation behind.
+A conversation that already has messages in it is kept, because unfollowing someone should not destroy the record of what was said.
+
+### Changed
+- Real-time direct-message delivery is now enabled in the production profile. The setting was absent there, so it fell back to off and messages were delivered only on refresh.
+- Real-time comment and like delivery is now enabled in the production profile. It was disabled, which left the only realtime endpoint the client opens absent in production and the feature silently inert.
+- `/actuator/prometheus` is reachable without authentication and should be restricted at the ingress.
+- The local database, cache, broker, and search ports are now published on the loopback interface only, matching the treatment the mail sink already documented.
+- The local database now uses a named volume, so its contents survive container recreation.
+
+### Fixed
+- The WebSocket handshake's remote-address logging no longer risks a null-pointer failure on non-Servlet requests, resolving a SonarQube dead-code finding without changing the logged value.
+
+### Tests
+- The development data seeder no longer runs during the test suite. It previously activated whenever a developer enabled seeding locally, inserting rows into whichever integration-test database was live and breaking that test's own teardown on a foreign key, with the affected test varying by timing.
+- A query-parameter test no longer selects its subject by position from an unordered reflection array, which intermittently picked a synthetic bridge method carrying none of the annotations under test.
+
+- The environment template now documents the media-duration limit plus post and message live/consumer toggles, so local and operator configuration exposes every application-owned environment variable.
+
+### Added
+- A user can now like and unlike a story, mirroring the existing post-like flow: self-like is permitted, liking an already-liked story is a conflict, and the story response carries the viewer's liked state plus, for the owner, the total like count.
+- Development-only automatic data seeding on startup: with `SEED_DATA=true` under the `dev` profile, the application seeds curated verified accounts, posts with real externally hosted media, comments, likes, and a follow graph a few seconds after startup, and logs a single reviewer account (which follows every seeded user) whose credentials give an immediate full-feed review experience. It is idempotent and never runs in production.
+- Comment, reply, comment-like, and comment-mention notifications now carry the id of the post they concern, alongside the existing comment id, so a client can open the correct post in one response instead of being unable to resolve it. Like-post notifications are unchanged. The field is additive and null for notifications that don't concern a post.
+- A user can now set and clear a banner (cover image), mirroring the existing avatar upload flow: upload through the pre-signed media flow, then save the resulting CDN URL to the profile. Sending an empty string clears it, exactly like the avatar. The banner URL is returned on both the self and public profile responses.
 - Conversations now deliver new and deleted messages to active participants in real time over a WebSocket connection, in addition to the existing REST history endpoint.
 - Sending a message now notifies every other active participant in the conversation.
 - Sending a message (text, image, video, post share, or story share) into a conversation, with a reply reference, idempotent retries, and validation that the payload matches the declared message type.
@@ -44,6 +173,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - End-to-end integration coverage for sending each message type, idempotent replay, history pagination, delete, and read-state endpoints.
 
 ### Security
+- Changing an account's status is now restricted to administrators and refused when the actor is the target or the target is an administrator: a moderator could previously ban any account including every administrator, and because a banned account cannot sign in to reverse it, a single moderator could lock the entire administrator tier out with no in-application recovery path. The audit-history endpoint for one user moved to `/admin/actions/for-user/{userId}`, which is a breaking change for that endpoint's callers.
 - Confirming a media upload no longer trusts the client's claim that the file reached storage: any authenticated user could previously register unlimited media assets, under any storage key including one the server never issued, and receive a CDN URL for an object that does not exist. Upload confirmation now verifies the object against storage before the asset is recorded.
 - Registration and password reset now enforce a password policy: 8 to 64 characters, at most 72 bytes when encoded as UTF-8, at least one uppercase letter, at least one digit or special character, and no whitespace or invisible characters. Login is deliberately unbounded, so accounts created under the previous rules continue to work and the policy is not disclosed to an attacker probing the login endpoint.
 - A deployment that did not set `APP_COOKIE_SIGNING_SECRET` previously started successfully and signed OAuth2 authorization-state cookies with the unresolved placeholder text as its HMAC key, voiding the tamper-evidence those cookies are meant to provide; declared constraints on security configuration are now enforced at startup, so such a deployment fails to start instead of running with a publicly known key.
@@ -79,6 +209,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The example environment file now documents 22 previously-undocumented configuration variables that already had defaults, covering the refresh-token purge job, the WebSocket revocation sweep interval, the notification live-push toggle, and several module seed/consumer/scheduler toggles.
 
 ### Fixed
+- The development auto-seeder now gives every seeded account a settings row, matching real registration; without it, `GET`/`PATCH /users/me/settings` returned not-found for any seeded account.
 - When post search was unavailable it returned an empty page identical to a genuine no-match apart from the response timestamp, so no client could tell "nothing matched your search" from "search is down" and no empty state could be worded honestly. Cursor-paginated responses now carry a `degraded` flag, false on every complete result including a real no-match, and true only when post search fell back because its index was unreachable. Hashtag search does not set it: its fallback answers from the database with real results, and only the ranking differs.
 - Listing one user's likes had no index carrying the full sort order, so a page could degrade into a scan of every like that user had ever made whenever many of them shared a timestamp, which is what a bulk import or a rapid burst of likes produces. Measured against a user holding twenty thousand such likes, a single first page read all twenty thousand rows; it now reads four pages of index.
 - A comment's `updatedAt` was one edit behind on the edit response and on the `comment.edited.v1` broadcast, so an editor saw the previous edit's timestamp and a live subscriber applied that stale value to everyone watching. Both now report the stored value.

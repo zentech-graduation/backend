@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +18,8 @@ import org.springframework.web.method.HandlerMethod;
 import com.app.common.exception.AppException;
 
 class StrictQueryParameterInterceptorTest {
+
+    private static final String HANDLER_METHOD_NAME = "handle";
 
     private StrictQueryParameterInterceptor interceptor;
     private MockHttpServletResponse response;
@@ -153,7 +157,29 @@ class StrictQueryParameterInterceptorTest {
                 .isTrue();
     }
 
+    /**
+     * Resolves the handler method by name, skipping compiler-generated members.
+     *
+     * <p>{@code getDeclaredMethods()} is documented as returning methods in no particular order, so
+     * indexing into it is not reproducible. A class implementing an interface method also carries a
+     * synthetic bridge alongside the real declaration, and a bridge does not expose the
+     * {@code @RequestParam} annotations. Picking the bridge made the interceptor see an unannotated
+     * handler, which it passes through by design, so the tests asserting a rejection failed
+     * intermittently depending on the order the JVM happened to report.
+     */
     private static HandlerMethod handlerFor(Object controller) {
-        return new HandlerMethod(controller, controller.getClass().getDeclaredMethods()[0]);
+        Method target =
+                Arrays.stream(controller.getClass().getDeclaredMethods())
+                        .filter(method -> HANDLER_METHOD_NAME.equals(method.getName()))
+                        .filter(method -> !method.isBridge() && !method.isSynthetic())
+                        .findFirst()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "No declared handler method named "
+                                                        + HANDLER_METHOD_NAME
+                                                        + " on "
+                                                        + controller.getClass()));
+        return new HandlerMethod(controller, target);
     }
 }

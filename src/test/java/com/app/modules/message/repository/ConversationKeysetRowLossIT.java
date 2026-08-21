@@ -117,8 +117,8 @@ class ConversationKeysetRowLossIT {
     private UUID insertConversation(OffsetDateTime lastMessageAt) {
         return jdbcClient
                 .sql(
-                        "INSERT INTO conversations(is_group, last_message_at)"
-                                + " VALUES (true, :lastMessageAt) RETURNING id")
+                        "INSERT INTO conversations(last_message_at)"
+                                + " VALUES (:lastMessageAt) RETURNING id")
                 .param("lastMessageAt", lastMessageAt)
                 .query(UUID.class)
                 .single();

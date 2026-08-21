@@ -27,6 +27,7 @@ import com.app.modules.post.dto.response.PostResponse;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.search.PostDocument;
 import com.app.modules.post.service.PostVisibilityService;
+import com.app.modules.recommendation.service.UserEventRecorder;
 
 @ExtendWith(MockitoExtension.class)
 class PostSearchServiceImplTest {
@@ -35,6 +36,7 @@ class PostSearchServiceImplTest {
     @Mock private PostRepository postRepository;
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private PostResponseAssembler postResponseAssembler;
+    @Mock private UserEventRecorder userEventRecorder;
     @Mock private SearchHits<PostDocument> searchHits;
 
     private PostSearchServiceImpl service;
@@ -46,7 +48,8 @@ class PostSearchServiceImplTest {
                         elasticsearchOperations,
                         postRepository,
                         postVisibilityService,
-                        postResponseAssembler);
+                        postResponseAssembler,
+                        userEventRecorder);
     }
 
     @Test

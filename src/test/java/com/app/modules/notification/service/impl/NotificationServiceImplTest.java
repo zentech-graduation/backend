@@ -82,7 +82,7 @@ class NotificationServiceImplTest {
     void create_selfNotification_skips() {
         UUID userId = UUID.randomUUID();
 
-        service.create(userId, userId, NotificationType.LIKE_POST, "post", UUID.randomUUID());
+        service.create(userId, userId, NotificationType.LIKE_POST, "post", UUID.randomUUID(), null);
 
         verify(notificationRepository, never()).save(any());
     }
@@ -95,7 +95,7 @@ class NotificationServiceImplTest {
                 UserSettings.builder().userId(recipientId).notifyFollows(false).build();
         when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
 
-        service.create(actorId, recipientId, NotificationType.FOLLOW, null, null);
+        service.create(actorId, recipientId, NotificationType.FOLLOW, null, null, null);
 
         verify(notificationRepository, never()).save(any());
     }
@@ -108,7 +108,7 @@ class NotificationServiceImplTest {
                 UserSettings.builder().userId(recipientId).notifyFollows(false).build();
         when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
 
-        service.create(actorId, recipientId, NotificationType.FOLLOW_REQUEST, null, null);
+        service.create(actorId, recipientId, NotificationType.FOLLOW_REQUEST, null, null, null);
 
         verify(notificationRepository, never()).save(any());
     }
@@ -119,7 +119,8 @@ class NotificationServiceImplTest {
         UUID recipientId = UUID.randomUUID();
         when(blockRepository.existsBetween(actorId, recipientId)).thenReturn(true);
 
-        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", UUID.randomUUID());
+        service.create(
+                actorId, recipientId, NotificationType.LIKE_POST, "post", UUID.randomUUID(), null);
 
         verify(notificationRepository, never()).save(any());
     }
@@ -130,7 +131,7 @@ class NotificationServiceImplTest {
         UUID recipientId = UUID.randomUUID();
         UUID entityId = UUID.randomUUID();
 
-        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", entityId);
+        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", entityId, null);
 
         ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
         verify(notificationRepository, times(1)).save(captor.capture());
@@ -141,12 +142,27 @@ class NotificationServiceImplTest {
     }
 
     @Test
+    void create_postIdProvided_savedOnNotification() {
+        UUID actorId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        UUID entityId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
+
+        service.create(
+                actorId, recipientId, NotificationType.COMMENT_POST, "comment", entityId, postId);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getPostId()).isEqualTo(postId);
+    }
+
+    @Test
     void create_allGuardsPass_enqueuesOutboxEvent() {
         UUID actorId = UUID.randomUUID();
         UUID recipientId = UUID.randomUUID();
         UUID entityId = UUID.randomUUID();
 
-        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", entityId);
+        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", entityId, null);
 
         verify(outboxService)
                 .enqueue(
@@ -162,7 +178,7 @@ class NotificationServiceImplTest {
     void create_selfNotification_doesNotEnqueueOutboxEvent() {
         UUID userId = UUID.randomUUID();
 
-        service.create(userId, userId, NotificationType.LIKE_POST, "post", UUID.randomUUID());
+        service.create(userId, userId, NotificationType.LIKE_POST, "post", UUID.randomUUID(), null);
 
         verify(outboxService, never()).enqueue(any(), any(), any(), any(), any(), any());
     }
@@ -173,7 +189,7 @@ class NotificationServiceImplTest {
         UUID recipientId = UUID.randomUUID();
         when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.empty());
 
-        service.create(actorId, recipientId, NotificationType.FOLLOW, null, null);
+        service.create(actorId, recipientId, NotificationType.FOLLOW, null, null, null);
 
         verify(notificationRepository, times(1)).save(any());
     }
@@ -316,7 +332,8 @@ class NotificationServiceImplTest {
                 UserSettings.builder().userId(recipientId).notifyLikes(false).build();
         when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
 
-        service.create(actorId, recipientId, NotificationType.LIKE_POST, "post", UUID.randomUUID());
+        service.create(
+                actorId, recipientId, NotificationType.LIKE_POST, "post", UUID.randomUUID(), null);
 
         verify(notificationRepository, never()).save(any());
     }
@@ -330,7 +347,12 @@ class NotificationServiceImplTest {
         when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
 
         service.create(
-                actorId, recipientId, NotificationType.COMMENT_POST, "post", UUID.randomUUID());
+                actorId,
+                recipientId,
+                NotificationType.COMMENT_POST,
+                "post",
+                UUID.randomUUID(),
+                null);
 
         verify(notificationRepository, never()).save(any());
     }
@@ -351,7 +373,12 @@ class NotificationServiceImplTest {
         when(userSettingsRepository.findById(recipientId)).thenReturn(Optional.of(settings));
 
         service.create(
-                actorId, recipientId, NotificationType.STORY_VIEW, "story", UUID.randomUUID());
+                actorId,
+                recipientId,
+                NotificationType.STORY_VIEW,
+                "story",
+                UUID.randomUUID(),
+                null);
 
         verify(notificationRepository, times(1)).save(any());
     }
@@ -425,6 +452,7 @@ class NotificationServiceImplTest {
                 UUID.randomUUID(),
                 null,
                 NotificationType.FOLLOW,
+                null,
                 null,
                 null,
                 false,

@@ -31,6 +31,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
@@ -101,6 +102,9 @@ class CommentStompSendAuthIT {
     @Autowired private UserRepository userRepository;
     @Autowired private PostRepository postRepository;
     @Autowired private StringRedisTemplate redisTemplate;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     @MockitoBean private MailSender mailSender;
 
@@ -226,8 +230,12 @@ class CommentStompSendAuthIT {
      */
     private StompSession connect(User user, CompletableFuture<Throwable> errorSink)
             throws Exception {
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
-        String wsUrl = "ws://localhost:" + port + "/ws/comments/websocket?token=" + token;
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
+        String wsUrl =
+                "ws://localhost:"
+                        + port
+                        + "/ws/comments/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         StompSessionHandlerAdapter handler =
                 errorSink == null
                         ? new StompSessionHandlerAdapter() {}

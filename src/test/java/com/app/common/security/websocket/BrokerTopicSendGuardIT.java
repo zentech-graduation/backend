@@ -35,6 +35,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.common.security.jwt.JwtTokenProvider;
+import com.app.modules.auth.service.WebSocketTicketService;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.enums.PostType;
@@ -116,6 +117,9 @@ class BrokerTopicSendGuardIT {
     @Autowired private UserRepository userRepository;
     @Autowired private PostRepository postRepository;
     @Autowired private SimpMessagingTemplate messagingTemplate;
+    // The handshake accepts a single-use ticket, not a raw access token, so a test that opens a
+    // real socket mints one the same way the client does.
+    @Autowired private WebSocketTicketService webSocketTicketService;
 
     private WebSocketStompClient stompClient;
     private StompSession victimSession;
@@ -272,8 +276,12 @@ class BrokerTopicSendGuardIT {
 
     private StompSession connect(User user, CompletableFuture<Throwable> errorSink)
             throws Exception {
-        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER");
-        String wsUrl = "ws://localhost:" + port + "/ws/notifications/websocket?token=" + token;
+        String token = jwtTokenProvider.generateAccessToken(user.getId(), "USER", 0);
+        String wsUrl =
+                "ws://localhost:"
+                        + port
+                        + "/ws/notifications/websocket?ticket="
+                        + webSocketTicketService.issueTicket(token);
         StompSessionHandlerAdapter handler =
                 errorSink == null
                         ? new StompSessionHandlerAdapter() {}

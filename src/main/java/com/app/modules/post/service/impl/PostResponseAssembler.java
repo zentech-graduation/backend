@@ -10,6 +10,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.hashtag.dto.response.HashtagSummaryResponse;
+import com.app.modules.hashtag.service.HashtagService;
 import com.app.modules.media.entity.MediaAsset;
 import com.app.modules.post.dto.response.FeedPostResponse;
 import com.app.modules.post.dto.response.PostMediaResponse;
@@ -35,16 +37,19 @@ public class PostResponseAssembler {
     private final PostMediaAssetRepository postMediaAssetRepository;
     private final UserSummaryService userSummaryService;
     private final PostViewerStateService postViewerStateService;
+    private final HashtagService hashtagService;
     private final PostMapper postMapper;
 
     public PostResponseAssembler(
             PostMediaAssetRepository postMediaAssetRepository,
             UserSummaryService userSummaryService,
             PostViewerStateService postViewerStateService,
+            HashtagService hashtagService,
             PostMapper postMapper) {
         this.postMediaAssetRepository = postMediaAssetRepository;
         this.userSummaryService = userSummaryService;
         this.postViewerStateService = postViewerStateService;
+        this.hashtagService = hashtagService;
         this.postMapper = postMapper;
     }
 
@@ -66,6 +71,7 @@ public class PostResponseAssembler {
                                 .collect(Collectors.toMap(MediaAsset::getId, a -> a));
         Map<UUID, UserSummaryResponse> authors = batchFetchAuthors(posts);
         PostViewerState viewerState = batchFetchViewerState(viewerId, posts);
+        Map<UUID, List<HashtagSummaryResponse>> hashtags = batchFetchHashtags(posts);
         List<PostResponse> result = new ArrayList<>(posts.size());
         for (Post post : posts) {
             List<PostMediaResponse> media =
@@ -82,7 +88,8 @@ public class PostResponseAssembler {
                             authors.get(post.getUserId()),
                             viewerState.isLiked(post.getId()),
                             viewerState.isSaved(post.getId()),
-                            viewerState.hasReported(post.getId())));
+                            viewerState.hasReported(post.getId()),
+                            hashtags.getOrDefault(post.getId(), List.of())));
         }
         return result;
     }
@@ -140,5 +147,11 @@ public class PostResponseAssembler {
     // One batched like/save/report lookup for every post on the page instead of one probe per row.
     private PostViewerState batchFetchViewerState(UUID viewerId, List<Post> posts) {
         return postViewerStateService.load(viewerId, posts.stream().map(Post::getId).toList());
+    }
+
+    // One batched hashtag lookup for every post on the page. Deleted hashtags are filtered out by
+    // the query rather than here, so the omission cannot be forgotten at one call site.
+    private Map<UUID, List<HashtagSummaryResponse>> batchFetchHashtags(List<Post> posts) {
+        return hashtagService.getVisibleHashtagsForPosts(posts.stream().map(Post::getId).toList());
     }
 }

@@ -5,8 +5,11 @@ import java.util.UUID;
 import com.app.common.exception.AppException;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminActionRequest;
+import com.app.modules.admin.dto.request.AdminEscalateReportRequest;
+import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminActionSummaryResponse;
+import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
 public interface AdminService {
@@ -17,10 +20,22 @@ public interface AdminService {
     /** Unbans a banned user and records the action atomically. */
     AdminActionResponse unbanUser(UUID actorId, UUID userId, AdminActionRequest request);
 
-    /** Suspends an active user and records the action atomically. */
-    AdminActionResponse suspendUser(UUID actorId, UUID userId, AdminActionRequest request);
+    /**
+     * Suspends an active user and records the action atomically.
+     *
+     * <p>A request carrying {@code durationDays} stores the moment the suspension lapses, after
+     * which the first authentication attempt or the reinstatement sweep returns the account to
+     * active. A request without one is indefinite and stores no deadline, so nothing ever
+     * reinstates it automatically.
+     */
+    AdminActionResponse suspendUser(UUID actorId, UUID userId, AdminSuspendUserRequest request);
 
-    /** Unsuspends a suspended user and records the action atomically. */
+    /**
+     * Unsuspends a suspended user and records the action atomically.
+     *
+     * <p>Clears the suspension deadline in the same transaction, so the reinstatement sweep can
+     * never fire on a row an administrator has already handled.
+     */
     AdminActionResponse unsuspendUser(UUID actorId, UUID userId, AdminActionRequest request);
 
     /** Removes a post and records the action atomically. */
@@ -35,24 +50,91 @@ public interface AdminService {
     /** Restores a removed comment and records the action atomically. */
     AdminActionResponse restoreComment(UUID actorId, UUID commentId, AdminActionRequest request);
 
-    /** Resolves a pending report and records the action atomically. */
+    /**
+     * Resolves an open report and records the action atomically.
+     *
+     * <p>An escalated report may be resolved only by an administrator. A moderator escalated it
+     * precisely because it did not want to decide, so letting any moderator close it again would
+     * make the escalation an empty gesture.
+     */
     AdminActionResponse resolveReport(UUID actorId, UUID reportId, AdminActionRequest request);
 
-    /** Dismisses a pending report and records the action atomically. */
+    /**
+     * Dismisses an open report and records the action atomically.
+     *
+     * <p>Subject to the same administrator-only rule as resolution for an escalated report.
+     */
     AdminActionResponse dismissReport(UUID actorId, UUID reportId, AdminActionRequest request);
 
-    /** Lists audit-event summaries with optional actor and action-type filters. */
+    /**
+     * Hands a report up to an administrator and records the action atomically.
+     *
+     * <p>Moves the report out of the moderator queue while leaving it readable by the moderator
+     * that escalated it. There is no transition back: a report that could fall into the queue it
+     * just left would defeat the point of escalating it.
+     *
+     * @param actorId moderator or administrator escalating the report
+     * @param reportId report to escalate
+     * @param request why the decision is being handed up
+     * @return the audit row written
+     * @throws AppException with {@code REPORT_NOT_FOUND} when no row holds that id, or {@code
+     *     REPORT_INVALID_TRANSITION} when the report is already closed or already escalated
+     */
+    AdminActionResponse escalateReport(
+            UUID actorId, UUID reportId, AdminEscalateReportRequest request);
+
+    /**
+     * Counts the reports waiting on an administrator.
+     *
+     * <p>Escalation pushes no notification by design, so this count is the only signal that one is
+     * waiting.
+     *
+     * @return the count
+     */
+    EscalatedReportCountResponse countEscalatedReports();
+
+    /**
+     * Lists audit-event summaries with optional actor and action-type filters.
+     *
+     * <p>A moderator sees only rows it authored, whatever {@code adminId} filter it supplies. An
+     * administrator sees every row. The restriction is applied here rather than at the web layer so
+     * it holds for any caller of this method.
+     *
+     * @param actorId the requesting account, resolved from the security context
+     * @param adminId actor filter requested by the caller; ignored for a moderator
+     * @param actionType action-type filter, or null for every type
+     * @param cursor opaque keyset cursor, or null for the first page
+     * @param size requested page size
+     * @return one cursor page of audit summaries visible to this actor
+     */
     CursorPageResponse<AdminActionSummaryResponse> getActions(
-            UUID adminId, AdminActionType actionType, String cursor, int size);
+            UUID actorId, UUID adminId, AdminActionType actionType, String cursor, int size);
 
     /**
      * Returns one immutable audit event.
      *
-     * @throws AppException when the audit event does not exist
+     * <p>A moderator may read only a row it authored. A row authored by someone else is reported as
+     * absent rather than forbidden, so the endpoint does not confirm that an audit row it may not
+     * read exists.
+     *
+     * @param actorId the requesting account, resolved from the security context
+     * @param actionId the audit event to read
+     * @return the audit event
+     * @throws AppException when the audit event does not exist or is not visible to this actor
      */
-    AdminActionResponse getActionById(UUID actionId);
+    AdminActionResponse getActionById(UUID actorId, UUID actionId);
 
-    /** Lists audit-event summaries for one affected user. */
+    /**
+     * Lists audit-event summaries for one affected user.
+     *
+     * <p>A moderator sees only rows it authored against that user; an administrator sees every row.
+     *
+     * @param actorId the requesting account, resolved from the security context
+     * @param userId the affected account
+     * @param cursor opaque keyset cursor, or null for the first page
+     * @param size requested page size
+     * @return one cursor page of audit summaries visible to this actor
+     */
     CursorPageResponse<AdminActionSummaryResponse> getActionsForUser(
-            UUID userId, String cursor, int size);
+            UUID actorId, UUID userId, String cursor, int size);
 }

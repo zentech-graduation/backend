@@ -10,6 +10,7 @@ import com.app.modules.report.dto.response.ReportResponse;
 import com.app.modules.report.dto.response.ReportSummaryResponse;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
+import com.app.modules.users.enums.UserRole;
 
 public interface ReportService {
 
@@ -26,6 +27,21 @@ public interface ReportService {
     /**
      * Lists reports for moderation with optional status and target-type filters.
      *
+     * <p>A moderator's queue is the open part of the lifecycle: pending and reviewing. Asking for a
+     * closed or escalated status returns an empty page rather than an error, which is the stealth
+     * model this codebase uses elsewhere and which avoids confirming that rows exist behind the
+     * filter.
+     *
+     * <p>An administrator's queue is unchanged and includes escalated reports.
+     *
+     * <p>The cursor is scoped per role. Filtering by role without doing so would let a moderator
+     * replay an administrator's cursor and page into rows its own listing never produces.
+     *
+     * <p>The role is a parameter rather than a lookup so this module keeps importing no other. It
+     * is the caller's real role either way: the principal it comes from is rebuilt from the account
+     * row on every request, not from a token claim.
+     *
+     * @param actorRole role of the caller, which decides the visible statuses
      * @param status optional lifecycle status filter
      * @param reportType optional target-type filter
      * @param cursor opaque cursor from the prior page
@@ -33,7 +49,11 @@ public interface ReportService {
      * @return matching report page
      */
     CursorPageResponse<ReportSummaryResponse> listReports(
-            ReportStatus status, ReportType reportType, String cursor, int size);
+            UserRole actorRole,
+            ReportStatus status,
+            ReportType reportType,
+            String cursor,
+            int size);
 
     /**
      * Lists pending reports in FIFO order for moderator triage.
@@ -47,11 +67,22 @@ public interface ReportService {
     /**
      * Returns a report by identifier for moderation review.
      *
+     * <p>A moderator reaches the open part of the lifecycle, pending and reviewing, and any report
+     * it escalated itself. Every other report answers as if it did not exist, which is the same
+     * stealth model the listing uses: a 403 would confirm that the row is there. An administrator
+     * reaches every report.
+     *
+     * <p>The role and the caller identity are parameters rather than lookups so this module keeps
+     * importing no other. They are the caller's real role and id either way: the principal they
+     * come from is rebuilt from the account row on every request, not from a token claim.
+     *
+     * @param actorRole role of the caller, which decides what it may read
+     * @param actorId identity of the caller, matched against the report's escalating moderator
      * @param reportId report identifier
      * @return report details
-     * @throws AppException when the report does not exist
+     * @throws AppException when the report does not exist, or the caller may not read it
      */
-    ReportResponse getReport(UUID reportId);
+    ReportResponse getReport(UserRole actorRole, UUID actorId, UUID reportId);
 
     /**
      * Applies a valid moderation lifecycle transition and records reviewer metadata.

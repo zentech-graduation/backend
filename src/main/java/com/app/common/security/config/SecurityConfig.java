@@ -77,6 +77,12 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_INFRA_PATHS = {
         "/actuator/health",
+        // A Prometheus scraper cannot present an admin JWT, and the rule below restricts the rest
+        // of /actuator/** to ADMIN. Registered here because the first matching rule wins, so this
+        // must precede that rule. Deliberately anonymous: the endpoint publishes URI templates,
+        // request counts, and JVM internals to any caller that can reach the port, and is expected
+        // to be restricted at the ingress rather than in the application.
+        "/actuator/prometheus",
         "/api-docs/**",
         "/swagger-ui/**",
         "/swagger-ui.html",
@@ -222,12 +228,26 @@ public class SecurityConfig {
         auth.requestMatchers("/actuator/**").hasRole("ADMIN");
     }
 
-    /** Restricts admin API paths to ADMIN and moderator API paths to MODERATOR or ADMIN. */
+    /**
+     * Restricts account-status administration to ADMIN and the remaining moderation surfaces to
+     * MODERATOR or ADMIN.
+     *
+     * <p>The two admin matchers are order-dependent: the narrower {@code /api/v1/admin/users/**}
+     * rule must be registered first, because the first matching rule wins and the broader rule
+     * below would otherwise grant a moderator the account-status endpoints. A moderator holding
+     * those endpoints can ban an administrator, and a banned administrator cannot authenticate to
+     * reverse it, so the role hierarchy inverts with no in-application recovery path. No endpoint
+     * that a moderator legitimately needs may live under {@code /api/v1/admin/users/}.
+     */
     private void configureRoleBasedEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
+        // The collection path is listed alongside the sub-tree pattern rather than relying on
+        // "/users/**" also matching zero trailing segments. It does under both of Spring's matcher
+        // implementations, but the ADMIN-only guarantee for the account list should not rest
+        // on that detail surviving a future matcher change.
+        auth.requestMatchers("/api/v1/admin/users", "/api/v1/admin/users/**").hasRole("ADMIN");
         auth.requestMatchers("/api/v1/admin/**").hasAnyRole("MODERATOR", "ADMIN");
-        auth.requestMatchers("/api/v1/moderator/**").hasAnyRole("MODERATOR", "ADMIN");
         auth.requestMatchers(
                         HttpMethod.GET,
                         ApiConstants.Reports.ROOT,

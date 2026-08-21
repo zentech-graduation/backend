@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01–V44 SQL migrations
+│   │       ├── db/migration/       # Flyway V01-V66 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -162,14 +162,14 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `social` | **Implemented** | api, controller, converter, dto/response, entity, enums, mapper, messaging, repository, service/impl |
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
 | `post` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, live, mapper, messaging, repository, runner, search, service/impl, validation |
-| `hashtag` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, event, mapper, messaging, repository, runner, search, service/impl |
+| `hashtag` | **Implemented** | api, config, consumer, controller, converter, dto/{request,response}, entity, enums, event, mapper, messaging, repository, runner, search, service/impl |
 | `notification` | **Implemented** | api, config, controller, dto/response, entity, entity/converter, entity/enums, live, mapper, messaging, repository, service/impl |
 | `comment` | **Implemented** | api, config, consumer, controller, dto/{request,response}, entity, live, mapper, messaging, observability, repository, service/impl, util |
 | `story` | **Implemented** | api, consumer, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
 | `message` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
-| `admin` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
-| `recommendation` | **Implemented** | api, client/{dto,impl}, config, consumer, controller, messaging, repository, service/impl/feed |
+| `admin` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
+| `recommendation` | **Implemented** | api, client/{dto,impl}, config, consumer, controller, converter, dto/response, entity, enums, messaging, repository, service/impl/feed |
 
 **Module responsibilities:**
 - **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
@@ -178,12 +178,12 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
 - **`post`**: Post CRUD (image/video/carousel), likes, saves, view recording, post edit history, visibility enforcement, Elasticsearch index sync via outbox.
-- **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback.
+- **`hashtag`**: Hashtag creation/normalization, trending computation, Elasticsearch index sync via outbox, trigram-search fallback, and the `active`/`banned`/`deleted` lifecycle that governs what every hashtag surface shows and what every post write path accepts. `HashtagLifecycleService` owns the status transitions, the immediate `hashtag_trending` purge, and the status-spanning administrative reads.
 - **`notification`**: Notification persistence and retrieval; `SocialNotificationConsumer` handles `user.followed.v1` and `user.follow-requested.v1` events.
 - **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
-- **`admin`**: Immutable moderation audit log and atomic moderation actions; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss — each writing an `admin_actions` row and mutating the target entity in the same transaction.
-- **`recommendation`**: Personalized ranked feed backed by the external Gorse recommender, reached over REST through `GorseClient`; `RecommendationFeedServiceImpl` runs a Source → Hydrator → Filter → Scorer → Selector pipeline with a `gorse` circuit breaker and degrades to the popularity ranking then the chronological feed; `RecommendationFeedbackConsumer` turns `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, and `comment.created.v1` into append-only `user_events` rows plus Gorse feedback. See `docs/modules/recommendation/README.md`.
+- **`admin`**: Immutable moderation audit log, atomic moderation actions, the warning and strike discipline ladder, report escalation, the report-anchored moderation view of a reported entity, the administrative hashtag registry, the behavioural activity log read surface, and platform statistics; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss, and `AdminHashtagServiceImpl` handles hashtag create/ban/unban/delete — each writing an `admin_actions` row and mutating the target entity in the same transaction. `AdminAuthorizationServiceImpl` holds every actor-and-target rule for both status and role changes. `StatsCollectionJob` fills `platform_stats` one completed bucket at a time and `StatsRollupJob` compacts fine buckets into daily rows and enforces retention; `AdminStatsServiceImpl` and `AdminUserEventServiceImpl` are the administrator-only read paths.
+- **`recommendation`**: Owns `user_events` and the personalized ranked feed. The feed is backed by the external Gorse recommender, reached over REST through `GorseClient`; `RecommendationFeedServiceImpl` runs a Source → Hydrator → Filter → Scorer → Selector pipeline with a `gorse` circuit breaker and degrades to the popularity ranking then the chronological feed. `user_events` has two writers with opposite durability contracts: `UserEventRecorder` produces `session_start`, `search`, and `profile_view` off the request thread, dropping rows rather than failing or extending the caller's request; `RecommendationFeedbackConsumer` turns `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, and `comment.created.v1` into idempotent append-only rows plus Gorse feedback, because those are the canonical record Gorse is rebuilt from. `UserEventsPartitionJob` maintains a rolling window of monthly partitions covering the current month and the next two. See `docs/modules/recommendation/README.md`.
 
 ### Transactional Outbox / Inbox Pattern
 
@@ -206,7 +206,9 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
-Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 185 test classes total.
+Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 213 test
+classes total. The table below is the script's output verified against the filesystem, not a
+hand-maintained roster.
 
 | Package | Test Classes |
 |---------|-------------|
@@ -229,45 +231,50 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `common/outbox/service/impl` | `OutboxPublisherRabbitMqIT`, `OutboxPublisherServiceImplTest`, `OutboxServiceImplTest` |
 | `common/pagination` | `CursorCodecTest`, `KeysetPageTest`, `OffsetCursorCodecTest`, `OffsetPageableTest`, `TimeCursorsTest` |
 | `common/response` | `ApiResponseTest`, `CursorPageResponseTest`, `ViewerRelationshipResponseTest` |
-| `common/web` | `StrictQueryParameterInterceptorTest` |
 | `common/security/config` | `CorsPropertiesTest` |
 | `common/security/filter` | `AuthRateLimitFilterTest`, `JwtAuthenticationFilterTest` |
 | `common/security/jwt` | `JwtTokenProviderTest` |
 | `common/security/service/impl` | `RateLimiterServiceImplTest`, `RefreshTokenServiceImplTest`, `TokenBlacklistServiceImplTest`, `TokenPrincipalResolverImplTest` |
 | `common/security/user` | `UserPrincipalTest` |
 | `common/security/util` | `CachedBodyHttpServletRequestTest`, `IpExtractorTest`, `SecurityUtilsTest` |
-| `common/security/websocket` | `BrokerTopicSendGuardIT`, `JwtHandshakeInterceptorTest`, `WebSocketHandshakeRateLimitIT`, `WebSocketRevocationIT`, `WebSocketRevocationSweepServiceTest` |
+| `common/security/websocket` | `BrokerSendGuardRegistrationIT`, `BrokerTopicSendGuardIT`, `JwtHandshakeInterceptorTest`, `WebSocketHandshakeRateLimitIT`, `WebSocketRevocationIT`, `WebSocketRevocationSweepServiceTest` |
 | `common/settings/service/impl` | `SystemSettingServiceImplTest` |
-| `modules/admin/controller` | `AdminControllerIT` |
-| `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest` |
-| `modules/admin/service/impl` | `AdminServiceImplTest` |
+| `common/web` | `StrictQueryParameterInterceptorTest` |
+| `modules/admin/controller` | `AdminControllerIT`, `AdminDisciplineControllerIT`, `AdminHashtagControllerIT`, `AdminStatsControllerIT`, `AdminUserControllerIT`, `AdminUserEventControllerIT` |
+| `modules/admin/dto/request` | `AdminUpdateHashtagRequestDeserializationTest` |
+| `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest`, `UserWarningRepositoryIT` |
+| `modules/admin/service` | `StatsBucketsTest` |
+| `modules/admin/service/impl` | `AdminAuthorizationServiceImplTest`, `AdminServiceImplTest`, `AdminUserEventServiceImplTest`, `PlatformStatsIT`, `StatsCollectionJobTest`, `SuspensionExpiryServiceImplTest`, `UserDisciplineServiceImplTest` |
 | `modules/auth/controller` | `AuthControllerIT`, `PasswordPolicyIT` |
 | `modules/auth/converter` | `OAuthProviderConverterTest` |
 | `modules/auth/cookie` | `RefreshTokenCookieManagerTest` |
 | `modules/auth/dto/request` | `RegisterRequestDeserializationTest`, `ResetPasswordRequestDeserializationTest` |
 | `modules/auth/messaging` | `AuthMailEventConsumerRabbitMqIT`, `AuthMailEventConsumerTest`, `AuthMailEventHandlerTest` |
 | `modules/auth/oauth2` | `CookieOAuth2AuthorizationRequestRepositoryTest`, `CustomOidcUserServiceTest`, `CustomOidcUserTest`, `OAuth2AuthenticationFailureHandlerTest` |
-| `modules/auth/service/impl` | `AuthForgotPasswordEventServiceImplTest`, `AuthMailEventServiceImplTest`, `AuthResendVerificationEventServiceImplTest`, `AuthServiceImplTest`, `ForgotPasswordTimingEqualizerTest`, `OAuth2ExchangeCodeServiceImplTest`, `RefreshTokenPurgeJobTest`, `TokenServiceImplTest` |
+| `modules/auth/service/impl` | `AuthForgotPasswordEventServiceImplTest`, `AuthMailEventServiceImplTest`, `AuthResendVerificationEventServiceImplTest`, `AuthServiceImplTest`, `ForgotPasswordTimingEqualizerTest`, `OAuth2ExchangeCodeServiceImplTest`, `RefreshTokenPurgeJobTest`, `TokenServiceImplTest`, `WebSocketTicketServiceImplTest` |
 | `modules/auth/validation` | `PasswordPolicyValidatorTest`, `UserStateValidatorTest` |
 | `modules/comment/config` | `CommentWebSocketConfigTest` |
-| `modules/comment/consumer` | `CommentNotificationConsumerIT` |
+| `modules/comment/consumer` | `CommentNotificationConsumerIT`, `CommentNotificationConsumerTest` |
 | `modules/comment/controller` | `CommentControllerIT` |
 | `modules/comment/live` | `CommentLiveBlockFilterIT`, `CommentStompSendAuthIT`, `CommentWebSocketAccountStatusIT`, `CommentWebSocketHandshakeRejectionIT`, `CommentWebSocketLiveDeliveryIT` |
-| `modules/comment/repository` | `CommentKeysetRowLossIT`, `CommentTopLikedQueryIT` |
+| `modules/comment/repository` | `CommentEditedAtColumnIT`, `CommentKeysetRowLossIT`, `CommentSubtreeDeleteEquivalenceIT`, `CommentTopLikedQueryIT` |
 | `modules/comment/service/impl` | `CommentAuthorEmbeddingIT`, `CommentModerationServiceImplTest`, `CommentPinnedTopCommentsIT`, `CommentServiceImplTest`, `CommentViewerStateIT`, `CommentViewerStateServiceImplTest` |
 | `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT`, `HashtagIndexSyncConsumerTest` |
 | `modules/hashtag/controller` | `HashtagControllerIT` |
-| `modules/hashtag/service/impl` | `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT` |
+| `modules/hashtag/repository` | `HashtagRepositoryIT` |
+| `modules/hashtag/service/impl` | `HashtagLifecycleServiceImplTest`, `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT` |
 | `modules/media/controller` | `MediaControllerIT` |
 | `modules/media/repository` | `MediaAssetRepositoryIT` |
 | `modules/media/service/impl` | `MediaAssetRegistrarTest`, `MediaEventServiceImplTest`, `MediaServiceImplTest` |
 | `modules/media/storage` | `MediaStorageKeyGeneratorTest`, `R2ObjectStoragePresignServiceTest` |
 | `modules/media/validation` | `MediaMetadataValidatorTest` |
 | `modules/message/config` | `MessagePropertiesTest` |
+| `modules/message/consumer` | `MessageNotificationConsumerIT`, `MessageNotificationConsumerTest` |
 | `modules/message/controller` | `MessageControllerIT` |
 | `modules/message/converter` | `MessageTypeConverterTest` |
+| `modules/message/live` | `MessageWebSocketAuthInterceptorTest` |
 | `modules/message/repository` | `ConversationKeysetRowLossIT` |
-| `modules/message/service/impl` | `ConversationServiceImplTest` |
+| `modules/message/service/impl` | `ConversationServiceImplTest`, `DirectConversationProvisionerIT`, `MessageServiceImplTest` |
 | `modules/notification/config` | `NotificationWebSocketConfigTest` |
 | `modules/notification/controller` | `NotificationControllerIT` |
 | `modules/notification/entity/converter` | `NotificationTypeConverterTest` |
@@ -276,26 +283,28 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | `modules/notification/repository` | `NotificationKeysetRowLossIT` |
 | `modules/notification/service/impl` | `NotificationAuthorEmbeddingIT`, `NotificationServiceImplTest` |
 | `modules/post/consumer` | `PostIndexSyncConsumerIT`, `PostIndexSyncConsumerTest` |
+| `modules/post/controller` | `PostBannedHashtagIT`, `PostControllerIT` |
 | `modules/post/live` | `PostLikeLiveDeliveryIT`, `PostOnlyWebSocketConfigIT` |
-| `modules/post/controller` | `PostControllerIT` |
 | `modules/post/repository` | `PostKeysetRowLossIT` |
-| `modules/post/service/impl` | `PostAuthorEmbeddingIT`, `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostViewerStateIT`, `PostViewerStateServiceImplTest`, `PostVisibilityServiceImplTest` |
+| `modules/post/service/impl` | `PostAuthorEmbeddingIT`, `PostLikeEventPublishingIT`, `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostViewerStateIT`, `PostViewerStateServiceImplTest`, `PostVisibilityServiceImplTest` |
+| `modules/post/validation` | `PostTypeFilterTest` |
+| `modules/recommendation/service` | `UserEventRecordingIT` |
 | `modules/recommendation/service/impl` | `UserEventsPartitionJobTest` |
 | `modules/report/controller` | `ReportControllerIT` |
 | `modules/report/repository` | `ReportKeysetRowLossIT`, `ReportRepositoryIT` |
-| `modules/report/service/impl` | `ReportServiceImplTest` |
+| `modules/report/service/impl` | `ReportedTargetServiceImplTest`, `ReportedViewerStateIT`, `ReportServiceImplTest` |
 | `modules/social/controller` | `SocialControllerIT` |
 | `modules/social/converter` | `FollowStatusConverterTest` |
 | `modules/social/repository` | `FollowKeysetRowLossIT`, `FollowRepositoryIT` |
-| `modules/social/service/impl` | `BlockedListIT`, `SocialEventServiceImplTest`, `SocialRelationshipIT`, `SocialServiceImplTest` |
+| `modules/social/service/impl` | `BlockedListIT`, `MutualFollowProvisioningIT`, `SocialEventServiceImplTest`, `SocialRelationshipIT`, `SocialServiceImplTest` |
 | `modules/story/consumer` | `StoryNotificationConsumerIT`, `StoryNotificationConsumerTest` |
 | `modules/story/controller` | `StoryControllerIT` |
 | `modules/story/repository` | `StoryViewKeysetRowLossIT` |
-| `modules/story/service/impl` | `StoryServiceImplTest`, `StoryViewServiceImplTest`, `StoryVisibilityServiceImplTest` |
+| `modules/story/service/impl` | `StoryLikeServiceImplTest`, `StoryServiceImplTest`, `StoryViewServiceImplTest`, `StoryVisibilityServiceImplTest` |
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
 | `modules/users/repository` | `UserRepositorySurfaceTest` |
-| `modules/users/service/impl` | `UserProfileViewerStateIT`, `UserSearchIT`, `UserSearchServiceImplTest`, `UserServiceImplTest`, `UserSummaryServiceIT`, `UserSummaryServiceImplTest`, `UsernameLookupIT` |
+| `modules/users/service/impl` | `UsernameLookupIT`, `UserProfileViewerStateIT`, `UserSearchIT`, `UserSearchServiceImplTest`, `UserServiceImplTest`, `UserSummaryServiceImplTest`, `UserSummaryServiceIT` |
 
 ---
 
@@ -304,7 +313,7 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 46 migrations at `src/main/resources/db/migration/`:
+- Migration: **Flyway** (`out-of-order: false`); 72 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71 and V72 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -355,6 +364,52 @@ Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`
 | V45 | add_comment_edited_at |
 | V46 | add_post_likes_user_keyset_index |
 
+| V47 | add_notification_post_id |
+
+| V48 | add_users_banner_url |
+
+| V49 | add_story_likes |
+
+| V50 | remove_group_conversations |
+
+| V51 | order_follow_counter_locks |
+
+| V52 | add_conversation_participant_customization |
+
+| V53 | add_conversation_manual_unread_flag |
+
+| V54 | add_admin_action_type_values |
+
+| V55 | add_moderation_action_configs_rows |
+
+| V56 | add_users_admin_visibility_columns |
+
+| V57 | add_users_admin_visibility_indexes |
+
+| V58 | add_users_token_epoch |
+
+| V59 | add_posts_status_before_moderation |
+
+| V60 | add_notification_type_warning |
+
+| V61 | add_notification_type_configs_warning_row |
+
+| V62 | create_user_discipline_tables |
+
+| V63 | create_user_discipline_indexes |
+
+| V64 | add_report_status_escalated |
+
+| V65 | add_reports_escalation_columns |
+
+| V66 | add_reports_escalated_index |
+| V67 | add_hashtag_status |
+| V68 | add_hashtag_status_indexes |
+| V69 | fill_user_events_partition_gaps |
+| V70 | create_platform_stats |
+| V71 | add_platform_stats_series_index |
+| V72 | add_admin_listing_indexes |
+
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
 
@@ -368,14 +423,16 @@ PostgreSQL enum types:
 | `post_type` | `image`, `video`, `carousel`, `text` |
 | `media_type` | `image`, `video` |
 | `follow_status` | `pending`, `accepted` |
+| `hashtag_status` | `active`, `banned`, `deleted` (V67) |
+| `stat_granularity` | `half_hour`, `day` (V70) |
 | `story_type` | `image`, `video` |
 | `message_type` | `text`, `image`, `video`, `post_share`, `story_share` |
 | `report_type` | `post`, `comment`, `user`, `story`, `message` |
-| `report_status` | `pending`, `reviewing`, `resolved`, `dismissed` |
+| `report_status` | `pending`, `reviewing`, `resolved`, `dismissed`, `escalated` (V64) |
 | `report_reason` | `spam`, `nudity`, `violence`, `hate_speech`, `harassment`, `false_information`, `scam`, `other` |
-| `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message` |
+| `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message`, `warning` (V60) |
 | `oauth_provider` | `google`, `facebook`, `apple` |
-| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report` |
+| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `force_logout`, `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag` (V54; every value has a caller) |
 | `event_type` | `post_view`, `post_like`, `post_unlike`, `post_save`, `post_unsave`, `post_share`, `post_comment`, `story_view`, `story_reply`, `profile_view`, `profile_follow`, `profile_unfollow`, `search`, `hashtag_click`, `comment_like`, `comment_reply`, `message_send`, `session_start`, `session_end`, `app_open` |
 
 ### Cache — Redis
@@ -421,6 +478,8 @@ PostgreSQL enum types:
 | `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
 | `recommendation.feedback.queue` | `recommendation.feedback.dlq` | `recommendation.feedback.dead-letter` |
 
+| `admin.notification.queue` | `admin.notification.dlq` | `admin.notification.dead-letter` |
+
 **Bindings (queue → `social.events`):**
 
 | Queue | Routing key / pattern | Source config |
@@ -438,6 +497,7 @@ PostgreSQL enum types:
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
 | `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
 | `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
+| `admin.notification.queue` | `user.warned.v1` | `AdminRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `post.live.events` (exchange) | `post.live.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
@@ -545,7 +605,9 @@ Implemented in `common/security/` and `modules/auth/`:
   - `comments`: `like_count`, `reply_count`
   - `hashtags`: `post_count`
   - `stories`: `view_count`
-- **`user_events` partitioning**: partitioned by month (`PARTITION BY RANGE (created_at)`). Pre-create monthly partitions before inserting events.
+- **`user_events` partitioning**: partitioned by month (`PARTITION BY RANGE (created_at)`) with a `DEFAULT` catch-all. A write whose month has no partition therefore does not fail; it lands in the catch-all, and once it does that month's partition can never be created (`updated partition constraint for default partition would be violated by some row`). `UserEventsPartitionJob` keeps the current month plus two ahead declared, daily. Rows accumulating in `user_events_default` are the signal that the horizon has fallen behind.
+- **`user_events` reads**: always bounded by `created_at`. A read bounded only by `user_id` prunes nothing and touches every partition ever declared, which is why the activity log makes the time window mandatory. Measured: a window inside one month scans one partition, a window crossing a boundary scans exactly two, and a window reaching past the last declared partition scans the catch-all as well.
+- **`platform_stats`**: written only by `StatsCollectionJob` and `StatsRollupJob`, never from a Controller or Service on a request path. Gauges are absolute snapshots bounded by the bucket end; flows are direct counts over the bucket window and are never derived by subtracting consecutive gauges. The roll-up sums flows and takes the last bucket for gauges — summing gauges multiplies a total by the number of buckets in the day. There is no backfill: a bucket never collected can never be collected later, and the bucket a process starts inside is deliberately skipped. A single application instance is assumed; there is no distributed scheduler lock, and the composite primary key with `ON CONFLICT DO UPDATE` is what keeps a double run harmless rather than duplicative.
 - **Comment depth cap**: `CHECK (depth BETWEEN 0 AND 10)`; adjacency list uses `root_id` for subtree queries.
 - **Follow visibility**: insert to `follows` with `is_private = true` target → `status = 'pending'`; counters increment only on `status = 'accepted'` (trigger-enforced).
 - **Story expiry**: `expires_at DEFAULT NOW() + INTERVAL '24 hours'`; `idx_stories_expires` implies a cleanup job.

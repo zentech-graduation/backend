@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.app.common.response.UserSummaryResponse;
+import com.app.modules.hashtag.dto.response.HashtagSummaryResponse;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.enums.PostType;
 
@@ -43,5 +44,17 @@ public record PostResponse(
         @Schema(description = "Longitude in decimal degrees.", nullable = true)
                 BigDecimal longitude,
         @Schema(description = "Ordered media items.") List<PostMediaResponse> media,
+        @Schema(
+                        description =
+                                "Hashtags this post is associated with, ordered by name. A hashtag"
+                                        + " an administrator has deleted is omitted, while the"
+                                        + " caption keeps its literal #tag text, so a client"
+                                        + " renders that text without linking it. A banned hashtag"
+                                        + " is still listed: banning hides the tag's own surfaces,"
+                                        + " not the posts that used it. Empty for a post whose"
+                                        + " caption carries no tag, and for any post that is not"
+                                        + " published, because associations exist only while a post"
+                                        + " is published.")
+                List<HashtagSummaryResponse> hashtags,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt,
         @Schema(description = "Last update timestamp.") OffsetDateTime updatedAt) {}
