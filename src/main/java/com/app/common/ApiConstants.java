@@ -24,6 +24,14 @@ public final class ApiConstants {
         public static final String WS_TICKET = "/ws-ticket";
     }
 
+    /** Read-only configuration surface shared by every authenticated caller. */
+    public static final class Config {
+        private Config() {}
+
+        public static final String ROOT = API_V1 + "/config";
+        public static final String VOCABULARIES = "/vocabularies";
+    }
+
     public static final class Users {
         private Users() {}
 
