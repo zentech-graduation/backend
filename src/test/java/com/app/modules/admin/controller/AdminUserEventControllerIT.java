@@ -283,4 +283,11 @@ class AdminUserEventControllerIT {
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         return (Map<String, Object>) data.get("pageInfo");
     }
+
+    @Test
+    void unauthenticatedRequest_isRejected() {
+        assertThat(rest.getForEntity("/api/v1/admin/user-events", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
 }

@@ -471,4 +471,25 @@ class AdminHashtagControllerIT {
         Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
         return (Map<String, Object>) data.get("pageInfo");
     }
+
+    @Test
+    void unauthenticatedRequest_isRejectedOnEveryRegistryOperation() {
+        UUID any = UUID.randomUUID();
+
+        assertThat(rest.getForEntity("/api/v1/admin/hashtags", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.getForEntity("/api/v1/admin/hashtags/search?q=abc", Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.exchange(
+                                        "/api/v1/admin/hashtags/" + any,
+                                        HttpMethod.PATCH,
+                                        new HttpEntity<>(Map.of("status", "banned")),
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
 }

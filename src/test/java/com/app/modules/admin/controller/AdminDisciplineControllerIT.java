@@ -628,4 +628,32 @@ class AdminDisciplineControllerIT {
     private static Map<String, Object> pageInfoOf(ResponseEntity<Map> response) {
         return (Map<String, Object>) dataOf(response).get("pageInfo");
     }
+
+    @Test
+    void unauthenticatedRequest_isRejectedOnEveryDisciplineOperation() {
+        UUID any = UUID.randomUUID();
+
+        assertThat(
+                        rest.getForEntity("/api/v1/admin/violations/for-user/" + any, Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.exchange(
+                                        "/api/v1/admin/warnings/for-user/" + any,
+                                        HttpMethod.POST,
+                                        new HttpEntity<>(
+                                                Map.of("reasonKey", "spam", "note", "no token")),
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.exchange(
+                                        "/api/v1/admin/warnings/" + any,
+                                        HttpMethod.DELETE,
+                                        new HttpEntity<>(Map.of("reason", "no token")),
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
 }

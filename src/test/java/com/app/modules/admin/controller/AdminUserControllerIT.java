@@ -614,7 +614,6 @@ class AdminUserControllerIT {
         assertThat(roleOf(other.id())).isEqualTo("admin");
         assertThat(auditCount()).isZero();
     }
-
     @Test
     void changeRole_skipLevelPromotion_returnsConflictAndChangesNothing() {
         TestUser admin = createUser("skip_admin", "admin");
@@ -896,4 +895,25 @@ class AdminUserControllerIT {
     private static List<Map<String, Object>> contentOf(ResponseEntity<Map> response) {
         return (List<Map<String, Object>>) dataOf(response).get("content");
     }
+
+    @Test
+    void unauthenticatedRequest_isRejectedOnEveryAccountOperation() {
+        UUID any = UUID.randomUUID();
+
+        assertThat(rest.getForEntity("/api/v1/admin/users", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(rest.getForEntity("/api/v1/admin/users/search?q=abc", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(rest.getForEntity("/api/v1/admin/users/" + any, Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.exchange(
+                                        "/api/v1/admin/users/" + any + "/ban",
+                                        HttpMethod.PATCH,
+                                        new HttpEntity<>(Map.of("reason", "no token")),
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
 }

@@ -291,6 +291,18 @@ class AdminStatsControllerIT {
     }
 
     @Test
+    void unauthenticatedRequest_isRejectedOnEveryStatisticsRead() {
+        assertThat(rest.getForEntity("/api/v1/admin/stats/current", Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(
+                        rest.getForEntity(
+                                        "/api/v1/admin/stats/timeseries?metric=registrations",
+                                        Map.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void timeseries_unknownMetric_isRejected() {
         TestUser admin = createUser("stats_badmetric_admin", "admin");
 
