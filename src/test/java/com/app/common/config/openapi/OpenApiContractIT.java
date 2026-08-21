@@ -515,6 +515,7 @@ class OpenApiContractIT {
                         new Expectation("PageInfo", "startCursor"),
                         new Expectation("PageInfo", "endCursor"));
 
+
         List<String> offenders = new ArrayList<>();
         JsonNode schemas = doc.path("components").path("schemas");
         for (Expectation expectation : expectations) {
@@ -552,7 +553,54 @@ class OpenApiContractIT {
                 }
             }
         }
+        // A nullable object reference cannot carry its null in the type keyword, because a $ref
+        // keeps its siblings under JSON Schema 2020-12 and the two assertions together are
+        // unsatisfiable. The satisfiable form is a union with a null branch.
+        for (JsonNode branch : property.path("oneOf")) {
+            if ("null".equals(branch.path("type").asString(""))) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    @Test
+    void noNullableReferenceIsDeclaredAsAnUnsatisfiableSchema() {
+        JsonNode doc = document();
+        // springdoc renders @Schema(nullable = true) on an object-typed property as
+        // {"type": "null", "$ref": "..."}. Under the dialect this document declares, a $ref keeps
+        // its sibling keywords instead of replacing them, so that asserts the value is null and is
+        // also the referenced object. Nothing satisfies both, and a generator reading it either
+        // emits an impossible type or drops the nullability and hands back a non-optional field
+        // that arrives null.
+        List<String> offenders = new ArrayList<>();
+        collectUnsatisfiableNullableRefs(doc.path("components").path("schemas"), "", offenders);
+
+        assertThat(offenders)
+                .as("a nullable reference must be a union, not a null-typed $ref")
+                .isEmpty();
+    }
+
+    private static void collectUnsatisfiableNullableRefs(
+            JsonNode node, String path, List<String> offenders) {
+        if (node.isObject()) {
+            if (node.has("$ref") && "null".equals(node.path("type").asString(""))) {
+                offenders.add(path);
+            }
+            node.properties()
+                    .forEach(
+                            entry ->
+                                    collectUnsatisfiableNullableRefs(
+                                            entry.getValue(),
+                                            path + "/" + entry.getKey(),
+                                            offenders));
+        } else if (node.isArray()) {
+            int index = 0;
+            for (JsonNode element : node) {
+                collectUnsatisfiableNullableRefs(element, path + "/" + index, offenders);
+                index++;
+            }
+        }
     }
 
     @Test
