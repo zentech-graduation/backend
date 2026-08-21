@@ -1,8 +1,10 @@
 package com.app.common.config.openapi;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -513,8 +515,22 @@ class OpenApiContractIT {
                         new Expectation("CommentResponse", "rootId"),
                         new Expectation("ParticipantResponse", "leftAt"),
                         new Expectation("PageInfo", "startCursor"),
-                        new Expectation("PageInfo", "endCursor"));
-
+                        new Expectation("PageInfo", "endCursor"),
+                        // The discipline and report-target payloads, whose declared-non-nullable
+                        // fields were observed null against live responses: a strike issued by a
+                        // since-deleted moderator, a warning nobody has revoked, and a comment
+                        // target, which has no lifecycle status of its own.
+                        new Expectation("AdminWarningViolationResponse", "actorId"),
+                        new Expectation("AdminStrikeViolationResponse", "actorId"),
+                        new Expectation("AdminWarnUserResponse", "strike"),
+                        new Expectation("AdminWarningResponse", "revokedAt"),
+                        new Expectation("AdminWarningResponse", "issuedBy"),
+                        new Expectation("AdminStrikeResponse", "revokedAt"),
+                        new Expectation("AdminStrikeResponse", "triggeredBy"),
+                        new Expectation("AdminReportTargetResponse", "status"),
+                        new Expectation("AdminReportTargetResponse", "ownerId"),
+                        new Expectation("AdminReportTargetResponse", "ownerUsername"),
+                        new Expectation("AdminReportTargetResponse", "text"));
 
         List<String> offenders = new ArrayList<>();
         JsonNode schemas = doc.path("components").path("schemas");
@@ -601,6 +617,62 @@ class OpenApiContractIT {
                 index++;
             }
         }
+    }
+
+    @Test
+    void violationHistoryIsDeclaredAsADiscriminatedUnion() {
+        JsonNode doc = document();
+        // A violation page interleaves two row shapes. Declared as one flat schema, the fields
+        // belonging to the other shape read as required and arrive null, and a generated client
+        // has nothing to switch on. The document must therefore carry a real union: oneOf over
+        // the two shapes plus a discriminator naming the property that tells them apart.
+        JsonNode violation = doc.path("components").path("schemas").path("AdminViolationResponse");
+        assertThat(violation.isMissingNode())
+                .as("AdminViolationResponse must be present in the document")
+                .isFalse();
+
+        List<String> variants = new ArrayList<>();
+        violation.path("oneOf").forEach(node -> variants.add(node.path("$ref").asString("")));
+        assertThat(variants)
+                .as("the violation payload must be a union of exactly the two row shapes")
+                .containsExactlyInAnyOrder(
+                        "#/components/schemas/AdminWarningViolationResponse",
+                        "#/components/schemas/AdminStrikeViolationResponse");
+
+        JsonNode discriminator = violation.path("discriminator");
+        assertThat(discriminator.path("propertyName").asString(""))
+                .as("the union must be discriminated on kind")
+                .isEqualTo("kind");
+
+        Map<String, String> mapping = new LinkedHashMap<>();
+        discriminator
+                .path("mapping")
+                .properties()
+                .forEach(entry -> mapping.put(entry.getKey(), entry.getValue().asString("")));
+        assertThat(mapping)
+                .as("each kind value must map to the shape it names")
+                .containsOnly(
+                        entry("warning", "#/components/schemas/AdminWarningViolationResponse"),
+                        entry("strike", "#/components/schemas/AdminStrikeViolationResponse"));
+
+        // Each variant must carry only the fields that shape actually has. The whole point of
+        // splitting is that a strike stops declaring a reason key it never holds.
+        JsonNode warningProperties =
+                doc.path("components")
+                        .path("schemas")
+                        .path("AdminWarningViolationResponse")
+                        .path("properties");
+        JsonNode strikeProperties =
+                doc.path("components")
+                        .path("schemas")
+                        .path("AdminStrikeViolationResponse")
+                        .path("properties");
+        assertThat(warningProperties.has("reasonKey")).isTrue();
+        assertThat(warningProperties.has("note")).isTrue();
+        assertThat(warningProperties.has("strikeNumber")).isFalse();
+        assertThat(strikeProperties.has("strikeNumber")).isTrue();
+        assertThat(strikeProperties.has("reasonKey")).isFalse();
+        assertThat(strikeProperties.has("note")).isFalse();
     }
 
     @Test

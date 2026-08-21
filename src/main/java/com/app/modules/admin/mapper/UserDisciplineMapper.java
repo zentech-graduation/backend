@@ -4,8 +4,10 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.app.modules.admin.dto.response.AdminStrikeResponse;
+import com.app.modules.admin.dto.response.AdminStrikeViolationResponse;
 import com.app.modules.admin.dto.response.AdminViolationResponse;
 import com.app.modules.admin.dto.response.AdminWarningResponse;
+import com.app.modules.admin.dto.response.AdminWarningViolationResponse;
 import com.app.modules.admin.dto.response.UserWarningResponse;
 import com.app.modules.admin.entity.UserStrike;
 import com.app.modules.admin.entity.UserWarning;
@@ -28,12 +30,9 @@ public interface UserDisciplineMapper {
 
     @Mapping(target = "kind", constant = AdminViolationResponse.KIND_WARNING)
     @Mapping(target = "actorId", source = "issuedBy")
-    @Mapping(target = "strikeNumber", ignore = true)
-    AdminViolationResponse toViolation(UserWarning warning);
+    AdminWarningViolationResponse toViolation(UserWarning warning);
 
     @Mapping(target = "kind", constant = AdminViolationResponse.KIND_STRIKE)
     @Mapping(target = "actorId", source = "triggeredBy")
-    @Mapping(target = "reasonKey", ignore = true)
-    @Mapping(target = "note", ignore = true)
-    AdminViolationResponse toViolation(UserStrike strike);
+    AdminStrikeViolationResponse toViolation(UserStrike strike);
 }
