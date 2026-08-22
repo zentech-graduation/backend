@@ -62,4 +62,19 @@ public record AdminUserDetailResponse(
                                 "What the requesting administrator may do to this account,"
                                         + " evaluated against the same component the write"
                                         + " endpoints enforce")
-                AdminUserCapabilitiesResponse capabilities) {}
+                AdminUserCapabilitiesResponse capabilities,
+        @Schema(
+                        description =
+                                "How many warnings currently count toward this account's next"
+                                        + " strike. Three of them issue a strike automatically,"
+                                        + " which suspends the account, so a reviewer about to warn"
+                                        + " can be told the warning will be the third before"
+                                        + " issuing it. Always present, and zero for an account"
+                                        + " that has never been warned. Counted by the discipline"
+                                        + " service's own predicate, not recomputed here: it"
+                                        + " excludes revoked warnings, warnings issued before the"
+                                        + " most recent unrevoked strike, and warnings older than"
+                                        + " the retention window.",
+                        example = "2",
+                        requiredMode = Schema.RequiredMode.REQUIRED)
+                long activeWarningCount) {}

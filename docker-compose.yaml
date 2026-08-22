@@ -90,7 +90,58 @@ services:
       timeout: 10s
       retries: 10
 
+  # The recommender behind the personalized feed. It lived in an overlay compose file until now,
+  # which meant the default `docker compose up -d` never started it: the engagement consumer is
+  # enabled in dev and prod, so every post.liked/saved/viewed and comment.created event retried
+  # against a service that was not there and then dead-lettered.
+  gorse:
+    image: zhenghaoz/gorse-in-one:0.5.11
+    restart: unless-stopped
+    # --cache-path is a folder in v0.5.11 (default /var/lib/gorse/master, holds the SQLite
+    # meta db); passing a file path breaks startup with SQLITE_CANTOPEN
+    command: >
+      -c /etc/gorse/config.toml
+      --log-path /var/lib/gorse/gorse.log
+    environment:
+      # Cache store is Postgres, not the app Redis: Gorse v0.5.x Redis cache requires the
+      # RediSearch module (FT.* commands) which plain redis:7-alpine does not ship. The gorse
+      # database is created by docker/postgres/init/01-create-gorse-db.sql, which only runs on
+      # first boot of an empty volume; on an existing volume create it by hand, or the container
+      # restart-loops on "database gorse does not exist".
+      GORSE_DATA_STORE: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/gorse?sslmode=disable
+      GORSE_CACHE_STORE: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/gorse?sslmode=disable
+      GORSE_SERVER_API_KEY: ${GORSE_API_KEY}
+      GORSE_DASHBOARD_USER_NAME: ${GORSE_DASHBOARD_USER}
+      GORSE_DASHBOARD_PASSWORD: ${GORSE_DASHBOARD_PASSWORD}
+    ports:
+      # Dashboard and REST API share this port in gorse-in-one. Loopback-only, like every other
+      # service here; reach the dashboard over an SSH tunnel rather than by publishing it.
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - ./gorse/config/config.toml:/etc/gorse/config.toml:ro
+      - gorse_data:/var/lib/gorse
+    # The image ships no curl, wget or nc, so the probe uses the bash the image does have.
+    # /api/health/ready reports data-store and cache-store connectivity rather than only that
+    # the port is open, which is what distinguishes a working Gorse from one restart-looping on
+    # a missing database.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/8088 && printf "GET /api/health/ready HTTP/1.0\r\n\r\n" >&3 && head -1 <&3 | grep -q "200 OK"'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   rabbitmq_data:
   elasticsearch_data:
+  gorse_data:

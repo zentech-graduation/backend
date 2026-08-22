@@ -358,4 +358,47 @@ public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTar
             @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
             @Param("cursorId") UUID cursorId,
             @Param("limit") int limit);
+
+    /**
+     * First page of the reports one moderator escalated, newest escalation first.
+     *
+     * <p>Deliberately carries no status predicate. An escalated report leaves every queue the
+     * moderator can read, and an administrator may since have resolved it; excluding those would
+     * hide exactly the outcomes the moderator escalated in order to follow. Served by {@code
+     * idx_reports_escalated_by} (V81).
+     *
+     * @param escalatedBy the moderator whose escalations to list
+     * @param limit maximum number of reports to return
+     * @return matching reports ordered by escalation time descending, id as tie-breaker
+     */
+    @Query(
+            "SELECT r FROM Report r WHERE r.escalatedBy = :escalatedBy "
+                    + "ORDER BY r.escalatedAt DESC, r.id DESC LIMIT :limit")
+    List<Report> findFirstEscalatedBy(
+            @Param("escalatedBy") UUID escalatedBy, @Param("limit") int limit);
+
+    /**
+     * Page of the reports one moderator escalated, after a cursor position.
+     *
+     * @param escalatedBy the moderator whose escalations to list
+     * @param cursorEscalatedAt escalation time of the last row on the previous page
+     * @param cursorId identifier of the last row on the previous page
+     * @param limit maximum number of reports to return
+     * @return matching reports following the cursor, newest escalation first
+     */
+    @Query(
+            """
+			SELECT r
+			FROM Report r
+			WHERE r.escalatedBy = :escalatedBy
+			AND (r.escalatedAt < :cursorEscalatedAt
+				OR (r.escalatedAt = :cursorEscalatedAt AND r.id < :cursorId))
+			ORDER BY r.escalatedAt DESC, r.id DESC
+			LIMIT :limit
+			""")
+    List<Report> findEscalatedByAfterCursor(
+            @Param("escalatedBy") UUID escalatedBy,
+            @Param("cursorEscalatedAt") OffsetDateTime cursorEscalatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 }

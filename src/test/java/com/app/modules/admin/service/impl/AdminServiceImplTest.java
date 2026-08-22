@@ -35,6 +35,7 @@ import com.app.modules.admin.mapper.AdminActionMapper;
 import com.app.modules.admin.repository.AdminActionRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.comment.repository.CommentRepository;
+import com.app.modules.message.repository.MessageRepository;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostModerationResult;
@@ -44,6 +45,7 @@ import com.app.modules.report.enums.ReportReason;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
+import com.app.modules.story.repository.StoryRepository;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -57,6 +59,8 @@ class AdminServiceImplTest {
     @Mock private PostRepository postRepository;
     @Mock private PostService postService;
     @Mock private CommentRepository commentRepository;
+    @Mock private StoryRepository storyRepository;
+    @Mock private MessageRepository messageRepository;
     @Mock private ReportRepository reportRepository;
     @Mock private AdminActionMapper adminActionMapper;
 
@@ -71,6 +75,8 @@ class AdminServiceImplTest {
                         postRepository,
                         postService,
                         commentRepository,
+                        storyRepository,
+                        messageRepository,
                         reportRepository,
                         adminActionMapper,
                         new AdminActionRecorder(adminActionRepository, adminActionMapper),
@@ -109,6 +115,40 @@ class AdminServiceImplTest {
         verify(adminActionRepository).insert(action.capture());
         assertThat(action.getValue().getAdminId()).isEqualTo(actorId);
         assertThat(action.getValue().getTargetUserId()).isEqualTo(userId);
+    }
+
+    @Test
+    void suspendUser_durationOmitted_leavesTheEndTimeNull() {
+        UUID actorId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User user = User.builder().id(userId).role(UserRole.USER).status(UserStatus.ACTIVE).build();
+        stubActor(actorId, UserRole.ADMIN);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
+        stubAudit(response(AdminActionType.SUSPEND_USER));
+
+        service.suspendUser(
+                actorId, userId, new AdminSuspendUserRequest("Policy breach", null, null));
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
+        // The reinstatement sweep matches on "suspended_until IS NOT NULL AND suspended_until <=
+        // now()", so a null end time is structurally outside it and the account stays suspended
+        // until an administrator lifts it.
+        assertThat(user.getSuspendedUntil()).isNull();
+    }
+
+    @Test
+    void suspendUser_durationSupplied_setsAnEndTimeInTheFuture() {
+        UUID actorId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User user = User.builder().id(userId).role(UserRole.USER).status(UserStatus.ACTIVE).build();
+        stubActor(actorId, UserRole.ADMIN);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
+        stubAudit(response(AdminActionType.SUSPEND_USER));
+
+        service.suspendUser(actorId, userId, new AdminSuspendUserRequest("Policy breach", null, 7));
+
+        assertThat(user.getSuspendedUntil()).isNotNull();
+        assertThat(user.getSuspendedUntil()).isAfter(OffsetDateTime.now());
     }
 
     @Test
@@ -227,7 +267,7 @@ class AdminServiceImplTest {
                         UUID.randomUUID(), postId, new AdminActionRequest("Appeal accepted", null));
 
         assertThat(result.action()).isEqualTo(expected);
-        assertThat(result.droppedHashtags()).isEmpty();
+        assertThat(result.remainingBannedHashtags()).isEmpty();
         ArgumentCaptor<AdminAction> captor = ArgumentCaptor.forClass(AdminAction.class);
         verify(adminActionRepository).insert(captor.capture());
         assertThat(captor.getValue().getMetadata()).containsEntry("resultingStatus", "draft");
@@ -251,7 +291,7 @@ class AdminServiceImplTest {
                 service.restorePost(
                         UUID.randomUUID(), postId, new AdminActionRequest("Appeal accepted", null));
 
-        assertThat(result.droppedHashtags()).containsExactly("laterbanned");
+        assertThat(result.remainingBannedHashtags()).containsExactly("laterbanned");
     }
 
     @Test
@@ -323,11 +363,11 @@ class AdminServiceImplTest {
         AdminAction first = action(AdminActionType.BAN_USER);
         AdminAction probe = action(AdminActionType.REMOVE_POST);
         AdminActionSummaryResponse mapped = summary(AdminActionType.BAN_USER);
-        when(adminActionRepository.findActions(null, null, null, null, null, 2))
+        when(adminActionRepository.findActions(null, null, null, null, null, null, null, 2))
                 .thenReturn(List.of(first, probe));
         when(adminActionMapper.toSummaryResponseList(List.of(first))).thenReturn(List.of(mapped));
 
-        var result = service.getActions(actorId, null, null, null, 1);
+        var result = service.getActions(actorId, null, null, null, null, null, null, 1);
 
         assertThat(result.getContent()).containsExactly(mapped);
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
@@ -341,14 +381,14 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID otherAdminId = UUID.randomUUID();
         stubActor(actorId, UserRole.MODERATOR);
-        when(adminActionRepository.findActions(actorId, null, null, null, null, 2))
+        when(adminActionRepository.findActions(actorId, null, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
-        service.getActions(actorId, otherAdminId, null, null, 1);
+        service.getActions(actorId, otherAdminId, null, null, null, null, null, 1);
 
-        verify(adminActionRepository).findActions(actorId, null, null, null, null, 2);
+        verify(adminActionRepository).findActions(actorId, null, null, null, null, null, null, 2);
         verify(adminActionRepository, never())
-                .findActions(eq(otherAdminId), any(), any(), any(), any(), anyInt());
+                .findActions(eq(otherAdminId), any(), any(), any(), any(), any(), any(), anyInt());
     }
 
     @Test
@@ -356,24 +396,25 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID otherAdminId = UUID.randomUUID();
         stubActor(actorId, UserRole.ADMIN);
-        when(adminActionRepository.findActions(otherAdminId, null, null, null, null, 2))
+        when(adminActionRepository.findActions(otherAdminId, null, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
-        service.getActions(actorId, otherAdminId, null, null, 1);
+        service.getActions(actorId, otherAdminId, null, null, null, null, null, 1);
 
-        verify(adminActionRepository).findActions(otherAdminId, null, null, null, null, 2);
+        verify(adminActionRepository)
+                .findActions(otherAdminId, null, null, null, null, null, null, 2);
     }
 
     @Test
     void getActions_administratorActorWithNoFilter_readsEveryActorsRows() {
         UUID actorId = UUID.randomUUID();
         stubActor(actorId, UserRole.ADMIN);
-        when(adminActionRepository.findActions(null, null, null, null, null, 2))
+        when(adminActionRepository.findActions(null, null, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
-        service.getActions(actorId, null, null, null, 1);
+        service.getActions(actorId, null, null, null, null, null, null, 1);
 
-        verify(adminActionRepository).findActions(null, null, null, null, null, 2);
+        verify(adminActionRepository).findActions(null, null, null, null, null, null, null, 2);
     }
 
     @Test
@@ -381,12 +422,14 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID targetUserId = UUID.randomUUID();
         stubActor(actorId, UserRole.MODERATOR);
-        when(adminActionRepository.findActions(actorId, targetUserId, null, null, null, 2))
+        when(adminActionRepository.findActions(
+                        actorId, targetUserId, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
         service.getActionsForUser(actorId, targetUserId, null, 1);
 
-        verify(adminActionRepository).findActions(actorId, targetUserId, null, null, null, 2);
+        verify(adminActionRepository)
+                .findActions(actorId, targetUserId, null, null, null, null, null, 2);
     }
 
     @Test
@@ -394,12 +437,13 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID targetUserId = UUID.randomUUID();
         stubActor(actorId, UserRole.ADMIN);
-        when(adminActionRepository.findActions(null, targetUserId, null, null, null, 2))
+        when(adminActionRepository.findActions(null, targetUserId, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
         service.getActionsForUser(actorId, targetUserId, null, 1);
 
-        verify(adminActionRepository).findActions(null, targetUserId, null, null, null, 2);
+        verify(adminActionRepository)
+                .findActions(null, targetUserId, null, null, null, null, null, 2);
     }
 
     @Test
@@ -440,6 +484,166 @@ class AdminServiceImplTest {
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.ADMIN_ACTION_NOT_FOUND);
+    }
+
+    @Test
+    void removeStory_liveStory_setsDeletedAtAndAudits() {
+        UUID storyId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        when(storyRepository.findOwnerIdIncludingDeleted(storyId)).thenReturn(Optional.of(ownerId));
+        when(storyRepository.isDeletedIncludingDeleted(storyId)).thenReturn(Optional.of(false));
+        AdminActionResponse expected = response(AdminActionType.REMOVE_STORY);
+        stubAudit(expected);
+
+        AdminActionResponse result =
+                service.removeStory(
+                        UUID.randomUUID(), storyId, new AdminActionRequest("Nudity", null));
+
+        assertThat(result).isEqualTo(expected);
+        verify(storyRepository).applyAdminModeration(eq(storyId), any(OffsetDateTime.class));
+    }
+
+    @Test
+    void restoreStory_removedStory_clearsDeletedAtAndLeavesExpiryAlone() {
+        UUID storyId = UUID.randomUUID();
+        when(storyRepository.findOwnerIdIncludingDeleted(storyId))
+                .thenReturn(Optional.of(UUID.randomUUID()));
+        when(storyRepository.isDeletedIncludingDeleted(storyId)).thenReturn(Optional.of(true));
+        AdminActionResponse expected = response(AdminActionType.RESTORE_STORY);
+        stubAudit(expected);
+
+        AdminActionResponse result =
+                service.restoreStory(
+                        UUID.randomUUID(),
+                        storyId,
+                        new AdminActionRequest("Appeal accepted", null));
+
+        assertThat(result).isEqualTo(expected);
+        // Only deleted_at is written. Nothing here touches expires_at, which is what stops a
+        // restore from resurrecting a story that expired while it was removed.
+        verify(storyRepository).applyAdminModeration(storyId, null);
+    }
+
+    @Test
+    void removeStory_alreadyRemovedStory_throwsInvalidTransition() {
+        UUID storyId = UUID.randomUUID();
+        when(storyRepository.findOwnerIdIncludingDeleted(storyId))
+                .thenReturn(Optional.of(UUID.randomUUID()));
+        when(storyRepository.isDeletedIncludingDeleted(storyId)).thenReturn(Optional.of(true));
+
+        assertThatThrownBy(
+                        () ->
+                                service.removeStory(
+                                        UUID.randomUUID(),
+                                        storyId,
+                                        new AdminActionRequest("Nudity", null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
+    }
+
+    @Test
+    void removeStory_missingStory_throwsNotFound() {
+        UUID storyId = UUID.randomUUID();
+        when(storyRepository.findOwnerIdIncludingDeleted(storyId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () ->
+                                service.removeStory(
+                                        UUID.randomUUID(),
+                                        storyId,
+                                        new AdminActionRequest("Nudity", null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.STORY_NOT_FOUND);
+    }
+
+    @Test
+    void removeMessage_liveMessage_setsTheAdminTombstoneAndAudits() {
+        UUID messageId = UUID.randomUUID();
+        UUID senderId = UUID.randomUUID();
+        when(messageRepository.isAdminRemoved(messageId)).thenReturn(Optional.of(false));
+        when(messageRepository.findSenderIdForModeration(messageId))
+                .thenReturn(Optional.of(senderId));
+        AdminActionResponse expected = response(AdminActionType.REMOVE_MESSAGE);
+        stubAudit(expected);
+
+        AdminActionResponse result =
+                service.removeMessage(
+                        UUID.randomUUID(), messageId, new AdminActionRequest("Harassment", null));
+
+        assertThat(result).isEqualTo(expected);
+        verify(messageRepository).applyAdminModeration(eq(messageId), any(OffsetDateTime.class));
+    }
+
+    @Test
+    void restoreMessage_removedMessage_clearsOnlyTheAdminTombstone() {
+        UUID messageId = UUID.randomUUID();
+        when(messageRepository.isAdminRemoved(messageId)).thenReturn(Optional.of(true));
+        when(messageRepository.findSenderIdForModeration(messageId))
+                .thenReturn(Optional.of(UUID.randomUUID()));
+        AdminActionResponse expected = response(AdminActionType.RESTORE_MESSAGE);
+        stubAudit(expected);
+
+        AdminActionResponse result =
+                service.restoreMessage(
+                        UUID.randomUUID(),
+                        messageId,
+                        new AdminActionRequest("Appeal accepted", null));
+
+        assertThat(result).isEqualTo(expected);
+        verify(messageRepository).applyAdminModeration(messageId, null);
+    }
+
+    @Test
+    void restoreMessage_messageTheSenderDeleted_throwsInvalidTransition() {
+        UUID messageId = UUID.randomUUID();
+        // The sender's own deletion sets is_deleted, never admin_removed_at. A restore must not
+        // treat it as a moderation state, or it would put back a message the sender destroyed.
+        when(messageRepository.isAdminRemoved(messageId)).thenReturn(Optional.of(false));
+
+        assertThatThrownBy(
+                        () ->
+                                service.restoreMessage(
+                                        UUID.randomUUID(),
+                                        messageId,
+                                        new AdminActionRequest("Appeal accepted", null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
+    }
+
+    @Test
+    void removeMessage_senderAccountDeleted_recordsTheActionWithNoTargetUser() {
+        UUID messageId = UUID.randomUUID();
+        when(messageRepository.isAdminRemoved(messageId)).thenReturn(Optional.of(false));
+        // sender_id is nullable (V32); the scalar read comes back empty for such a row.
+        when(messageRepository.findSenderIdForModeration(messageId)).thenReturn(Optional.empty());
+        stubAudit(response(AdminActionType.REMOVE_MESSAGE));
+
+        service.removeMessage(
+                UUID.randomUUID(), messageId, new AdminActionRequest("Harassment", null));
+
+        ArgumentCaptor<AdminAction> captor = ArgumentCaptor.forClass(AdminAction.class);
+        verify(adminActionRepository).insert(captor.capture());
+        assertThat(captor.getValue().getTargetUserId()).isNull();
+        assertThat(captor.getValue().getTargetEntityType()).isEqualTo("message");
+    }
+
+    @Test
+    void removeMessage_missingMessage_throwsNotFound() {
+        UUID messageId = UUID.randomUUID();
+        when(messageRepository.isAdminRemoved(messageId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () ->
+                                service.removeMessage(
+                                        UUID.randomUUID(),
+                                        messageId,
+                                        new AdminActionRequest("Harassment", null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.MESSAGE_NOT_FOUND);
     }
 
     private void stubAudit(AdminActionResponse response) {

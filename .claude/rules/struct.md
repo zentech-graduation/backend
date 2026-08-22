@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01-V66 SQL migrations
+│   │       ├── db/migration/       # Flyway V01-V78 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -244,7 +244,7 @@ hand-maintained roster.
 | `modules/admin/dto/request` | `AdminUpdateHashtagRequestDeserializationTest` |
 | `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest`, `UserWarningRepositoryIT` |
 | `modules/admin/service` | `StatsBucketsTest` |
-| `modules/admin/service/impl` | `AdminAuthorizationServiceImplTest`, `AdminServiceImplTest`, `AdminUserEventServiceImplTest`, `PlatformStatsIT`, `StatsCollectionJobTest`, `SuspensionExpiryServiceImplTest`, `UserDisciplineServiceImplTest` |
+| `modules/admin/service/impl` | `AdminAuthorizationServiceImplTest`, `AdminServiceImplTest`, `AdminUserEventServiceImplTest`, `AdminUserServiceImplTest`, `PlatformStatsIT`, `StatsCollectionJobTest`, `SuspensionExpiryServiceImplTest`, `UserDisciplineServiceImplTest` |
 | `modules/auth/controller` | `AuthControllerIT`, `PasswordPolicyIT` |
 | `modules/auth/converter` | `OAuthProviderConverterTest` |
 | `modules/auth/cookie` | `RefreshTokenCookieManagerTest` |
@@ -273,6 +273,7 @@ hand-maintained roster.
 | `modules/message/controller` | `MessageControllerIT` |
 | `modules/message/converter` | `MessageTypeConverterTest` |
 | `modules/message/live` | `MessageWebSocketAuthInterceptorTest` |
+| `modules/message/mapper` | `MessageMapperTest` |
 | `modules/message/repository` | `ConversationKeysetRowLossIT` |
 | `modules/message/service/impl` | `ConversationServiceImplTest`, `DirectConversationProvisionerIT`, `MessageServiceImplTest` |
 | `modules/notification/config` | `NotificationWebSocketConfigTest` |
@@ -313,7 +314,7 @@ hand-maintained roster.
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 72 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71 and V72 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`:
+- Migration: **Flyway** (`out-of-order: false`); 78 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71, V72, V73 and V74 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`. V75 through V78 add no index and run in the ordinary transactional mode:
 
 | Migration | Description |
 |-----------|-------------|
@@ -409,6 +410,12 @@ hand-maintained roster.
 | V70 | create_platform_stats |
 | V71 | add_platform_stats_series_index |
 | V72 | add_admin_listing_indexes |
+| V73 | add_reports_open_queue_index |
+| V74 | add_admin_actions_created_index |
+| V75 | add_admin_action_type_content_values |
+| V76 | add_moderation_action_configs_content_rows |
+| V77 | add_messages_admin_removed_at |
+| V78 | backfill_missing_user_settings |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -432,7 +439,7 @@ PostgreSQL enum types:
 | `report_reason` | `spam`, `nudity`, `violence`, `hate_speech`, `harassment`, `false_information`, `scam`, `other` |
 | `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message`, `warning` (V60) |
 | `oauth_provider` | `google`, `facebook`, `apple` |
-| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `force_logout`, `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag` (V54; every value has a caller) |
+| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `force_logout`, `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag` (V54), `remove_story`, `restore_story`, `remove_message`, `restore_message` (V75); every value has a caller |
 | `event_type` | `post_view`, `post_like`, `post_unlike`, `post_save`, `post_unsave`, `post_share`, `post_comment`, `story_view`, `story_reply`, `profile_view`, `profile_follow`, `profile_unfollow`, `search`, `hashtag_click`, `comment_like`, `comment_reply`, `message_send`, `session_start`, `session_end`, `app_open` |
 
 ### Cache — Redis
@@ -620,6 +627,9 @@ Implemented in `common/security/` and `modules/auth/`:
 - **`user_events` partitioning**: partitioned by month (`PARTITION BY RANGE (created_at)`) with a `DEFAULT` catch-all. A write whose month has no partition therefore does not fail; it lands in the catch-all, and once it does that month's partition can never be created (`updated partition constraint for default partition would be violated by some row`). `UserEventsPartitionJob` keeps the current month plus two ahead declared, daily. Rows accumulating in `user_events_default` are the signal that the horizon has fallen behind.
 - **`user_events` reads**: always bounded by `created_at`. A read bounded only by `user_id` prunes nothing and touches every partition ever declared, which is why the activity log makes the time window mandatory. Measured: a window inside one month scans one partition, a window crossing a boundary scans exactly two, and a window reaching past the last declared partition scans the catch-all as well.
 - **`platform_stats`**: written only by `StatsCollectionJob` and `StatsRollupJob`, never from a Controller or Service on a request path. Gauges are absolute snapshots bounded by the bucket end; flows are direct counts over the bucket window and are never derived by subtracting consecutive gauges. The roll-up sums flows and takes the last bucket for gauges — summing gauges multiplies a total by the number of buckets in the day. There is no backfill: a bucket never collected can never be collected later, and the bucket a process starts inside is deliberately skipped. A single application instance is assumed; there is no distributed scheduler lock, and the composite primary key with `ON CONFLICT DO UPDATE` is what keeps a double run harmless rather than duplicative.
+- **Message tombstones**: `messages` carries two independent ones. The sender-owned pair `is_deleted`/`deleted_at` is set together and clears `content`, which makes a sender's own deletion irreversible. `admin_removed_at` (V77) is the moderation tombstone; it preserves every payload so a restore can return the message, and clearing it never undoes a sender deletion. A message is hidden when either is set, and the read path withholds text, media and shares for an administrative removal.
+- **Story moderation and expiry**: administrative removal writes `deleted_at` only. Expiry keeps deciding visibility, so a story that expired while removed does not return to a feed when restored, and the cleanup job hard-deletes rows that are both removed and expired, after which a restore answers not-found.
+- **`user_settings`**: every account has exactly one row from creation. Four writers create it - password registration, first OAuth2 sign-in, the Java dev seeder and the shell seed script - and V78 backfilled the rest. The read is deliberately strict, so a 404 from it means the invariant is broken rather than that the account simply has no preferences yet.
 - **Comment depth cap**: `CHECK (depth BETWEEN 0 AND 10)`; adjacency list uses `root_id` for subtree queries.
 - **Follow visibility**: insert to `follows` with `is_private = true` target → `status = 'pending'`; counters increment only on `status = 'accepted'` (trigger-enforced).
 - **Story expiry**: `expires_at DEFAULT NOW() + INTERVAL '24 hours'`; `idx_stories_expires` implies a cleanup job.

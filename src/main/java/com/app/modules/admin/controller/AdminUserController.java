@@ -1,5 +1,6 @@
 package com.app.modules.admin.controller;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -8,6 +9,7 @@ import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +31,7 @@ import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
+import com.app.modules.admin.dto.response.AdminUserLookupResponse;
 import com.app.modules.admin.service.AdminUserService;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -99,6 +102,31 @@ public class AdminUserController extends BaseController implements AdminUserApi 
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request) {
         return action(
                 adminUserService.forceLogout(SecurityUtils.getCurrentUserId(), userId, request));
+    }
+
+    /** Resolves several account identifiers to display information in one call. */
+    @Override
+    @GetMapping(ApiConstants.Admin.USER_SUMMARIES)
+    @StrictQueryParameters
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<List<AdminUserLookupResponse>>> resolveUserSummaries(
+            @RequestParam("ids") List<UUID> ids) {
+        return ResponseEntity.ok(
+                ApiResponse.success(ApiSuccessCode.OK, adminUserService.resolveUserSummaries(ids)));
+    }
+
+    /** Revokes one named session of one account for the authenticated administrator. */
+    @Override
+    @DeleteMapping(ApiConstants.Admin.USER_SESSION_BY_ID)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> revokeSession(
+            @PathVariable("userId") UUID userId,
+            @PathVariable("sessionId") UUID sessionId,
+            @Valid @RequestBody AdminActionRequest request) {
+        return action(
+                adminUserService.revokeSession(
+                        SecurityUtils.getCurrentUserId(), userId, sessionId, request));
     }
 
     /** Changes one account's role for the authenticated administrator. */

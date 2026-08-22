@@ -30,7 +30,8 @@ public class ReportTargetRepositoryImpl implements ReportTargetRepository {
                             "SELECT user_id FROM stories WHERE id = :entityId AND deleted_at IS NULL";
                     case MESSAGE ->
                             "SELECT sender_id FROM messages WHERE id = :entityId "
-                                    + "AND is_deleted = FALSE AND deleted_at IS NULL";
+                                    + "AND is_deleted = FALSE AND deleted_at IS NULL "
+                                    + "AND admin_removed_at IS NULL";
                 };
         return jdbcClient.sql(query).param("entityId", entityId).query(UUID.class).optional();
     }

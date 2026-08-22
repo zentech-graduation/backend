@@ -177,7 +177,8 @@ public class AdminReportTargetRepository {
                 .sql(
                         """
 						SELECT msg.id, msg.sender_id, u.username, msg.content, m.cdn_url,
-							msg.is_deleted, msg.created_at
+							msg.is_deleted OR msg.admin_removed_at IS NOT NULL AS deleted,
+							msg.created_at
 						FROM messages msg
 						LEFT JOIN users u ON u.id = msg.sender_id
 						LEFT JOIN media_assets m ON m.id = msg.media_asset_id
@@ -195,7 +196,7 @@ public class AdminReportTargetRepository {
                                     null,
                                     rs.getString("content"),
                                     cdnUrl == null ? List.of() : List.of(cdnUrl),
-                                    rs.getBoolean("is_deleted"),
+                                    rs.getBoolean("deleted"),
                                     rs.getObject("created_at", java.time.OffsetDateTime.class));
                         })
                 .optional();

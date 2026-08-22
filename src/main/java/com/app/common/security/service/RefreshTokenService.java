@@ -56,6 +56,33 @@ public interface RefreshTokenService {
     int revokeAllForUser(UUID userId);
 
     /**
+     * Revokes one named session belonging to one account.
+     *
+     * <p>Idempotent: revoking a session that is already revoked or expired is a no-op that reports
+     * success, because a reviewer clicking twice has still got what they asked for.
+     *
+     * @param userId account the session must belong to
+     * @param sessionId refresh-token row identifying the session
+     * @return true when this call revoked a live session, false when it was already revoked
+     * @throws com.app.common.exception.AppException with {@code NOT_FOUND} when no such session
+     *     belongs to that account
+     */
+    boolean revokeSessionForUser(UUID userId, UUID sessionId);
+
+    /**
+     * Resolves the session a raw refresh token belongs to.
+     *
+     * <p>Serves the caller's own "which of these rows is me" question. The session identifier is
+     * not derivable from an access token: its {@code jti} is unique per access token and carries no
+     * link to the refresh-token row, and the refresh cookie is scoped to the auth path so it never
+     * reaches the administrative tree.
+     *
+     * @param rawToken the raw refresh token presented by the caller
+     * @return the session identifier, or empty when the token is unknown, revoked or expired
+     */
+    java.util.Optional<UUID> findSessionIdByRawToken(String rawToken);
+
+    /**
      * Lists the user's live sessions, newest first.
      *
      * <p>A session is live when its refresh token is neither revoked nor past its expiry. The raw

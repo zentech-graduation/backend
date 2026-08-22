@@ -146,7 +146,17 @@ public interface AdminDisciplineApi {
                     @RequestParam(value = "limit", defaultValue = "20")
                     @Min(1)
                     @Max(100)
-                    int limit);
+                    int limit,
+            @Parameter(
+                            description =
+                                    "Include revoked warnings and strikes. Defaults to false, which"
+                                            + " is what a caller that does not ask for them gets. A"
+                                            + " revoked entry is told apart by a non-null revokedAt and"
+                                            + " carries revokedBy. The cursor is scoped on this flag, so"
+                                            + " a cursor issued by one listing is rejected by the"
+                                            + " other.")
+                    @RequestParam(value = "includeRevoked", defaultValue = "false")
+                    boolean includeRevoked);
 
     /** Revokes one warning without touching anything it contributed to. */
     @Operation(

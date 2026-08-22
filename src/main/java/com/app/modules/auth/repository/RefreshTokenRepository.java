@@ -70,6 +70,45 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     int revokeByTokenHash(@Param("tokenHash") String tokenHash, @Param("now") OffsetDateTime now);
 
     /**
+     * Revokes one session, but only if it belongs to the named account.
+     *
+     * <p>The account id is part of the predicate rather than checked beforehand, so the ownership
+     * test and the write cannot be separated by a concurrent change. Revoking by session id alone
+     * would let a caller end any session in the system given only an identifier, and the session
+     * listing hands those out.
+     *
+     * <p>Already-revoked rows are excluded, so a second call updates nothing and returns 0. That is
+     * reported as success rather than as an error: a reviewer clicking twice has got what they
+     * asked for.
+     *
+     * @param id refresh-token row identifying the session
+     * @param userId account the session must belong to
+     * @param now revocation timestamp
+     * @return 1 when a live session was revoked, 0 when it was already revoked or not that
+     *     account's
+     */
+    @Modifying
+    @Query(
+            value =
+                    "UPDATE refresh_tokens SET revoked_at = :now"
+                            + " WHERE id = :id AND user_id = :userId AND revoked_at IS NULL",
+            nativeQuery = true)
+    int revokeByIdForUser(
+            @Param("id") UUID id, @Param("userId") UUID userId, @Param("now") OffsetDateTime now);
+
+    /**
+     * Reports whether a session row exists for the named account, whatever its revocation state.
+     *
+     * <p>Separates "not that account's session, or no such session" from "already revoked", so the
+     * first can answer not-found and the second can answer success.
+     *
+     * @param id refresh-token row identifying the session
+     * @param userId account the session must belong to
+     * @return true when the row exists and belongs to that account
+     */
+    boolean existsByIdAndUserId(UUID id, UUID userId);
+
+    /**
      * Deletes all refresh tokens that are either expired past the grace period or revoked past the
      * retention window.
      *

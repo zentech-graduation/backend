@@ -285,6 +285,60 @@ public class ReportServiceImpl implements ReportService {
                 .build();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<ReportSummaryResponse> getMyEscalations(
+            UUID actorId, String cursor, int size) {
+        int pageSize = normalizeLimit(size);
+        ReportCursor decoded = decodeCursor(cursor, CursorScope.REPORTS_ESCALATED_BY_ME);
+        int queryLimit = pageSize + 1;
+        List<Report> reports =
+                decoded.isEmpty()
+                        ? reportRepository.findFirstEscalatedBy(actorId, queryLimit)
+                        : reportRepository.findEscalatedByAfterCursor(
+                                actorId, decoded.createdAt(), decoded.id(), queryLimit);
+        return toEscalationPage(
+                reports, pageSize, cursor != null, CursorScope.REPORTS_ESCALATED_BY_ME);
+    }
+
+    // A near-copy of toSummaryPage with one difference that cannot be parameterised away: this
+    // listing is ordered by escalated_at, so its cursor has to carry escalated_at. Encoding
+    // created_at here would produce a cursor that names a position in a different ordering.
+    private CursorPageResponse<ReportSummaryResponse> toEscalationPage(
+            List<Report> reports, int pageSize, boolean hasPreviousPage, String scope) {
+        boolean hasNextPage = reports.size() > pageSize;
+        List<Report> pageReports = hasNextPage ? reports.subList(0, pageSize) : reports;
+        if (pageReports.isEmpty()) {
+            return CursorPageResponse.<ReportSummaryResponse>builder()
+                    .content(Collections.emptyList())
+                    .pageInfo(
+                            CursorPageResponse.PageInfo.builder()
+                                    .hasNextPage(false)
+                                    .hasPreviousPage(hasPreviousPage)
+                                    .startCursor(null)
+                                    .endCursor(null)
+                                    .build())
+                    .build();
+        }
+        return CursorPageResponse.<ReportSummaryResponse>builder()
+                .content(reportMapper.toSummaryResponseList(pageReports))
+                .pageInfo(
+                        CursorPageResponse.PageInfo.builder()
+                                .hasNextPage(hasNextPage)
+                                .hasPreviousPage(hasPreviousPage)
+                                .startCursor(encodeEscalationCursor(pageReports.get(0), scope))
+                                .endCursor(
+                                        encodeEscalationCursor(
+                                                pageReports.get(pageReports.size() - 1), scope))
+                                .build())
+                .build();
+    }
+
+    private String encodeEscalationCursor(Report report, String scope) {
+        return CursorCodec.encode(
+                new Cursor(TimeCursors.toMicros(report.getEscalatedAt()), report.getId()), scope);
+    }
+
     private int normalizeLimit(int size) {
         if (size < 1) {
             return DEFAULT_PAGE_SIZE;

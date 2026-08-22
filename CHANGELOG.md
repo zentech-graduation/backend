@@ -9,15 +9,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - A post in the personalized ranked feed now keeps its hashtags. They were dropped from every ranked post while the chronological feed kept them, so the same post rendered differently depending on which feed it came from.
 - The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
+- Opening the settings page on a valid account is no longer an error.
+The read answers not-found when an account has no settings record, and the accounts the development seed script creates had none, so the page rendered defaults that a reader could not tell apart from their real preferences.
+The seed script now creates the record, and existing accounts without one have been given it.
+- The report listings now reject an unrecognised query parameter instead of ignoring it, as the administrative endpoints already did.
+A misspelled filter was previously answered with an unfiltered page, which a reviewer works through believing it is the set they asked for.
+
+### Changed
+- The list of hashtags returned when a post is restored is renamed to say what it holds.
+It names the banned tags the caption still carries after the restore, which is the post's present state rather than the set that one call changed, so restoring the same post twice reports the same tags both times.
+The audit metadata key carrying the same set is renamed to match.
 
 ### Added
+- An account's violation history can now be read including records that have been revoked, which were previously removed from the list entirely, so an account that had been disciplined and then cleared looked identical to one that never was.
+Revoked entries are returned only when asked for, are marked as revoked, and say when and by whom.
+- The account detail an administrator reads now says how many warnings currently count toward the account's next strike, so a reviewer can be told that the warning they are about to issue will be the third and will suspend the account.
+- A single session can now be ended instead of only every session at once.
+The session must belong to the account it is named under, and ending one that has already ended reports success rather than an error.
+Ending one session does not sign the account out everywhere, which ending all of them does.
+- A signed-in client can now ask which session it is using, so a reviewer reading its own account's sessions can tell which row is the one it is sitting on.
+- Several account identifiers can now be resolved to display names in one request, instead of one request per account.
+Queues, audit rows, violation rows and activity rows all show bare identifiers, and this is what turns them into names.
+An identifier that matches no account is returned and marked as such rather than quietly left out.
+- The moderation audit log can now be filtered by a time window and by the account an action was taken against, so an investigation can ask what happened last Tuesday, or everything done to this account.
+A moderator still sees only its own entries.
+- A moderator can now list the reports it escalated.
+Escalating takes a report out of every queue a moderator can read, so until now there was no way to follow what had been handed up.
+- An account's posts now carry their attached images and video when a reviewer reads them, instead of only the caption.
+- The recommender service now starts with the rest of the local development stack.
+It was defined but never started, so every like, save, view and comment was retried against a service that was not running and then discarded.
+Those four kinds of activity now reach the activity log, taking it from three kinds to seven in development.
+This is development only; nothing about a production deployment was set up.
+- A moderator or administrator can now remove and restore a reported story and a reported message, the same way they already could a post or a comment.
+Closing a report about either previously recorded a moderation decision in the audit log while the content stayed up, which was the one place where the record and the reality could disagree.
+Removing a story leaves its expiry alone, so a story that expires while removed does not come back into anyone's feed when it is restored; once a story is both removed and expired the existing cleanup job deletes it and it can no longer be restored.
+Removing a message withholds its text, its media and any post or story it shares from both participants, leaving the same placeholder the thread already shows when a sender deletes their own message.
+The message keeps its content so a restore can return it, and a restore never undoes a deletion the sender performed.
+- Suspension with no end date is now stated as a supported choice in the endpoint documentation rather than only being possible.
+Omitting the duration suspends indefinitely and stores no end time, which the reinstatement sweep never matches, so the account stays suspended until an administrator lifts it.
+
 - Every display vocabulary the API asks a client to send back is now readable in one call: report reasons, notification types, and moderation action types, each with its label, its behavioural flags, and whether it is currently enabled.
 A disabled row is returned and flagged rather than filtered out, so a client can show it as unavailable instead of offering it and meeting a rejection.
 Readable by any signed-in caller, because a person filing a report needs the same reason list a moderator needs when issuing a warning.
 - A moderator or administrator can now list an account's posts and its comments while investigating it, including drafts, archived posts, and content moderation has already removed, and regardless of whether the account is private or has blocked the reviewer.
 - A moderator or administrator can now open a single post, comment, account, story, or message by its own identifier, so a link from an audit entry or an account's content listing no longer dead-ends.
 - The account detail an administrator reads now says what that administrator is allowed to do to the account and which roles it may be moved to, so a control can be shown or hidden from the payload instead of from a copy of the rules kept in the client.
-- Restoring a post now names any hashtags the restore dropped because an administrator had banned them in the meantime, so a moderator is told rather than finding out from a later complaint.
+- Restoring a post now names the banned hashtags its caption still carries, so a moderator is told the post came back with fewer tags than its text names rather than finding out from a later complaint.
 - A post in the following feed now carries its hashtags, the same field and the same shape the post detail already carried, so one post card renders identically wherever it came from.
 - The bucket width of a statistics chart can now be requested rather than only reported. Asking for half-hourly buckets over a window older than the fine-retention horizon is refused rather than answered with an empty chart, because those rows have been rolled up and deleted.
 - The real-time surface is now documented alongside the REST description: the four endpoints, the ticket handshake, every subscribable destination, the events each carries, and the list of what is pushed against what must still be polled.

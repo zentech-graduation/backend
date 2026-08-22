@@ -23,6 +23,7 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.web.StrictQueryParameters;
 import com.app.modules.report.api.ReportApi;
 import com.app.modules.report.dto.request.CreateReportRequest;
 import com.app.modules.report.dto.request.UpdateReportStatusRequest;
@@ -60,6 +61,10 @@ public class ReportController extends BaseController implements ReportApi {
     /** Returns a filtered report page to authenticated moderators and administrators. */
     @Override
     @GetMapping
+    // Both filters here are the reason this endpoint is strict. A misspelled status or reportType
+    // would otherwise be dropped and answered with an unfiltered page, which a reviewer then works
+    // through believing it is the set they asked for.
+    @StrictQueryParameters
     @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> listReports(
@@ -81,6 +86,7 @@ public class ReportController extends BaseController implements ReportApi {
     /** Returns pending reports in FIFO order to authenticated moderators and administrators. */
     @Override
     @GetMapping(ApiConstants.Reports.PENDING)
+    @StrictQueryParameters
     @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
     @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getPendingReports(
@@ -89,6 +95,22 @@ public class ReportController extends BaseController implements ReportApi {
         return ResponseEntity.ok(
                 ApiResponse.success(
                         ApiSuccessCode.OK, reportService.getPendingReports(cursor, limit)));
+    }
+
+    /** Returns the reports the calling moderator or administrator escalated. */
+    @Override
+    @GetMapping(ApiConstants.Reports.ESCALATED_BY_ME)
+    @StrictQueryParameters
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getMyEscalations(
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "20") @Min(1) @Max(100) int limit) {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        reportService.getMyEscalations(
+                                SecurityUtils.getCurrentUserId(), cursor, limit)));
     }
 
     /** Returns one report to an authenticated moderator or administrator. */

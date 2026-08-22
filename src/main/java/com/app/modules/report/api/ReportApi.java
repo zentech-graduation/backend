@@ -99,7 +99,9 @@ public interface ReportApi {
                             + " status returns an empty page rather than an error. An administrator"
                             + " sees every status including escalated. The cursor is scoped per role, so"
                             + " one issued to an administrator is rejected when replayed by a"
-                            + " moderator. Requires MODERATOR or ADMIN.")
+                            + " moderator. Unrecognised query parameters are rejected rather than"
+                            + " ignored, so a misspelled filter cannot be answered with an"
+                            + " unfiltered page. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -133,7 +135,8 @@ public interface ReportApi {
             summary = "List pending reports",
             description =
                     "Returns the pending moderation queue in FIFO order matching the"
-                            + " pending_reports view. Requires MODERATOR or ADMIN.")
+                            + " pending_reports view. Unrecognised query parameters are rejected"
+                            + " rather than ignored. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -161,6 +164,46 @@ public interface ReportApi {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 
     /** Returns one report for moderator or administrator review. */
+    /** Lists the reports the caller escalated. */
+    @Operation(
+            summary = "List reports I escalated",
+            description =
+                    "Returns the reports the calling account escalated, newest escalation first."
+                            + " Escalating removes a report from every queue a moderator can read,"
+                            + " so this is how a moderator follows what it handed up. Always the"
+                            + " caller's own escalations and never anyone else's, including for an"
+                            + " administrator, which already has the full escalated queue. Carries"
+                            + " no status filter: a report an administrator has since resolved is"
+                            + " exactly the outcome the moderator escalated in order to see. The"
+                            + " cursor has its own scope, so one from another listing is rejected."
+                            + " Unrecognised query parameters are rejected rather than ignored."
+                            + " Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Page of the caller's escalations"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @CursorErrorResponses
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Reports.ESCALATED_BY_ME)
+    ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getMyEscalations(
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "20") @Min(1) @Max(100) int limit);
+
     @Operation(
             summary = "Get report details",
             description =

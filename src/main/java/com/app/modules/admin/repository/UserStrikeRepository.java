@@ -74,4 +74,44 @@ public interface UserStrikeRepository extends Repository<UserStrike, UUID> {
             @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
             @Param("cursorId") UUID cursorId,
             @Param("limit") int limit);
+
+    /**
+     * First keyset page of an account's strikes including revoked ones, newest first.
+     *
+     * @param userId account whose strikes are listed
+     * @param limit page size, already including the probe row
+     * @return strikes ordered by {@code (created_at, id)} descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM user_strikes s"
+                            + " WHERE s.user_id = :userId"
+                            + " ORDER BY s.created_at DESC, s.id DESC"
+                            + " LIMIT :limit",
+            nativeQuery = true)
+    List<UserStrike> findFirstPageIncludingRevoked(
+            @Param("userId") UUID userId, @Param("limit") int limit);
+
+    /**
+     * Keyset page of an account's strikes including revoked ones, after a cursor position.
+     *
+     * @param userId account whose strikes are listed
+     * @param cursorCreatedAt creation time of the last row on the previous page
+     * @param cursorId identifier of the last row on the previous page
+     * @param limit page size, already including the probe row
+     * @return strikes ordered by {@code (created_at, id)} descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM user_strikes s"
+                            + " WHERE s.user_id = :userId"
+                            + " AND (s.created_at, s.id) < (:cursorCreatedAt, :cursorId)"
+                            + " ORDER BY s.created_at DESC, s.id DESC"
+                            + " LIMIT :limit",
+            nativeQuery = true)
+    List<UserStrike> findPageAfterCursorIncludingRevoked(
+            @Param("userId") UUID userId,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 }

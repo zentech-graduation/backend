@@ -19,6 +19,7 @@ import com.app.common.enums.ApiErrorCode;
 import com.app.common.enums.ApiSuccessCode;
 import com.app.common.exception.AppException;
 import com.app.common.response.ApiResponse;
+import com.app.common.security.service.RefreshTokenService;
 import com.app.modules.auth.api.AuthApi;
 import com.app.modules.auth.cookie.RefreshTokenCookieManager;
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
@@ -29,6 +30,7 @@ import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResendVerificationRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
+import com.app.modules.auth.dto.response.CurrentSessionResponse;
 import com.app.modules.auth.dto.response.WebSocketTicketResponse;
 import com.app.modules.auth.service.AuthService;
 import com.app.modules.auth.service.WebSocketTicketService;
@@ -42,14 +44,17 @@ public class AuthController extends BaseController implements AuthApi {
     private final AuthService authService;
     private final RefreshTokenCookieManager refreshTokenCookieManager;
     private final WebSocketTicketService webSocketTicketService;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthController(
             AuthService authService,
             RefreshTokenCookieManager refreshTokenCookieManager,
-            WebSocketTicketService webSocketTicketService) {
+            WebSocketTicketService webSocketTicketService,
+            RefreshTokenService refreshTokenService) {
         this.authService = authService;
         this.refreshTokenCookieManager = refreshTokenCookieManager;
         this.webSocketTicketService = webSocketTicketService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     /**
@@ -97,6 +102,29 @@ public class AuthController extends BaseController implements AuthApi {
         AuthResponse body = authService.refresh(rawRefreshToken, httpRequest);
         refreshTokenCookieManager.write(httpResponse, body.refreshToken());
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, body));
+    }
+
+    /**
+     * Reports which session the calling client is using, resolved from the same refresh token the
+     * rotation path reads.
+     */
+    @Override
+    @PostMapping(ApiConstants.Auth.SESSION)
+    public ResponseEntity<ApiResponse<CurrentSessionResponse>> currentSession(
+            @Valid @RequestBody(required = false) RefreshRequest request,
+            HttpServletRequest httpRequest) {
+        String rawRefreshToken =
+                refreshTokenCookieManager.resolve(
+                        request == null ? null : request.refreshToken(), httpRequest);
+        // An absent or unusable token is not an error here. The answer is "no session I can name",
+        // and a client holding its refresh token outside the cookie path gets exactly that.
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        new CurrentSessionResponse(
+                                refreshTokenService
+                                        .findSessionIdByRawToken(rawRefreshToken)
+                                        .orElse(null))));
     }
 
     /**

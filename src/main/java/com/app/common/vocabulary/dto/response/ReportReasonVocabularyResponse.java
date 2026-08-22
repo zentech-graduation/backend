@@ -14,7 +14,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * @param key the value to send as {@code reportReason} or {@code reasonKey}
  * @param displayName the label to render
  * @param description longer explanatory text, or null when the row carries none
- * @param appliesTo report types this reason is valid for; empty means every type
+ * @param appliesTo report types this reason is valid for; an empty list means every type, never
+ *     none, so a client filtering the list by the type being reported must treat empty as a match
  * @param isEnabled whether the reason is currently accepted
  * @param sortOrder ascending display position
  */
@@ -25,7 +26,12 @@ public record ReportReasonVocabularyResponse(
         @Schema(description = "Longer explanatory text", nullable = true) String description,
         @Schema(
                         description =
-                                "Report types this reason is valid for; empty means every type",
+                                "Report types this reason is valid for. An empty list means every"
+                                        + " type, never none: the four reasons that apply to an"
+                                        + " account as readily as to a piece of content carry an"
+                                        + " empty list rather than enumerating all five. A client"
+                                        + " filtering this list by the type being reported must"
+                                        + " therefore treat empty as a match.",
                         example = "[\"post\",\"comment\"]")
                 List<String> appliesTo,
         @Schema(

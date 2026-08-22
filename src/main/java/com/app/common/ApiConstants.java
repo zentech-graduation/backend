@@ -16,6 +16,9 @@ public final class ApiConstants {
         public static final String LOGIN = "/login";
         public static final String LOGOUT = "/logout";
         public static final String REFRESH = "/refresh";
+        // Under the auth root on purpose: the refresh cookie is scoped to this path, so this
+        // is the only tree a request carrying it reaches.
+        public static final String SESSION = "/session";
         public static final String FORGOT_PASSWORD = "/forgot-password";
         public static final String RESET_PASSWORD = "/reset-password";
         public static final String VERIFY_EMAIL = "/verify-email";
@@ -152,6 +155,8 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/reports";
         public static final String PENDING = "/pending";
+        // Literal segments, so no "/{reportId}" template can shadow it.
+        public static final String ESCALATED_BY_ME = "/escalated/mine";
         public static final String BY_ID = "/{reportId}";
         public static final String STATUS = "/{reportId}/status";
     }
@@ -169,6 +174,7 @@ public final class ApiConstants {
         public static final String USER_BY_ID = "/users/{userId}";
         public static final String USER_ROLE = "/users/{userId}/role";
         public static final String USER_FORCE_LOGOUT = "/users/{userId}/force-logout";
+        public static final String USER_SESSION_BY_ID = "/users/{userId}/sessions/{sessionId}";
         public static final String BAN_USER = "/users/{userId}/ban";
         public static final String UNBAN_USER = "/users/{userId}/unban";
         public static final String SUSPEND_USER = "/users/{userId}/suspend";
@@ -177,6 +183,10 @@ public final class ApiConstants {
         public static final String RESTORE_POST = "/posts/{postId}/restore";
         public static final String REMOVE_COMMENT = "/comments/{commentId}/remove";
         public static final String RESTORE_COMMENT = "/comments/{commentId}/restore";
+        public static final String REMOVE_STORY = "/stories/{storyId}/remove";
+        public static final String RESTORE_STORY = "/stories/{storyId}/restore";
+        public static final String REMOVE_MESSAGE = "/messages/{messageId}/remove";
+        public static final String RESTORE_MESSAGE = "/messages/{messageId}/restore";
         public static final String RESOLVE_REPORT = "/reports/{reportId}/resolve";
         public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
         public static final String ESCALATE_REPORT = "/reports/{reportId}/escalate";
@@ -195,6 +205,10 @@ public final class ApiConstants {
         // @PreAuthorize on the controller enforces.
         public static final String STATS_CURRENT = "/stats/current";
         public static final String STATS_TIMESERIES = "/stats/timeseries";
+        // A literal segment outside the "/users/**" sub-tree, so the broader "/api/v1/admin/**"
+        // matcher applies and a moderator can reach it. Queues, audit rows and violation rows
+        // are moderator surfaces and all carry bare account identifiers.
+        public static final String USER_SUMMARIES = "/user-summaries";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
         // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the

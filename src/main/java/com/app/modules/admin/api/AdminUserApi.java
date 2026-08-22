@@ -1,5 +1,6 @@
 package com.app.modules.admin.api;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +28,7 @@ import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
+import com.app.modules.admin.dto.response.AdminUserLookupResponse;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 
@@ -226,6 +229,103 @@ public interface AdminUserApi {
     @PostMapping(ApiConstants.Admin.USER_FORCE_LOGOUT)
     ResponseEntity<ApiResponse<AdminActionResponse>> forceLogout(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Resolves several account identifiers to display information. */
+    @Operation(
+            summary = "Resolve account identifiers to names",
+            description =
+                    "Resolves up to 100 account identifiers to display information in one call."
+                            + " Queues, audit rows, violation rows and activity rows all carry bare"
+                            + " identifiers, and resolving them one at a time costs one request per"
+                            + " distinct account on a page. Returns exactly one entry per distinct"
+                            + " identifier, in the order requested: an unknown or deleted"
+                            + " identifier comes back with found=false and a null user rather than"
+                            + " being omitted, so the caller's lookup map is never silently short."
+                            + " More than 100 identifiers is rejected rather than truncated."
+                            + " Display information only, never account status, role or email:"
+                            + " this is reachable by a moderator and must not become a second route"
+                            + " to the administrative account detail. Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "One entry per requested identifier"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "More than 100 identifiers supplied, or one is not a UUID",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Admin.USER_SUMMARIES)
+    ResponseEntity<ApiResponse<List<AdminUserLookupResponse>>> resolveUserSummaries(
+            @Parameter(description = "Account identifiers, comma separated, at most 100")
+                    @RequestParam("ids")
+                    List<UUID> ids);
+
+    /** Revokes one named session and returns the persisted audit event. */
+    @Operation(
+            summary = "Revoke one session",
+            description =
+                    "Ends a single session rather than every session the account holds. The"
+                            + " session must belong to the account named in the path; naming"
+                            + " another account's session answers 404, because the session listing"
+                            + " hands identifiers out and this endpoint must not become a way to"
+                            + " end any session in the system. Revoking a session that is already"
+                            + " revoked or expired succeeds rather than failing, so a reviewer"
+                            + " clicking twice sees no error; the audit row's metadata carries"
+                            + " alreadyRevoked so the two are still told apart. This does not"
+                            + " advance the account's token epoch, unlike force logout: the epoch"
+                            + " is per account, so advancing it would sign the account out"
+                            + " everywhere while reporting that one session was ended.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Session revoked, or already was"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Account not found, or no such session belongs to it",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @DeleteMapping(ApiConstants.Admin.USER_SESSION_BY_ID)
+    ResponseEntity<ApiResponse<AdminActionResponse>> revokeSession(
+            @PathVariable("userId") UUID userId,
+            @PathVariable("sessionId") UUID sessionId,
+            @Valid @RequestBody AdminActionRequest request);
 
     /** Changes an account's role and returns the persisted audit event. */
     @Operation(

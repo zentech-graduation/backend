@@ -156,6 +156,37 @@ class ReportControllerIT {
     }
 
     @Test
+    void listReports_misspelledFilter_isRejectedRatherThanAnsweredUnfiltered() {
+        TestUser moderator = createUser("strict_list_moderator", "moderator");
+
+        // "statuss" is not "status". Before this endpoint became strict the parameter was dropped
+        // and an unfiltered page came back, which a reviewer then works through believing it is
+        // the set they asked for.
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports?statuss=pending", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void listReports_declaredFilters_areStillAccepted() {
+        TestUser moderator = createUser("strict_declared_moderator", "moderator");
+
+        ResponseEntity<Map> response =
+                getWithAuth("/api/v1/reports?status=pending&reportType=post&limit=5", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void getPendingReports_unknownParameter_isRejected() {
+        TestUser moderator = createUser("strict_pending_moderator", "moderator");
+
+        ResponseEntity<Map> response = getWithAuth("/api/v1/reports/pending?page=2", moderator);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void getPendingReports_regularUser_returnsForbidden() {
         TestUser user = createUser("pending_forbidden_user", "user");
 

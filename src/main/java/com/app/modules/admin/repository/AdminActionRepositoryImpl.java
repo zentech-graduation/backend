@@ -37,6 +37,8 @@ public class AdminActionRepositoryImpl implements AdminActionRepositoryCustom {
             UUID adminId,
             UUID targetUserId,
             AdminActionType actionType,
+            OffsetDateTime from,
+            OffsetDateTime to,
             OffsetDateTime cursorCreatedAt,
             UUID cursorId,
             int limit) {
@@ -52,6 +54,14 @@ public class AdminActionRepositoryImpl implements AdminActionRepositoryCustom {
         }
         if (actionType != null) {
             predicates.add(builder.equal(action.get("actionType"), actionType));
+        }
+        // Half-open on purpose: [from, to). Two adjacent windows then partition the log with no
+        // row counted twice and none skipped, which a closed upper bound would not do.
+        if (from != null) {
+            predicates.add(builder.greaterThanOrEqualTo(action.get("createdAt"), from));
+        }
+        if (to != null) {
+            predicates.add(builder.lessThan(action.get("createdAt"), to));
         }
         if (cursorCreatedAt != null && cursorId != null) {
             // The first conjunct implies nothing the disjunction below does not already imply, and

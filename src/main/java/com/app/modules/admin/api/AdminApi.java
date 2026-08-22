@@ -1,11 +1,13 @@
 package com.app.modules.admin.api;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -31,6 +33,7 @@ import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -130,7 +133,13 @@ public interface AdminApi {
                     "Supplying durationDays fixes the term: the first authentication attempt after"
                             + " it lapses returns the account to active, and a periodic sweep does"
                             + " the same for an account nobody signs into. Omitting it makes the"
-                            + " suspension indefinite, and nothing reinstates it automatically.")
+                            + " suspension indefinite, and nothing reinstates it automatically."
+                            + " Both are supported and a consumer may offer either. An indefinite"
+                            + " suspension stores a null suspendedUntil, which the reinstatement"
+                            + " sweep never matches, so the account stays suspended until an"
+                            + " administrator unsuspends it explicitly. The field is genuinely"
+                            + " optional: omitting it is a deliberate choice rather than an"
+                            + " incomplete request.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -271,7 +280,10 @@ public interface AdminApi {
                             + " re-derived and the search index is refreshed only when the post comes"
                             + " back published. Restore is the one write path that strips a banned"
                             + " hashtag instead of refusing, so the post can come back carrying"
-                            + " fewer tags than its caption names; droppedHashtags names them."
+                            + " fewer tags than its caption names; remainingBannedHashtags names"
+                            + " the banned ones the caption still holds. That list is the post's"
+                            + " state after the restore rather than the set this call changed, so"
+                            + " restoring the same post twice returns the same names both times."
                             + " Moderator or administrator role required.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -394,6 +406,200 @@ public interface AdminApi {
     @PatchMapping(ApiConstants.Admin.RESTORE_COMMENT)
     ResponseEntity<ApiResponse<AdminActionResponse>> restoreComment(
             @PathVariable("commentId") UUID commentId,
+            @Valid @RequestBody AdminActionRequest request);
+
+    /** Removes a story and returns the persisted audit event. */
+    @Operation(
+            summary = "Removes a story and returns the persisted audit event",
+            description =
+                    "Takes a reported story down. The story stops appearing in its owner's profile"
+                            + " and in every viewer's story feed immediately. Expiry is untouched,"
+                            + " so a story removed close to its twenty-fourth hour may expire while"
+                            + " removed; once a story is both removed and expired the cleanup job"
+                            + " hard-deletes it and it can no longer be restored.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Story removed"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Story or linked report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Story is already removed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PatchMapping(ApiConstants.Admin.REMOVE_STORY)
+    ResponseEntity<ApiResponse<AdminActionResponse>> removeStory(
+            @PathVariable("storyId") UUID storyId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Restores a removed story and returns the persisted audit event. */
+    @Operation(
+            summary = "Restores a removed story and returns the persisted audit event",
+            description =
+                    "Reverses a story removal. Expiry continues to decide visibility, so a story"
+                            + " that expired while it was removed comes back to a live row that no"
+                            + " feed will show; this is deliberate, because a restore must not"
+                            + " resurrect content past its lifetime. A story the cleanup job has"
+                            + " already hard-deleted answers not-found.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Story restored"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Story or linked report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Story is not removed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PatchMapping(ApiConstants.Admin.RESTORE_STORY)
+    ResponseEntity<ApiResponse<AdminActionResponse>> restoreStory(
+            @PathVariable("storyId") UUID storyId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Removes a message and returns the persisted audit event. */
+    @Operation(
+            summary = "Removes a message and returns the persisted audit event",
+            description =
+                    "Takes a reported message down for both participants. Its text, media and any"
+                            + " shared post or story stop being served, and the thread shows the"
+                            + " same \"message deleted\" placeholder it already shows when a sender"
+                            + " deletes their own message. The row keeps its payload so a restore"
+                            + " can return it, and a deletion the sender performed is left"
+                            + " untouched.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Message removed"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Message or linked report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Message is already removed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PatchMapping(ApiConstants.Admin.REMOVE_MESSAGE)
+    ResponseEntity<ApiResponse<AdminActionResponse>> removeMessage(
+            @PathVariable("messageId") UUID messageId,
+            @Valid @RequestBody AdminActionRequest request);
+
+    /** Restores a removed message and returns the persisted audit event. */
+    @Operation(
+            summary = "Restores a removed message and returns the persisted audit event",
+            description =
+                    "Reverses a message removal, returning the message's text, media and shares to"
+                            + " both participants. A message the sender had also deleted stays"
+                            + " deleted: a restore corrects a moderation decision, not the"
+                            + " sender's.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Message restored"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "Message or linked report not found",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "Message is not removed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @AuthenticationRequiredResponse
+    @PatchMapping(ApiConstants.Admin.RESTORE_MESSAGE)
+    ResponseEntity<ApiResponse<AdminActionResponse>> restoreMessage(
+            @PathVariable("messageId") UUID messageId,
             @Valid @RequestBody AdminActionRequest request);
 
     /** Resolves a report and returns the persisted audit event. */
@@ -641,6 +847,25 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActions(
             @RequestParam(required = false) UUID adminId,
             @RequestParam(required = false) AdminActionType actionType,
+            @Parameter(description = "Account the action was taken against")
+                    @RequestParam(required = false)
+                    UUID targetUserId,
+            @Parameter(
+                            description =
+                                    "Inclusive lower bound on when the action was recorded, ISO"
+                                            + " 8601")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    OffsetDateTime from,
+            @Parameter(
+                            description =
+                                    "Exclusive upper bound on when the action was recorded, ISO"
+                                            + " 8601. The window is half-open, so two adjacent"
+                                            + " windows partition the log with no row counted twice"
+                                            + " and none skipped.")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    OffsetDateTime to,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 

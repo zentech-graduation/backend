@@ -1,5 +1,6 @@
 package com.app.modules.admin.service.impl;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.KeysetPage;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.service.RefreshTokenService;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
@@ -22,18 +24,21 @@ import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminUserCapabilitiesResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
+import com.app.modules.admin.dto.response.AdminUserLookupResponse;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminUserMapper;
 import com.app.modules.admin.repository.AdminUserRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminUserService;
+import com.app.modules.admin.service.UserDisciplineService;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -58,6 +63,8 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final AdminUserMapper adminUserMapper;
     private final AdminActionRecorder adminActionRecorder;
     private final AdminAuthorizationService adminAuthorizationService;
+    private final UserDisciplineService userDisciplineService;
+    private final UserSummaryService userSummaryService;
 
     public AdminUserServiceImpl(
             AdminUserRepository adminUserRepository,
@@ -66,7 +73,9 @@ public class AdminUserServiceImpl implements AdminUserService {
             RefreshTokenService refreshTokenService,
             AdminUserMapper adminUserMapper,
             AdminActionRecorder adminActionRecorder,
-            AdminAuthorizationService adminAuthorizationService) {
+            AdminAuthorizationService adminAuthorizationService,
+            UserDisciplineService userDisciplineService,
+            UserSummaryService userSummaryService) {
         this.adminUserRepository = adminUserRepository;
         this.userRepository = userRepository;
         this.reportRepository = reportRepository;
@@ -74,6 +83,8 @@ public class AdminUserServiceImpl implements AdminUserService {
         this.adminUserMapper = adminUserMapper;
         this.adminActionRecorder = adminActionRecorder;
         this.adminAuthorizationService = adminAuthorizationService;
+        this.userDisciplineService = userDisciplineService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -138,7 +149,11 @@ public class AdminUserServiceImpl implements AdminUserService {
                 new AdminUserCapabilitiesResponse(
                         capabilities.canChangeStatus(),
                         capabilities.canChangeRole(),
-                        capabilities.assignableRoles()));
+                        capabilities.assignableRoles()),
+                // Served by the discipline service rather than counted here. Three active warnings
+                // issue a strike, and a second copy of that predicate would produce a plausible
+                // number that drifts from the one the strike decision uses.
+                userDisciplineService.countActiveWarnings(userId));
     }
 
     @Override
@@ -169,6 +184,71 @@ public class AdminUserServiceImpl implements AdminUserService {
                 request.reportId(),
                 request.reason(),
                 Map.of("revokedSessions", revoked));
+    }
+
+    /**
+     * Ceiling on one batch. Rejected rather than truncated, so a caller cannot be handed a short
+     * map that looks complete.
+     */
+    private static final int MAX_SUMMARY_LOOKUP = 100;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminUserLookupResponse> resolveUserSummaries(List<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        if (userIds.size() > MAX_SUMMARY_LOOKUP) {
+            throw new AppException(
+                    ApiErrorCode.BAD_REQUEST,
+                    "At most " + MAX_SUMMARY_LOOKUP + " identifiers may be resolved in one call");
+        }
+        // One batched query, whatever the page size. This is the whole point of the endpoint.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(userIds);
+        List<AdminUserLookupResponse> resolved = new ArrayList<>(summaries.size());
+        for (Map.Entry<UUID, UserSummaryResponse> entry : summaries.entrySet()) {
+            UserSummaryResponse summary = entry.getValue();
+            // The placeholder the summary service returns for an unknown or deleted account is the
+            // only one with a null username; the column is NOT NULL for every real row. Surfaced
+            // as an explicit flag rather than leaving the client to match on a display string.
+            boolean found = summary != null && summary.username() != null;
+            resolved.add(
+                    new AdminUserLookupResponse(entry.getKey(), found, found ? summary : null));
+        }
+        return resolved;
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse revokeSession(
+            UUID actorId, UUID userId, UUID sessionId, AdminActionRequest request) {
+        User target =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(userId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
+        // Ownership is enforced inside the update predicate rather than by a read here, so it
+        // cannot be separated from the write by a concurrent change.
+        boolean endedNow = refreshTokenService.revokeSessionForUser(target.getId(), sessionId);
+        // Deliberately no token-epoch advance. Force logout advances it because it claims to end
+        // every session, and the access tokens already issued would otherwise outlive that claim.
+        // Ending one session cannot invalidate one access token, since the epoch is per account,
+        // so advancing it here would sign the account out everywhere while reporting that one
+        // session was ended.
+        log.info(
+                "Session revoked: actorId={}, targetId={}, sessionId={}, endedNow={}",
+                actorId,
+                userId,
+                sessionId,
+                endedNow);
+        return adminActionRecorder.record(
+                actorId,
+                AdminActionType.REVOKE_SESSION,
+                userId,
+                TARGET_ENTITY_TYPE,
+                userId,
+                request.reportId(),
+                request.reason(),
+                Map.of("sessionId", sessionId.toString(), "alreadyRevoked", !endedNow));
     }
 
     @Override

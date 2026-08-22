@@ -65,6 +65,26 @@ public interface ReportService {
     CursorPageResponse<ReportSummaryResponse> getPendingReports(String cursor, int size);
 
     /**
+     * Cursor page of the reports the caller escalated, newest escalation first.
+     *
+     * <p>Escalating takes a report out of every queue a moderator can read, so without this the
+     * only way back to it is a link from the moderator's own audit rows, which works only because
+     * those rows happen to carry the report identifier.
+     *
+     * <p>Always the caller's own escalations, never anyone else's, and that includes an
+     * administrator: the full escalated queue already serves that need. Carries no status filter,
+     * because a report an administrator has since resolved is exactly the outcome the moderator
+     * escalated in order to follow.
+     *
+     * @param actorId the caller, whose escalations are listed
+     * @param cursor opaque cursor from the previous page; null for the first page
+     * @param size requested page size, normalized to 1 to 100 with a default of 20
+     * @return the page
+     */
+    CursorPageResponse<ReportSummaryResponse> getMyEscalations(
+            UUID actorId, String cursor, int size);
+
+    /**
      * Returns a report by identifier for moderation review.
      *
      * <p>A moderator reaches the open part of the lifecycle, pending and reviewing, and any report

@@ -1,7 +1,10 @@
 package com.app.modules.admin.repository;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -57,9 +60,10 @@ public class AdminContentRepository {
      */
     public List<AdminPostSummaryResponse> findPostsForUser(
             UUID userId, OffsetDateTime cursorCreatedAt, UUID cursorId, int limit) {
-        return jdbcClient
-                .sql(
-                        """
+        List<AdminPostSummaryResponse> rows =
+                jdbcClient
+                        .sql(
+                                """
 						SELECT p.id, p.user_id, u.username, p.status::text AS status,
 							p.caption, p.deleted_at, p.like_count, p.comment_count, p.created_at
 						FROM posts p
@@ -72,23 +76,79 @@ public class AdminContentRepository {
 						ORDER BY p.created_at DESC, p.id DESC
 						LIMIT :limit
 						""")
-                .param("userId", userId)
-                .param("cursorCreatedAt", cursorCreatedAt)
-                .param("cursorId", cursorId)
-                .param("limit", limit)
+                        .param("userId", userId)
+                        .param("cursorCreatedAt", cursorCreatedAt)
+                        .param("cursorId", cursorId)
+                        .param("limit", limit)
+                        .query(
+                                (rs, row) ->
+                                        new AdminPostSummaryResponse(
+                                                rs.getObject("id", UUID.class),
+                                                rs.getObject("user_id", UUID.class),
+                                                rs.getString("username"),
+                                                rs.getString("status"),
+                                                rs.getString("caption"),
+                                                rs.getObject("deleted_at") != null,
+                                                rs.getInt("like_count"),
+                                                rs.getInt("comment_count"),
+                                                rs.getObject("created_at", OffsetDateTime.class),
+                                                // Filled in below. Reading media here would issue
+                                                // one
+                                                // query per row.
+                                                List.of()))
+                        .list();
+        return attachMedia(rows);
+    }
+
+    /**
+     * Attaches each post's media to the page in one further query.
+     *
+     * <p>Two statements for the whole page, whatever its size. Reading media inside the row mapper
+     * would issue one query per row, which is the shape that has produced an N+1 on this project
+     * twice already: once when hashtags were added to the post response, and once on the feed
+     * response.
+     *
+     * @param rows the page, carrying empty media lists
+     * @return the same rows in the same order, with media attached
+     */
+    private List<AdminPostSummaryResponse> attachMedia(List<AdminPostSummaryResponse> rows) {
+        if (rows.isEmpty()) {
+            return rows;
+        }
+        List<UUID> postIds = rows.stream().map(AdminPostSummaryResponse::id).toList();
+        Map<UUID, List<String>> byPost = new HashMap<>();
+        jdbcClient
+                .sql(
+                        """
+						SELECT pm.post_id, m.cdn_url
+						FROM post_media pm
+						JOIN media_assets m ON m.id = pm.media_asset_id
+						WHERE pm.post_id IN (:postIds)
+						ORDER BY pm.post_id, pm.position ASC
+						""")
+                .param("postIds", postIds)
                 .query(
-                        (rs, row) ->
+                        rs -> {
+                            byPost.computeIfAbsent(
+                                            rs.getObject("post_id", UUID.class),
+                                            key -> new ArrayList<>())
+                                    .add(rs.getString("cdn_url"));
+                        });
+        return rows.stream()
+                .map(
+                        row ->
                                 new AdminPostSummaryResponse(
-                                        rs.getObject("id", UUID.class),
-                                        rs.getObject("user_id", UUID.class),
-                                        rs.getString("username"),
-                                        rs.getString("status"),
-                                        rs.getString("caption"),
-                                        rs.getObject("deleted_at") != null,
-                                        rs.getInt("like_count"),
-                                        rs.getInt("comment_count"),
-                                        rs.getObject("created_at", OffsetDateTime.class)))
-                .list();
+                                        row.id(),
+                                        row.userId(),
+                                        row.username(),
+                                        row.status(),
+                                        row.caption(),
+                                        row.removed(),
+                                        row.likeCount(),
+                                        row.commentCount(),
+                                        row.createdAt(),
+                                        byPost.getOrDefault(row.id(), List.of())))
+                .toList();
     }
 
     /**

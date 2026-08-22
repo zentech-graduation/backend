@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -131,6 +132,35 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Transactional
     public int revokeAllForUser(UUID userId) {
         return repository.revokeAllActiveByUserId(userId, OffsetDateTime.now());
+    }
+
+    @Override
+    @Transactional
+    public boolean revokeSessionForUser(UUID userId, UUID sessionId) {
+        int revoked = repository.revokeByIdForUser(sessionId, userId, OffsetDateTime.now());
+        if (revoked > 0) {
+            return true;
+        }
+        // Nothing was updated, which is either "already revoked" or "not this account's session".
+        // Only the second is an error, so the two are separated rather than collapsed into one
+        // answer: a reviewer clicking revoke twice must not be shown a failure, and a caller
+        // naming another account's session must not be told it exists.
+        if (!repository.existsByIdAndUserId(sessionId, userId)) {
+            throw new AppException(ApiErrorCode.NOT_FOUND);
+        }
+        return false;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findSessionIdByRawToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return Optional.empty();
+        }
+        return repository
+                .findByTokenHashAndRevokedAtIsNull(sha256(rawToken))
+                .filter(token -> token.getExpiresAt().isAfter(OffsetDateTime.now()))
+                .map(RefreshToken::getId);
     }
 
     @Override

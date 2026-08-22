@@ -72,12 +72,18 @@ public class AdminDisciplineController extends BaseController implements AdminDi
     public ResponseEntity<ApiResponse<CursorPageResponse<AdminViolationResponse>>> listViolations(
             @PathVariable("userId") UUID userId,
             @RequestParam(value = "cursor", required = false) String cursor,
-            @RequestParam(value = "limit", defaultValue = "20") @Min(1) @Max(100) int limit) {
+            @RequestParam(value = "limit", defaultValue = "20") @Min(1) @Max(100) int limit,
+            @RequestParam(value = "includeRevoked", defaultValue = "false")
+                    boolean includeRevoked) {
         return ResponseEntity.ok(
                 ApiResponse.success(
                         ApiSuccessCode.OK,
                         userDisciplineService.listViolations(
-                                SecurityUtils.getCurrentUserId(), userId, cursor, limit)));
+                                SecurityUtils.getCurrentUserId(),
+                                userId,
+                                cursor,
+                                limit,
+                                includeRevoked)));
     }
 
     /** Revokes one warning for the authenticated administrator. */

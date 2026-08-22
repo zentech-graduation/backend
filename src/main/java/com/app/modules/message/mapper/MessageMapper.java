@@ -1,5 +1,6 @@
 package com.app.modules.message.mapper;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import org.mapstruct.Mapper;
@@ -81,9 +82,9 @@ public interface MessageMapper {
      * @param message the source message
      * @return the message response
      */
-    @Mapping(source = "deleted", target = "isDeleted")
-    @Mapping(target = "media", ignore = true)
-    MessageResponse toMessageResponse(Message message);
+    default MessageResponse toMessageResponse(Message message) {
+        return toMessageResponse(message, null);
+    }
 
     /**
      * Projects a message together with its already-resolved media.
@@ -91,15 +92,44 @@ public interface MessageMapper {
      * <p>The asset is passed in rather than looked up here so a page of messages costs one batched
      * query instead of one per row.
      *
+     * <p>Hand-written rather than generated because a message carries two independent tombstones
+     * and the response collapses them into one pair of fields. Either tombstone marks the message
+     * deleted; the sender's timestamp wins when both are set, because that is the one the
+     * participants already saw.
+     *
+     * <p>An administrative removal additionally withholds every payload the message carries, not
+     * only its text. A reported image is the usual case, and a removal that suppressed the caption
+     * while still serving the picture would not be a removal. The row keeps all of it so a restore
+     * can return it.
+     *
      * @param message the source message
      * @param media the resolved attachment, or null when the message carries none
      * @return the message response
      */
-    @Mapping(source = "message.deleted", target = "isDeleted")
-    @Mapping(source = "media", target = "media")
-    // Both sources expose mediaAssetId, so the message is named as the authority for it.
-    @Mapping(source = "message.mediaAssetId", target = "mediaAssetId")
-    MessageResponse toMessageResponse(Message message, MessageMediaResponse media);
+    default MessageResponse toMessageResponse(Message message, MessageMediaResponse media) {
+        if (message == null) {
+            return null;
+        }
+        boolean adminRemoved = message.getAdminRemovedAt() != null;
+        OffsetDateTime tombstonedAt =
+                message.getDeletedAt() != null
+                        ? message.getDeletedAt()
+                        : message.getAdminRemovedAt();
+        return new MessageResponse(
+                message.getId(),
+                message.getConversationId(),
+                message.getSenderId(),
+                message.getMessageType(),
+                adminRemoved ? null : message.getContent(),
+                adminRemoved ? null : message.getMediaAssetId(),
+                adminRemoved ? null : media,
+                adminRemoved ? null : message.getSharedPostId(),
+                adminRemoved ? null : message.getSharedStoryId(),
+                message.getReplyToId(),
+                message.isDeleted() || adminRemoved,
+                tombstonedAt,
+                message.getCreatedAt());
+    }
 
     /**
      * Projects a media asset onto the subset a message needs.

@@ -32,6 +32,11 @@ import lombok.Setter;
  * "message deleted" placeholder in place. {@code sender_id} is nullable: deleting a user's account
  * sets it to {@code null} (V32) rather than destroying the message, preserving history for the
  * remaining participants.
+ *
+ * <p>{@code admin_removed_at} (V77) is a second, independent tombstone owned by the moderation
+ * path. It is separate from the sender's because administrative removal has to be reversible: it
+ * preserves {@code content} so a restore can return the message, and clearing it leaves any sender
+ * deletion exactly as it was. A message is hidden when either tombstone is set.
  */
 @Entity
 @Table(name = "messages")
@@ -78,6 +83,10 @@ public class Message {
 
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
+
+    /** Set by the moderation path only; independent of the sender-owned pair above (V77). */
+    @Column(name = "admin_removed_at")
+    private OffsetDateTime adminRemovedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

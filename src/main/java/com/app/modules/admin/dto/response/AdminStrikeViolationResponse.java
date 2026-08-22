@@ -31,5 +31,17 @@ public record AdminStrikeViolationResponse(
                 UUID actorId,
         @Schema(description = "Position in the active strike sequence, starting at 1")
                 short strikeNumber,
-        @Schema(description = "Moment the strike was issued") OffsetDateTime createdAt)
+        @Schema(description = "Moment the strike was issued") OffsetDateTime createdAt,
+        @Schema(
+                        description =
+                                "When this entry was revoked; null while it still stands. A non-null"
+                                        + " value is what tells a revoked entry from a live one.",
+                        nullable = true)
+                OffsetDateTime revokedAt,
+        @Schema(
+                        description =
+                                "Who revoked this entry; null while it stands, and null once that"
+                                        + " account is deleted.",
+                        nullable = true)
+                UUID revokedBy)
         implements AdminViolationResponse {}

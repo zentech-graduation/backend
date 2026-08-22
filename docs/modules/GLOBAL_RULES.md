@@ -194,6 +194,13 @@ Alongside these, the schema includes config tables (`notification_type_configs`,
 
 **Read path**: Services read config tables to determine display behavior and policy. The enum value in the row is the source of truth for what the event IS. The config table is the source of truth for how it should be DISPLAYED and HANDLED.
 
+**Empty-set convention in `report_reason_configs.applies_to`**: an empty array means the reason applies to **every** `report_type`, never to none.
+The column is `NOT NULL DEFAULT '{}'`, so empty is the permissive default rather than an unfilled value.
+Four rows carry it - `spam`, `harassment`, `scam` and `other` - because each applies to an account as readily as to a piece of content, and enumerating all five types would say the same thing at more length.
+The rows that do enumerate are the ones that exclude a type: `nudity`, `violence` and `hate_speech` list the four content types and omit `user`, and `false_information` additionally omits `message`.
+A client filtering the reason list by the type being reported must therefore treat an empty list as a match.
+The convention is stated in V18 where the table is created, and published to consumers on the `appliesTo` field of the vocabulary endpoint.
+
 ---
 
 ## Metadata Configuration Tables

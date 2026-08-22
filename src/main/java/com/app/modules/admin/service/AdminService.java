@@ -1,5 +1,6 @@
 package com.app.modules.admin.service;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import com.app.common.exception.AppException;
@@ -63,6 +64,51 @@ public interface AdminService {
     /** Restores a removed comment and records the action atomically. */
     AdminActionResponse restoreComment(UUID actorId, UUID commentId, AdminActionRequest request);
 
+    /** Removes a story and records the action atomically. */
+    AdminActionResponse removeStory(UUID actorId, UUID storyId, AdminActionRequest request);
+
+    /**
+     * Restores a removed story and records the action atomically.
+     *
+     * <p>Clears the removal only. Expiry continues to decide visibility, so a story that expired
+     * while it was removed comes back to a live row that no feed will show. A story that the
+     * cleanup job has already hard-deleted, which it does once a row is both removed and expired,
+     * cannot be restored at all and answers not-found.
+     *
+     * @param actorId the acting moderator or administrator
+     * @param storyId the story to restore
+     * @param request the audit reason and any linked report
+     * @return the audit row
+     */
+    AdminActionResponse restoreStory(UUID actorId, UUID storyId, AdminActionRequest request);
+
+    /**
+     * Removes a message and records the action atomically.
+     *
+     * <p>Sets the administrative tombstone, which withholds the message's text, media and shares
+     * from both participants and leaves the "message deleted" placeholder the module already shows
+     * for a sender's own deletion. The row keeps its payload so a restore can return it.
+     *
+     * @param actorId the acting moderator or administrator
+     * @param messageId the message to remove
+     * @param request the audit reason and any linked report
+     * @return the audit row
+     */
+    AdminActionResponse removeMessage(UUID actorId, UUID messageId, AdminActionRequest request);
+
+    /**
+     * Restores a removed message and records the action atomically.
+     *
+     * <p>Clears the administrative tombstone only. A message the sender had also deleted stays
+     * deleted, because a restore corrects a moderation decision and not the sender's.
+     *
+     * @param actorId the acting moderator or administrator
+     * @param messageId the message to restore
+     * @param request the audit reason and any linked report
+     * @return the audit row
+     */
+    AdminActionResponse restoreMessage(UUID actorId, UUID messageId, AdminActionRequest request);
+
     /**
      * Resolves an open report and records the action atomically.
      *
@@ -116,12 +162,24 @@ public interface AdminService {
      * @param actorId the requesting account, resolved from the security context
      * @param adminId actor filter requested by the caller; ignored for a moderator
      * @param actionType action-type filter, or null for every type
+     * @param targetUserId account the action was taken against, or null for every target
+     * @param from inclusive lower bound on when the action was recorded, or null for unbounded
+     * @param to exclusive upper bound on when the action was recorded, or null for unbounded
      * @param cursor opaque keyset cursor, or null for the first page
      * @param size requested page size
      * @return one cursor page of audit summaries visible to this actor
+     * @throws com.app.common.exception.AppException {@code BAD_REQUEST} when both bounds are given
+     *     and {@code to} is not after {@code from}
      */
     CursorPageResponse<AdminActionSummaryResponse> getActions(
-            UUID actorId, UUID adminId, AdminActionType actionType, String cursor, int size);
+            UUID actorId,
+            UUID adminId,
+            AdminActionType actionType,
+            UUID targetUserId,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            String cursor,
+            int size);
 
     /**
      * Returns one immutable audit event.

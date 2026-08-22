@@ -21,6 +21,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * that exist.
  *
  * <p>A moderator receives warnings only, so a moderator's page contains no {@code strike} entry.
+ *
+ * <p>A revoked entry is returned only when the caller asks for it, and is told apart by {@code
+ * revokedAt} being non-null. Revoking used to remove the row from this listing entirely, so an
+ * account that had been disciplined and then cleared looked identical to one that never was, and
+ * the decision survived only as a separate row in the moderation action log.
  */
 @Schema(
         description = "One entry in an account's violation history, discriminated by kind",
@@ -53,4 +58,10 @@ public sealed interface AdminViolationResponse
 
     /** Moment the entry was recorded. */
     OffsetDateTime createdAt();
+
+    /** When the entry was revoked, or null while it still stands. */
+    OffsetDateTime revokedAt();
+
+    /** Who revoked it; null while it stands, and null once that account is deleted. */
+    UUID revokedBy();
 }
