@@ -189,6 +189,16 @@ FROM users u
 WHERE u.email LIKE '%@seed.local'
 ON CONFLICT (user_id) DO NOTHING;
 
+-- Mirrors AuthServiceImpl.register and CustomOidcUserService: every account the server creates
+-- gets a settings row, so a seeded account must too. Without it GET and PATCH /users/me/settings
+-- answer 404 for exactly these five accounts while the page renders defaults, which is worse than
+-- an error because the reader cannot tell the difference.
+INSERT INTO user_settings (user_id)
+SELECT u.id
+FROM users u
+WHERE u.email LIKE '%@seed.local'
+ON CONFLICT (user_id) DO NOTHING;
+
 -- Status is set explicitly rather than left to a default: no trigger derives 'pending' from the
 -- target's is_private flag, the application does, and this script does not go through it.
 INSERT INTO follows (follower_id, following_id, status)
