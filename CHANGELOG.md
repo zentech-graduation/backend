@@ -21,6 +21,25 @@ It names the banned tags the caption still carries after the restore, which is t
 The audit metadata key carrying the same set is renamed to match.
 
 ### Added
+- An account's violation history can now be read including records that have been revoked, which were previously removed from the list entirely, so an account that had been disciplined and then cleared looked identical to one that never was.
+Revoked entries are returned only when asked for, are marked as revoked, and say when and by whom.
+- The account detail an administrator reads now says how many warnings currently count toward the account's next strike, so a reviewer can be told that the warning they are about to issue will be the third and will suspend the account.
+- A single session can now be ended instead of only every session at once.
+The session must belong to the account it is named under, and ending one that has already ended reports success rather than an error.
+Ending one session does not sign the account out everywhere, which ending all of them does.
+- A signed-in client can now ask which session it is using, so a reviewer reading its own account's sessions can tell which row is the one it is sitting on.
+- Several account identifiers can now be resolved to display names in one request, instead of one request per account.
+Queues, audit rows, violation rows and activity rows all show bare identifiers, and this is what turns them into names.
+An identifier that matches no account is returned and marked as such rather than quietly left out.
+- The moderation audit log can now be filtered by a time window and by the account an action was taken against, so an investigation can ask what happened last Tuesday, or everything done to this account.
+A moderator still sees only its own entries.
+- A moderator can now list the reports it escalated.
+Escalating takes a report out of every queue a moderator can read, so until now there was no way to follow what had been handed up.
+- An account's posts now carry their attached images and video when a reviewer reads them, instead of only the caption.
+- The recommender service now starts with the rest of the local development stack.
+It was defined but never started, so every like, save, view and comment was retried against a service that was not running and then discarded.
+Those four kinds of activity now reach the activity log, taking it from three kinds to seven in development.
+This is development only; nothing about a production deployment was set up.
 - A moderator or administrator can now remove and restore a reported story and a reported message, the same way they already could a post or a comment.
 Closing a report about either previously recorded a moderation decision in the audit log while the content stayed up, which was the one place where the record and the reality could disagree.
 Removing a story leaves its expiry alone, so a story that expires while removed does not come back into anyone's feed when it is restored; once a story is both removed and expired the existing cleanup job deletes it and it can no longer be restored.
