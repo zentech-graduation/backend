@@ -1,8 +1,8 @@
 package com.app.common.devseed;
 
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.UUID;
 
 import org.springframework.context.annotation.Profile;
@@ -29,6 +29,8 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
 
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
+
+    private static final SecureRandom DEV_SEED_RANDOM = new SecureRandom();
 
     private static final String PASSWORD = "Password123!";
     private static final String DOMAIN = "luvax.test";
@@ -142,7 +144,7 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
         }
 
         String hash = passwordEncoder.encode(PASSWORD);
-        Random rnd = new Random(20260817L);
+        SecureRandom rnd = DEV_SEED_RANDOM;
 
         List<UUID> userIds = new ArrayList<>();
         for (int i = 0; i < PEOPLE.length; i++) {
@@ -329,7 +331,7 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
                 null);
     }
 
-    private UUID insertVideo(UUID userId, Random rnd) {
+    private UUID insertVideo(UUID userId, SecureRandom rnd) {
         Object[] v = VIDEOS[rnd.nextInt(VIDEOS.length)];
         return insertMedia(
                 userId, (String) v[0], "video", "video/mp4", (int) v[1], (int) v[2], (int) v[3]);
@@ -441,7 +443,7 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
         return sb.toString();
     }
 
-    private String caption(Random rnd) {
+    private String caption(SecureRandom rnd) {
         StringBuilder sb = new StringBuilder(CAPTIONS[rnd.nextInt(CAPTIONS.length)]);
         int tags = 1 + rnd.nextInt(2);
         for (int i = 0; i < tags; i++) {

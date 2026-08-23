@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Restoring a moderation-removed post with a blank legacy prior-status value now restores it as published instead of throwing a null-pointer exception.
+- Development seed data now uses a cryptographically secure random generator, and the audited dynamic SQL and stateless security exceptions document their closed inputs and protections.
 - A post in the personalized ranked feed now keeps its hashtags. They were dropped from every ranked post while the chronological feed kept them, so the same post rendered differently depending on which feed it came from.
 - The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
 - Opening the settings page on a valid account is no longer an error.

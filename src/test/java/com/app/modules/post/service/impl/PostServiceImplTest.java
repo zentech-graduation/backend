@@ -56,6 +56,7 @@ import com.app.modules.post.enums.PostType;
 import com.app.modules.post.mapper.PostMapper;
 import com.app.modules.post.repository.PostEditHistoryRepository;
 import com.app.modules.post.repository.PostMediaAssetRepository;
+import com.app.modules.post.repository.PostModerationProjection;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.repository.PostUserRepository;
 import com.app.modules.post.service.PostVisibilityService;
@@ -753,6 +754,22 @@ class PostServiceImplTest {
 
         assertThat(page.getPageInfo().isHasNextPage()).isFalse();
         assertThat(page.getContent()).hasSize(5);
+    }
+
+    @Test
+    void applyModerationRestore_blankPriorStatus_restoresAsPublished() {
+        PostModerationProjection post = Mockito.mock(PostModerationProjection.class);
+        when(post.getUserId()).thenReturn(authorId);
+        when(post.getCaption()).thenReturn(null);
+        when(post.getCreatedAt()).thenReturn(java.time.Instant.now());
+        when(post.getStatusBeforeModeration()).thenReturn("   ");
+        when(postRepository.findModerationViewIncludingDeleted(postId))
+                .thenReturn(Optional.of(post));
+
+        var result = service.applyModerationRestore(postId);
+
+        assertThat(result.status()).isEqualTo(PostStatus.PUBLISHED);
+        verify(postRepository).applyModerationRestore(postId, "published");
     }
 
     private List<Post> buildPosts(UUID userId, int count) {

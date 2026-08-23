@@ -30,6 +30,8 @@ public class PlatformStatsRepositoryImpl implements PlatformStatsRepository {
     }
 
     @Override
+    // The selected statement is from the closed PlatformMetric enum; bucket values are bound.
+    @SuppressWarnings("java:S2077")
     public int collect(
             PlatformMetric metric,
             StatGranularity granularity,

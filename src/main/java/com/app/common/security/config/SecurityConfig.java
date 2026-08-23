@@ -133,6 +133,9 @@ public class SecurityConfig {
     }
 
     @Bean
+    // API calls use bearer tokens, while the path-scoped refresh and OAuth cookies are HttpOnly
+    // and SameSite=Lax. CSRF remains enabled for browser-facing paths outside these matchers.
+    @SuppressWarnings("java:S4502")
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(
                         csrf ->
