@@ -1,5 +1,6 @@
 package com.app.modules.admin.service;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import com.app.common.exception.AppException;
@@ -161,12 +162,24 @@ public interface AdminService {
      * @param actorId the requesting account, resolved from the security context
      * @param adminId actor filter requested by the caller; ignored for a moderator
      * @param actionType action-type filter, or null for every type
+     * @param targetUserId account the action was taken against, or null for every target
+     * @param from inclusive lower bound on when the action was recorded, or null for unbounded
+     * @param to exclusive upper bound on when the action was recorded, or null for unbounded
      * @param cursor opaque keyset cursor, or null for the first page
      * @param size requested page size
      * @return one cursor page of audit summaries visible to this actor
+     * @throws com.app.common.exception.AppException {@code BAD_REQUEST} when both bounds are given
+     *     and {@code to} is not after {@code from}
      */
     CursorPageResponse<AdminActionSummaryResponse> getActions(
-            UUID actorId, UUID adminId, AdminActionType actionType, String cursor, int size);
+            UUID actorId,
+            UUID adminId,
+            AdminActionType actionType,
+            UUID targetUserId,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            String cursor,
+            int size);
 
     /**
      * Returns one immutable audit event.

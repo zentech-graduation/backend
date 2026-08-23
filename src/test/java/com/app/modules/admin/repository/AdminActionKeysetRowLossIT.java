@@ -69,14 +69,22 @@ class AdminActionKeysetRowLossIT {
 
         List<UUID> seen = new ArrayList<>();
         List<AdminAction> page =
-                adminActionRepository.findActions(null, null, null, null, null, PAGE_SIZE);
+                adminActionRepository.findActions(
+                        null, null, null, null, null, null, null, PAGE_SIZE);
         int guard = 0;
         while (!page.isEmpty() && guard++ < 100) {
             page.forEach(a -> seen.add(a.getId()));
             AdminAction last = page.get(page.size() - 1);
             page =
                     adminActionRepository.findActions(
-                            null, null, null, last.getCreatedAt(), last.getId(), PAGE_SIZE);
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            last.getCreatedAt(),
+                            last.getId(),
+                            PAGE_SIZE);
         }
 
         assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);

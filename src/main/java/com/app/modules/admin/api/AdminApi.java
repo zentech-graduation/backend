@@ -1,11 +1,13 @@
 package com.app.modules.admin.api;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -31,6 +33,7 @@ import com.app.modules.admin.dto.response.EscalatedReportCountResponse;
 import com.app.modules.admin.enums.AdminActionType;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -844,6 +847,25 @@ public interface AdminApi {
     ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActions(
             @RequestParam(required = false) UUID adminId,
             @RequestParam(required = false) AdminActionType actionType,
+            @Parameter(description = "Account the action was taken against")
+                    @RequestParam(required = false)
+                    UUID targetUserId,
+            @Parameter(
+                            description =
+                                    "Inclusive lower bound on when the action was recorded, ISO"
+                                            + " 8601")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    OffsetDateTime from,
+            @Parameter(
+                            description =
+                                    "Exclusive upper bound on when the action was recorded, ISO"
+                                            + " 8601. The window is half-open, so two adjacent"
+                                            + " windows partition the log with no row counted twice"
+                                            + " and none skipped.")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    OffsetDateTime to,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit);
 

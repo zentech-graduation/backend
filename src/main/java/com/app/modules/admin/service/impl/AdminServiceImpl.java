@@ -239,10 +239,30 @@ public class AdminServiceImpl implements AdminService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminActionSummaryResponse> getActions(
-            UUID actorId, UUID adminId, AdminActionType actionType, String cursor, int size) {
+            UUID actorId,
+            UUID adminId,
+            AdminActionType actionType,
+            UUID targetUserId,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            String cursor,
+            int size) {
+        if (from != null && to != null && !to.isAfter(from)) {
+            throw new AppException(ApiErrorCode.BAD_REQUEST, "'to' must be later than 'from'");
+        }
+        // The moderator narrowing is applied to the actor filter, not to the new ones, so the new
+        // filters compose with the restriction instead of offering a way around it: a moderator
+        // asking for a target still only ever sees its own rows against that target.
         UUID effectiveAdminId = scopeActorFilter(actorId, adminId);
         return findActions(
-                effectiveAdminId, null, actionType, cursor, size, CursorScope.ADMIN_ACTIONS);
+                effectiveAdminId,
+                targetUserId,
+                actionType,
+                from,
+                to,
+                cursor,
+                size,
+                CursorScope.ADMIN_ACTIONS);
     }
 
     @Override
@@ -266,7 +286,14 @@ public class AdminServiceImpl implements AdminService {
             UUID actorId, UUID userId, String cursor, int size) {
         UUID effectiveAdminId = scopeActorFilter(actorId, null);
         return findActions(
-                effectiveAdminId, userId, null, cursor, size, CursorScope.ADMIN_ACTIONS_FOR_USER);
+                effectiveAdminId,
+                userId,
+                null,
+                null,
+                null,
+                cursor,
+                size,
+                CursorScope.ADMIN_ACTIONS_FOR_USER);
     }
 
     /**
@@ -492,6 +519,8 @@ public class AdminServiceImpl implements AdminService {
             UUID adminId,
             UUID targetUserId,
             AdminActionType actionType,
+            OffsetDateTime from,
+            OffsetDateTime to,
             String cursor,
             int size,
             String scope) {
@@ -503,6 +532,8 @@ public class AdminServiceImpl implements AdminService {
                         adminId,
                         targetUserId,
                         actionType,
+                        from,
+                        to,
                         decoded.createdAt(),
                         decoded.id(),
                         queryLimit);

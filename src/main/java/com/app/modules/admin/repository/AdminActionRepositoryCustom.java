@@ -15,6 +15,8 @@ public interface AdminActionRepositoryCustom {
             UUID adminId,
             UUID targetUserId,
             AdminActionType actionType,
+            OffsetDateTime from,
+            OffsetDateTime to,
             OffsetDateTime cursorCreatedAt,
             UUID cursorId,
             int limit);

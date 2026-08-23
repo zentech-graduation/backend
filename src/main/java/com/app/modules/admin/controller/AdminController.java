@@ -1,11 +1,13 @@
 package com.app.modules.admin.controller;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -199,11 +201,23 @@ public class AdminController extends BaseController implements AdminApi {
     public ResponseEntity<ApiResponse<CursorPageResponse<AdminActionSummaryResponse>>> getActions(
             @RequestParam(required = false) UUID adminId,
             @RequestParam(required = false) AdminActionType actionType,
+            @RequestParam(required = false) UUID targetUserId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    OffsetDateTime to,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
         return page(
                 adminService.getActions(
-                        SecurityUtils.getCurrentUserId(), adminId, actionType, cursor, limit));
+                        SecurityUtils.getCurrentUserId(),
+                        adminId,
+                        actionType,
+                        targetUserId,
+                        from,
+                        to,
+                        cursor,
+                        limit));
     }
 
     /** Returns one audit event to an authenticated moderator or administrator. */

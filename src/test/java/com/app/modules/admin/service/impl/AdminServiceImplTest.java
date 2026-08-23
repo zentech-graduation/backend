@@ -363,11 +363,11 @@ class AdminServiceImplTest {
         AdminAction first = action(AdminActionType.BAN_USER);
         AdminAction probe = action(AdminActionType.REMOVE_POST);
         AdminActionSummaryResponse mapped = summary(AdminActionType.BAN_USER);
-        when(adminActionRepository.findActions(null, null, null, null, null, 2))
+        when(adminActionRepository.findActions(null, null, null, null, null, null, null, 2))
                 .thenReturn(List.of(first, probe));
         when(adminActionMapper.toSummaryResponseList(List.of(first))).thenReturn(List.of(mapped));
 
-        var result = service.getActions(actorId, null, null, null, 1);
+        var result = service.getActions(actorId, null, null, null, null, null, null, 1);
 
         assertThat(result.getContent()).containsExactly(mapped);
         assertThat(result.getPageInfo().isHasNextPage()).isTrue();
@@ -381,14 +381,14 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID otherAdminId = UUID.randomUUID();
         stubActor(actorId, UserRole.MODERATOR);
-        when(adminActionRepository.findActions(actorId, null, null, null, null, 2))
+        when(adminActionRepository.findActions(actorId, null, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
-        service.getActions(actorId, otherAdminId, null, null, 1);
+        service.getActions(actorId, otherAdminId, null, null, null, null, null, 1);
 
-        verify(adminActionRepository).findActions(actorId, null, null, null, null, 2);
+        verify(adminActionRepository).findActions(actorId, null, null, null, null, null, null, 2);
         verify(adminActionRepository, never())
-                .findActions(eq(otherAdminId), any(), any(), any(), any(), anyInt());
+                .findActions(eq(otherAdminId), any(), any(), any(), any(), any(), any(), anyInt());
     }
 
     @Test
@@ -396,24 +396,25 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID otherAdminId = UUID.randomUUID();
         stubActor(actorId, UserRole.ADMIN);
-        when(adminActionRepository.findActions(otherAdminId, null, null, null, null, 2))
+        when(adminActionRepository.findActions(otherAdminId, null, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
-        service.getActions(actorId, otherAdminId, null, null, 1);
+        service.getActions(actorId, otherAdminId, null, null, null, null, null, 1);
 
-        verify(adminActionRepository).findActions(otherAdminId, null, null, null, null, 2);
+        verify(adminActionRepository)
+                .findActions(otherAdminId, null, null, null, null, null, null, 2);
     }
 
     @Test
     void getActions_administratorActorWithNoFilter_readsEveryActorsRows() {
         UUID actorId = UUID.randomUUID();
         stubActor(actorId, UserRole.ADMIN);
-        when(adminActionRepository.findActions(null, null, null, null, null, 2))
+        when(adminActionRepository.findActions(null, null, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
-        service.getActions(actorId, null, null, null, 1);
+        service.getActions(actorId, null, null, null, null, null, null, 1);
 
-        verify(adminActionRepository).findActions(null, null, null, null, null, 2);
+        verify(adminActionRepository).findActions(null, null, null, null, null, null, null, 2);
     }
 
     @Test
@@ -421,12 +422,14 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID targetUserId = UUID.randomUUID();
         stubActor(actorId, UserRole.MODERATOR);
-        when(adminActionRepository.findActions(actorId, targetUserId, null, null, null, 2))
+        when(adminActionRepository.findActions(
+                        actorId, targetUserId, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
         service.getActionsForUser(actorId, targetUserId, null, 1);
 
-        verify(adminActionRepository).findActions(actorId, targetUserId, null, null, null, 2);
+        verify(adminActionRepository)
+                .findActions(actorId, targetUserId, null, null, null, null, null, 2);
     }
 
     @Test
@@ -434,12 +437,13 @@ class AdminServiceImplTest {
         UUID actorId = UUID.randomUUID();
         UUID targetUserId = UUID.randomUUID();
         stubActor(actorId, UserRole.ADMIN);
-        when(adminActionRepository.findActions(null, targetUserId, null, null, null, 2))
+        when(adminActionRepository.findActions(null, targetUserId, null, null, null, null, null, 2))
                 .thenReturn(List.of());
 
         service.getActionsForUser(actorId, targetUserId, null, 1);
 
-        verify(adminActionRepository).findActions(null, targetUserId, null, null, null, 2);
+        verify(adminActionRepository)
+                .findActions(null, targetUserId, null, null, null, null, null, 2);
     }
 
     @Test
