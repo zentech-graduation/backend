@@ -33,6 +33,8 @@ import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminService;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.message.repository.MessageRepository;
+import com.app.modules.notification.entity.enums.NotificationType;
+import com.app.modules.notification.service.NotificationService;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostModerationResult;
@@ -67,6 +69,7 @@ public class AdminServiceImpl implements AdminService {
     private final AdminActionMapper adminActionMapper;
     private final AdminActionRecorder adminActionRecorder;
     private final AdminAuthorizationService adminAuthorizationService;
+    private final NotificationService notificationService;
 
     public AdminServiceImpl(
             AdminActionRepository adminActionRepository,
@@ -79,7 +82,8 @@ public class AdminServiceImpl implements AdminService {
             ReportRepository reportRepository,
             AdminActionMapper adminActionMapper,
             AdminActionRecorder adminActionRecorder,
-            AdminAuthorizationService adminAuthorizationService) {
+            AdminAuthorizationService adminAuthorizationService,
+            NotificationService notificationService) {
         this.adminActionRepository = adminActionRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
@@ -91,6 +95,7 @@ public class AdminServiceImpl implements AdminService {
         this.adminActionMapper = adminActionMapper;
         this.adminActionRecorder = adminActionRecorder;
         this.adminAuthorizationService = adminAuthorizationService;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -362,7 +367,7 @@ public class AdminServiceImpl implements AdminService {
         if (restore != PostStatus.REMOVED.toJson().equals(currentStatus)) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
-        validateLinkedReport(request.reportId());
+        Report linkedReport = findLinkedReport(request.reportId());
         PostModerationResult result =
                 restore
                         ? postService.applyModerationRestore(postId)
@@ -385,6 +390,34 @@ public class AdminServiceImpl implements AdminService {
                         request.reportId(),
                         request.reason(),
                         metadata);
+        if (restore) {
+            notifySystem(
+                    result.ownerId(),
+                    NotificationType.POST_RESTORED,
+                    "post",
+                    postId,
+                    null,
+                    request.reason());
+        } else {
+            resolveLinkedReport(linkedReport, actorId, request.reason());
+            notifySystem(
+                    result.ownerId(),
+                    NotificationType.POST_REMOVED,
+                    "post",
+                    postId,
+                    null,
+                    request.reason());
+            if (isMatchingPostReport(linkedReport, postId)
+                    && !linkedReport.getReporterId().equals(result.ownerId())) {
+                notifySystem(
+                        linkedReport.getReporterId(),
+                        NotificationType.REPORT_POST_REMOVED,
+                        "report",
+                        linkedReport.getId(),
+                        postId,
+                        null);
+            }
+        }
         return new ModerationOutcome(action, result.remainingBannedHashtags());
     }
 
@@ -407,17 +440,22 @@ public class AdminServiceImpl implements AdminService {
         if (restore != deleted) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
-        validateLinkedReport(request.reportId());
+        Report linkedReport = findLinkedReport(request.reportId());
         commentRepository.applyAdminModeration(commentId, restore ? null : OffsetDateTime.now());
-        return adminActionRecorder.record(
-                actorId,
-                actionType,
-                ownerId,
-                "comment",
-                commentId,
-                request.reportId(),
-                request.reason(),
-                null);
+        AdminActionResponse action =
+                adminActionRecorder.record(
+                        actorId,
+                        actionType,
+                        ownerId,
+                        "comment",
+                        commentId,
+                        request.reportId(),
+                        request.reason(),
+                        null);
+        if (!restore) {
+            resolveLinkedReport(linkedReport, actorId, request.reason());
+        }
+        return action;
     }
 
     // Shaped on moderateComment rather than on the post path: a story removal has no side effect
@@ -436,17 +474,22 @@ public class AdminServiceImpl implements AdminService {
         if (restore != deleted) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
-        validateLinkedReport(request.reportId());
+        Report linkedReport = findLinkedReport(request.reportId());
         storyRepository.applyAdminModeration(storyId, restore ? null : OffsetDateTime.now());
-        return adminActionRecorder.record(
-                actorId,
-                actionType,
-                ownerId,
-                "story",
-                storyId,
-                request.reportId(),
-                request.reason(),
-                null);
+        AdminActionResponse action =
+                adminActionRecorder.record(
+                        actorId,
+                        actionType,
+                        ownerId,
+                        "story",
+                        storyId,
+                        request.reportId(),
+                        request.reason(),
+                        null);
+        if (!restore) {
+            resolveLinkedReport(linkedReport, actorId, request.reason());
+        }
+        return action;
     }
 
     // The transition guard reads admin_removed_at and not is_deleted, so a message the sender
@@ -465,17 +508,22 @@ public class AdminServiceImpl implements AdminService {
         if (restore != removed) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
-        validateLinkedReport(request.reportId());
+        Report linkedReport = findLinkedReport(request.reportId());
         messageRepository.applyAdminModeration(messageId, restore ? null : OffsetDateTime.now());
-        return adminActionRecorder.record(
-                actorId,
-                actionType,
-                senderId,
-                "message",
-                messageId,
-                request.reportId(),
-                request.reason(),
-                null);
+        AdminActionResponse action =
+                adminActionRecorder.record(
+                        actorId,
+                        actionType,
+                        senderId,
+                        "message",
+                        messageId,
+                        request.reportId(),
+                        request.reason(),
+                        null);
+        if (!restore) {
+            resolveLinkedReport(linkedReport, actorId, request.reason());
+        }
+        return action;
     }
 
     private AdminActionResponse closeReport(
@@ -504,15 +552,26 @@ public class AdminServiceImpl implements AdminService {
         report.setResolutionNote(request.reason().trim());
         reportRepository.save(report);
         UUID targetUserId = report.getReportType() == ReportType.USER ? report.getEntityId() : null;
-        return adminActionRecorder.record(
-                actorId,
-                actionType,
-                targetUserId,
-                report.getReportType().toJson(),
-                report.getEntityId(),
-                reportId,
-                request.reason(),
-                null);
+        AdminActionResponse action =
+                adminActionRecorder.record(
+                        actorId,
+                        actionType,
+                        targetUserId,
+                        report.getReportType().toJson(),
+                        report.getEntityId(),
+                        reportId,
+                        request.reason(),
+                        null);
+        if (actionType == AdminActionType.DISMISS_REPORT) {
+            notifySystem(
+                    report.getReporterId(),
+                    NotificationType.REPORT_DISMISSED,
+                    "report",
+                    reportId,
+                    null,
+                    request.reason());
+        }
+        return action;
     }
 
     private CursorPageResponse<AdminActionSummaryResponse> findActions(
@@ -571,10 +630,42 @@ public class AdminServiceImpl implements AdminService {
         throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
     }
 
-    private void validateLinkedReport(UUID reportId) {
-        if (reportId != null && !reportRepository.existsById(reportId)) {
-            throw new AppException(ApiErrorCode.REPORT_NOT_FOUND);
+    private Report findLinkedReport(UUID reportId) {
+        if (reportId == null) {
+            return null;
         }
+        return reportRepository
+                .findById(reportId)
+                .orElseThrow(() -> new AppException(ApiErrorCode.REPORT_NOT_FOUND));
+    }
+
+    private boolean isMatchingPostReport(Report report, UUID postId) {
+        return report != null
+                && report.getReportType() == ReportType.POST
+                && postId.equals(report.getEntityId());
+    }
+
+    private void resolveLinkedReport(Report report, UUID actorId, String reason) {
+        if (report == null
+                || report.getStatus() == ReportStatus.RESOLVED
+                || report.getStatus() == ReportStatus.DISMISSED) {
+            return;
+        }
+        report.setStatus(ReportStatus.RESOLVED);
+        report.setReviewedBy(actorId);
+        report.setReviewedAt(OffsetDateTime.now());
+        report.setResolutionNote(reason.trim());
+        reportRepository.save(report);
+    }
+
+    private void notifySystem(
+            UUID recipientId,
+            NotificationType type,
+            String entityType,
+            UUID entityId,
+            UUID postId,
+            String message) {
+        notificationService.create(null, recipientId, type, entityType, entityId, postId, message);
     }
 
     private CursorPageResponse<AdminActionSummaryResponse> toPage(

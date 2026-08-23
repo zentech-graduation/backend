@@ -28,6 +28,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.mail.service.MailService;
 import com.app.modules.notification.dto.response.NotificationResponse;
+import com.app.modules.notification.entity.enums.NotificationType;
 import com.app.modules.notification.service.NotificationService;
 import com.app.modules.users.service.impl.UserSummaryServiceImpl;
 
@@ -155,6 +156,31 @@ class NotificationAuthorEmbeddingIT {
         assertThat(content.get(1).actor().id()).isEqualTo(bob);
         assertThat(content.get(2).actor().id()).isEqualTo(alice);
         assertThat(content.get(0).actor()).isEqualTo(content.get(2).actor());
+    }
+
+    @Test
+    void listNotifications_systemNotificationWithoutActor_keepsMessage() {
+        UUID recipient = insertUser("notif_recipient4", false);
+        UUID notificationId =
+                jdbcTemplate.queryForObject(
+                        "INSERT INTO notifications(recipient_id, type, entity_type, entity_id,"
+                                + " message, created_at) VALUES (?, 'post_removed', 'post', ?, ?,"
+                                + " ?) RETURNING id",
+                        UUID.class,
+                        recipient,
+                        UUID.randomUUID(),
+                        "Policy violation",
+                        minutesAgo(1));
+
+        CursorPageResponse<NotificationResponse> page =
+                notificationService.listNotifications(recipient, null, 10);
+
+        assertThat(page.getContent()).hasSize(1);
+        NotificationResponse response = page.getContent().get(0);
+        assertThat(response.id()).isEqualTo(notificationId);
+        assertThat(response.actor()).isNull();
+        assertThat(response.type()).isEqualTo(NotificationType.POST_REMOVED);
+        assertThat(response.message()).isEqualTo("Policy violation");
     }
 
     private OffsetDateTime minutesAgo(int minutes) {

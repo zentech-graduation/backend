@@ -512,6 +512,7 @@ class OpenApiContractIT {
                         new Expectation("PostResponse", "latitude"),
                         new Expectation("NotificationResponse", "entityId"),
                         new Expectation("NotificationResponse", "entityType"),
+                        new Expectation("NotificationResponse", "message"),
                         new Expectation("ConversationResponse", "lastMessageAt"),
                         new Expectation("CommentResponse", "parentId"),
                         new Expectation("CommentResponse", "rootId"),

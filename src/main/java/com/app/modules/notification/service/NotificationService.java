@@ -37,6 +37,18 @@ public interface NotificationService {
             UUID postId);
 
     /**
+     * Creates a notification with an optional system message attached, such as a moderation reason.
+     */
+    void create(
+            UUID actorId,
+            UUID recipientId,
+            NotificationType type,
+            String entityType,
+            UUID entityId,
+            UUID postId,
+            String message);
+
+    /**
      * Marks the notification as read. Throws {@link com.app.common.exception.AppException} with
      * {@link com.app.common.enums.ApiErrorCode#FORBIDDEN} if the notification does not exist or
      * belongs to a different recipient.

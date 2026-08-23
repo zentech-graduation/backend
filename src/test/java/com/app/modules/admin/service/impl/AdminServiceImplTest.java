@@ -36,6 +36,8 @@ import com.app.modules.admin.repository.AdminActionRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.comment.repository.CommentRepository;
 import com.app.modules.message.repository.MessageRepository;
+import com.app.modules.notification.entity.enums.NotificationType;
+import com.app.modules.notification.service.NotificationService;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostModerationResult;
@@ -63,6 +65,7 @@ class AdminServiceImplTest {
     @Mock private MessageRepository messageRepository;
     @Mock private ReportRepository reportRepository;
     @Mock private AdminActionMapper adminActionMapper;
+    @Mock private NotificationService notificationService;
 
     private AdminServiceImpl service;
 
@@ -80,7 +83,8 @@ class AdminServiceImplTest {
                         reportRepository,
                         adminActionMapper,
                         new AdminActionRecorder(adminActionRepository, adminActionMapper),
-                        new AdminAuthorizationServiceImpl());
+                        new AdminAuthorizationServiceImpl(),
+                        notificationService);
     }
 
     private void stubActor(UUID actorId, UserRole role) {
@@ -250,6 +254,55 @@ class AdminServiceImplTest {
 
         assertThat(result).isEqualTo(expected);
         verify(postService).applyModerationRemoval(postId);
+        verify(notificationService)
+                .create(
+                        null,
+                        ownerId,
+                        NotificationType.POST_REMOVED,
+                        "post",
+                        postId,
+                        null,
+                        "Violation");
+    }
+
+    @Test
+    void removePost_linkedReport_notifiesReporterThatReportedPostWasRemoved() {
+        UUID postId = UUID.randomUUID();
+        UUID reportId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        AdminActionResponse expected = response(AdminActionType.REMOVE_POST);
+        when(postRepository.findStatusIncludingDeleted(postId))
+                .thenReturn(Optional.of("published"));
+        when(reportRepository.findById(reportId))
+                .thenReturn(
+                        Optional.of(
+                                Report.builder()
+                                        .id(reportId)
+                                        .reporterId(reporterId)
+                                        .reportType(ReportType.POST)
+                                        .reportReason(ReportReason.SPAM)
+                                        .entityId(postId)
+                                        .status(ReportStatus.PENDING)
+                                        .build()));
+        when(postService.applyModerationRemoval(postId))
+                .thenReturn(new PostModerationResult(ownerId, PostStatus.REMOVED, List.of()));
+        stubAudit(expected);
+
+        AdminActionResponse result =
+                service.removePost(
+                        UUID.randomUUID(), postId, new AdminActionRequest("Violation", reportId));
+
+        assertThat(result).isEqualTo(expected);
+        verify(notificationService)
+                .create(
+                        null,
+                        reporterId,
+                        NotificationType.REPORT_POST_REMOVED,
+                        "report",
+                        reportId,
+                        postId,
+                        null);
     }
 
     @Test
@@ -271,6 +324,15 @@ class AdminServiceImplTest {
         ArgumentCaptor<AdminAction> captor = ArgumentCaptor.forClass(AdminAction.class);
         verify(adminActionRepository).insert(captor.capture());
         assertThat(captor.getValue().getMetadata()).containsEntry("resultingStatus", "draft");
+        verify(notificationService)
+                .create(
+                        null,
+                        ownerId,
+                        NotificationType.POST_RESTORED,
+                        "post",
+                        postId,
+                        null,
+                        "Appeal accepted");
     }
 
     @Test
@@ -337,6 +399,41 @@ class AdminServiceImplTest {
         assertThat(report.getReviewedBy()).isEqualTo(actorId);
         assertThat(report.getResolutionNote()).isEqualTo("Confirmed");
         verify(reportRepository).save(report);
+    }
+
+    @Test
+    void dismissReport_pendingReport_notifiesReporter() {
+        UUID actorId = UUID.randomUUID();
+        UUID reportId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        Report report =
+                Report.builder()
+                        .id(reportId)
+                        .reporterId(reporterId)
+                        .reportType(ReportType.POST)
+                        .reportReason(ReportReason.SPAM)
+                        .entityId(UUID.randomUUID())
+                        .status(ReportStatus.PENDING)
+                        .build();
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(report));
+        AdminActionResponse expected = response(AdminActionType.DISMISS_REPORT);
+        stubAudit(expected);
+
+        AdminActionResponse result =
+                service.dismissReport(
+                        actorId, reportId, new AdminActionRequest("No violation found", null));
+
+        assertThat(result).isEqualTo(expected);
+        assertThat(report.getStatus()).isEqualTo(ReportStatus.DISMISSED);
+        verify(notificationService)
+                .create(
+                        null,
+                        reporterId,
+                        NotificationType.REPORT_DISMISSED,
+                        "report",
+                        reportId,
+                        null,
+                        "No violation found");
     }
 
     @Test

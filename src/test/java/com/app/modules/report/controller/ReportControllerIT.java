@@ -128,6 +128,23 @@ class ReportControllerIT {
     }
 
     @Test
+    void submitReport_sameTargetAfterTerminalReport_returnsCreated() {
+        TestUser reporter = createUser("terminal_duplicate_reporter", "user");
+        TestUser target = createUser("terminal_duplicate_target", "user");
+        ResponseEntity<Map> first = submitReport(reporter, target.id(), "spam", null);
+        UUID reportId =
+                UUID.fromString((String) ((Map<?, ?>) first.getBody().get("data")).get("id"));
+        jdbcTemplate.update(
+                "UPDATE reports SET status = 'dismissed' WHERE id = ?",
+                reportId);
+
+        ResponseEntity<Map> second = submitReport(reporter, target.id(), "harassment", null);
+
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(reportRepository.count()).isEqualTo(2);
+    }
+
+    @Test
     void submitReport_selfTarget_returnsBadRequest() {
         TestUser reporter = createUser("self_reporter", "user");
 

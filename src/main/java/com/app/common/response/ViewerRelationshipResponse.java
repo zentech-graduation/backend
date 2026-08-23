@@ -33,9 +33,8 @@ public record ViewerRelationshipResponse(
                                         + " report from this viewer against this user would be"
                                         + " rejected as a duplicate, so a client can disable the"
                                         + " report control instead of submitting and handling the"
-                                        + " rejection. Remains true after a moderator resolves or"
-                                        + " dismisses the report, because that does not permit"
-                                        + " reporting the user again.",
+                                        + " rejection. Resolved and dismissed reports no longer"
+                                        + " make this true.",
                         example = "false")
                 boolean hasReported) {
 

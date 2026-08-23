@@ -17,18 +17,18 @@ import com.app.modules.report.enums.ReportType;
 @Repository
 public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTargetRepository {
 
-    boolean existsByReporterIdAndReportTypeAndEntityId(
-            UUID reporterId, ReportType reportType, UUID entityId);
+    boolean existsByReporterIdAndReportTypeAndEntityIdAndStatusIn(
+            UUID reporterId,
+            ReportType reportType,
+            UUID entityId,
+            Collection<ReportStatus> statuses);
 
     /**
      * Target ids among {@code entityIds} that this reporter has already reported under the given
      * type, for batched viewer-state flags.
      *
-     * <p>Carries no status predicate on purpose. The uniqueness key that rejects a duplicate
-     * submission is the unique index {@code uq_reports_reporter_type_entity}, which is not partial,
-     * so a report in any status - including a resolved or dismissed one - still blocks a new report
-     * on the same target. Adding a status filter here would report a target as un-reported while a
-     * fresh submission would still be rejected.
+     * <p>Only active reports count. Once a report is resolved or dismissed, a restored target may be
+     * reported again and the viewer-state flag must stop disabling the report action.
      *
      * @param reporterId the requesting viewer
      * @param reportType target family shared by every id on the current page
@@ -37,11 +37,13 @@ public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTar
      */
     @Query(
             "SELECT r.entityId FROM Report r WHERE r.reporterId = :reporterId"
-                    + " AND r.reportType = :reportType AND r.entityId IN :entityIds")
+                    + " AND r.reportType = :reportType AND r.entityId IN :entityIds"
+                    + " AND r.status IN :statuses")
     List<UUID> findReportedEntityIds(
             @Param("reporterId") UUID reporterId,
             @Param("reportType") ReportType reportType,
-            @Param("entityIds") Collection<UUID> entityIds);
+            @Param("entityIds") Collection<UUID> entityIds,
+            @Param("statuses") Collection<ReportStatus> statuses);
 
     /**
      * Finds the newest reports up to the requested limit.

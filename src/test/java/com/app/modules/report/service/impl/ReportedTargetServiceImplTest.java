@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 
@@ -38,7 +39,8 @@ class ReportedTargetServiceImplTest {
                 service.loadReportedEntityIds(UUID.randomUUID(), ReportType.POST, List.of());
 
         assertThat(result).isEmpty();
-        verify(reportRepository, never()).findReportedEntityIds(any(), any(), anyCollection());
+        verify(reportRepository, never())
+                .findReportedEntityIds(any(), any(), anyCollection(), anyCollection());
     }
 
     @Test
@@ -47,7 +49,8 @@ class ReportedTargetServiceImplTest {
                 service.loadReportedEntityIds(null, ReportType.POST, List.of(UUID.randomUUID()));
 
         assertThat(result).isEmpty();
-        verify(reportRepository, never()).findReportedEntityIds(any(), any(), anyCollection());
+        verify(reportRepository, never())
+                .findReportedEntityIds(any(), any(), anyCollection(), anyCollection());
     }
 
     @Test
@@ -55,7 +58,8 @@ class ReportedTargetServiceImplTest {
         Set<UUID> result = service.loadReportedEntityIds(UUID.randomUUID(), ReportType.POST, null);
 
         assertThat(result).isEmpty();
-        verify(reportRepository, never()).findReportedEntityIds(any(), any(), anyCollection());
+        verify(reportRepository, never())
+                .findReportedEntityIds(any(), any(), anyCollection(), anyCollection());
     }
 
     @Test
@@ -63,8 +67,10 @@ class ReportedTargetServiceImplTest {
         UUID viewer = UUID.randomUUID();
         UUID reported = UUID.randomUUID();
         UUID notReported = UUID.randomUUID();
+        var activeStatuses =
+                List.of(ReportStatus.PENDING, ReportStatus.REVIEWING, ReportStatus.ESCALATED);
         when(reportRepository.findReportedEntityIds(
-                        viewer, ReportType.POST, Set.of(reported, notReported)))
+                        viewer, ReportType.POST, Set.of(reported, notReported), activeStatuses))
                 .thenReturn(List.of(reported));
 
         Set<UUID> result =
@@ -78,7 +84,10 @@ class ReportedTargetServiceImplTest {
     void loadReportedEntityIds_duplicateIdsInInput_areDeduplicatedBeforeQuerying() {
         UUID viewer = UUID.randomUUID();
         UUID target = UUID.randomUUID();
-        when(reportRepository.findReportedEntityIds(viewer, ReportType.COMMENT, Set.of(target)))
+        var activeStatuses =
+                List.of(ReportStatus.PENDING, ReportStatus.REVIEWING, ReportStatus.ESCALATED);
+        when(reportRepository.findReportedEntityIds(
+                        viewer, ReportType.COMMENT, Set.of(target), activeStatuses))
                 .thenReturn(List.of(target));
 
         Set<UUID> result =

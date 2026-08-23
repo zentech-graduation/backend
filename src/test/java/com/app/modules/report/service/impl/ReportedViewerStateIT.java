@@ -182,8 +182,8 @@ class ReportedViewerStateIT {
     }
 
     @Test
-    void hasReported_staysTrueInEveryReportStatusBecauseTheUniqueIndexIsNotPartial() {
-        for (String status : List.of("pending", "reviewing", "resolved", "dismissed")) {
+    void hasReported_isTrueOnlyForActiveReportStatuses() {
+        for (String status : List.of("pending", "reviewing", "escalated")) {
             UUID viewer = insertUser("viewer_" + status);
             UUID owner = insertUser("owner_" + status);
             UUID post = insertPublishedPost(owner);
@@ -192,6 +192,16 @@ class ReportedViewerStateIT {
             assertThat(hasReported(postService.getPostById(viewer, post)))
                     .as("hasReported for a report in status %s", status)
                     .isTrue();
+        }
+        for (String status : List.of("resolved", "dismissed")) {
+            UUID viewer = insertUser("viewer_" + status);
+            UUID owner = insertUser("owner_" + status);
+            UUID post = insertPublishedPost(owner);
+            insertReport(viewer, "post", post, status);
+
+            assertThat(hasReported(postService.getPostById(viewer, post)))
+                    .as("hasReported for a report in status %s", status)
+                    .isFalse();
         }
     }
 
