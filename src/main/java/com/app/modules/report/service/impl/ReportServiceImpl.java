@@ -36,6 +36,7 @@ public class ReportServiceImpl implements ReportService {
 
     /** The open part of the lifecycle, and the whole of a moderator's queue. */
     private static final List<ReportStatus> MODERATOR_STATUSES = ReportStatus.OPEN_QUEUE;
+
     private static final List<ReportStatus> ACTIVE_DUPLICATE_STATUSES =
             List.of(ReportStatus.PENDING, ReportStatus.REVIEWING, ReportStatus.ESCALATED);
 

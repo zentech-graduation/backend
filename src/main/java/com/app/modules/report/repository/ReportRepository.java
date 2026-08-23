@@ -27,8 +27,8 @@ public interface ReportRepository extends JpaRepository<Report, UUID>, ReportTar
      * Target ids among {@code entityIds} that this reporter has already reported under the given
      * type, for batched viewer-state flags.
      *
-     * <p>Only active reports count. Once a report is resolved or dismissed, a restored target may be
-     * reported again and the viewer-state flag must stop disabling the report action.
+     * <p>Only active reports count. Once a report is resolved or dismissed, a restored target may
+     * be reported again and the viewer-state flag must stop disabling the report action.
      *
      * @param reporterId the requesting viewer
      * @param reportType target family shared by every id on the current page

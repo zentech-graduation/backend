@@ -134,9 +134,7 @@ class ReportControllerIT {
         ResponseEntity<Map> first = submitReport(reporter, target.id(), "spam", null);
         UUID reportId =
                 UUID.fromString((String) ((Map<?, ?>) first.getBody().get("data")).get("id"));
-        jdbcTemplate.update(
-                "UPDATE reports SET status = 'dismissed' WHERE id = ?",
-                reportId);
+        jdbcTemplate.update("UPDATE reports SET status = 'dismissed' WHERE id = ?", reportId);
 
         ResponseEntity<Map> second = submitReport(reporter, target.id(), "harassment", null);
 
