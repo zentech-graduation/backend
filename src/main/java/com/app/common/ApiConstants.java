@@ -155,6 +155,8 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/reports";
         public static final String PENDING = "/pending";
+        // Literal segments, so no "/{reportId}" template can shadow it.
+        public static final String ESCALATED_BY_ME = "/escalated/mine";
         public static final String BY_ID = "/{reportId}";
         public static final String STATUS = "/{reportId}/status";
     }

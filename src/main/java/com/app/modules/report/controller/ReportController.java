@@ -97,6 +97,22 @@ public class ReportController extends BaseController implements ReportApi {
                         ApiSuccessCode.OK, reportService.getPendingReports(cursor, limit)));
     }
 
+    /** Returns the reports the calling moderator or administrator escalated. */
+    @Override
+    @GetMapping(ApiConstants.Reports.ESCALATED_BY_ME)
+    @StrictQueryParameters
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<CursorPageResponse<ReportSummaryResponse>>> getMyEscalations(
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "20") @Min(1) @Max(100) int limit) {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK,
+                        reportService.getMyEscalations(
+                                SecurityUtils.getCurrentUserId(), cursor, limit)));
+    }
+
     /** Returns one report to an authenticated moderator or administrator. */
     @Override
     @GetMapping(ApiConstants.Reports.BY_ID)

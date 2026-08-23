@@ -49,6 +49,9 @@ public final class CursorScope {
     // administrator's cursor and page into rows its own listing never produces.
     public static final String REPORTS_MODERATOR = "rptm";
     public static final String PENDING_REPORTS = "prpt";
+    // The caller's own escalations. Its own scope because the row set is per caller: a
+    // cursor issued to one moderator names a position in a list nobody else has.
+    public static final String REPORTS_ESCALATED_BY_ME = "rptem";
     public static final String SOCIAL_FOLLOWERS = "flw";
     public static final String SOCIAL_FOLLOWING = "flg";
     public static final String SOCIAL_BLOCKED = "blk";
