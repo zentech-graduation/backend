@@ -455,6 +455,7 @@ class NotificationServiceImplTest {
                 null,
                 null,
                 null,
+                null,
                 false,
                 null,
                 OffsetDateTime.now(ZoneOffset.UTC));

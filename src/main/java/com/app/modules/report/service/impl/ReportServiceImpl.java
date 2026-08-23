@@ -37,6 +37,9 @@ public class ReportServiceImpl implements ReportService {
     /** The open part of the lifecycle, and the whole of a moderator's queue. */
     private static final List<ReportStatus> MODERATOR_STATUSES = ReportStatus.OPEN_QUEUE;
 
+    private static final List<ReportStatus> ACTIVE_DUPLICATE_STATUSES =
+            List.of(ReportStatus.PENDING, ReportStatus.REVIEWING, ReportStatus.ESCALATED);
+
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
 
@@ -68,8 +71,8 @@ public class ReportServiceImpl implements ReportService {
                         .build();
         try {
             // The pre-check above cannot close the race between two concurrent submissions. The
-            // unique index on (reporter_id, report_type, entity_id) is the authoritative guard;
-            // flush here so the violation surfaces as a duplicate rather than a late 500.
+            // partial unique index on active reports is the authoritative guard; flush here so the
+            // violation surfaces as a duplicate rather than a late 500.
             return reportMapper.toResponse(reportRepository.saveAndFlush(report));
         } catch (DataIntegrityViolationException ex) {
             throw new AppException(ApiErrorCode.REPORT_DUPLICATE);
@@ -155,8 +158,8 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private void validateDuplicateReport(UUID reporterId, ReportType reportType, UUID entityId) {
-        if (reportRepository.existsByReporterIdAndReportTypeAndEntityId(
-                reporterId, reportType, entityId)) {
+        if (reportRepository.existsByReporterIdAndReportTypeAndEntityIdAndStatusIn(
+                reporterId, reportType, entityId, ACTIVE_DUPLICATE_STATUSES)) {
             throw new AppException(ApiErrorCode.REPORT_DUPLICATE);
         }
     }

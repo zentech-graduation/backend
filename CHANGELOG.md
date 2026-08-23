@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Reports can be filed again after an earlier report on the same target has been closed, dismissed, or otherwise resolved.
+  Only active reports now block duplicates, so a restored post or a dismissed report no longer leaves the reporter permanently unable to report the same content again.
+- Moderation notifications now cover the full post-report outcome: post owners are notified when an administrator removes or restores their post, and reporters are notified when their report removes content or is dismissed.
+  These notifications carry the recorded moderation reason or decision text so the client can explain what happened.
 - A post in the personalized ranked feed now keeps its hashtags. They were dropped from every ranked post while the chronological feed kept them, so the same post rendered differently depending on which feed it came from.
 - The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
 - Opening the settings page on a valid account is no longer an error.
