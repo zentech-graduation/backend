@@ -345,21 +345,22 @@ public class PostServiceImpl implements PostService {
         // would leave the post removed with no in-role way to bring it back. The stripped names
         // travel back to the caller so the audit row records exactly what was dropped and the
         // moderator is told rather than finding out later.
-        List<String> strippedHashtags = List.of();
+        List<String> remainingBannedHashtags = List.of();
         if (restored == PostStatus.PUBLISHED) {
             List<String> tags = extractHashtags(post.getCaption());
             if (!tags.isEmpty()) {
-                strippedHashtags = hashtagService.upsertHashtagsForPostSkippingBanned(postId, tags);
+                remainingBannedHashtags =
+                        hashtagService.upsertHashtagsForPostSkippingBanned(postId, tags);
             }
             enqueuePostIndexUpsert(
                     postId, post.getUserId(), post.getCreatedAt().atOffset(ZoneOffset.UTC));
         }
         log.info(
-                "Post restored by moderation: postId={}, to={}, strippedHashtags={}",
+                "Post restored by moderation: postId={}, to={}, remainingBannedHashtags={}",
                 postId,
                 restored,
-                strippedHashtags);
-        return new PostModerationResult(post.getUserId(), restored, strippedHashtags);
+                remainingBannedHashtags);
+        return new PostModerationResult(post.getUserId(), restored, remainingBannedHashtags);
     }
 
     @Override

@@ -44,7 +44,11 @@ public interface VocabularyApi {
                             + " These are small closed sets, so the response is not paginated."
                             + " Disabled rows are returned rather than filtered out, so a client can"
                             + " render a retired reason as unavailable instead of having it vanish"
-                            + " between page loads. Any authenticated caller may read it.")
+                            + " between page loads. A report reason's appliesTo list is empty when"
+                            + " the reason applies to every report type, never when it applies to"
+                            + " none, so a client filtering reasons by the type being reported must"
+                            + " treat an empty list as a match. Any authenticated caller may read"
+                            + " it.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

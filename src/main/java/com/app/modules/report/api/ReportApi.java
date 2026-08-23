@@ -99,7 +99,9 @@ public interface ReportApi {
                             + " status returns an empty page rather than an error. An administrator"
                             + " sees every status including escalated. The cursor is scoped per role, so"
                             + " one issued to an administrator is rejected when replayed by a"
-                            + " moderator. Requires MODERATOR or ADMIN.")
+                            + " moderator. Unrecognised query parameters are rejected rather than"
+                            + " ignored, so a misspelled filter cannot be answered with an"
+                            + " unfiltered page. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -133,7 +135,8 @@ public interface ReportApi {
             summary = "List pending reports",
             description =
                     "Returns the pending moderation queue in FIFO order matching the"
-                            + " pending_reports view. Requires MODERATOR or ADMIN.")
+                            + " pending_reports view. Unrecognised query parameters are rejected"
+                            + " rather than ignored. Requires MODERATOR or ADMIN.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

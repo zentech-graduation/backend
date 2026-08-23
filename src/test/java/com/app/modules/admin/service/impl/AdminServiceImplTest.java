@@ -227,7 +227,7 @@ class AdminServiceImplTest {
                         UUID.randomUUID(), postId, new AdminActionRequest("Appeal accepted", null));
 
         assertThat(result.action()).isEqualTo(expected);
-        assertThat(result.droppedHashtags()).isEmpty();
+        assertThat(result.remainingBannedHashtags()).isEmpty();
         ArgumentCaptor<AdminAction> captor = ArgumentCaptor.forClass(AdminAction.class);
         verify(adminActionRepository).insert(captor.capture());
         assertThat(captor.getValue().getMetadata()).containsEntry("resultingStatus", "draft");
@@ -251,7 +251,7 @@ class AdminServiceImplTest {
                 service.restorePost(
                         UUID.randomUUID(), postId, new AdminActionRequest("Appeal accepted", null));
 
-        assertThat(result.droppedHashtags()).containsExactly("laterbanned");
+        assertThat(result.remainingBannedHashtags()).containsExactly("laterbanned");
     }
 
     @Test

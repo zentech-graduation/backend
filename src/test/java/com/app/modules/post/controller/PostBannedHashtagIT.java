@@ -262,7 +262,8 @@ class PostBannedHashtagIT {
         assertThat(restoreMetadata()).contains("laterbanned");
         // The moderator is told, not only the audit log. Reading the audit row back is not a
         // remedy for a moderator who has just been shown "Post restored" and no more.
-        assertThat(dataOf(response).get("droppedHashtags")).isEqualTo(List.of("laterbanned"));
+        assertThat(dataOf(response).get("remainingBannedHashtags"))
+                .isEqualTo(List.of("laterbanned"));
     }
 
     @Test
@@ -292,7 +293,7 @@ class PostBannedHashtagIT {
         assertThat(countOutboxEvents()).isZero();
         // Nothing was dropped because nothing was re-derived, which is not the same as a restore
         // that silently lost a tag, so the list is empty rather than naming the banned one.
-        assertThat(dataOf(response).get("droppedHashtags")).isEqualTo(List.of());
+        assertThat(dataOf(response).get("remainingBannedHashtags")).isEqualTo(List.of());
     }
 
     @Test
