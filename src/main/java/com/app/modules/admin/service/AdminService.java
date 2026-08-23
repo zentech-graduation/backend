@@ -63,6 +63,51 @@ public interface AdminService {
     /** Restores a removed comment and records the action atomically. */
     AdminActionResponse restoreComment(UUID actorId, UUID commentId, AdminActionRequest request);
 
+    /** Removes a story and records the action atomically. */
+    AdminActionResponse removeStory(UUID actorId, UUID storyId, AdminActionRequest request);
+
+    /**
+     * Restores a removed story and records the action atomically.
+     *
+     * <p>Clears the removal only. Expiry continues to decide visibility, so a story that expired
+     * while it was removed comes back to a live row that no feed will show. A story that the
+     * cleanup job has already hard-deleted, which it does once a row is both removed and expired,
+     * cannot be restored at all and answers not-found.
+     *
+     * @param actorId the acting moderator or administrator
+     * @param storyId the story to restore
+     * @param request the audit reason and any linked report
+     * @return the audit row
+     */
+    AdminActionResponse restoreStory(UUID actorId, UUID storyId, AdminActionRequest request);
+
+    /**
+     * Removes a message and records the action atomically.
+     *
+     * <p>Sets the administrative tombstone, which withholds the message's text, media and shares
+     * from both participants and leaves the "message deleted" placeholder the module already shows
+     * for a sender's own deletion. The row keeps its payload so a restore can return it.
+     *
+     * @param actorId the acting moderator or administrator
+     * @param messageId the message to remove
+     * @param request the audit reason and any linked report
+     * @return the audit row
+     */
+    AdminActionResponse removeMessage(UUID actorId, UUID messageId, AdminActionRequest request);
+
+    /**
+     * Restores a removed message and records the action atomically.
+     *
+     * <p>Clears the administrative tombstone only. A message the sender had also deleted stays
+     * deleted, because a restore corrects a moderation decision and not the sender's.
+     *
+     * @param actorId the acting moderator or administrator
+     * @param messageId the message to restore
+     * @param request the audit reason and any linked report
+     * @return the audit row
+     */
+    AdminActionResponse restoreMessage(UUID actorId, UUID messageId, AdminActionRequest request);
+
     /**
      * Resolves an open report and records the action atomically.
      *

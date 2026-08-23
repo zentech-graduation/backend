@@ -132,6 +132,45 @@ public class AdminController extends BaseController implements AdminApi {
                 adminService.restoreComment(SecurityUtils.getCurrentUserId(), commentId, request));
     }
 
+    /** Removes a story for the authenticated moderator or administrator. */
+    @Override
+    @PatchMapping(ApiConstants.Admin.REMOVE_STORY)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> removeStory(
+            @PathVariable("storyId") UUID storyId, @Valid @RequestBody AdminActionRequest request) {
+        return ok(adminService.removeStory(SecurityUtils.getCurrentUserId(), storyId, request));
+    }
+
+    /** Restores a story for the authenticated moderator or administrator. */
+    @Override
+    @PatchMapping(ApiConstants.Admin.RESTORE_STORY)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> restoreStory(
+            @PathVariable("storyId") UUID storyId, @Valid @RequestBody AdminActionRequest request) {
+        return ok(adminService.restoreStory(SecurityUtils.getCurrentUserId(), storyId, request));
+    }
+
+    /** Removes a message for the authenticated moderator or administrator. */
+    @Override
+    @PatchMapping(ApiConstants.Admin.REMOVE_MESSAGE)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> removeMessage(
+            @PathVariable("messageId") UUID messageId,
+            @Valid @RequestBody AdminActionRequest request) {
+        return ok(adminService.removeMessage(SecurityUtils.getCurrentUserId(), messageId, request));
+    }
+
+    /** Restores a message for the authenticated moderator or administrator. */
+    @Override
+    @PatchMapping(ApiConstants.Admin.RESTORE_MESSAGE)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> restoreMessage(
+            @PathVariable("messageId") UUID messageId,
+            @Valid @RequestBody AdminActionRequest request) {
+        return ok(
+                adminService.restoreMessage(SecurityUtils.getCurrentUserId(), messageId, request));
+    }
+
     /** Resolves a report for the authenticated moderator or administrator. */
     @Override
     @PatchMapping(ApiConstants.Admin.RESOLVE_REPORT)

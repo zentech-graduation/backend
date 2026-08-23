@@ -177,6 +177,10 @@ public final class ApiConstants {
         public static final String RESTORE_POST = "/posts/{postId}/restore";
         public static final String REMOVE_COMMENT = "/comments/{commentId}/remove";
         public static final String RESTORE_COMMENT = "/comments/{commentId}/restore";
+        public static final String REMOVE_STORY = "/stories/{storyId}/remove";
+        public static final String RESTORE_STORY = "/stories/{storyId}/restore";
+        public static final String REMOVE_MESSAGE = "/messages/{messageId}/remove";
+        public static final String RESTORE_MESSAGE = "/messages/{messageId}/restore";
         public static final String RESOLVE_REPORT = "/reports/{reportId}/resolve";
         public static final String DISMISS_REPORT = "/reports/{reportId}/dismiss";
         public static final String ESCALATE_REPORT = "/reports/{reportId}/escalate";

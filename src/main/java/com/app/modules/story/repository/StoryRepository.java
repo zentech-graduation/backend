@@ -64,4 +64,44 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
             value = "DELETE FROM stories WHERE deleted_at IS NOT NULL AND expires_at < NOW()",
             nativeQuery = true)
     int purgeSoftDeletedExpired();
+
+    /**
+     * Reads the owner of a story whatever its soft-delete state, for the moderation path.
+     *
+     * <p>Native because a moderator acts on a story that is already removed as readily as on a live
+     * one, and the entity's {@code @SQLRestriction} would hide the removed case.
+     *
+     * @param storyId story identifier
+     * @return the author's id, or empty when no row holds that id
+     */
+    @Query(value = "SELECT s.user_id FROM stories s WHERE s.id = :storyId", nativeQuery = true)
+    Optional<UUID> findOwnerIdIncludingDeleted(UUID storyId);
+
+    /**
+     * Reports whether a story is currently soft-deleted, spanning the {@code @SQLRestriction}.
+     *
+     * @param storyId story identifier
+     * @return true when the row carries a {@code deleted_at}, or empty when no row holds that id
+     */
+    @Query(
+            value = "SELECT s.deleted_at IS NOT NULL FROM stories s WHERE s.id = :storyId",
+            nativeQuery = true)
+    Optional<Boolean> isDeletedIncludingDeleted(UUID storyId);
+
+    /**
+     * Sets or clears a story's soft-delete marker on behalf of the moderation path.
+     *
+     * <p>Native for the same reason as the two reads above. Expiry is deliberately untouched: a
+     * restore returns the row to the live state it held and lets {@code expires_at} continue to
+     * decide visibility, so a story that expired while removed does not come back into any feed.
+     *
+     * @param storyId story identifier
+     * @param deletedAt soft-delete timestamp, or null when restoring
+     * @return number of updated stories
+     */
+    @Modifying
+    @Query(
+            value = "UPDATE stories SET deleted_at = :deletedAt WHERE id = :storyId",
+            nativeQuery = true)
+    int applyAdminModeration(UUID storyId, OffsetDateTime deletedAt);
 }

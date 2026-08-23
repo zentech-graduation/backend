@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -73,6 +74,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
 						AND p.left_at IS NULL
 					WHERE m.conversation_id IN (:conversationIds)
 					AND m.is_deleted = FALSE
+					AND m.admin_removed_at IS NULL
 					AND m.sender_id IS DISTINCT FROM :userId
 					AND (p.last_read_at IS NULL OR m.created_at > p.last_read_at)
 					GROUP BY m.conversation_id
@@ -95,9 +97,59 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
 						AND p.user_id = :userId
 						AND p.left_at IS NULL
 					WHERE m.is_deleted = FALSE
+					AND m.admin_removed_at IS NULL
 					AND m.sender_id IS DISTINCT FROM :userId
 					AND (p.last_read_at IS NULL OR m.created_at > p.last_read_at)
 					""",
             nativeQuery = true)
     long countTotalUnreadForUser(@Param("userId") UUID userId);
+
+    /**
+     * Reads a message's sender whatever either tombstone says, for the moderation path.
+     *
+     * <p>Native and taking no conversation identifier, because the moderation path reaches a
+     * message through a report rather than through a thread the actor participates in.
+     *
+     * @param messageId message identifier
+     * @return the sender's id, which is null for a message whose sender's account was deleted, or
+     *     empty when no row holds that id
+     */
+    @Query(value = "SELECT m.sender_id FROM messages m WHERE m.id = :messageId", nativeQuery = true)
+    Optional<UUID> findSenderIdForModeration(@Param("messageId") UUID messageId);
+
+    /**
+     * Reports whether a message currently carries the administrative tombstone.
+     *
+     * <p>Deliberately reads {@code admin_removed_at} rather than {@code is_deleted}: the sender's
+     * own deletion is not a moderation state and must not satisfy a restore's transition guard.
+     *
+     * @param messageId message identifier
+     * @return true when the row carries an {@code admin_removed_at}, or empty when no row holds
+     *     that id
+     */
+    @Query(
+            value =
+                    "SELECT m.admin_removed_at IS NOT NULL FROM messages m WHERE m.id ="
+                            + " :messageId",
+            nativeQuery = true)
+    Optional<Boolean> isAdminRemoved(@Param("messageId") UUID messageId);
+
+    /**
+     * Sets or clears a message's administrative tombstone.
+     *
+     * <p>Touches that column only. {@code content} is preserved so a restore can return the
+     * message, and the sender-owned {@code is_deleted}/{@code deleted_at} pair is left alone so a
+     * restore cannot undo a deletion the sender performed.
+     *
+     * @param messageId message identifier
+     * @param adminRemovedAt removal timestamp, or null when restoring
+     * @return number of updated messages
+     */
+    @Modifying
+    @Query(
+            value = "UPDATE messages SET admin_removed_at = :adminRemovedAt WHERE id = :messageId",
+            nativeQuery = true)
+    int applyAdminModeration(
+            @Param("messageId") UUID messageId,
+            @Param("adminRemovedAt") OffsetDateTime adminRemovedAt);
 }

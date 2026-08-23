@@ -32,6 +32,7 @@ import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminService;
 import com.app.modules.comment.repository.CommentRepository;
+import com.app.modules.message.repository.MessageRepository;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.service.PostModerationResult;
@@ -40,6 +41,7 @@ import com.app.modules.report.entity.Report;
 import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
+import com.app.modules.story.repository.StoryRepository;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -59,6 +61,8 @@ public class AdminServiceImpl implements AdminService {
     private final PostRepository postRepository;
     private final PostService postService;
     private final CommentRepository commentRepository;
+    private final StoryRepository storyRepository;
+    private final MessageRepository messageRepository;
     private final ReportRepository reportRepository;
     private final AdminActionMapper adminActionMapper;
     private final AdminActionRecorder adminActionRecorder;
@@ -70,6 +74,8 @@ public class AdminServiceImpl implements AdminService {
             PostRepository postRepository,
             PostService postService,
             CommentRepository commentRepository,
+            StoryRepository storyRepository,
+            MessageRepository messageRepository,
             ReportRepository reportRepository,
             AdminActionMapper adminActionMapper,
             AdminActionRecorder adminActionRecorder,
@@ -79,6 +85,8 @@ public class AdminServiceImpl implements AdminService {
         this.postRepository = postRepository;
         this.postService = postService;
         this.commentRepository = commentRepository;
+        this.storyRepository = storyRepository;
+        this.messageRepository = messageRepository;
         this.reportRepository = reportRepository;
         this.adminActionMapper = adminActionMapper;
         this.adminActionRecorder = adminActionRecorder;
@@ -131,7 +139,7 @@ public class AdminServiceImpl implements AdminService {
             UUID actorId, UUID postId, AdminActionRequest request) {
         ModerationOutcome outcome =
                 moderatePostAndReport(actorId, postId, AdminActionType.RESTORE_POST, request);
-        return new AdminPostRestoreResponse(outcome.action(), outcome.droppedHashtags());
+        return new AdminPostRestoreResponse(outcome.action(), outcome.remainingBannedHashtags());
     }
 
     @Override
@@ -146,6 +154,33 @@ public class AdminServiceImpl implements AdminService {
     public AdminActionResponse restoreComment(
             UUID actorId, UUID commentId, AdminActionRequest request) {
         return moderateComment(actorId, commentId, AdminActionType.RESTORE_COMMENT, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse removeStory(UUID actorId, UUID storyId, AdminActionRequest request) {
+        return moderateStory(actorId, storyId, AdminActionType.REMOVE_STORY, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse restoreStory(
+            UUID actorId, UUID storyId, AdminActionRequest request) {
+        return moderateStory(actorId, storyId, AdminActionType.RESTORE_STORY, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse removeMessage(
+            UUID actorId, UUID messageId, AdminActionRequest request) {
+        return moderateMessage(actorId, messageId, AdminActionType.REMOVE_MESSAGE, request);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse restoreMessage(
+            UUID actorId, UUID messageId, AdminActionRequest request) {
+        return moderateMessage(actorId, messageId, AdminActionType.RESTORE_MESSAGE, request);
     }
 
     @Override
@@ -310,8 +345,8 @@ public class AdminServiceImpl implements AdminService {
         // the post came back without that association, and the audit row is where that shows.
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("resultingStatus", result.status().toJson());
-        if (!result.strippedHashtags().isEmpty()) {
-            metadata.put("strippedHashtags", result.strippedHashtags());
+        if (!result.remainingBannedHashtags().isEmpty()) {
+            metadata.put("remainingBannedHashtags", result.remainingBannedHashtags());
         }
         AdminActionResponse action =
                 adminActionRecorder.record(
@@ -323,12 +358,13 @@ public class AdminServiceImpl implements AdminService {
                         request.reportId(),
                         request.reason(),
                         metadata);
-        return new ModerationOutcome(action, result.strippedHashtags());
+        return new ModerationOutcome(action, result.remainingBannedHashtags());
     }
 
     // The audit row plus the one side effect a moderator has to be told about. The audit row alone
     // cannot carry it in a declared shape: metadata is a free-form map shared by every action.
-    private record ModerationOutcome(AdminActionResponse action, List<String> droppedHashtags) {}
+    private record ModerationOutcome(
+            AdminActionResponse action, List<String> remainingBannedHashtags) {}
 
     private AdminActionResponse moderateComment(
             UUID actorId, UUID commentId, AdminActionType actionType, AdminActionRequest request) {
@@ -352,6 +388,64 @@ public class AdminServiceImpl implements AdminService {
                 ownerId,
                 "comment",
                 commentId,
+                request.reportId(),
+                request.reason(),
+                null);
+    }
+
+    // Shaped on moderateComment rather than on the post path: a story removal has no side effect
+    // beyond the row itself, so there is no owning-service method for it to delegate to.
+    private AdminActionResponse moderateStory(
+            UUID actorId, UUID storyId, AdminActionType actionType, AdminActionRequest request) {
+        UUID ownerId =
+                storyRepository
+                        .findOwnerIdIncludingDeleted(storyId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.STORY_NOT_FOUND));
+        boolean deleted =
+                storyRepository
+                        .isDeletedIncludingDeleted(storyId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.STORY_NOT_FOUND));
+        boolean restore = actionType == AdminActionType.RESTORE_STORY;
+        if (restore != deleted) {
+            throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
+        }
+        validateLinkedReport(request.reportId());
+        storyRepository.applyAdminModeration(storyId, restore ? null : OffsetDateTime.now());
+        return adminActionRecorder.record(
+                actorId,
+                actionType,
+                ownerId,
+                "story",
+                storyId,
+                request.reportId(),
+                request.reason(),
+                null);
+    }
+
+    // The transition guard reads admin_removed_at and not is_deleted, so a message the sender
+    // deleted is not mistaken for one a moderator removed. Without that split a restore would
+    // reverse the sender's own deletion and put back a message whose content the sender destroyed.
+    private AdminActionResponse moderateMessage(
+            UUID actorId, UUID messageId, AdminActionType actionType, AdminActionRequest request) {
+        boolean removed =
+                messageRepository
+                        .isAdminRemoved(messageId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.MESSAGE_NOT_FOUND));
+        // Null for a message whose sender's account was deleted (V32), which is a legitimate
+        // moderation target: the audit row then simply carries no target user.
+        UUID senderId = messageRepository.findSenderIdForModeration(messageId).orElse(null);
+        boolean restore = actionType == AdminActionType.RESTORE_MESSAGE;
+        if (restore != removed) {
+            throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
+        }
+        validateLinkedReport(request.reportId());
+        messageRepository.applyAdminModeration(messageId, restore ? null : OffsetDateTime.now());
+        return adminActionRecorder.record(
+                actorId,
+                actionType,
+                senderId,
+                "message",
+                messageId,
                 request.reportId(),
                 request.reason(),
                 null);
