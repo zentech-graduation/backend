@@ -46,6 +46,18 @@ public interface UserDisciplineService {
     AdminWarnUserResponse issueWarning(UUID actorId, UUID userId, AdminWarnUserRequest request);
 
     /**
+     * How many warnings currently count toward the account's next strike.
+     *
+     * <p>The single reader of the active-warning predicate outside the warning path itself. A
+     * caller that recomputed the rule would produce a plausible number that drifts silently from
+     * the one the strike decision uses, so the count is served from here rather than restated.
+     *
+     * @param userId account being counted
+     * @return the count, zero for an account with no warnings that still count
+     */
+    long countActiveWarnings(UUID userId);
+
+    /**
      * Cursor page of an account's violation history, newest first.
      *
      * <p>A moderator sees warnings. An administrator sees warnings and strikes interleaved. The
@@ -57,10 +69,14 @@ public interface UserDisciplineService {
      * @param userId account whose history to read
      * @param cursor opaque cursor from the previous page; null for the first page
      * @param limit requested page size, normalized to 1 to 100 with a default of 20
+     * @param includeRevoked when true the page also carries revoked entries, each marked by a
+     *     non-null {@code revokedAt}; when false it carries only entries that still stand, which is
+     *     what a caller that does not ask gets. The cursor is scoped on this too, so a cursor from
+     *     one listing is rejected by the other.
      * @return the page
      */
     CursorPageResponse<AdminViolationResponse> listViolations(
-            UUID actorId, UUID userId, String cursor, int limit);
+            UUID actorId, UUID userId, String cursor, int limit, boolean includeRevoked);
 
     /**
      * Revokes one warning.

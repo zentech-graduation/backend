@@ -23,6 +23,7 @@ import com.app.modules.admin.mapper.AdminUserMapper;
 import com.app.modules.admin.repository.AdminUserRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.admin.service.AdminAuthorizationService;
+import com.app.modules.admin.service.UserDisciplineService;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
@@ -50,6 +51,7 @@ class AdminUserServiceImplTest {
     @Mock private AdminUserMapper adminUserMapper;
     @Mock private AdminActionRecorder adminActionRecorder;
     @Mock private AdminAuthorizationService adminAuthorizationService;
+    @Mock private UserDisciplineService userDisciplineService;
 
     private AdminUserServiceImpl service;
 
@@ -63,7 +65,8 @@ class AdminUserServiceImplTest {
                         refreshTokenService,
                         adminUserMapper,
                         adminActionRecorder,
-                        adminAuthorizationService);
+                        adminAuthorizationService,
+                        userDisciplineService);
     }
 
     @Test

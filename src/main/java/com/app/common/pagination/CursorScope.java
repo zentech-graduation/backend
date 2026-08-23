@@ -18,6 +18,10 @@ public final class CursorScope {
     // administrator's cursor and page into strike rows its own listing never produces.
     public static final String ADMIN_VIOLATIONS_WARNINGS = "admvw";
     public static final String ADMIN_VIOLATIONS_FULL = "admvf";
+    // Including revoked rows is a different result set, so a cursor issued for one listing
+    // must not be replayable on the other. Four scopes, one per role-and-inclusion pair.
+    public static final String ADMIN_VIOLATIONS_WARNINGS_ALL = "admvwa";
+    public static final String ADMIN_VIOLATIONS_FULL_ALL = "admvfa";
     public static final String OWN_WARNINGS = "ownw";
     public static final String ADMIN_USER_SEARCH = "admus";
     public static final String ADMIN_USER_EVENTS = "admue";

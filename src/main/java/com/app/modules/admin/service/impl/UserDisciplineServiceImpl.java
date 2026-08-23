@@ -144,8 +144,7 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
                                 .adminActionId(warnAudit.id())
                                 .build());
 
-        OffsetDateTime windowStart =
-                OffsetDateTime.now(ZoneOffset.UTC).minusDays(WARNING_RETENTION_DAYS);
+        OffsetDateTime windowStart = warningWindowStart();
         long activeWarnings =
                 userWarningRepository.countActiveWarnings(userId, windowStart, NO_STRIKE_YET);
 
@@ -178,10 +177,71 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
                 target.getStatus().toJson());
     }
 
+    // The one place the retention window is computed. issueWarning and countActiveWarnings
+    // both read it, so the rule cannot drift between the count a reviewer is shown and the count
+    // the strike decision acts on.
+    private static OffsetDateTime warningWindowStart() {
+        return OffsetDateTime.now(ZoneOffset.UTC).minusDays(WARNING_RETENTION_DAYS);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countActiveWarnings(UUID userId) {
+        return userWarningRepository.countActiveWarnings(
+                userId, warningWindowStart(), NO_STRIKE_YET);
+    }
+
+    private static String cursorScope(boolean includeStrikes, boolean includeRevoked) {
+        if (includeStrikes) {
+            return includeRevoked
+                    ? CursorScope.ADMIN_VIOLATIONS_FULL_ALL
+                    : CursorScope.ADMIN_VIOLATIONS_FULL;
+        }
+        return includeRevoked
+                ? CursorScope.ADMIN_VIOLATIONS_WARNINGS_ALL
+                : CursorScope.ADMIN_VIOLATIONS_WARNINGS;
+    }
+
+    private List<UserWarning> readWarnings(
+            UUID userId,
+            OffsetDateTime cursorCreatedAt,
+            UUID cursorId,
+            int queryLimit,
+            boolean includeRevoked) {
+        if (cursorCreatedAt == null) {
+            return includeRevoked
+                    ? userWarningRepository.findFirstPageIncludingRevoked(userId, queryLimit)
+                    : userWarningRepository.findFirstActivePage(userId, queryLimit);
+        }
+        return includeRevoked
+                ? userWarningRepository.findPageAfterCursorIncludingRevoked(
+                        userId, cursorCreatedAt, cursorId, queryLimit)
+                : userWarningRepository.findActivePageAfterCursor(
+                        userId, cursorCreatedAt, cursorId, queryLimit);
+    }
+
+    private List<UserStrike> readStrikes(
+            UUID userId,
+            OffsetDateTime cursorCreatedAt,
+            UUID cursorId,
+            int queryLimit,
+            boolean includeRevoked) {
+        if (cursorCreatedAt == null) {
+            return includeRevoked
+                    ? userStrikeRepository.findFirstPageIncludingRevoked(userId, queryLimit)
+                    : userStrikeRepository.findFirstActivePage(userId, queryLimit);
+        }
+        return includeRevoked
+                ? userStrikeRepository.findPageAfterCursorIncludingRevoked(
+                        userId, cursorCreatedAt, cursorId, queryLimit)
+                : userStrikeRepository.findActivePageAfterCursor(
+                        userId, cursorCreatedAt, cursorId, queryLimit);
+    }
+
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminViolationResponse> listViolations(
-            UUID actorId, UUID userId, String cursor, int limit) {
+            UUID actorId, UUID userId, String cursor, int limit, boolean includeRevoked) {
         // Read from the row rather than from the security context, for the same reason every other
         // authorization decision in this module does: the caller must not be able to choose what
         // the listing contains, and a future non-controller caller must get the same answer.
@@ -191,10 +251,9 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
                         .map(User::getRole)
                         .orElseThrow(() -> new AppException(ApiErrorCode.FORBIDDEN));
         boolean includeStrikes = actorRole == UserRole.ADMIN;
-        String scope =
-                includeStrikes
-                        ? CursorScope.ADMIN_VIOLATIONS_FULL
-                        : CursorScope.ADMIN_VIOLATIONS_WARNINGS;
+        // Four scopes rather than two. Including revoked rows changes which rows a cursor points
+        // past, so replaying one listing's cursor on the other would skip or repeat entries.
+        String scope = cursorScope(includeStrikes, includeRevoked);
         int pageSize = normalizeLimit(limit);
         Cursor decoded = CursorCodec.decode(cursor, scope);
         OffsetDateTime cursorCreatedAt =
@@ -207,17 +266,11 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
         // on this page: any row it drops is older than every row it keeps.
         List<AdminViolationResponse> merged = new ArrayList<>();
         List<UserWarning> warnings =
-                cursorCreatedAt == null
-                        ? userWarningRepository.findFirstActivePage(userId, queryLimit)
-                        : userWarningRepository.findActivePageAfterCursor(
-                                userId, cursorCreatedAt, cursorId, queryLimit);
+                readWarnings(userId, cursorCreatedAt, cursorId, queryLimit, includeRevoked);
         warnings.stream().map(userDisciplineMapper::toViolation).forEach(merged::add);
         if (includeStrikes) {
             List<UserStrike> strikes =
-                    cursorCreatedAt == null
-                            ? userStrikeRepository.findFirstActivePage(userId, queryLimit)
-                            : userStrikeRepository.findActivePageAfterCursor(
-                                    userId, cursorCreatedAt, cursorId, queryLimit);
+                    readStrikes(userId, cursorCreatedAt, cursorId, queryLimit, includeRevoked);
             strikes.stream().map(userDisciplineMapper::toViolation).forEach(merged::add);
         }
         merged.sort(VIOLATION_ORDER);

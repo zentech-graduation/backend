@@ -49,9 +49,11 @@ public interface AdminUserMapper {
     @Mapping(target = "sessions", source = "sessions")
     @Mapping(target = "reportsAgainst", source = "reportsAgainst")
     @Mapping(target = "capabilities", source = "capabilities")
+    @Mapping(target = "activeWarningCount", source = "activeWarningCount")
     AdminUserDetailResponse toDetail(
             User user,
             List<AdminUserSessionResponse> sessions,
             List<AdminUserReportResponse> reportsAgainst,
-            AdminUserCapabilitiesResponse capabilities);
+            AdminUserCapabilitiesResponse capabilities,
+            long activeWarningCount);
 }

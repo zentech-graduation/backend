@@ -29,5 +29,17 @@ public record AdminWarningViolationResponse(
         @Schema(description = "Key of the report_reason_configs row cited", example = "spam")
                 String reasonKey,
         @Schema(description = "The moderator's own description of what happened") String note,
-        @Schema(description = "Moment the warning was issued") OffsetDateTime createdAt)
+        @Schema(description = "Moment the warning was issued") OffsetDateTime createdAt,
+        @Schema(
+                        description =
+                                "When this entry was revoked; null while it still stands. A non-null"
+                                        + " value is what tells a revoked entry from a live one.",
+                        nullable = true)
+                OffsetDateTime revokedAt,
+        @Schema(
+                        description =
+                                "Who revoked this entry; null while it stands, and null once that"
+                                        + " account is deleted.",
+                        nullable = true)
+                UUID revokedBy)
         implements AdminViolationResponse {}

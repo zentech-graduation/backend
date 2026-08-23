@@ -28,6 +28,7 @@ import com.app.modules.admin.repository.AdminUserRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.AdminUserService;
+import com.app.modules.admin.service.UserDisciplineService;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.users.entity.User;
@@ -58,6 +59,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final AdminUserMapper adminUserMapper;
     private final AdminActionRecorder adminActionRecorder;
     private final AdminAuthorizationService adminAuthorizationService;
+    private final UserDisciplineService userDisciplineService;
 
     public AdminUserServiceImpl(
             AdminUserRepository adminUserRepository,
@@ -66,7 +68,8 @@ public class AdminUserServiceImpl implements AdminUserService {
             RefreshTokenService refreshTokenService,
             AdminUserMapper adminUserMapper,
             AdminActionRecorder adminActionRecorder,
-            AdminAuthorizationService adminAuthorizationService) {
+            AdminAuthorizationService adminAuthorizationService,
+            UserDisciplineService userDisciplineService) {
         this.adminUserRepository = adminUserRepository;
         this.userRepository = userRepository;
         this.reportRepository = reportRepository;
@@ -74,6 +77,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         this.adminUserMapper = adminUserMapper;
         this.adminActionRecorder = adminActionRecorder;
         this.adminAuthorizationService = adminAuthorizationService;
+        this.userDisciplineService = userDisciplineService;
     }
 
     @Override
@@ -138,7 +142,11 @@ public class AdminUserServiceImpl implements AdminUserService {
                 new AdminUserCapabilitiesResponse(
                         capabilities.canChangeStatus(),
                         capabilities.canChangeRole(),
-                        capabilities.assignableRoles()));
+                        capabilities.assignableRoles()),
+                // Served by the discipline service rather than counted here. Three active warnings
+                // issue a strike, and a second copy of that predicate would produce a plausible
+                // number that drifts from the one the strike decision uses.
+                userDisciplineService.countActiveWarnings(userId));
     }
 
     @Override

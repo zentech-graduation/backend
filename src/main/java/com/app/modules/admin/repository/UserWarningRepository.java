@@ -113,4 +113,48 @@ public interface UserWarningRepository extends Repository<UserWarning, UUID> {
             @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
             @Param("cursorId") UUID cursorId,
             @Param("limit") int limit);
+
+    /**
+     * First keyset page of an account's warnings including revoked ones, newest first.
+     *
+     * <p>Separate from {@link #findFirstActivePage} rather than a parameterised predicate, because
+     * a nullable flag inside the WHERE clause would stop the keyset index being used for either
+     * case.
+     *
+     * @param userId account whose warnings are listed
+     * @param limit page size, already including the probe row
+     * @return warnings ordered by {@code (created_at, id)} descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM user_warnings w"
+                            + " WHERE w.user_id = :userId"
+                            + " ORDER BY w.created_at DESC, w.id DESC"
+                            + " LIMIT :limit",
+            nativeQuery = true)
+    List<UserWarning> findFirstPageIncludingRevoked(
+            @Param("userId") UUID userId, @Param("limit") int limit);
+
+    /**
+     * Keyset page of an account's warnings including revoked ones, after a cursor position.
+     *
+     * @param userId account whose warnings are listed
+     * @param cursorCreatedAt creation time of the last row on the previous page
+     * @param cursorId identifier of the last row on the previous page
+     * @param limit page size, already including the probe row
+     * @return warnings ordered by {@code (created_at, id)} descending
+     */
+    @Query(
+            value =
+                    "SELECT * FROM user_warnings w"
+                            + " WHERE w.user_id = :userId"
+                            + " AND (w.created_at, w.id) < (:cursorCreatedAt, :cursorId)"
+                            + " ORDER BY w.created_at DESC, w.id DESC"
+                            + " LIMIT :limit",
+            nativeQuery = true)
+    List<UserWarning> findPageAfterCursorIncludingRevoked(
+            @Param("userId") UUID userId,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit);
 }
