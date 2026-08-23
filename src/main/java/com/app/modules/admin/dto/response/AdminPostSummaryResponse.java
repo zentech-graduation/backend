@@ -1,6 +1,7 @@
 package com.app.modules.admin.dto.response;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -38,4 +39,11 @@ public record AdminPostSummaryResponse(
         @Schema(description = "Whether the post is soft-deleted") boolean removed,
         @Schema(description = "Number of likes; trigger-maintained") int likeCount,
         @Schema(description = "Number of comments; trigger-maintained") int commentCount,
-        @Schema(description = "Creation timestamp") OffsetDateTime createdAt) {}
+        @Schema(description = "Creation timestamp") OffsetDateTime createdAt,
+        @Schema(
+                        description =
+                                "CDN URLs of the attached media, in carousel order. Empty for a"
+                                        + " text post. The same shape the report-anchored"
+                                        + " moderation view returns, so a reviewer sees the same"
+                                        + " thing on both screens.")
+                List<String> mediaUrls) {}
