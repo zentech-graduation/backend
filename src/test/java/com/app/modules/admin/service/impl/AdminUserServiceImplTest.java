@@ -29,6 +29,7 @@ import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 /**
  * Pins the pairing of a token-epoch advance with a refresh-token revocation.
@@ -52,6 +53,7 @@ class AdminUserServiceImplTest {
     @Mock private AdminActionRecorder adminActionRecorder;
     @Mock private AdminAuthorizationService adminAuthorizationService;
     @Mock private UserDisciplineService userDisciplineService;
+    @Mock private UserSummaryService userSummaryService;
 
     private AdminUserServiceImpl service;
 
@@ -66,7 +68,8 @@ class AdminUserServiceImplTest {
                         adminUserMapper,
                         adminActionRecorder,
                         adminAuthorizationService,
-                        userDisciplineService);
+                        userDisciplineService,
+                        userSummaryService);
     }
 
     @Test

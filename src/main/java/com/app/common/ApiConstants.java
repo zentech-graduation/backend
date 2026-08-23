@@ -205,6 +205,10 @@ public final class ApiConstants {
         // @PreAuthorize on the controller enforces.
         public static final String STATS_CURRENT = "/stats/current";
         public static final String STATS_TIMESERIES = "/stats/timeseries";
+        // A literal segment outside the "/users/**" sub-tree, so the broader "/api/v1/admin/**"
+        // matcher applies and a moderator can reach it. Queues, audit rows and violation rows
+        // are moderator surfaces and all carry bare account identifiers.
+        public static final String USER_SUMMARIES = "/user-summaries";
         public static final String ACTIONS = "/actions";
         public static final String ACTION_BY_ID = "/actions/{actionId}";
         // Deliberately not "/users/{userId}/actions": the "/users/**" sub-tree is reserved for the

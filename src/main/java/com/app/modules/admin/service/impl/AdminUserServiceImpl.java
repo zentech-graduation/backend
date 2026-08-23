@@ -1,5 +1,6 @@
 package com.app.modules.admin.service.impl;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import com.app.common.pagination.CursorScope;
 import com.app.common.pagination.KeysetPage;
 import com.app.common.pagination.TimeCursors;
 import com.app.common.response.CursorPageResponse;
+import com.app.common.response.UserSummaryResponse;
 import com.app.common.security.service.RefreshTokenService;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
@@ -22,6 +24,7 @@ import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminUserCapabilitiesResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
+import com.app.modules.admin.dto.response.AdminUserLookupResponse;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.mapper.AdminUserMapper;
 import com.app.modules.admin.repository.AdminUserRepository;
@@ -35,6 +38,7 @@ import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.service.UserSummaryService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -60,6 +64,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final AdminActionRecorder adminActionRecorder;
     private final AdminAuthorizationService adminAuthorizationService;
     private final UserDisciplineService userDisciplineService;
+    private final UserSummaryService userSummaryService;
 
     public AdminUserServiceImpl(
             AdminUserRepository adminUserRepository,
@@ -69,7 +74,8 @@ public class AdminUserServiceImpl implements AdminUserService {
             AdminUserMapper adminUserMapper,
             AdminActionRecorder adminActionRecorder,
             AdminAuthorizationService adminAuthorizationService,
-            UserDisciplineService userDisciplineService) {
+            UserDisciplineService userDisciplineService,
+            UserSummaryService userSummaryService) {
         this.adminUserRepository = adminUserRepository;
         this.userRepository = userRepository;
         this.reportRepository = reportRepository;
@@ -78,6 +84,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         this.adminActionRecorder = adminActionRecorder;
         this.adminAuthorizationService = adminAuthorizationService;
         this.userDisciplineService = userDisciplineService;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -177,6 +184,38 @@ public class AdminUserServiceImpl implements AdminUserService {
                 request.reportId(),
                 request.reason(),
                 Map.of("revokedSessions", revoked));
+    }
+
+    /**
+     * Ceiling on one batch. Rejected rather than truncated, so a caller cannot be handed a short
+     * map that looks complete.
+     */
+    private static final int MAX_SUMMARY_LOOKUP = 100;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminUserLookupResponse> resolveUserSummaries(List<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        if (userIds.size() > MAX_SUMMARY_LOOKUP) {
+            throw new AppException(
+                    ApiErrorCode.BAD_REQUEST,
+                    "At most " + MAX_SUMMARY_LOOKUP + " identifiers may be resolved in one call");
+        }
+        // One batched query, whatever the page size. This is the whole point of the endpoint.
+        Map<UUID, UserSummaryResponse> summaries = userSummaryService.loadSummaries(userIds);
+        List<AdminUserLookupResponse> resolved = new ArrayList<>(summaries.size());
+        for (Map.Entry<UUID, UserSummaryResponse> entry : summaries.entrySet()) {
+            UserSummaryResponse summary = entry.getValue();
+            // The placeholder the summary service returns for an unknown or deleted account is the
+            // only one with a null username; the column is NOT NULL for every real row. Surfaced
+            // as an explicit flag rather than leaving the client to match on a display string.
+            boolean found = summary != null && summary.username() != null;
+            resolved.add(
+                    new AdminUserLookupResponse(entry.getKey(), found, found ? summary : null));
+        }
+        return resolved;
     }
 
     @Override

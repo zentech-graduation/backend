@@ -1,5 +1,6 @@
 package com.app.modules.admin.api;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -27,6 +28,7 @@ import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
+import com.app.modules.admin.dto.response.AdminUserLookupResponse;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 
@@ -227,6 +229,54 @@ public interface AdminUserApi {
     @PostMapping(ApiConstants.Admin.USER_FORCE_LOGOUT)
     ResponseEntity<ApiResponse<AdminActionResponse>> forceLogout(
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request);
+
+    /** Resolves several account identifiers to display information. */
+    @Operation(
+            summary = "Resolve account identifiers to names",
+            description =
+                    "Resolves up to 100 account identifiers to display information in one call."
+                            + " Queues, audit rows, violation rows and activity rows all carry bare"
+                            + " identifiers, and resolving them one at a time costs one request per"
+                            + " distinct account on a page. Returns exactly one entry per distinct"
+                            + " identifier, in the order requested: an unknown or deleted"
+                            + " identifier comes back with found=false and a null user rather than"
+                            + " being omitted, so the caller's lookup map is never silently short."
+                            + " More than 100 identifiers is rejected rather than truncated."
+                            + " Display information only, never account status, role or email:"
+                            + " this is reachable by a moderator and must not become a second route"
+                            + " to the administrative account detail. Requires MODERATOR or ADMIN.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "One entry per requested identifier"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "More than 100 identifiers supplied, or one is not a UUID",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "Moderator or administrator role required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Admin.USER_SUMMARIES)
+    ResponseEntity<ApiResponse<List<AdminUserLookupResponse>>> resolveUserSummaries(
+            @Parameter(description = "Account identifiers, comma separated, at most 100")
+                    @RequestParam("ids")
+                    List<UUID> ids);
 
     /** Revokes one named session and returns the persisted audit event. */
     @Operation(

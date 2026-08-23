@@ -1,5 +1,6 @@
 package com.app.modules.admin.controller;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -30,6 +31,7 @@ import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
+import com.app.modules.admin.dto.response.AdminUserLookupResponse;
 import com.app.modules.admin.service.AdminUserService;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -100,6 +102,18 @@ public class AdminUserController extends BaseController implements AdminUserApi 
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request) {
         return action(
                 adminUserService.forceLogout(SecurityUtils.getCurrentUserId(), userId, request));
+    }
+
+    /** Resolves several account identifiers to display information in one call. */
+    @Override
+    @GetMapping(ApiConstants.Admin.USER_SUMMARIES)
+    @StrictQueryParameters
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<List<AdminUserLookupResponse>>> resolveUserSummaries(
+            @RequestParam("ids") List<UUID> ids) {
+        return ResponseEntity.ok(
+                ApiResponse.success(ApiSuccessCode.OK, adminUserService.resolveUserSummaries(ids)));
     }
 
     /** Revokes one named session of one account for the authenticated administrator. */

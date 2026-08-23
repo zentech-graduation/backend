@@ -9,6 +9,7 @@ import com.app.modules.admin.dto.request.AdminRoleChangeRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.dto.response.AdminUserDetailResponse;
 import com.app.modules.admin.dto.response.AdminUserListItemResponse;
+import com.app.modules.admin.dto.response.AdminUserLookupResponse;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
 
@@ -97,6 +98,23 @@ public interface AdminUserService {
      * @throws com.app.common.exception.AppException {@code USER_NOT_FOUND} when the account does
      *     not exist; {@code NOT_FOUND} when no such session belongs to it
      */
+    /**
+     * Resolves several account identifiers to display information in one call.
+     *
+     * <p>Queues, audit rows, violation rows and activity rows all carry bare identifiers, and
+     * resolving them one at a time costs one request per distinct account on a page.
+     *
+     * <p>Returns one entry per requested identifier, in the order requested and with duplicates
+     * collapsed, so the caller can build a complete map. An unknown or deleted identifier is
+     * returned with {@code found} false rather than omitted.
+     *
+     * @param userIds identifiers to resolve
+     * @return one entry per distinct identifier, in request order
+     * @throws com.app.common.exception.AppException {@code BAD_REQUEST} when more identifiers are
+     *     supplied than the endpoint accepts
+     */
+    java.util.List<AdminUserLookupResponse> resolveUserSummaries(java.util.List<UUID> userIds);
+
     AdminActionResponse revokeSession(
             UUID actorId, UUID userId, UUID sessionId, AdminActionRequest request);
 
