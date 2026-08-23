@@ -5,13 +5,22 @@ The backend talks to it over REST; no domain code depends on Gorse internals.
 
 ## Run
 
+Gorse is part of the root compose file, so the ordinary command starts it:
+
 ```bash
-docker compose -f docker-compose.yaml -f gorse/docker-compose.gorse.yml up -d
+docker compose up -d
 ```
 
+It lived in an overlay compose file until the engagement consumer was found dead-lettering every
+event: the consumer is enabled in dev and prod, so a service the default `up` never started meant
+`post.liked`, `post.saved`, `post.viewed` and `comment.created` retried and then dead-lettered.
+The overlay is gone; there is one way to start the stack.
+
 Storage: data store and cache store both point at the dedicated `gorse` database inside the shared Postgres container.
-The `gorse` database is created by `docker/postgres/init/01-create-gorse-db.sql` on first boot of an empty volume.
-For an existing volume: `docker compose exec postgres psql -U "$POSTGRES_USER" -c 'CREATE DATABASE gorse'`.
+The `gorse` database is created by `docker/postgres/init/01-create-gorse-db.sql`, which runs only on first boot of an empty volume.
+On a volume created before that script existed the container restart-loops on `database "gorse" does not exist`; the container carries `restart: unless-stopped`, so this presents as a service that never becomes healthy rather than as a visible crash.
+Create it by hand once: `docker compose exec postgres psql -U "$POSTGRES_USER" -c 'CREATE DATABASE gorse'`.
+The healthcheck probes `/api/health/ready`, which reports data-store and cache-store connectivity, so this state now shows up as an unhealthy service instead of a silently absent one.
 
 Required env vars (see `.env.example`): `GORSE_API_KEY`, `GORSE_DASHBOARD_USER`, `GORSE_DASHBOARD_PASSWORD`, `APP_GORSE_BASE_URL`.
 
