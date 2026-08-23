@@ -267,6 +267,43 @@ class PostBannedHashtagIT {
     }
 
     @Test
+    void restorePost_repeatedOnTheSamePost_namesTheSameRemainingBannedTagEveryTime() {
+        TestUser author = createUser("repeat_restore_author", "user");
+        TestUser admin = createUser("repeat_restore_admin", "admin");
+        UUID postId = createPublishedPost(author, "post #keptone and #laterbanned");
+        patchWithAuth(
+                "/api/v1/admin/posts/" + postId + "/remove",
+                Map.of("reason", "under review"),
+                admin);
+        banHashtag("laterbanned");
+
+        // Three cycles. The association is gone after the first restore, so a field holding the
+        // delta of one action would be empty on the second and third. This one holds the post's
+        // present state instead, which is why it keeps naming the tag: the caption still says
+        // #laterbanned and the post still does not carry it.
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            ResponseEntity<Map> restored =
+                    patchWithAuth(
+                            "/api/v1/admin/posts/" + postId + "/restore",
+                            Map.of("reason", "removed by mistake"),
+                            admin);
+
+            assertThat(restored.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(dataOf(restored).get("remainingBannedHashtags"))
+                    .as("restore attempt %d", attempt)
+                    .isEqualTo(List.of("laterbanned"));
+            assertThat(associatedHashtagNames(postId)).containsExactly("keptone");
+
+            if (attempt < 3) {
+                patchWithAuth(
+                        "/api/v1/admin/posts/" + postId + "/remove",
+                        Map.of("reason", "under review"),
+                        admin);
+            }
+        }
+    }
+
+    @Test
     void restorePost_toDraft_createsNoAssociationsWhateverTheTagStatus() {
         TestUser author = createUser("draft_restore_author", "user");
         TestUser admin = createUser("draft_restore_admin", "admin");
