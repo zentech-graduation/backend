@@ -15,7 +15,10 @@ public record MessageResponse(
         @Schema(description = "Sender; null if the sending user's account was deleted.")
                 UUID senderId,
         @Schema(description = "Content kind of the message.") MessageType messageType,
-        @Schema(description = "Text body; null for a non-text message or a deleted message.")
+        @Schema(
+                        description =
+                                "Text body; null for a non-text message, a message its sender deleted,"
+                                        + " or one an administrator removed.")
                 String content,
         @Schema(description = "Referenced media asset for an image/video message.")
                 UUID mediaAssetId,
@@ -30,6 +33,17 @@ public record MessageResponse(
         @Schema(description = "Shared post for a post-share message.") UUID sharedPostId,
         @Schema(description = "Shared story for a story-share message.") UUID sharedStoryId,
         @Schema(description = "Message this one replies to, or null.") UUID replyToId,
-        @Schema(description = "True if the sender deleted this message.") boolean isDeleted,
-        @Schema(description = "Deletion timestamp; null unless deleted.") OffsetDateTime deletedAt,
+        @Schema(
+                        description =
+                                "True if this message is no longer shown: either its sender deleted it"
+                                        + " or an administrator removed it. The two are not distinguished"
+                                        + " on the wire, because both render the same placeholder.")
+                boolean isDeleted,
+        @Schema(
+                        description =
+                                "When the message stopped being shown; null unless it is deleted. A"
+                                        + " sender deletion wins over a later administrative removal,"
+                                        + " because that is the timestamp the participants were already"
+                                        + " shown.")
+                OffsetDateTime deletedAt,
         @Schema(description = "Creation timestamp.") OffsetDateTime createdAt) {}
