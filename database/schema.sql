@@ -46,7 +46,8 @@ CREATE TYPE admin_action_type AS ENUM (
     'change_user_role', 'force_logout',
     'warn_user', 'revoke_warning', 'issue_strike', 'revoke_strike',
     'escalate_report',
-    'create_hashtag', 'edit_hashtag', 'ban_hashtag', 'unban_hashtag', 'delete_hashtag'
+    'create_hashtag', 'edit_hashtag', 'ban_hashtag', 'unban_hashtag', 'delete_hashtag',
+    'remove_story', 'restore_story', 'remove_message', 'restore_message'
 );
 CREATE TYPE event_type AS ENUM (
     'post_view', 'post_like', 'post_unlike',
@@ -478,8 +479,14 @@ CREATE TABLE messages (
     shared_story_id     UUID            REFERENCES stories(id) ON DELETE SET NULL,
     -- Thread reply
     reply_to_id         UUID            REFERENCES messages(id) ON DELETE SET NULL,
+    -- Sender-owned tombstone. Set together on the sender's own delete, which also clears content,
+    -- so a sender deletion is irreversible by design.
     is_deleted          BOOLEAN         NOT NULL DEFAULT FALSE,
     deleted_at          TIMESTAMPTZ,
+    -- Moderation-owned tombstone, independent of the pair above. Administrative removal sets it
+    -- and preserves content so a restore can return the message; clearing it never undoes a
+    -- sender deletion. A message is hidden when either tombstone is set.
+    admin_removed_at    TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
