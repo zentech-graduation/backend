@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -99,6 +100,19 @@ public class AdminUserController extends BaseController implements AdminUserApi 
             @PathVariable("userId") UUID userId, @Valid @RequestBody AdminActionRequest request) {
         return action(
                 adminUserService.forceLogout(SecurityUtils.getCurrentUserId(), userId, request));
+    }
+
+    /** Revokes one named session of one account for the authenticated administrator. */
+    @Override
+    @DeleteMapping(ApiConstants.Admin.USER_SESSION_BY_ID)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> revokeSession(
+            @PathVariable("userId") UUID userId,
+            @PathVariable("sessionId") UUID sessionId,
+            @Valid @RequestBody AdminActionRequest request) {
+        return action(
+                adminUserService.revokeSession(
+                        SecurityUtils.getCurrentUserId(), userId, sessionId, request));
     }
 
     /** Changes one account's role for the authenticated administrator. */

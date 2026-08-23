@@ -181,6 +181,39 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Override
     @Transactional
+    public AdminActionResponse revokeSession(
+            UUID actorId, UUID userId, UUID sessionId, AdminActionRequest request) {
+        User target =
+                userRepository
+                        .findByIdAndDeletedAtIsNull(userId)
+                        .orElseThrow(() -> new AppException(ApiErrorCode.USER_NOT_FOUND));
+        // Ownership is enforced inside the update predicate rather than by a read here, so it
+        // cannot be separated from the write by a concurrent change.
+        boolean endedNow = refreshTokenService.revokeSessionForUser(target.getId(), sessionId);
+        // Deliberately no token-epoch advance. Force logout advances it because it claims to end
+        // every session, and the access tokens already issued would otherwise outlive that claim.
+        // Ending one session cannot invalidate one access token, since the epoch is per account,
+        // so advancing it here would sign the account out everywhere while reporting that one
+        // session was ended.
+        log.info(
+                "Session revoked: actorId={}, targetId={}, sessionId={}, endedNow={}",
+                actorId,
+                userId,
+                sessionId,
+                endedNow);
+        return adminActionRecorder.record(
+                actorId,
+                AdminActionType.REVOKE_SESSION,
+                userId,
+                TARGET_ENTITY_TYPE,
+                userId,
+                request.reportId(),
+                request.reason(),
+                Map.of("sessionId", sessionId.toString(), "alreadyRevoked", !endedNow));
+    }
+
+    @Override
+    @Transactional
     public AdminActionResponse changeRole(
             UUID actorId, UUID userId, AdminRoleChangeRequest request) {
         // Resolved from the source of truth inside this transaction. A role claim on a token

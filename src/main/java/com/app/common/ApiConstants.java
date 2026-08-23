@@ -16,6 +16,9 @@ public final class ApiConstants {
         public static final String LOGIN = "/login";
         public static final String LOGOUT = "/logout";
         public static final String REFRESH = "/refresh";
+        // Under the auth root on purpose: the refresh cookie is scoped to this path, so this
+        // is the only tree a request carrying it reaches.
+        public static final String SESSION = "/session";
         public static final String FORGOT_PASSWORD = "/forgot-password";
         public static final String RESET_PASSWORD = "/reset-password";
         public static final String VERIFY_EMAIL = "/verify-email";
@@ -169,6 +172,7 @@ public final class ApiConstants {
         public static final String USER_BY_ID = "/users/{userId}";
         public static final String USER_ROLE = "/users/{userId}/role";
         public static final String USER_FORCE_LOGOUT = "/users/{userId}/force-logout";
+        public static final String USER_SESSION_BY_ID = "/users/{userId}/sessions/{sessionId}";
         public static final String BAN_USER = "/users/{userId}/ban";
         public static final String UNBAN_USER = "/users/{userId}/unban";
         public static final String SUSPEND_USER = "/users/{userId}/suspend";

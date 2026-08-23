@@ -28,6 +28,7 @@ public enum AdminActionType {
     REVOKE_STRIKE,
     ESCALATE_REPORT,
     FORCE_LOGOUT,
+    REVOKE_SESSION,
     CREATE_HASHTAG,
     EDIT_HASHTAG,
     BAN_HASHTAG,

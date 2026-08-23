@@ -22,6 +22,7 @@ import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResendVerificationRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
+import com.app.modules.auth.dto.response.CurrentSessionResponse;
 import com.app.modules.auth.dto.response.WebSocketTicketResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -212,6 +213,44 @@ public interface AuthApi {
             @Valid @RequestBody(required = false) RefreshRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse);
+
+    /** Reports which session the calling client is using. */
+    @Operation(
+            summary = "Identify the calling session",
+            description =
+                    "Returns the identifier of the session the caller is using, so a reviewer"
+                            + " reading its own account's session listing can tell which row it is"
+                            + " sitting on. This cannot be derived from the access token: its jti"
+                            + " is unique per access token and carries no link to the session, and"
+                            + " the refresh cookie is scoped to the auth path so it never reaches"
+                            + " the administrative tree. The token is read from the request body"
+                            + " when supplied, otherwise from the HttpOnly refresh cookie."
+                            + " sessionId is null when the request carried no usable refresh"
+                            + " token, which is not an error.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "The caller's session identifier, or null"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "Authentication required",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @MalformedBodyErrorResponses
+    @PostMapping(ApiConstants.Auth.SESSION)
+    ResponseEntity<ApiResponse<CurrentSessionResponse>> currentSession(
+            @Valid @RequestBody(required = false) RefreshRequest request,
+            HttpServletRequest httpRequest);
 
     /** Revokes the supplied refresh token. Idempotent. */
     @Operation(
