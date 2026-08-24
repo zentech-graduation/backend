@@ -3,18 +3,23 @@ package com.app.modules.report.service.impl;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.report.service.ReportedTargetService;
 
 @Service
 public class ReportedTargetServiceImpl implements ReportedTargetService {
+
+    private static final List<ReportStatus> ACTIVE_DUPLICATE_STATUSES =
+            List.of(ReportStatus.PENDING, ReportStatus.REVIEWING, ReportStatus.ESCALATED);
 
     private final ReportRepository reportRepository;
 
@@ -31,6 +36,7 @@ public class ReportedTargetServiceImpl implements ReportedTargetService {
         }
         Set<UUID> distinct = new LinkedHashSet<>(entityIds);
         return new HashSet<>(
-                reportRepository.findReportedEntityIds(viewerId, reportType, distinct));
+                reportRepository.findReportedEntityIds(
+                        viewerId, reportType, distinct, ACTIVE_DUPLICATE_STATUSES));
     }
 }

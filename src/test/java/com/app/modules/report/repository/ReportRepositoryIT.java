@@ -1,5 +1,6 @@
 package com.app.modules.report.repository;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
@@ -53,6 +54,20 @@ class ReportRepositoryIT {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void save_duplicateReporterTypeEntity_afterTerminalReport_isAllowed() {
+        UUID reporterId = insertUser("closed_reporter", "closed-reporter@example.com");
+        UUID entityId = UUID.randomUUID();
+        reportRepository.saveAndFlush(
+                report(reporterId, ReportType.POST, entityId, ReportStatus.RESOLVED));
+
+        assertThatCode(
+                        () ->
+                                reportRepository.saveAndFlush(
+                                        report(reporterId, ReportType.POST, entityId)))
+                .doesNotThrowAnyException();
+    }
+
     private UUID insertUser(String username, String email) {
         return jdbcClient
                 .sql(
@@ -68,12 +83,17 @@ class ReportRepositoryIT {
     }
 
     private Report report(UUID reporterId, ReportType reportType, UUID entityId) {
+        return report(reporterId, reportType, entityId, ReportStatus.PENDING);
+    }
+
+    private Report report(
+            UUID reporterId, ReportType reportType, UUID entityId, ReportStatus status) {
         return Report.builder()
                 .reporterId(reporterId)
                 .reportType(reportType)
                 .reportReason(ReportReason.SPAM)
                 .entityId(entityId)
-                .status(ReportStatus.PENDING)
+                .status(status)
                 .build();
     }
 }

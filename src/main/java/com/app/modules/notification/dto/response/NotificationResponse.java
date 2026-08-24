@@ -38,6 +38,12 @@ public record NotificationResponse(
                                         + " created before this field existed",
                         nullable = true)
                 UUID postId,
+        @Schema(
+                        description =
+                                "Optional system message or moderation reason attached to the"
+                                        + " notification",
+                        nullable = true)
+                String message,
         @Schema(description = "Whether this notification has been read", requiredMode = REQUIRED)
                 boolean isRead,
         @Schema(

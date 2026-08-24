@@ -19,8 +19,9 @@ public interface ReportedTargetService {
      * Returns the subset of {@code entityIds} that this viewer has already reported.
      *
      * <p>Membership of the returned set is exactly the condition under which a new report from this
-     * viewer against that target would be rejected as a duplicate. Report status is deliberately
-     * not considered, because the unique index enforcing duplicate suppression is not partial.
+     * viewer against that target would be rejected as a duplicate: an active pending, reviewing, or
+     * escalated report already exists. Resolved and dismissed reports are history and do not block
+     * a fresh report.
      *
      * @param viewerId the requesting viewer, or null for an anonymous caller
      * @param reportType target family shared by every id in {@code entityIds}
