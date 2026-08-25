@@ -119,7 +119,12 @@ public class SeedRunner {
             throw new IllegalStateException(
                     "SEED_DATA=true requires the 'seed' profile to also be active, with 'seed'"
                             + " listed after 'dev' so its overrides win. Start with"
-                            + " SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true instead.");
+                            + " SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true instead. If you set"
+                            + " SPRING_PROFILES_ACTIVE in the .env file, that has no effect here:"
+                            + " Spring Boot resolves active profiles before spring.config.import"
+                            + " (which is how .env is loaded) is applied, so profile selection must"
+                            + " come from a real environment variable, a JVM/Maven system property,"
+                            + " or a command-line argument - never from .env.");
         }
     }
 

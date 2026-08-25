@@ -23,11 +23,22 @@ It never runs in production, and it refuses to run against anything but a local 
 ## Running the seed
 
 Bring up the local stack (`docker compose up -d`) so PostgreSQL is reachable at `localhost`, then
-start the application with:
+start the application with both settings passed as real environment variables at process start,
+for example:
 
 ```
-SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true
+SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true ./mvnw spring-boot:run
 ```
+
+**`SPRING_PROFILES_ACTIVE` must not be placed in `.env`.** `.env` is loaded by
+`spring.config.import` (`application.yaml`), and Spring Boot resolves which profiles are active
+before that import is applied - a value for `SPRING_PROFILES_ACTIVE` inside `.env` is silently
+ignored for profile activation, even though ordinary properties in `.env` (including `SEED_DATA`)
+work normally. Export it in your shell, pass it as a command-line/IDE run-configuration variable,
+or prefix the start command as shown above. `SEED_DATA` has no such restriction and may be set in
+`.env`, on the command line, or exported, since it is a plain `@ConditionalOnProperty` check, not
+profile selection - `.env.example` deliberately lists `SEED_DATA` but not `SPRING_PROFILES_ACTIVE`
+for this reason.
 
 Both settings are required, for different reasons:
 
