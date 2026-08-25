@@ -21,6 +21,15 @@ import lombok.RequiredArgsConstructor;
  * referenced by real, externally hosted URLs (Picsum images and public sample videos) stored as the
  * asset's CDN URL, so it renders in the interface without any upload. Denormalised counters are
  * never written here; inserting into the source tables lets the database triggers maintain them.
+ *
+ * <p>In addition to the 16 regular users and the JohnDoe reviewer, this seeder creates:
+ *
+ * <ul>
+ *   <li>An {@code admin} account (role=admin) and a {@code moderator} account (role=moderator).
+ *   <li>Stories for the first 5 seeded users, each with views and likes.
+ *   <li>Four 1-1 conversations between JohnDoe and four seeded users.
+ *   <li>Admin actions: two warns, one suspension, one post removal, and two reports (one resolved).
+ * </ul>
  */
 @Service
 @Profile("dev")
@@ -35,6 +44,10 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
     private static final String REVIEWER_USERNAME = "JohnDoe";
     private static final String REVIEWER_EMAIL = "johndoe@luvax.test";
     private static final String REVIEWER_NAME = "John Doe";
+    private static final String ADMIN_USERNAME = "admin";
+    private static final String ADMIN_EMAIL = "admin@luvax.test";
+    private static final String MOD_USERNAME = "moderator";
+    private static final String MOD_EMAIL = "moderator@luvax.test";
     private static final String BLURHASH = "LKO2?U%2Tw=w]~RBVZRi};RPxuwH";
 
     private static final String[][] PEOPLE = {
@@ -107,6 +120,56 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
         "spot metered for the highlights",
     };
 
+    private static final String[] STORY_CAPTIONS = {
+        "today",
+        "morning light",
+        "out here",
+        "golden hour",
+        "just this",
+        "quiet day",
+        "on the road",
+        "catching it",
+    };
+
+    // Alternating lines of dialogue between JohnDoe (J) and the other user (U).
+    // Each conversation uses a slice of this array starting at a different offset.
+    private static final String[][] CONVERSATION_SCRIPTS = {
+        {
+            "J: hey, love your last post",
+            "U: thank you! took me a while to get that shot",
+            "J: where was that exactly?",
+            "U: somewhere up north, near the coast",
+            "J: going to try and make it there this summer",
+            "U: you should, worth every hour of the drive",
+        },
+        {
+            "J: saw your story this morning",
+            "U: haha yeah that was early",
+            "J: 6am light is something else",
+            "U: once you start you can't stop",
+            "J: fair warning noted",
+            "U: bring coffee",
+            "J: always",
+        },
+        {
+            "J: can I ask what film stock you shoot on?",
+            "U: kodak gold 200 mostly",
+            "J: I've been on portra 400 but thinking of switching",
+            "U: gold has a warmer grain, great for outdoor",
+            "J: good to know, cheers",
+        },
+        {
+            "J: that series you did last month was incredible",
+            "U: means a lot coming from you",
+            "J: how long did you spend on location?",
+            "U: three days, mostly waiting for light",
+            "J: patience is the real skill",
+            "U: exactly",
+            "J: when is the next one?",
+            "U: probably spring, weather dependent",
+        },
+    };
+
     private static final int[][] IMG_SHAPES = {
         {1080, 1080},
         {1080, 1350},
@@ -144,6 +207,7 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
         String hash = passwordEncoder.encode(PASSWORD);
         Random rnd = new Random(20260817L);
 
+        // --- Seed regular users ---
         List<UUID> userIds = new ArrayList<>();
         for (int i = 0; i < PEOPLE.length; i++) {
             String name = PEOPLE[i][0];
@@ -159,10 +223,12 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
                     bio,
                     avatar("av-" + i),
                     banner,
-                    hash);
+                    hash,
+                    "user");
             userIds.add(id);
         }
 
+        // --- Seed reviewer (JohnDoe) ---
         UUID reviewerId = UUID.randomUUID();
         insertUser(
                 reviewerId,
@@ -172,8 +238,36 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
                 "here to see everything",
                 avatar("reviewer"),
                 null,
-                hash);
+                hash,
+                "user");
 
+        // --- Seed admin account ---
+        UUID adminId = UUID.randomUUID();
+        insertUser(
+                adminId,
+                ADMIN_USERNAME,
+                ADMIN_EMAIL,
+                "Platform Admin",
+                "keeping the community safe",
+                avatar("admin"),
+                null,
+                hash,
+                "admin");
+
+        // --- Seed moderator account ---
+        UUID modId = UUID.randomUUID();
+        insertUser(
+                modId,
+                MOD_USERNAME,
+                MOD_EMAIL,
+                "Moderator",
+                "reviewing content for community standards",
+                avatar("mod"),
+                null,
+                hash,
+                "moderator");
+
+        // --- Seed posts ---
         List<UUID> postIds = new ArrayList<>();
         List<UUID> postOwners = new ArrayList<>();
         int postCount = 0;
@@ -209,6 +303,7 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
             }
         }
 
+        // --- Follows: random cross-follows + reviewer follows all ---
         int follows = 0;
         for (UUID follower : userIds) {
             int k = 6 + rnd.nextInt(7);
@@ -224,6 +319,7 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
             reviewerFollows += insertFollow(reviewerId, target);
         }
 
+        // --- Post engagement ---
         int postLikes = 0;
         int saves = 0;
         int comments = 0;
@@ -272,22 +368,241 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
             }
         }
 
+        // --- Stories: first 5 users get 2 stories each ---
+        int storyCount = 0;
+        int storyViews = 0;
+        int storyLikes = 0;
+        int storyMediaCount = 0;
+        for (int u = 0; u < 5 && u < userIds.size(); u++) {
+            UUID owner = userIds.get(u);
+            for (int s = 0; s < 2; s++) {
+                int[] shape = IMG_SHAPES[rnd.nextInt(IMG_SHAPES.length)];
+                UUID mediaId = insertImage(owner, "story-" + u + "-" + s, shape);
+                storyMediaCount++;
+                String caption = STORY_CAPTIONS[(u * 2 + s) % STORY_CAPTIONS.length];
+                UUID storyId = insertStory(owner, mediaId, caption);
+                storyCount++;
+
+                // JohnDoe always views
+                storyViews += insertStoryView(storyId, reviewerId);
+
+                // 3 more random viewers
+                for (int v = 0; v < 3; v++) {
+                    UUID viewer = userIds.get(rnd.nextInt(userIds.size()));
+                    if (!viewer.equals(owner)) {
+                        storyViews += insertStoryView(storyId, viewer);
+                    }
+                }
+
+                // 2-3 random users like
+                int likeCount = 2 + rnd.nextInt(2);
+                for (int l = 0; l < likeCount; l++) {
+                    UUID liker = userIds.get(rnd.nextInt(userIds.size()));
+                    if (!liker.equals(owner)) {
+                        storyLikes += insertStoryLike(storyId, liker);
+                    }
+                }
+            }
+        }
+
+        // --- Messages: JohnDoe with 4 seeded users ---
+        int conversationCount = 0;
+        int messageCount = 0;
+        for (int i = 0; i < 4 && i < userIds.size(); i++) {
+            UUID otherId = userIds.get(i);
+            String pairKey = pairKey(reviewerId, otherId);
+            UUID convId = insertConversation(reviewerId, pairKey);
+            insertConversationParticipant(convId, reviewerId);
+            insertConversationParticipant(convId, otherId);
+            conversationCount++;
+
+            String[] script = CONVERSATION_SCRIPTS[i];
+            UUID lastMsgAt = null;
+            for (String line : script) {
+                boolean isJohn = line.startsWith("J:");
+                UUID sender = isJohn ? reviewerId : otherId;
+                String content = line.substring(3).trim();
+                insertMessage(convId, sender, content);
+                messageCount++;
+            }
+            // Update last_message_at on the conversation
+            jdbc.update("UPDATE conversations SET last_message_at = NOW() WHERE id = ?", convId);
+        }
+
+        // --- Admin data ---
+        // Pick stable users for discipline targets: index 5 (warn+warn) and index 6 (warn+suspend)
+        UUID warnTargetA = userIds.get(5); // Jae Okoro - gets 1 warning
+        UUID warnTargetB = userIds.get(6); // Ren Kato  - gets 1 warning then suspended
+        UUID removePostOwner = userIds.get(7); // Ava Lindqvist - has a post removed
+        UUID reporter1 = userIds.get(8); // Tomas Feld
+        UUID reporter2 = userIds.get(9); // Priya Nair
+
+        // Find a published post owned by removePostOwner (use the first one in postIds)
+        UUID postToRemove = null;
+        for (int i = 0; i < postOwners.size(); i++) {
+            if (postOwners.get(i).equals(removePostOwner)) {
+                postToRemove = postIds.get(i);
+                break;
+            }
+        }
+
+        // Find a post owned by warnTargetA to be the subject of report1
+        UUID reportedPost1 = null;
+        for (int i = 0; i < postOwners.size(); i++) {
+            if (postOwners.get(i).equals(warnTargetA)) {
+                reportedPost1 = postIds.get(i);
+                break;
+            }
+        }
+
+        // Find a post owned by warnTargetB to be the subject of report2
+        UUID reportedPost2 = null;
+        for (int i = 0; i < postOwners.size(); i++) {
+            if (postOwners.get(i).equals(warnTargetB)) {
+                reportedPost2 = postIds.get(i);
+                break;
+            }
+        }
+
+        int adminActionCount = 0;
+        int reportCount = 0;
+
+        // Report 1: reporter1 reports warnTargetA's post for spam (will be resolved)
+        UUID report1Id = null;
+        if (reportedPost1 != null) {
+            report1Id = insertReport(reporter1, "post", "spam", reportedPost1, null);
+            reportCount++;
+        }
+
+        // Report 2: reporter2 reports warnTargetB's post for harassment (stays pending)
+        if (reportedPost2 != null) {
+            insertReport(reporter2, "post", "harassment", reportedPost2, null);
+            reportCount++;
+        }
+
+        // Moderator warns warnTargetA (reason: spam)
+        UUID warnActionA =
+                insertAdminAction(
+                        modId,
+                        "warn_user",
+                        warnTargetA,
+                        null,
+                        null,
+                        null,
+                        "Repeated spam comments on community posts.");
+        insertUserWarning(
+                warnTargetA,
+                modId,
+                "spam",
+                "Repeated spam comments on community posts.",
+                warnActionA);
+        adminActionCount++;
+
+        // Moderator warns warnTargetB (reason: harassment)
+        UUID warnActionB =
+                insertAdminAction(
+                        modId,
+                        "warn_user",
+                        warnTargetB,
+                        null,
+                        null,
+                        null,
+                        "Harassing replies targeting another user.");
+        insertUserWarning(
+                warnTargetB,
+                modId,
+                "harassment",
+                "Harassing replies targeting another user.",
+                warnActionB);
+        adminActionCount++;
+
+        // Admin suspends warnTargetB (72-hour suspension)
+        UUID suspendAction =
+                insertAdminAction(
+                        adminId,
+                        "suspend_user",
+                        warnTargetB,
+                        null,
+                        null,
+                        null,
+                        "Escalated after warning: continued harassment.");
+        jdbc.update(
+                "UPDATE users SET status = 'suspended',"
+                        + " suspended_until = NOW() + INTERVAL '72 hours'"
+                        + " WHERE id = ?",
+                warnTargetB);
+        adminActionCount++;
+
+        // Admin removes post
+        if (postToRemove != null) {
+            UUID removeAction =
+                    insertAdminAction(
+                            adminId,
+                            "remove_post",
+                            removePostOwner,
+                            "post",
+                            postToRemove,
+                            null,
+                            "Post violates community guidelines: graphic content.");
+            jdbc.update("UPDATE posts SET status = 'removed' WHERE id = ?", postToRemove);
+            adminActionCount++;
+        }
+
+        // Moderator resolves report1
+        if (report1Id != null) {
+            UUID resolveAction =
+                    insertAdminAction(
+                            modId,
+                            "resolve_report",
+                            warnTargetA,
+                            "post",
+                            reportedPost1,
+                            report1Id,
+                            "Reviewed: user was warned, content has been addressed.");
+            jdbc.update(
+                    "UPDATE reports SET status = 'resolved',"
+                            + " reviewed_by = ?, reviewed_at = NOW(),"
+                            + " resolution_note = 'User warned; action taken.'"
+                            + " WHERE id = ?",
+                    modId,
+                    report1Id);
+            adminActionCount++;
+        }
+
+        // --- Build summary ---
         String summary =
                 String.format(
-                        "%d users + reviewer, %d posts, %d media, %d follows, %d post-likes, %d saves,"
-                                + " %d comments, %d replies, %d comment-likes",
+                        "%d users + reviewer + admin + moderator,"
+                                + " %d posts, %d media (incl. %d story media),"
+                                + " %d follows, %d post-likes, %d saves,"
+                                + " %d comments, %d replies, %d comment-likes,"
+                                + " %d stories, %d story-views, %d story-likes,"
+                                + " %d conversations, %d messages,"
+                                + " %d reports, %d admin-actions",
                         userIds.size(),
                         postCount,
-                        mediaCount,
+                        mediaCount + storyMediaCount,
+                        storyMediaCount,
                         follows + reviewerFollows,
                         postLikes,
                         saves,
                         comments,
                         replies,
-                        commentLikes);
+                        commentLikes,
+                        storyCount,
+                        storyViews,
+                        storyLikes,
+                        conversationCount,
+                        messageCount,
+                        reportCount,
+                        adminActionCount);
         return new DevSeedResult(
                 false, summary, REVIEWER_USERNAME, REVIEWER_EMAIL, PASSWORD, reviewerFollows);
     }
+
+    // -------------------------------------------------------------------------
+    // Insert helpers
+    // -------------------------------------------------------------------------
 
     private void insertUser(
             UUID id,
@@ -297,17 +612,20 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
             String bio,
             String avatarUrl,
             String bannerUrl,
-            String hash) {
+            String hash,
+            String role) {
         jdbc.update(
                 "INSERT INTO users (id, username, email, display_name, bio, avatar_url, banner_url,"
-                        + " is_verified, status) VALUES (?, ?, ?, ?, ?, ?, ?, true, 'active')",
+                        + " is_verified, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, true, 'active',"
+                        + " ?::user_role)",
                 id,
                 username,
                 email,
                 name,
                 bio,
                 avatarUrl,
-                bannerUrl);
+                bannerUrl,
+                role);
         jdbc.update(
                 "INSERT INTO user_credentials (user_id, password_hash, email_verified,"
                         + " email_verified_at) VALUES (?, ?, true, now())",
@@ -345,8 +663,8 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
             Integer duration) {
         UUID id = UUID.randomUUID();
         jdbc.update(
-                "INSERT INTO media_assets (id, user_id, storage_key, cdn_url, media_type, mime_type,"
-                        + " file_size, width, height, duration, blurhash)"
+                "INSERT INTO media_assets (id, user_id, storage_key, cdn_url, media_type,"
+                        + " mime_type, file_size, width, height, duration, blurhash)"
                         + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 id,
                 userId,
@@ -424,10 +742,141 @@ public class DevDataSeedServiceImpl implements DevDataSeedService {
 
     private int insertCommentLike(UUID userId, UUID commentId) {
         return jdbc.update(
-                "INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                "INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?)"
+                        + " ON CONFLICT DO NOTHING",
                 userId,
                 commentId);
     }
+
+    // --- Story helpers ---
+
+    private UUID insertStory(UUID userId, UUID mediaAssetId, String caption) {
+        UUID id = UUID.randomUUID();
+        jdbc.update(
+                "INSERT INTO stories (id, user_id, media_asset_id, story_type, caption,"
+                        + " expires_at) VALUES (?, ?, ?, 'image', ?,"
+                        + " NOW() + INTERVAL '48 hours')",
+                id,
+                userId,
+                mediaAssetId,
+                caption);
+        return id;
+    }
+
+    private int insertStoryView(UUID storyId, UUID viewerId) {
+        return jdbc.update(
+                "INSERT INTO story_views (story_id, viewer_id) VALUES (?, ?)"
+                        + " ON CONFLICT DO NOTHING",
+                storyId,
+                viewerId);
+    }
+
+    private int insertStoryLike(UUID storyId, UUID userId) {
+        return jdbc.update(
+                "INSERT INTO story_likes (user_id, story_id) VALUES (?, ?)"
+                        + " ON CONFLICT DO NOTHING",
+                userId,
+                storyId);
+    }
+
+    // --- Message helpers ---
+
+    private UUID insertConversation(UUID createdBy, String pairKey) {
+        UUID id = UUID.randomUUID();
+        jdbc.update(
+                "INSERT INTO conversations (id, direct_pair_key, created_by) VALUES (?, ?, ?)",
+                id,
+                pairKey,
+                createdBy);
+        return id;
+    }
+
+    private void insertConversationParticipant(UUID conversationId, UUID userId) {
+        jdbc.update(
+                "INSERT INTO conversation_participants (conversation_id, user_id) VALUES (?, ?)",
+                conversationId,
+                userId);
+    }
+
+    private void insertMessage(UUID conversationId, UUID senderId, String content) {
+        jdbc.update(
+                "INSERT INTO messages (id, conversation_id, sender_id, message_type, content)"
+                        + " VALUES (?, ?, ?, 'text', ?)",
+                UUID.randomUUID(),
+                conversationId,
+                senderId,
+                content);
+    }
+
+    /** Builds the direct_pair_key identical to ConversationRepository's LEAST/GREATEST pattern. */
+    private String pairKey(UUID a, UUID b) {
+        String sa = a.toString();
+        String sb = b.toString();
+        return (sa.compareTo(sb) <= 0) ? sa + ":" + sb : sb + ":" + sa;
+    }
+
+    // --- Admin helpers ---
+
+    private UUID insertReport(
+            UUID reporterId,
+            String reportType,
+            String reportReason,
+            UUID entityId,
+            String description) {
+        UUID id = UUID.randomUUID();
+        jdbc.update(
+                "INSERT INTO reports (id, reporter_id, report_type, report_reason, entity_id,"
+                        + " description, status) VALUES (?, ?, ?::report_type, ?::report_reason,"
+                        + " ?, ?, 'pending')",
+                id,
+                reporterId,
+                reportType,
+                reportReason,
+                entityId,
+                description);
+        return id;
+    }
+
+    private UUID insertAdminAction(
+            UUID adminId,
+            String actionType,
+            UUID targetUserId,
+            String targetEntityType,
+            UUID targetEntityId,
+            UUID reportId,
+            String reason) {
+        UUID id = UUID.randomUUID();
+        jdbc.update(
+                "INSERT INTO admin_actions (id, admin_id, action_type, target_user_id,"
+                        + " target_entity_type, target_entity_id, report_id, reason)"
+                        + " VALUES (?, ?, ?::admin_action_type, ?, ?, ?, ?, ?)",
+                id,
+                adminId,
+                actionType,
+                targetUserId,
+                targetEntityType,
+                targetEntityId,
+                reportId,
+                reason);
+        return id;
+    }
+
+    private void insertUserWarning(
+            UUID userId, UUID issuedBy, String reasonKey, String note, UUID adminActionId) {
+        jdbc.update(
+                "INSERT INTO user_warnings (id, user_id, issued_by, reason_key, note,"
+                        + " admin_action_id) VALUES (?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID(),
+                userId,
+                issuedBy,
+                reasonKey,
+                note,
+                adminActionId);
+    }
+
+    // -------------------------------------------------------------------------
+    // String helpers
+    // -------------------------------------------------------------------------
 
     private String handle(String name) {
         StringBuilder sb = new StringBuilder();

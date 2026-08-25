@@ -25,6 +25,10 @@ It names the banned tags the caption still carries after the restore, which is t
 The audit metadata key carrying the same set is renamed to match.
 
 ### Added
+- The development seed data now includes an `admin` account (`admin@luvax.test`) and a `moderator` account (`moderator@luvax.test`), both using the shared seed password, with their respective roles pre-assigned and no social graph attachments.
+- The development seed data now includes stories for the first five seeded users, each with views from JohnDoe and three random users, and likes from two to three random users.
+- The development seed data now includes four 1-1 conversations between JohnDoe and four seeded users, each populated with five to eight text messages following realistic back-and-forth scripts.
+- The development seed data now includes admin actions for reviewer coverage: two user warnings (issued by the moderator), one 72-hour suspension (issued by the admin), one post removal (issued by the admin), two reports (one resolved by the moderator, one left pending), and corresponding `user_warnings` rows - providing a populated audit log and discipline ladder for manual review sessions.
 - An account's violation history can now be read including records that have been revoked, which were previously removed from the list entirely, so an account that had been disciplined and then cleared looked identical to one that never was.
 Revoked entries are returned only when asked for, are marked as revoked, and say when and by whom.
 - The account detail an administrator reads now says how many warnings currently count toward the account's next strike, so a reviewer can be told that the warning they are about to issue will be the third and will suspend the account.
