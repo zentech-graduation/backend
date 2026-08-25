@@ -3,32 +3,51 @@ package com.app.common.seed;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.common.config.rabbit.RabbitMqTopologyConfig;
 import com.app.common.seed.reset.SeedResetService;
+import com.app.modules.hashtag.search.HashtagDocument;
 import com.app.modules.mail.service.MailService;
+import com.app.modules.post.search.PostDocument;
 
 /**
  * Proves {@link SeedResetService#reset()} truncates seedable domain tables while leaving the
- * excluded config/reference tables untouched, against a real Flyway-migrated schema.
+ * excluded config/reference tables untouched, and also purges the broker queue and recreates the
+ * Elasticsearch indexes it now owns as part of a full reset.
  */
 @SpringBootTest(
         properties = {
             "spring.profiles.active=dev",
             "spring.docker.compose.enabled=false",
-            "spring.autoconfigure.exclude="
-                    + "org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration"
+            "app.mail.consumer.enabled=false",
+            "app.notification.consumer.enabled=false",
+            "app.comment.consumer.enabled=false",
+            "app.story.consumer.enabled=false",
+            "app.admin.consumer.enabled=false",
+            "app.hashtag.consumer.enabled=false",
+            "app.post.consumer.enabled=false",
+            "app.recommendation.consumer.enabled=false",
+            "spring.rabbitmq.publisher-confirm-type=correlated",
+            "spring.rabbitmq.publisher-returns=true",
+            "spring.rabbitmq.template.mandatory=true"
         })
 @Testcontainers
 class SeedResetServiceIT {
@@ -40,11 +59,29 @@ class SeedResetServiceIT {
     static GenericContainer<?> redis =
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
+    @Container
+    static GenericContainer<?> rabbit =
+            new GenericContainer<>(DockerImageName.parse("rabbitmq:3.13-alpine"))
+                    .withExposedPorts(5672);
+
+    @Container
+    static ElasticsearchContainer elasticsearch =
+            new ElasticsearchContainer(
+                            DockerImageName.parse(
+                                    "docker.elastic.co/elasticsearch/elasticsearch:9.0.3"))
+                    .withEnv("xpack.security.enabled", "false");
+
     @DynamicPropertySource
     static void register(DynamicPropertyRegistry registry) {
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         registry.add("spring.data.redis.password", () -> "");
+        registry.add("spring.rabbitmq.host", rabbit::getHost);
+        registry.add("spring.rabbitmq.port", () -> rabbit.getMappedPort(5672));
+        registry.add("spring.rabbitmq.username", () -> "guest");
+        registry.add("spring.rabbitmq.password", () -> "guest");
+        registry.add(
+                "app.elasticsearch.uris", () -> "http://" + elasticsearch.getHttpHostAddress());
         registry.add("JWT_SECRET", () -> "seed-reset-it-secret-at-least-32-chars!!");
         registry.add("JWT_ISSUER", () -> "https://seedreset.it.local");
         registry.add("JWT_AUDIENCE", () -> "App");
@@ -71,6 +108,8 @@ class SeedResetServiceIT {
 
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private SeedResetService seedResetService;
+    @Autowired private RabbitTemplate rabbitTemplate;
+    @Autowired private ElasticsearchOperations elasticsearchOperations;
 
     @Test
     void reset_truncatesDomainTablesButPreservesExcludedConfigTables() {
@@ -93,6 +132,47 @@ class SeedResetServiceIT {
         assertThat(countRows("system_settings")).isPositive();
         assertThat(countRows("feature_flags")).isPositive();
         assertThat(countRows("flyway_schema_history")).isPositive();
+    }
+
+    @Test
+    void reset_purgesQueuedMessagesLeftOverFromAPriorRun() {
+        rabbitTemplate.send(
+                RabbitMqTopologyConfig.MAIL_QUEUE,
+                MessageBuilder.withBody("stale".getBytes()).build());
+
+        seedResetService.reset();
+
+        Message leftover = rabbitTemplate.receive(RabbitMqTopologyConfig.MAIL_QUEUE, 1000);
+        assertThat(leftover).isNull();
+    }
+
+    @Test
+    void reset_recreatesSearchIndexesEmptyingAnyStrayDocument() {
+        IndexOperations postIndex = elasticsearchOperations.indexOps(PostDocument.class);
+        IndexOperations hashtagIndex = elasticsearchOperations.indexOps(HashtagDocument.class);
+        if (postIndex.exists()) {
+            postIndex.delete();
+        }
+        postIndex.create();
+        if (hashtagIndex.exists()) {
+            hashtagIndex.delete();
+        }
+        hashtagIndex.create();
+        PostDocument strayDocument =
+                PostDocument.builder()
+                        .id("seed-reset-it-stray-post")
+                        .userId("seed-reset-it-user")
+                        .caption("stray document left over from a prior run")
+                        .status("published")
+                        .build();
+        elasticsearchOperations.save(strayDocument);
+
+        seedResetService.reset();
+
+        assertThat(postIndex.exists()).isTrue();
+        assertThat(hashtagIndex.exists()).isTrue();
+        assertThat(elasticsearchOperations.exists("seed-reset-it-stray-post", PostDocument.class))
+                .isFalse();
     }
 
     private int countRows(String table) {

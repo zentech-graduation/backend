@@ -103,6 +103,7 @@ class SeedRunnerIT {
                         null,
                         null,
                         null,
+                        null,
                         null);
 
         assertThatThrownBy(seedRunner::assertEnumCoverage)

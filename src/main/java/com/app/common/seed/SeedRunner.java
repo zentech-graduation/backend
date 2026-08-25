@@ -5,12 +5,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import jakarta.annotation.PostConstruct;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -91,12 +94,56 @@ public class SeedRunner {
     private final AnalyticsSeedWriter analyticsSeedWriter;
     private final SeedOutboxEmitter seedOutboxEmitter;
     private final SeedProperties seedProperties;
+    private final Environment environment;
 
     @Value("${spring.datasource.url}")
     private String datasourceUrl;
 
+    /**
+     * Fails application startup outright when {@code SEED_DATA=true} (the only way this bean exists
+     * at all) but the {@code seed} profile is not active.
+     *
+     * <p>Without the {@code seed} profile, {@code application-seed.yml} never applies, so the five
+     * notification-producing consumers stay live through the whole run and stamp every seeded
+     * notification event with {@code NOW()} while {@code NotificationSeedWriter} is also writing
+     * historically-dated rows for the same events - the exact condition this check exists to make
+     * impossible rather than merely documented.
+     *
+     * @throws IllegalStateException naming the exact command to use instead
+     */
+    @PostConstruct
+    void assertSeedProfileActive() {
+        boolean seedProfileActive =
+                java.util.Arrays.asList(environment.getActiveProfiles()).contains("seed");
+        if (!seedProfileActive) {
+            throw new IllegalStateException(
+                    "SEED_DATA=true requires the 'seed' profile to also be active, with 'seed'"
+                            + " listed after 'dev' so its overrides win. Start with"
+                            + " SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true instead.");
+        }
+    }
+
+    // A JVM system property, not a Spring bean field: DevTools reloads every one of this
+    // application's own classes (including a fresh SeedRunner instance) from its "restart"
+    // classloader on each hot restart, so an instance field or static field on this class is
+    // reset every time regardless. A system property lives on java.lang.System, loaded once by
+    // the base classloader for the life of the JVM process, so it is the one place a flag
+    // actually survives a DevTools restart within the same process - confirmed empirically: the
+    // thread name is "restartedMain" on the very first boot too (DevTools always launches through
+    // its restart-capable thread, not only on a genuine hot reload), so thread name cannot tell
+    // the two apart, but this property can.
+    private static final String ALREADY_RAN_PROPERTY = "app.seed.already-ran-this-jvm";
+
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
+        if (System.getProperty(ALREADY_RAN_PROPERTY) != null) {
+            log.warn(
+                    "[seed] skipping reseed: this JVM process already ran the seed once (this is"
+                            + " a devtools hot restart, not a fresh process). Stop and restart the"
+                            + " application to force a reseed.");
+            return;
+        }
+        System.setProperty(ALREADY_RAN_PROPERTY, "true");
         Thread worker = new Thread(this::runSeed, "seed-runner");
         worker.setDaemon(true);
         worker.start();
