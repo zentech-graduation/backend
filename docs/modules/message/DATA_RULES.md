@@ -1,7 +1,7 @@
 # Message Module - Data Rules
 
 **Implementation status**: Fully implemented.
-Conversation and group lifecycle, message send/history/delete/read, notification fan-out, and real-time WebSocket delivery are all in place.
+Conversation lifecycle, message send/history/delete/read, notification fan-out, and real-time WebSocket delivery are all in place. Group conversations were removed by V50; messaging is 1-1 only.
 
 ---
 
@@ -9,9 +9,11 @@ Conversation and group lifecycle, message send/history/delete/read, notification
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `conversations` | `id`, `is_group`, `group_name`, `group_avatar_url`, `created_by` | A conversation thread, either 1-1 or group. `created_by` is SET NULL if the creator deletes their account. |
-| `conversation_participants` | `conversation_id`, `user_id`, `is_admin`, `joined_at`, `left_at`, `last_read_at` | Membership record for each participant. `left_at IS NOT NULL` means the user has left the conversation. |
-| `messages` | `id`, `conversation_id`, `sender_id`, `message_type`, `content`, `media_asset_id`, `shared_post_id`, `shared_story_id`, `reply_to_id`, `is_deleted`, `deleted_at` | Individual messages. Soft-deleted via `is_deleted = TRUE` + `deleted_at`. |
+| `conversations` | `id`, `created_by`, `last_message_at`, `created_at`, `updated_at`, `direct_pair_key` | A 1-1 conversation thread. `created_by` is SET NULL if the creator deletes their account. `direct_pair_key` is the two participants' `user_id` values in sorted order, and its unique index is what lets `createDirectConversation` reuse an existing conversation instead of creating a duplicate. |
+| `conversation_participants` | `conversation_id`, `user_id`, `is_admin`, `joined_at`, `left_at`, `last_read_at` | Membership record for each participant. `left_at IS NOT NULL` means the user has left the conversation. `is_admin` is a holdover from the removed group feature and carries no meaning on a 1-1 conversation. |
+| `messages` | `id`, `conversation_id`, `sender_id`, `message_type`, `content`, `media_asset_id`, `shared_post_id`, `shared_story_id`, `reply_to_id`, `is_deleted`, `deleted_at`, `admin_removed_at` | Individual messages. Sender-owned soft-delete via `is_deleted = TRUE` + `deleted_at`, which clears `content` and is irreversible. `admin_removed_at` (V77) is the independent moderation tombstone; it preserves the payload so a restore can return it, and a message is hidden when either tombstone is set. |
+
+`conversations.is_group`, `group_name`, and `group_avatar_url` were removed by V50 along with the group-conversation feature: messaging is 1-1 only now. The columns' data was copied into `archived_group_conversations` before the drop, and the group's participant and message rows were copied into `archived_group_participants` and `archived_group_messages` respectively, so no group history was destroyed by the removal.
 
 These tables cannot be rebuilt from any other source if lost.
 
@@ -48,14 +50,13 @@ These tables cannot be rebuilt from any other source if lost.
 | Rule | Service / Component |
 |------|---------------------|
 | A user may only send messages to conversations they are an active participant of (`left_at IS NULL`) | `MessageServiceImpl.sendMessage`, `MessageServiceImpl.listHistory`, `MessageServiceImpl.markRead` |
-| For a 1-1 conversation (`is_group = FALSE`), there must be exactly 2 participants; a duplicate request reuses the existing conversation | `ConversationServiceImpl.createDirectConversation` - enforced by construction (the only path that creates a non-group conversation, always inserting the actor plus exactly one target); reactivates the caller's membership if they had left |
-| A blocked user may not initiate or reply to messages with the blocker | Initiation enforced by `ConversationServiceImpl.assertNotBlocked`, called from `createDirectConversation`, `createGroupConversation`, and `addParticipants`; replies enforced by `MessageServiceImpl.assertNotBlockedForDirectMessage`, called from `sendMessage` |
+| A conversation has exactly 2 participants; a duplicate request reuses the existing conversation | `ConversationServiceImpl.createDirectConversation` - the only path that creates a conversation, always inserting the actor plus exactly one target; reactivates the caller's membership if they had left |
+| A blocked user may not initiate or reply to messages with the blocker | Initiation enforced by `ConversationServiceImpl.assertNotBlocked`, called from `createDirectConversation`; replies enforced by `MessageServiceImpl.assertNotBlockedForDirectMessage`, called from `sendMessage` |
 | Message soft-delete sets `is_deleted = TRUE` and `deleted_at = NOW()`, and clears `content` to a tombstone | `MessageServiceImpl.deleteMessage` |
 | Only the message sender may delete their own message | `MessageServiceImpl.deleteMessage` |
 | `last_read_at` on `conversation_participants` is updated when the user reads the conversation | `MessageServiceImpl.markRead` |
 | A message of type `'post_share'` must have `shared_post_id` set; `'story_share'` must have `shared_story_id` set | `MessageServiceImpl.sendMessage` payload validation |
 | A message of type `'image'` or `'video'` must have `media_asset_id` set | `MessageServiceImpl.sendMessage` payload validation |
-| Group admins may add/remove participants and update `group_name` / `group_avatar_url`; the last active admin leaving or being removed promotes the oldest remaining member | `ConversationServiceImpl.addParticipants` / `removeParticipant` / `updateGroup`, all gated by `requireGroupAdmin` |
 | Sending a message generates a `message` notification for every other active participant | `MessageNotificationConsumer` |
 | `user_settings.allow_message_requests` governs whether non-followers can initiate a conversation | `ConversationServiceImpl.assertMessageRequestAllowed`, called from `createDirectConversation` |
 | A live WebSocket SUBSCRIBE to a conversation's topic is rejected unless the subscriber is an active participant | `MessageWebSocketAuthInterceptor` |
@@ -70,8 +71,7 @@ Deleting a user's account preserves their past messages for the remaining partic
 - No end-to-end encryption in v1.
 - No message reactions.
 - No read receipts beyond `last_read_at` at the conversation level.
-- Group chat is gated by the `app.message.group-chat-enabled` configuration property, not the `feature_flags.group_chat` table row.
-  That table row is decorative; there is no runtime `feature_flags` reader in this codebase.
+- Group chat was removed entirely (V50); messaging is 1-1 only. The `feature_flags.group_chat` table row (V18) is a leftover from before the removal - it is decorative, and there is no runtime `feature_flags` reader in this codebase.
 - Real-time delivery uses a single in-process `SimpleBroker` (no distributed STOMP relay), so delivery is best-effort per instance; a client recovers any missed event through the message history endpoint on reconnect.
 
 ---
@@ -85,5 +85,5 @@ Deleting a user's account preserves their past messages for the remaining partic
 | `post` | outbound | `messages.shared_post_id` references `posts` for shared-post messages |
 | `story` | outbound | `messages.shared_story_id` references `stories` for shared-story messages |
 | `social` | inbound | Block relationships govern messaging permissions |
-| `notification` | outbound | Intended: new messages would trigger `MESSAGE` notification creation for participants once a send-message endpoint exists. `notification_type_configs.MESSAGE` and `user_settings.notify_messages` exist for this but have no creation site today. |
+| `notification` | outbound | Sending a message triggers a `message` notification for every other active participant, via `MessageNotificationConsumer`; `notification_type_configs.MESSAGE` and `user_settings.notify_messages` govern its display metadata and per-user opt-out. |
 | `report` | inbound | Reports can target a message via polymorphic `entity_id` |
