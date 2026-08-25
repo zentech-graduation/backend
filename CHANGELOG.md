@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- A development seed run now purges every broker queue, resets the search indexes, and truncates the recommender's own data store before writing, and refuses to start unless the seed profile is active alongside dev; without this, a second seed run against an already-seeded stack could dead-letter on stale messages and leave search and recommendation state accumulating across runs instead of reflecting only the latest run.
+- A development seed run started under Spring Boot DevTools no longer reseeds a second time on a hot restart within the same process.
+- A scripted direct-message conversation could restart its own dialogue from the beginning partway through instead of ending naturally; affected conversations now end at the last genuine line.
 - The moderation audit log now shows the moderator's actual written reason for an action instead of a short category code or nothing at all, for both the six narrative seed cases and every standalone seeded action.
 - A development seed run's warning and strike records now carry their intended reason and note text instead of a generic placeholder, and a moderation-case action referencing a message that does not exist now fails the run immediately instead of silently skipping it with a warning.
 - Two development seed report records that collided on the same duplicate-suppression key and were silently dropped at write time have been given distinct targets, and a development seed run now fails immediately on any such collision instead of silently dropping the second record.
@@ -42,6 +45,7 @@ The audit metadata key carrying the same set is renamed to match.
 - The two group-chat environment variables have been removed from the example environment template. Group conversations were removed from the product in an earlier release, and neither variable has controlled any behavior since.
 
 ### Added
+- The development seed dataset's authored content (display names, bios, captions, comments, direct messages, hashtags, and moderation notes) has been rewritten in natural English, replacing the earlier Vietnamese-language authoring pass.
 - The rebuilt development seeder's usage, its fixed QA accounts and shared password, its consumer-activation requirements, and how to re-provision its media are now documented in a dedicated README.
 - The rebuilt development seeder now has a single entry point that runs on application startup behind an explicit opt-in flag: it refuses to run against anything but a local database, wipes and rewrites the full seeded dataset in dependency order, replays the seeded activity through the same event pipeline production traffic uses, and then verifies every status/type/reason value the platform's enums define is actually represented in the data before declaring the run complete.
 - A dedicated configuration profile now holds off the five notification-producing consumers during a development seed run, since the seeder writes their notification rows directly with historically correct timestamps instead.

@@ -336,13 +336,13 @@
           "type": "comment",
           "comment_ref": "post_0023#comment_toxic_1",
           "post_id": "post_0023",
-          "text": "nói vậy mà cũng tin được à, hiểu biết tài chính kém quá"
+          "text": "imagine actually believing this, your financial literacy is embarrassing"
         },
         {
           "type": "comment",
           "comment_ref": "post_0023#comment_toxic_2",
           "post_id": "post_0023",
-          "text": "đăng bài kiểu này chỉ tổ gây hoang mang, xoá đi cho rồi"
+          "text": "posts like this just cause panic, this should honestly just get taken down"
         }
       ],
       "timeline": [
@@ -1074,7 +1074,7 @@
       "action_type": "create_hashtag",
       "target_user": null,
       "note": "Administrative creation of a hashtag ahead of a planned content campaign.",
-      "hashtag_name": "tetlixi"
+      "hashtag_name": "luckymoney2026"
     },
     {
       "at": "2026-08-01T13:06:34.995Z",
@@ -1090,7 +1090,7 @@
       "action_type": "create_hashtag",
       "target_user": null,
       "note": "Administrative creation of a hashtag ahead of a planned content campaign.",
-      "hashtag_name": "dulichhe2026"
+      "hashtag_name": "summertravel2026"
     },
     {
       "at": "2026-08-01T22:27:37.071Z",
@@ -1114,7 +1114,7 @@
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
-      "hashtag_name": "giavang"
+      "hashtag_name": "goldprice"
     },
     {
       "at": "2026-08-02T14:42:57.437Z",
@@ -1130,7 +1130,7 @@
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
-      "hashtag_name": "duhoc"
+      "hashtag_name": "studyabroad"
     },
     {
       "at": "2026-08-03T05:15:23.958Z",
@@ -1138,7 +1138,7 @@
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
-      "hashtag_name": "cafesaigon"
+      "hashtag_name": "saigoncafe"
     },
     {
       "at": "2026-08-03T07:04:26.782Z",
@@ -1146,7 +1146,7 @@
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
-      "hashtag_name": "dautuloinhuancao"
+      "hashtag_name": "highreturninvestment"
     },
     {
       "at": "2026-08-03T09:08:36.672Z",
@@ -1154,7 +1154,7 @@
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
-      "hashtag_name": "vaynhanh247"
+      "hashtag_name": "quickloans247"
     },
     {
       "at": "2026-08-03T13:04:19.681Z",
@@ -1162,7 +1162,7 @@
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
-      "hashtag_name": "hanghieusieucap"
+      "hashtag_name": "luxurydupe"
     },
     {
       "at": "2026-08-03T20:37:55.598Z",
@@ -1170,7 +1170,7 @@
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
-      "hashtag_name": "cado"
+      "hashtag_name": "quickcash"
     },
     {
       "at": "2026-08-04T01:53:03.845Z",
@@ -1178,7 +1178,7 @@
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
-      "hashtag_name": "binaryoptionvn"
+      "hashtag_name": "binaryoptions"
     },
     {
       "at": "2026-08-04T07:03:19.897Z",
@@ -1226,7 +1226,7 @@
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
-      "hashtag_name": "covid19capnhat"
+      "hashtag_name": "covid19update"
     },
     {
       "at": "2026-08-05T13:34:36.747Z",
@@ -1234,7 +1234,7 @@
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
-      "hashtag_name": "tetnguyendan2024"
+      "hashtag_name": "lunarnewyear2024"
     },
     {
       "at": "2026-08-05T21:43:46.000Z",
@@ -1242,7 +1242,7 @@
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
-      "hashtag_name": "eventcu2023"
+      "hashtag_name": "archivedevent2023"
     },
     {
       "at": "2026-08-06T06:01:09.921Z",

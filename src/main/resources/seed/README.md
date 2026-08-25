@@ -14,7 +14,7 @@ It never runs in production, and it refuses to run against anything but a local 
 | Hashtags | 152 |
 | Media assets (Pexels-sourced) | 255 (120 images, 15 videos, 95 avatars, 25 banners) |
 | Comment pool entries | 900 across 22 topic pools |
-| Conversations / messages | 60 conversations, ~2,200 messages |
+| Conversations / messages | 60 conversations, ~1,100 messages |
 | Moderation cases (full narrative) | 6 |
 | Reports | ~180 (narrative + standalone) |
 | Warnings / strikes | 27 / 14 |
@@ -50,11 +50,25 @@ Both settings are required, for different reasons:
 via `SEED_REQUIRE_LOCAL_DATASOURCE`) is enabled and the configured JDBC URL resolves to
 `localhost`, `127.0.0.1`, or the IPv6 loopback, since the reset step truncates every seedable
 table.
+A `@PostConstruct` check also refuses to run unless the `seed` profile is active alongside `dev`,
+naming the exact `SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true` command in its failure message -
+`SEED_DATA=true` under plain `dev` can no longer silently run the seed with the wrong consumers
+active.
 
 What happens on that run:
 
-1. `SeedResetService.reset()` truncates every seedable domain table.
-   This is destructive: any local data you had before the run is gone.
+1. `SeedResetService.reset()` purges every declared RabbitMQ queue (both the working queues and
+   their dead-letter queues, discovered from the `Queue` beans the topology config declares rather
+   than a hardcoded list), deletes and recreates the `posts` and `hashtags` Elasticsearch indexes
+   with their real mapping, truncates Gorse's own sibling Postgres database (`GORSE_DATA_STORE` in
+   `docker-compose.yaml`), and only then truncates every seedable domain table.
+   This is destructive: any local data, queued message, indexed document, or recommender state you
+   had before the run is gone.
+   The broker and search/recommender state are purged first, specifically so a message already in
+   flight when the purge starts cannot be delivered against a database this call is about to
+   truncate - without this, a second run against an already-seeded stack replays stale queue
+   messages and dead-letters on a foreign key violation, and Elasticsearch/Gorse accumulate
+   duplicate or orphaned entries across runs.
 2. Every domain writer runs in dependency order (users and media first, then posts, comments,
    engagement, social graph, stories, messages, moderation history, notifications, analytics).
 3. `SeedOutboxEmitter` replays a bounded set of real domain events (search-index updates, and
@@ -64,6 +78,11 @@ What happens on that run:
 4. The run asserts every value of 16 mandatory enum-typed columns (`user_status`, `post_type`,
    `admin_action_type`, `event_type`, and so on) is represented on at least 5 rows, and fails loudly
    if any value falls short.
+
+A seed run only ever executes once per JVM process: a marker system property is set the moment a
+run starts, so a Spring Boot DevTools hot restart (which reuses the same JVM and the same broker,
+search, and recommender state) does not silently trigger a second reset and reseed on top of
+whatever the first run already wrote. Stop and start the application to force a genuinely new run.
 
 ## QA accounts
 
@@ -89,7 +108,7 @@ describes.
 
 | File | Holds | Consumed by |
 |------|-------|-------------|
-| `personas.json` | 10 persona archetypes referenced by users, posts, and comments | `UserSeedWriter`, `PostSeedWriter`, `CommentSeedWriter` |
+| `personas.json` | 10 persona archetypes referenced by users, posts, and comments; each `voice` describes an English writing style | `UserSeedWriter`, `PostSeedWriter`, `CommentSeedWriter` |
 | `users.json` | The 90 seed users, including the 8 fixed QA accounts | `UserSeedWriter`, and read by nearly every other writer |
 | `content/posts.json` | 722 authored posts (image/video/carousel/text) | `PostSeedWriter` |
 | `content/hashtags.json` | The hashtag catalog posts reference | `PostSeedWriter` |

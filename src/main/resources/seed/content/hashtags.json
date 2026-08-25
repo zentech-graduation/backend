@@ -19,7 +19,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "lamviectuxa",
+      "name": "remotejobsvn",
       "status": "active",
       "topic_tags": [
         "software-engineering",
@@ -29,7 +29,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "tuyendung",
+      "name": "hiring",
       "status": "active",
       "topic_tags": [
         "job-market"
@@ -86,7 +86,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "hocjava",
+      "name": "learnjava",
       "status": "active",
       "topic_tags": [
         "software-engineering",
@@ -114,7 +114,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "cntt",
+      "name": "computerscience",
       "status": "active",
       "topic_tags": [
         "software-engineering",
@@ -153,7 +153,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "startupvn",
+      "name": "startuplife",
       "status": "active",
       "topic_tags": [
         "software-engineering",
@@ -191,7 +191,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "giavang",
+      "name": "goldprice",
       "status": "active",
       "topic_tags": [
         "gold-price",
@@ -201,7 +201,7 @@
       "intended_post_count_band": "high"
     },
     {
-      "name": "laisuat",
+      "name": "interestrates",
       "status": "active",
       "topic_tags": [
         "personal-finance"
@@ -210,7 +210,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "chungkhoan",
+      "name": "stockmarket",
       "status": "active",
       "topic_tags": [
         "personal-finance"
@@ -219,7 +219,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "tietkiem",
+      "name": "savings",
       "status": "active",
       "topic_tags": [
         "personal-finance"
@@ -228,7 +228,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "dautu",
+      "name": "investing",
       "status": "active",
       "topic_tags": [
         "personal-finance"
@@ -237,7 +237,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "bcnhadat",
+      "name": "realestatenews",
       "status": "active",
       "topic_tags": [
         "property-price"
@@ -246,7 +246,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "nhadat",
+      "name": "realestate",
       "status": "active",
       "topic_tags": [
         "property-price"
@@ -255,7 +255,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "giabds",
+      "name": "propertyprices",
       "status": "active",
       "topic_tags": [
         "property-price"
@@ -264,7 +264,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "taichinhcanhan",
+      "name": "personalfinance",
       "status": "active",
       "topic_tags": [
         "personal-finance"
@@ -273,7 +273,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "luongthang",
+      "name": "monthlysalary",
       "status": "active",
       "topic_tags": [
         "personal-finance",
@@ -283,7 +283,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "nhatro",
+      "name": "rentalroom",
       "status": "active",
       "topic_tags": [
         "rental",
@@ -293,7 +293,7 @@
       "intended_post_count_band": "high"
     },
     {
-      "name": "thuenha",
+      "name": "rentinghome",
       "status": "active",
       "topic_tags": [
         "rental",
@@ -303,7 +303,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "chuphongtro",
+      "name": "roomforrent",
       "status": "active",
       "topic_tags": [
         "rental"
@@ -312,7 +312,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "sinhvien",
+      "name": "studentlife",
       "status": "active",
       "topic_tags": [
         "studying-abroad",
@@ -322,7 +322,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "chiphisinhhoat",
+      "name": "costofliving",
       "status": "active",
       "topic_tags": [
         "cost-of-living"
@@ -331,7 +331,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "tienthue",
+      "name": "rentcost",
       "status": "active",
       "topic_tags": [
         "rental"
@@ -340,7 +340,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "timviec",
+      "name": "jobhunting",
       "status": "active",
       "topic_tags": [
         "job-market"
@@ -349,7 +349,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "capnhatcv",
+      "name": "resumeupdate",
       "status": "active",
       "topic_tags": [
         "job-market"
@@ -367,7 +367,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "cvxinviec",
+      "name": "jobapplication",
       "status": "active",
       "topic_tags": [
         "job-market"
@@ -376,7 +376,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "phongvan",
+      "name": "jobinterview",
       "status": "active",
       "topic_tags": [
         "job-market"
@@ -385,7 +385,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "duhoc",
+      "name": "studyabroad",
       "status": "active",
       "topic_tags": [
         "studying-abroad"
@@ -394,7 +394,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "hocbong",
+      "name": "scholarship",
       "status": "active",
       "topic_tags": [
         "studying-abroad"
@@ -412,7 +412,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "dinhcu",
+      "name": "immigration",
       "status": "active",
       "topic_tags": [
         "studying-abroad"
@@ -421,7 +421,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "cafesaigon",
+      "name": "saigoncafe",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -430,7 +430,7 @@
       "intended_post_count_band": "high"
     },
     {
-      "name": "quananngon",
+      "name": "goodeats",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -439,7 +439,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "streetfoodvn",
+      "name": "streetfood",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -448,7 +448,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "reviewquananhcm",
+      "name": "hcmcfoodreview",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -466,7 +466,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "trasuahcm",
+      "name": "bubbletea",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -475,7 +475,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "chuoicafe",
+      "name": "cafechain",
       "status": "active",
       "topic_tags": [
         "fnb",
@@ -485,7 +485,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "fnbvn",
+      "name": "fnblife",
       "status": "active",
       "topic_tags": [
         "fnb",
@@ -495,7 +495,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "khoinghiepfnb",
+      "name": "fnbstartup",
       "status": "active",
       "topic_tags": [
         "fnb",
@@ -514,7 +514,7 @@
       "intended_post_count_band": "high"
     },
     {
-      "name": "chaybo",
+      "name": "running",
       "status": "active",
       "topic_tags": [
         "running"
@@ -523,7 +523,7 @@
       "intended_post_count_band": "high"
     },
     {
-      "name": "tapgym",
+      "name": "gymtraining",
       "status": "active",
       "topic_tags": [
         "gym"
@@ -559,7 +559,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "calo",
+      "name": "calories",
       "status": "active",
       "topic_tags": [
         "gym"
@@ -577,7 +577,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "nhiepanh",
+      "name": "photography",
       "status": "active",
       "topic_tags": [
         "photography"
@@ -586,7 +586,7 @@
       "intended_post_count_band": "high"
     },
     {
-      "name": "anhcuoi",
+      "name": "weddingphoto",
       "status": "active",
       "topic_tags": [
         "photography"
@@ -613,7 +613,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "chupanhsanpham",
+      "name": "productphotography",
       "status": "active",
       "topic_tags": [
         "photography",
@@ -623,7 +623,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "chupanhdaosukien",
+      "name": "eventphotography",
       "status": "active",
       "topic_tags": [
         "photography"
@@ -632,7 +632,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "xemay",
+      "name": "motorbike",
       "status": "active",
       "topic_tags": [
         "motorbike"
@@ -659,7 +659,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "oto",
+      "name": "cars",
       "status": "active",
       "topic_tags": [
         "motorbike"
@@ -668,7 +668,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "baotrixe",
+      "name": "vehiclemaintenance",
       "status": "active",
       "topic_tags": [
         "motorbike"
@@ -677,7 +677,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "phuottrongngay",
+      "name": "daytrip",
       "status": "active",
       "topic_tags": [
         "motorbike",
@@ -697,7 +697,7 @@
       "intended_post_count_band": "high"
     },
     {
-      "name": "dohangsi",
+      "name": "wholesale",
       "status": "active",
       "topic_tags": [
         "online-shop",
@@ -707,7 +707,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "kinhdoanhonline",
+      "name": "onlinebusiness",
       "status": "active",
       "topic_tags": [
         "online-shop",
@@ -726,7 +726,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "shipcod",
+      "name": "codshipping",
       "status": "active",
       "topic_tags": [
         "online-shop"
@@ -735,7 +735,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "nuoiconkhole",
+      "name": "parentingcosts",
       "status": "active",
       "topic_tags": [
         "parenting"
@@ -744,7 +744,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "hocphi",
+      "name": "tuitionfees",
       "status": "active",
       "topic_tags": [
         "parenting",
@@ -754,7 +754,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "mevabesg",
+      "name": "momlife",
       "status": "active",
       "topic_tags": [
         "parenting"
@@ -763,7 +763,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "canho",
+      "name": "apartment",
       "status": "active",
       "topic_tags": [
         "property-price",
@@ -773,7 +773,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "chungcu",
+      "name": "apartmentbuilding",
       "status": "active",
       "topic_tags": [
         "property-price"
@@ -782,7 +782,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "muanhadat",
+      "name": "buyingproperty",
       "status": "active",
       "topic_tags": [
         "property-price"
@@ -791,7 +791,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "cuoituan",
+      "name": "weekendvibes",
       "status": "active",
       "topic_tags": [
         "lifestyle"
@@ -819,7 +819,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "ngaymoi",
+      "name": "newday",
       "status": "active",
       "topic_tags": [
         "lifestyle"
@@ -1013,7 +1013,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "luongtoithieu",
+      "name": "minimumwage",
       "status": "active",
       "topic_tags": [
         "job-market",
@@ -1023,7 +1023,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "canhomini",
+      "name": "ministudio",
       "status": "active",
       "topic_tags": [
         "rental",
@@ -1033,7 +1033,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "timphongtro",
+      "name": "roomhunting",
       "status": "active",
       "topic_tags": [
         "rental"
@@ -1042,7 +1042,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "reviewcafe",
+      "name": "cafereview",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -1051,7 +1051,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "quancafedep",
+      "name": "aestheticcafe",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -1060,7 +1060,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "monanvat",
+      "name": "streetsnacks",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -1069,7 +1069,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "anuong",
+      "name": "foodanddrink",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -1078,7 +1078,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "dulichgiare",
+      "name": "budgettravel",
       "status": "active",
       "topic_tags": [
         "travel-work"
@@ -1087,7 +1087,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "dulichnoidia",
+      "name": "domestictravel",
       "status": "active",
       "topic_tags": [
         "travel-work"
@@ -1096,7 +1096,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "reviewsanpham",
+      "name": "productreview",
       "status": "active",
       "topic_tags": [
         "online-shop"
@@ -1105,7 +1105,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "shopquanao",
+      "name": "clothingshop",
       "status": "active",
       "topic_tags": [
         "online-shop",
@@ -1115,7 +1115,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "thoitrangre",
+      "name": "affordablefashion",
       "status": "active",
       "topic_tags": [
         "online-shop"
@@ -1124,7 +1124,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "sanphammoi",
+      "name": "newarrivals",
       "status": "active",
       "topic_tags": [
         "online-shop",
@@ -1144,7 +1144,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "designervn",
+      "name": "designerlife",
       "status": "active",
       "topic_tags": [
         "design"
@@ -1153,7 +1153,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "hocthietke",
+      "name": "learndesign",
       "status": "active",
       "topic_tags": [
         "design",
@@ -1163,7 +1163,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "chupanhdep",
+      "name": "photoinspo",
       "status": "active",
       "topic_tags": [
         "photography"
@@ -1172,7 +1172,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "concepchupanh",
+      "name": "photoconcept",
       "status": "active",
       "topic_tags": [
         "photography"
@@ -1199,7 +1199,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "chaydemngay",
+      "name": "nightrun",
       "status": "active",
       "topic_tags": [
         "running"
@@ -1208,7 +1208,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "dieuchinhtaichinh",
+      "name": "budgetadjustment",
       "status": "active",
       "topic_tags": [
         "personal-finance"
@@ -1217,7 +1217,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "tietkiemtien",
+      "name": "moneysaving",
       "status": "active",
       "topic_tags": [
         "personal-finance"
@@ -1226,7 +1226,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "muavang",
+      "name": "buyinggold",
       "status": "active",
       "topic_tags": [
         "gold-price"
@@ -1235,7 +1235,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "vangnhan",
+      "name": "goldbars",
       "status": "active",
       "topic_tags": [
         "gold-price"
@@ -1244,7 +1244,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "canhogiare",
+      "name": "cheapapartment",
       "status": "active",
       "topic_tags": [
         "property-price",
@@ -1254,7 +1254,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "chuyennha",
+      "name": "moving",
       "status": "active",
       "topic_tags": [
         "rental",
@@ -1264,7 +1264,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "cuocsonghanoi",
+      "name": "hanoilife",
       "status": "active",
       "topic_tags": [
         "lifestyle",
@@ -1274,7 +1274,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "cuocsongsaigon",
+      "name": "saigonlife",
       "status": "active",
       "topic_tags": [
         "lifestyle",
@@ -1284,7 +1284,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "vieclamthem",
+      "name": "parttimejob",
       "status": "active",
       "topic_tags": [
         "job-market",
@@ -1294,7 +1294,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "sinhvienlamthem",
+      "name": "studentjobs",
       "status": "active",
       "topic_tags": [
         "job-market",
@@ -1304,7 +1304,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "hocit",
+      "name": "learntocode",
       "status": "active",
       "topic_tags": [
         "software-engineering",
@@ -1314,7 +1314,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "hocphandau",
+      "name": "examseason",
       "status": "active",
       "topic_tags": [
         "studying-abroad"
@@ -1323,7 +1323,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "dautuloinhuancao",
+      "name": "highreturninvestment",
       "status": "banned",
       "topic_tags": [
         "fake-investment"
@@ -1332,7 +1332,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "vaynhanh247",
+      "name": "quickloans247",
       "status": "banned",
       "topic_tags": [
         "fake-investment"
@@ -1341,7 +1341,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "hanghieusieucap",
+      "name": "luxurydupe",
       "status": "banned",
       "topic_tags": [
         "fake-investment",
@@ -1351,7 +1351,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "cado",
+      "name": "quickcash",
       "status": "banned",
       "topic_tags": [
         "fake-investment"
@@ -1360,7 +1360,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "binaryoptionvn",
+      "name": "binaryoptions",
       "status": "banned",
       "topic_tags": [
         "fake-investment"
@@ -1369,7 +1369,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "covid19capnhat",
+      "name": "covid19update",
       "status": "deleted",
       "topic_tags": [
         "lifestyle"
@@ -1378,7 +1378,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "tetnguyendan2024",
+      "name": "lunarnewyear2024",
       "status": "deleted",
       "topic_tags": [
         "lifestyle"
@@ -1387,7 +1387,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "eventcu2023",
+      "name": "archivedevent2023",
       "status": "deleted",
       "topic_tags": [
         "lifestyle"
@@ -1396,7 +1396,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "promo2024hetha",
+      "name": "promo2024ended",
       "status": "deleted",
       "topic_tags": [
         "lifestyle"
