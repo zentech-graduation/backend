@@ -327,7 +327,8 @@ class PostBannedHashtagIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(statusOf(postId)).isEqualTo("draft");
         assertThat(associatedHashtagNames(postId)).isEmpty();
-        assertThat(countOutboxEvents()).isZero();
+        assertThat(countOutboxEvents()).isEqualTo(1);
+        assertThat(countOutboxEvents("notification.created.v1")).isEqualTo(1);
         // Nothing was dropped because nothing was re-derived, which is not the same as a restore
         // that silently lost a tag, so the list is empty rather than naming the banned one.
         assertThat(dataOf(response).get("remainingBannedHashtags")).isEqualTo(List.of());
@@ -439,6 +440,11 @@ class PostBannedHashtagIT {
 
     private long countOutboxEvents() {
         return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox_events", Long.class);
+    }
+
+    private long countOutboxEvents(String eventType) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_events WHERE event_type = ?", Long.class, eventType);
     }
 
     private long countHashtagsNamed(String name) {

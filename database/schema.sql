@@ -33,7 +33,8 @@ CREATE TYPE notification_type AS ENUM (
     'comment_post', 'reply_comment',
     'follow', 'follow_request',
     'mention_post', 'mention_comment',
-    'story_view', 'message', 'warning'
+    'story_view', 'message', 'warning', 'post_removed', 'report_post_removed',
+    'post_restored', 'report_dismissed'
 );
 CREATE TYPE hashtag_status  AS ENUM ('active', 'banned', 'deleted');
 CREATE TYPE stat_granularity AS ENUM ('half_hour', 'day');
@@ -431,6 +432,7 @@ CREATE TABLE notifications (
     -- Denormalised so a notification can deep-link to the post without the client resolving
     -- entity_id first; null for a notification with no post (V47).
     post_id             UUID            REFERENCES posts(id) ON DELETE CASCADE,
+    message             TEXT,
     is_read             BOOLEAN             NOT NULL DEFAULT FALSE,
     read_at             TIMESTAMPTZ,
     created_at          TIMESTAMPTZ         NOT NULL DEFAULT NOW()
@@ -611,7 +613,12 @@ INSERT INTO notification_type_configs (type_key, display_name, template_key, is_
     ('mention_post',    'Mention in Post',     'mention_post',    TRUE, TRUE),
     ('mention_comment', 'Mention in Comment',  'mention_comment', TRUE, TRUE),
     ('story_view',      'Story View',          'story_view',      TRUE, TRUE),
-    ('message',         'Message',             'message',         TRUE, TRUE);
+    ('message',         'Message',             'message',         TRUE, TRUE),
+    ('warning',              'Moderation Warning',      'warning',              FALSE, TRUE),
+    ('post_removed',         'Post Removed',            'post_removed',         FALSE, TRUE),
+    ('report_post_removed',  'Reported Post Removed',   'report_post_removed',  FALSE, TRUE),
+    ('post_restored',        'Post Restored',           'post_restored',        FALSE, TRUE),
+    ('report_dismissed',     'Report Dismissed',        'report_dismissed',     FALSE, TRUE);
 
 -- Registry of admin moderation actions with behavioral flags
 -- action_key maps to values in the admin_action_type enum
@@ -1114,7 +1121,8 @@ CREATE INDEX idx_reports_escalated      ON reports (created_at ASC, id ASC)
 -- without being added here returns the queue to a sequential scan of every report ever filed.
 CREATE INDEX idx_reports_open_queue     ON reports (created_at DESC, id DESC)
     WHERE status IN ('pending', 'reviewing');
-CREATE UNIQUE INDEX uq_reports_reporter_type_entity ON reports (reporter_id, report_type, entity_id);
+CREATE UNIQUE INDEX uq_reports_reporter_type_entity ON reports (reporter_id, report_type, entity_id)
+    WHERE status IN ('pending', 'reviewing', 'escalated');
 
 -- admin_actions
 CREATE INDEX idx_admin_actions_admin    ON admin_actions (admin_id, created_at DESC);

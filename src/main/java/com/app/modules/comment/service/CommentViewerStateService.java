@@ -29,7 +29,8 @@ public interface CommentViewerStateService {
      * Loads the comment ids among {@code commentIds} that the viewer has already reported.
      *
      * <p>Membership is exactly the condition under which a new report from this viewer against that
-     * comment would be rejected as a duplicate, in any report status.
+     * comment would be rejected as a duplicate: an active pending, reviewing, or escalated report
+     * already exists.
      *
      * @param viewerId the requesting viewer; a null viewer (anonymous) short-circuits to an empty
      *     set without querying
