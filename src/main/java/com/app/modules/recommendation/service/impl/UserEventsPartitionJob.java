@@ -63,6 +63,8 @@ public class UserEventsPartitionJob {
         }
     }
 
+    // PostgreSQL cannot bind a table identifier; the partition name derives only from LocalDate.
+    @SuppressWarnings("java:S2077")
     void createMonthlyPartitionIfAbsent(LocalDate month) {
         LocalDate start = month.withDayOfMonth(1);
         LocalDate end = start.plusMonths(1);

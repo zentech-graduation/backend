@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Restoring a moderation-removed post with a blank legacy prior-status value now restores it as published instead of throwing a null-pointer exception.
+- Development seed data now uses a cryptographically secure random generator, and the audited dynamic SQL and stateless security exceptions document their closed inputs and protections.
 - Reports can be filed again after an earlier report on the same target has been closed, dismissed, or otherwise resolved.
   Only active reports now block duplicates, so a restored post or a dismissed report no longer leaves the reporter permanently unable to report the same content again.
 - Moderation notifications now cover the full post-report outcome: post owners are notified when an administrator removes or restores their post, and reporters are notified when their report removes content or is dismissed.

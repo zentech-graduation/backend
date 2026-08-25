@@ -42,6 +42,8 @@ public class AdminUserRepositoryImpl implements AdminUserRepositoryCustom {
     }
 
     @Override
+    // SQL text only joins constant predicates; every caller-controlled value is bound separately.
+    @SuppressWarnings("java:S2077")
     public List<User> findPage(
             UserStatus status,
             UserRole role,
@@ -75,6 +77,8 @@ public class AdminUserRepositoryImpl implements AdminUserRepositoryCustom {
     }
 
     @Override
+    // SQL text only joins constant predicates; every caller-controlled value is bound separately.
+    @SuppressWarnings("java:S2077")
     public List<User> search(
             String query, UUID exactId, OffsetDateTime cursorCreatedAt, UUID cursorId, int limit) {
         StringBuilder match =

@@ -12,6 +12,7 @@ class AdminActionRepositoryTest {
     @Test
     void repository_appendOnlyContract_exposesNoUpdateOrDeleteMethods() {
         assertThat(Arrays.stream(AdminActionRepository.class.getMethods()).map(Method::getName))
+                .isNotEmpty()
                 .doesNotContain(
                         "save", "saveAll", "delete", "deleteById", "deleteAll", "deleteAllById");
     }
