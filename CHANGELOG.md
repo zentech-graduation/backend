@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Local development's mail transport can now be switched to the real Resend provider by setting `APP_MAIL_TRANSPORT=resend` in `.env` and restarting, instead of always defaulting to the local Mailpit sink; there is no recipient allowlist, so only trigger mail-sending flows against real mailboxes you control while it is set this way.
+- The development seed dataset's usernames, display names, email addresses, bios, cities, business names, and captions are now written entirely in English, replacing content that previously mixed in romanized Vietnamese names and places.
 
 ### Fixed
 - A development seed run now emits notifications for post removal, post restoration, and report dismissal, matching the platform's current notification types; a seed run previously failed outright because these types had no seeded coverage.

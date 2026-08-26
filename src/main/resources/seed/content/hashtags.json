@@ -19,7 +19,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "remotejobsvn",
+      "name": "remotejobsusa",
       "status": "active",
       "topic_tags": [
         "software-engineering",
@@ -421,7 +421,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "saigoncafe",
+      "name": "austincafe",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -448,7 +448,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "hcmcfoodreview",
+      "name": "austinfoodreview",
       "status": "active",
       "topic_tags": [
         "fnb"
@@ -1264,7 +1264,7 @@
       "intended_post_count_band": "low"
     },
     {
-      "name": "hanoilife",
+      "name": "portlandlife",
       "status": "active",
       "topic_tags": [
         "lifestyle",
@@ -1274,7 +1274,7 @@
       "intended_post_count_band": "medium"
     },
     {
-      "name": "saigonlife",
+      "name": "austinlife",
       "status": "active",
       "topic_tags": [
         "lifestyle",
