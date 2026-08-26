@@ -175,7 +175,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 
 **Module responsibilities:**
 - **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
-- **`mail`**: Transactional email via Resend SDK; Thymeleaf templates; `MailTemplate` enum drives template selection; `MailSender` interface abstracts transport.
+- **`mail`**: Transactional email via Resend SDK; Thymeleaf templates; `MailTemplate` enum drives template selection; `MailSender` interface abstracts transport. Under the `dev` profile, `app.mail.transport` defaults from `APP_MAIL_TRANSPORT` (set in `.env`) rather than being a fixed literal, so a developer can switch local mail to the real Resend provider without a code change.
 - **`users`**: Public and private user profiles, user settings, role/status management.
 - **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
