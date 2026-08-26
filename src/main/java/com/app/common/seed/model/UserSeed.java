@@ -11,7 +11,7 @@ public record UserSeed(
         boolean isPrivate,
         boolean emailVerified,
         int createdAtOffsetDays,
-        String avatarMediaRef,
+        String avatarUrl,
         String bannerMediaRef,
         int postCountTarget,
         boolean isQaAccount,

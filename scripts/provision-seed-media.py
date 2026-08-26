@@ -4,8 +4,13 @@
 Refuses to run against any R2 bucket other than the configured dev bucket name.
 Idempotent: HEAD before PUT, skips assets already present.
 
-Produces src/main/resources/seed/media/media_manifest.json with four top-level arrays:
-images (120), videos (15), avatars (95), banners (25) - 255 objects total.
+Produces src/main/resources/seed/media/media_manifest.json with three top-level arrays:
+images (120), videos (15), banners (25) - 160 objects total from a fresh provisioning run.
+Avatars are sourced separately (a literal randomuser.me URL authored per user in users.json),
+never uploaded to R2. (The checked-in manifest also carries 5 images reclassified from the
+former avatar pool that real posts.json entries still reference - see media_manifest.json's
+_reclassified_avatar_pool_note - which a fresh `provision` run does not reproduce; use
+`--verify` against the existing manifest rather than re-running `provision` from scratch.)
 Every physical asset is uploaded to R2 exactly once, under a stable
 seed/library/{manifest_id}.{ext} key; downstream consumers (Task 5's
 MediaSeedWriter) mint their own per-owner storage_key for each media_assets
@@ -106,17 +111,6 @@ VIDEO_TOPICS = [
     "tech-general",
     "studying-abroad",
     "job-market",
-]
-
-# Avatar sourcing: varied portrait queries for age/gender/setting diversity.
-AVATAR_QUERIES = [
-    "portrait young man",
-    "portrait young woman",
-    "portrait middle aged man",
-    "portrait middle aged woman",
-    "portrait smiling person outdoor",
-    "portrait professional headshot",
-    "portrait casual person",
 ]
 
 # Banner sourcing: wide-aspect imagery for the creator/business account types
@@ -497,33 +491,6 @@ def build_videos(s3, bucket):
     return entries, uploaded
 
 
-def build_avatars(s3, bucket):
-    base, extra = 13, 4
-    entries = []
-    uploaded = 0
-    seen_ids = set()
-    seq = 0
-    for idx, query in enumerate(AVATAR_QUERIES):
-        needed = base + (1 if idx < extra else 0)
-        candidates = search_photos(query, per_page=25, orientation="portrait")
-        picked = 0
-        for photo in candidates:
-            if picked >= needed:
-                break
-            if photo["id"] in seen_ids:
-                continue
-            seen_ids.add(photo["id"])
-            seq += 1
-            manifest_id = f"pexels_avatar_{seq:03d}"
-            entry, was_uploaded = image_entry(manifest_id, "avatar", ["portrait"], photo, s3, bucket)
-            entries.append(entry)
-            uploaded += 1 if was_uploaded else 0
-            picked += 1
-        if picked < needed:
-            print(f"WARNING: avatar query {query!r} only yielded {picked}/{needed} unique photos", file=sys.stderr)
-    return entries, uploaded
-
-
 def build_banners(s3, bucket):
     """Selects landscape-oriented photos for banners and center-crops every
     one of them down to BANNER_TARGET_ASPECT_RATIO (2:1) before upload, so
@@ -566,9 +533,8 @@ def build_banners(s3, bucket):
 def build_manifest(s3, bucket):
     images, up1 = build_images(s3, bucket)
     videos, up2 = build_videos(s3, bucket)
-    avatars, up3 = build_avatars(s3, bucket)
     banners, up4 = build_banners(s3, bucket)
-    total_uploaded = up1 + up2 + up3 + up4
+    total_uploaded = up1 + up2 + up4
 
     topic_notes = {t: note for t, _, note in IMAGE_TOPICS if note}
     topic_notes["_banner_pool_note"] = (
@@ -583,13 +549,12 @@ def build_manifest(s3, bucket):
         "_topic_notes": topic_notes,
         "images": images,
         "videos": videos,
-        "avatars": avatars,
         "banners": banners,
     }
     print(
         f"manifest built: images={len(images)} videos={len(videos)} "
-        f"avatars={len(avatars)} banners={len(banners)} "
-        f"total={len(images) + len(videos) + len(avatars) + len(banners)}, "
+        f"banners={len(banners)} "
+        f"total={len(images) + len(videos) + len(banners)}, "
         f"newly uploaded this run={total_uploaded}, "
         f"pexels api calls this run={getattr(pexels_call_count, 'n', 0)}"
     )
@@ -616,7 +581,7 @@ def verify_manifest(s3, bucket):
 
     mismatches = 0
     checked = 0
-    for array_name in ("images", "videos", "avatars", "banners"):
+    for array_name in ("images", "videos", "banners"):
         for entry in manifest.get(array_name, []):
             checked += 1
             key = entry["storage_key"]
