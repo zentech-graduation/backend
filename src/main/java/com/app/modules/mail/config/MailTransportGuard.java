@@ -29,6 +29,7 @@ public class MailTransportGuard {
 
     static final String TRANSPORT_PROPERTY = "app.mail.transport";
     static final String SMTP_TRANSPORT = "smtp";
+    static final String NOOP_TRANSPORT = "noop";
     static final String RESEND_TRANSPORT = "resend";
     static final String DEVELOPMENT_PROFILE = "dev";
 
@@ -39,7 +40,15 @@ public class MailTransportGuard {
      * configuration would have wired a bean for it.
      */
     private static final List<String> ACCEPTED_TRANSPORTS =
-            List.of(RESEND_TRANSPORT, SMTP_TRANSPORT);
+            List.of(RESEND_TRANSPORT, SMTP_TRANSPORT, NOOP_TRANSPORT);
+
+    /**
+     * Transports that never leave the machine - a local sink or a captured no-op - and so are
+     * refused outside development, where a stray environment override could otherwise divert or
+     * silently discard production mail.
+     */
+    private static final List<String> DEVELOPMENT_ONLY_TRANSPORTS =
+            List.of(SMTP_TRANSPORT, NOOP_TRANSPORT);
 
     private static final Logger log = LoggerFactory.getLogger(MailTransportGuard.class);
 
@@ -68,12 +77,12 @@ public class MailTransportGuard {
                             + activeProfiles
                             + ".");
         }
-        if (SMTP_TRANSPORT.equalsIgnoreCase(transport)
+        if (DEVELOPMENT_ONLY_TRANSPORTS.stream().anyMatch(t -> t.equalsIgnoreCase(transport))
                 && !activeProfiles.contains(DEVELOPMENT_PROFILE)) {
             throw new IllegalStateException(
                     "Mail transport '"
                             + transport
-                            + "' delivers to a local sink and is permitted only when the '"
+                            + "' never reaches a real recipient and is permitted only when the '"
                             + DEVELOPMENT_PROFILE
                             + "' profile is active, but the active profiles are "
                             + activeProfiles
