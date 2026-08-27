@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
+
+### Changed
+- Resend is now the mail transport in every environment, including local development; a valid Resend API key is required to run the application at all, and mail-sending flows must only be triggered against real mailboxes you control, since every outbound message now reaches the real provider.
+
+### Removed
+- The local SMTP mail transport and its Mailpit sink.
+
 ### Changed
 - Local development's mail transport can now be switched to the real Resend provider by setting `APP_MAIL_TRANSPORT=resend` in `.env` and restarting, instead of always defaulting to the local Mailpit sink; there is no recipient allowlist, so only trigger mail-sending flows against real mailboxes you control while it is set this way.
 - The development seed dataset's usernames, display names, email addresses, bios, cities, business names, and captions are now written entirely in English, replacing content that previously mixed in romanized Vietnamese names and places.
