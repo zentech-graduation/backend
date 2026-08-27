@@ -69,6 +69,19 @@ public class NotificationServiceImpl implements NotificationService {
             String entityType,
             UUID entityId,
             UUID postId) {
+        create(actorId, recipientId, type, entityType, entityId, postId, null);
+    }
+
+    @Override
+    @Transactional
+    public void create(
+            UUID actorId,
+            UUID recipientId,
+            NotificationType type,
+            String entityType,
+            UUID entityId,
+            UUID postId,
+            String message) {
         if (actorId != null && actorId.equals(recipientId)) {
             return;
         }
@@ -90,6 +103,7 @@ public class NotificationServiceImpl implements NotificationService {
                         .entityType(entityType)
                         .entityId(entityId)
                         .postId(postId)
+                        .message(message)
                         .build();
         Notification saved = notificationRepository.save(notification);
 
@@ -197,7 +211,8 @@ public class NotificationServiceImpl implements NotificationService {
             // WARNING has no toggle either, and deliberately never gets one. An account that could
             // switch off moderation warnings would be disciplined without being told, and the
             // strike that follows three of them would arrive unexplained.
-            case WARNING -> true;
+            case WARNING, POST_REMOVED, REPORT_POST_REMOVED, POST_RESTORED, REPORT_DISMISSED ->
+                    true;
         };
     }
 }

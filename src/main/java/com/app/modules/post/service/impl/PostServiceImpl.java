@@ -329,10 +329,7 @@ public class PostServiceImpl implements PostService {
         // Null for a post removed before the prior status was recorded. Published is the right
         // fallback rather than a guess: it is what restore did for every post back then, so a row
         // from that era lands exactly where it would have.
-        PostStatus restored =
-                post.getStatusBeforeModeration() == null
-                        ? PostStatus.PUBLISHED
-                        : PostStatus.fromJson(post.getStatusBeforeModeration());
+        PostStatus restored = restoredStatusOrPublished(post.getStatusBeforeModeration());
         postRepository.applyModerationRestore(postId, restored.toJson());
         // Only a published post belongs in post_hashtags and in the search index; the owner path
         // keeps a draft and an archived post out of both. The hashtag-eligibility check belongs on
@@ -361,6 +358,11 @@ public class PostServiceImpl implements PostService {
                 restored,
                 remainingBannedHashtags);
         return new PostModerationResult(post.getUserId(), restored, remainingBannedHashtags);
+    }
+
+    private static PostStatus restoredStatusOrPublished(String statusBeforeModeration) {
+        PostStatus restored = PostStatus.fromJson(statusBeforeModeration);
+        return restored == null ? PostStatus.PUBLISHED : restored;
     }
 
     @Override

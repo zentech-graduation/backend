@@ -39,6 +39,8 @@ public class HashtagRepositoryImpl implements HashtagRepositoryCustom {
     }
 
     @Override
+    // SQL text only joins constant predicates; every caller-controlled value is bound separately.
+    @SuppressWarnings("java:S2077")
     public List<Hashtag> findAdminPage(
             HashtagStatus status, OffsetDateTime cursorCreatedAt, UUID cursorId, int limit) {
         List<String> predicates = new ArrayList<>();
@@ -62,6 +64,8 @@ public class HashtagRepositoryImpl implements HashtagRepositoryCustom {
     }
 
     @Override
+    // SQL text only joins constant predicates; every caller-controlled value is bound separately.
+    @SuppressWarnings("java:S2077")
     public List<Hashtag> searchAdmin(
             String queryText,
             HashtagStatus status,

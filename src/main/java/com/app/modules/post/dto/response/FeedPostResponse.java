@@ -36,10 +36,9 @@ public record FeedPostResponse(
                                         + " when a new report from this viewer against this post"
                                         + " would be rejected as a duplicate, so a client can"
                                         + " disable the report control instead of submitting and"
-                                        + " handling the rejection. Remains true after a"
-                                        + " moderator resolves or dismisses the report, because"
-                                        + " that does not permit reporting the post again. Always"
-                                        + " false for an anonymous viewer.",
+                                        + " handling the rejection. Resolved and dismissed"
+                                        + " reports no longer make this true. Always false for an"
+                                        + " anonymous viewer.",
                         example = "false")
                 boolean hasReported,
         @Schema(description = "Number of views; updated by a background job and may lag.")

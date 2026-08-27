@@ -26,6 +26,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Seeded media assets now carry a historical creation date derived from their owning account instead of the moment the seed run executed, so they fall inside the same historical window as every other seeded table instead of appearing to have been uploaded after the historical content that references them.
 - The development seed media's recorded image dimensions now always match the actual stored asset. A prior fix that skipped re-downloading already-uploaded images left their recorded width and height pointing at an unrelated source dimension instead of the real stored pixels.
 - Profile banner images in the development seed media are now genuinely wide (2:1), not ordinary photo crops mislabeled as banners, and re-provisioning the seed media no longer re-downloads assets that were already uploaded.
+- Restoring a moderation-removed post with a blank legacy prior-status value now restores it as published instead of throwing a null-pointer exception.
+- Development seed data now uses a cryptographically secure random generator, and the audited dynamic SQL and stateless security exceptions document their closed inputs and protections.
+- Reports can be filed again after an earlier report on the same target has been closed, dismissed, or otherwise resolved.
+  Only active reports now block duplicates, so a restored post or a dismissed report no longer leaves the reporter permanently unable to report the same content again.
+- Moderation notifications now cover the full post-report outcome: post owners are notified when an administrator removes or restores their post, and reporters are notified when their report removes content or is dismissed.
+  These notifications carry the recorded moderation reason or decision text so the client can explain what happened.
 - A post in the personalized ranked feed now keeps its hashtags. They were dropped from every ranked post while the chronological feed kept them, so the same post rendered differently depending on which feed it came from.
 - The post view recording and personalized feed endpoints now correctly document their response body type in the published API documentation instead of an untyped envelope, so client code can be generated correctly from them; the view endpoint's missing 401 response and the feed endpoint's missing 400 response for a malformed cursor are also now declared.
 - Opening the settings page on a valid account is no longer an error.

@@ -118,8 +118,10 @@ class ReportServiceImplTest {
         UUID entityId = UUID.randomUUID();
         when(reportRepository.findOwnerId(ReportType.COMMENT, entityId))
                 .thenReturn(Optional.of(UUID.randomUUID()));
-        when(reportRepository.existsByReporterIdAndReportTypeAndEntityId(
-                        reporterId, ReportType.COMMENT, entityId))
+        var activeStatuses =
+                List.of(ReportStatus.PENDING, ReportStatus.REVIEWING, ReportStatus.ESCALATED);
+        when(reportRepository.existsByReporterIdAndReportTypeAndEntityIdAndStatusIn(
+                        reporterId, ReportType.COMMENT, entityId, activeStatuses))
                 .thenReturn(true);
 
         assertThatThrownBy(

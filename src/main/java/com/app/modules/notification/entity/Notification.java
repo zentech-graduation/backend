@@ -53,6 +53,9 @@ public class Notification {
     @Column(name = "post_id", nullable = true, updatable = false)
     private UUID postId;
 
+    @Column(name = "message", nullable = true, columnDefinition = "TEXT")
+    private String message;
+
     @Setter
     @Column(name = "is_read", nullable = false)
     private boolean isRead;
