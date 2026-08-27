@@ -5,14 +5,14 @@ import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.mail.javamail.JavaMailSender;
 
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.config.MailTransportGuard;
+import com.app.modules.mail.config.noop.SentMailRecorder;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.mail.service.impl.MailServiceImpl;
+import com.app.modules.mail.service.impl.NoopMailSender;
 import com.app.modules.mail.service.impl.ResendMailSender;
-import com.app.modules.mail.service.impl.SmtpMailSender;
 import com.app.modules.mail.util.MailTemplateRenderer;
 import com.resend.Resend;
 
@@ -23,11 +23,11 @@ class MailTransportSelectionTest {
                     .withBean(MailProperties.class)
                     .withBean(MailTemplateRenderer.class, () -> mock(MailTemplateRenderer.class))
                     .withBean(Resend.class, () -> mock(Resend.class))
-                    .withBean(JavaMailSender.class, () -> mock(JavaMailSender.class))
+                    .withBean(SentMailRecorder.class, SentMailRecorder::new)
                     .withUserConfiguration(
                             MailTransportGuard.class,
                             ResendMailSender.class,
-                            SmtpMailSender.class,
+                            NoopMailSender.class,
                             MailServiceImpl.class);
 
     @Test
@@ -37,17 +37,17 @@ class MailTransportSelectionTest {
                         context -> {
                             assertThat(context).hasSingleBean(MailSender.class);
                             assertThat(context).hasSingleBean(ResendMailSender.class);
-                            assertThat(context).doesNotHaveBean(SmtpMailSender.class);
+                            assertThat(context).doesNotHaveBean(NoopMailSender.class);
                         });
     }
 
     @Test
-    void smtpTransport_registersOnlyTheSmtpSender() {
-        runner.withPropertyValues("spring.profiles.active=dev", "app.mail.transport=smtp")
+    void noopTransport_registersOnlyTheNoopSender() {
+        runner.withPropertyValues("spring.profiles.active=dev", "app.mail.transport=noop")
                 .run(
                         context -> {
                             assertThat(context).hasSingleBean(MailSender.class);
-                            assertThat(context).hasSingleBean(SmtpMailSender.class);
+                            assertThat(context).hasSingleBean(NoopMailSender.class);
                             assertThat(context).doesNotHaveBean(ResendMailSender.class);
                         });
     }
@@ -67,7 +67,7 @@ class MailTransportSelectionTest {
                                     .isInstanceOf(IllegalStateException.class)
                                     .hasMessageContaining("app.mail.transport")
                                     .hasMessageContaining("resend")
-                                    .hasMessageContaining("smtp");
+                                    .hasMessageContaining("noop");
                         });
     }
 
@@ -83,20 +83,20 @@ class MailTransportSelectionTest {
                                     .hasMessageContaining("app.mail.transport")
                                     .hasMessageContaining("sendgrid")
                                     .hasMessageContaining("resend")
-                                    .hasMessageContaining("smtp");
+                                    .hasMessageContaining("noop");
                         });
     }
 
     @Test
-    void smtpTransportOutsideDevelopment_refusesToStartAndNamesTransportAndProfiles() {
-        runner.withPropertyValues("spring.profiles.active=prod", "app.mail.transport=smtp")
+    void noopTransportOutsideDevelopment_refusesToStartAndNamesTransportAndProfiles() {
+        runner.withPropertyValues("spring.profiles.active=prod", "app.mail.transport=noop")
                 .run(
                         context -> {
                             assertThat(context).hasFailed();
                             assertThat(context.getStartupFailure())
                                     .rootCause()
                                     .isInstanceOf(IllegalStateException.class)
-                                    .hasMessageContaining("smtp")
+                                    .hasMessageContaining("noop")
                                     .hasMessageContaining("[prod]");
                         });
     }
@@ -112,15 +112,15 @@ class MailTransportSelectionTest {
     }
 
     @Test
-    void smtpTransportWithNoActiveProfile_refusesToStart() {
-        runner.withPropertyValues("app.mail.transport=smtp")
+    void noopTransportWithNoActiveProfile_refusesToStart() {
+        runner.withPropertyValues("app.mail.transport=noop")
                 .run(
                         context -> {
                             assertThat(context).hasFailed();
                             assertThat(context.getStartupFailure())
                                     .rootCause()
                                     .isInstanceOf(IllegalStateException.class)
-                                    .hasMessageContaining("smtp");
+                                    .hasMessageContaining("noop");
                         });
     }
 }
