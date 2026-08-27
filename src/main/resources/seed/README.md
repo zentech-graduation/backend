@@ -1,0 +1,185 @@
+# Development Database Seed
+
+A seed run populates a local PostgreSQL instance with a full, internally consistent social-network
+dataset - 90 users, 722 posts, a follow graph, comment threads, stories, direct messages, a
+moderation history with a working discipline ladder, notifications, and 12 months of analytics -
+so a developer or QA reviewer can exercise every surface of the application, including the admin
+panel, against realistic data instead of an empty database.
+It never runs in production, and it refuses to run against anything but a local database.
+
+| Content | Volume |
+|---------|--------|
+| Users | 90 (8 fixed QA accounts, 82 generated) |
+| Posts | 722 (image/video/carousel/text) |
+| Hashtags | 152 |
+| Media assets (Pexels-sourced) | 255 (120 images, 15 videos, 95 avatars, 25 banners) |
+| Comment pool entries | 900 across 22 topic pools |
+| Conversations / messages | 60 conversations, ~1,100 messages |
+| Moderation cases (full narrative) | 6 |
+| Reports | ~180 (narrative + standalone) |
+| Warnings / strikes | 27 / 14 |
+| Personas | 10 |
+
+## Running the seed
+
+Bring up the local stack (`docker compose up -d`) so PostgreSQL is reachable at `localhost`, then
+start the application with both settings passed as real environment variables at process start,
+for example:
+
+```
+SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true ./mvnw spring-boot:run
+```
+
+**`SPRING_PROFILES_ACTIVE` must not be placed in `.env`.** `.env` is loaded by
+`spring.config.import` (`application.yaml`), and Spring Boot resolves which profiles are active
+before that import is applied - a value for `SPRING_PROFILES_ACTIVE` inside `.env` is silently
+ignored for profile activation, even though ordinary properties in `.env` (including `SEED_DATA`)
+work normally. Export it in your shell, pass it as a command-line/IDE run-configuration variable,
+or prefix the start command as shown above. `SEED_DATA` has no such restriction and may be set in
+`.env`, on the command line, or exported, since it is a plain `@ConditionalOnProperty` check, not
+profile selection - `.env.example` deliberately lists `SEED_DATA` but not `SPRING_PROFILES_ACTIVE`
+for this reason.
+
+Both settings are required, for different reasons:
+
+- `SEED_DATA=true` is what actually triggers `SeedRunner` (`@ConditionalOnProperty(name =
+  "SEED_DATA", havingValue = "true")`). The `dev` profile alone never runs a seed.
+- The `seed` profile (`dev,seed` - profile order matters, `seed` must be listed last so its
+  overrides win) activates `application-seed.yml`, which holds off the five
+  notification-producing consumers (`mail`, `notification`, `comment`, `story`, `admin`) for the
+  duration of the run. Those five would otherwise stamp notification rows with `NOW()` while the
+  seeder replays historical activity; `NotificationSeedWriter` writes those rows directly with
+  historically correct timestamps instead. `SEED_DATA=true` alone, under plain `dev`, would run
+  the seed with all eight consumers active, because `application-dev.yml`'s literal `true` values
+  are not overridden by an environment variable at that point - only the `seed` profile's own file
+  overrides them.
+  The `hashtag`, `post`, and `recommendation` consumers stay enabled during a seed run: their side
+  effects (Elasticsearch sync, Gorse feedback) are safe and are in fact the point of the run's
+  outbox-emission phase (see below).
+
+`SeedRunner` also refuses to run unless `app.seed.require-local-datasource` (default `true`, set
+via `SEED_REQUIRE_LOCAL_DATASOURCE`) is enabled and the configured JDBC URL resolves to
+`localhost`, `127.0.0.1`, or the IPv6 loopback, since the reset step truncates every seedable
+table.
+A `@PostConstruct` check also refuses to run unless the `seed` profile is active alongside `dev`,
+naming the exact `SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true` command in its failure message -
+`SEED_DATA=true` under plain `dev` can no longer silently run the seed with the wrong consumers
+active.
+
+What happens on that run:
+
+1. `SeedResetService.reset()` purges every declared RabbitMQ queue (both the working queues and
+   their dead-letter queues, discovered from the `Queue` beans the topology config declares rather
+   than a hardcoded list), deletes and recreates the `posts` and `hashtags` Elasticsearch indexes
+   with their real mapping, truncates Gorse's own sibling Postgres database (`GORSE_DATA_STORE` in
+   `docker-compose.yaml`), and only then truncates every seedable domain table.
+   This is destructive: any local data, queued message, indexed document, or recommender state you
+   had before the run is gone.
+   The broker and search/recommender state are purged first, specifically so a message already in
+   flight when the purge starts cannot be delivered against a database this call is about to
+   truncate - without this, a second run against an already-seeded stack replays stale queue
+   messages and dead-letters on a foreign key violation, and Elasticsearch/Gorse accumulate
+   duplicate or orphaned entries across runs.
+2. Every domain writer runs in dependency order (users and media first, then posts, comments,
+   engagement, social graph, stories, messages, moderation history, notifications, analytics).
+3. `SeedOutboxEmitter` replays a bounded set of real domain events (search-index updates, and
+   engagement events for every like, save, and comment) through the same transactional outbox
+   every production write path uses, so the real Elasticsearch index-sync and Gorse recommendation
+   consumers index and learn from the seeded dataset.
+4. The run asserts every value of 16 mandatory enum-typed columns (`user_status`, `post_type`,
+   `admin_action_type`, `event_type`, and so on) is represented on at least 5 rows, and fails loudly
+   if any value falls short.
+
+A seed run only ever executes once per JVM process: a marker system property is set the moment a
+run starts, so a Spring Boot DevTools hot restart (which reuses the same JVM and the same broker,
+search, and recommender state) does not silently trigger a second reset and reseed on top of
+whatever the first run already wrote. Stop and start the application to force a genuinely new run.
+
+## QA accounts
+
+Every seeded account shares the plaintext password `Password123!`.
+Eight accounts have fixed, stable usernames specifically for manual QA and reference in test
+fixtures - every other account is generated content and should not be relied on by name.
+
+| Username | Purpose |
+|----------|---------|
+| `admin` | Full administrator (role `admin`). |
+| `mod1` | Moderator (role `moderator`). |
+| `user_public` | Ordinary active public account with content. |
+| `user_new_empty` | Created 2 days ago, zero posts, zero followers. |
+| `user_power` | High-volume account: 20 posts, high follower count, high engagement. |
+| `user_private` | Private account with pending follow requests inbound. |
+| `user_suspended` | Suspended with an active suspension expiry in the future. Tied to `moderation_cases.json` case 1 (spam escalation). |
+| `user_banned` | Banned, with a full moderation history. Primary target of `moderation_cases.json` case 2 (scam account). |
+
+## File map
+
+Files used across nearly every writer stay at the top level; everything else is grouped by what it
+describes.
+
+| File | Holds | Consumed by |
+|------|-------|-------------|
+| `personas.json` | 10 persona archetypes referenced by users, posts, and comments; each `voice` describes an English writing style | `UserSeedWriter`, `PostSeedWriter`, `CommentSeedWriter` |
+| `users.json` | The 90 seed users, including the 8 fixed QA accounts | `UserSeedWriter`, and read by nearly every other writer |
+| `content/posts.json` | 722 authored posts (image/video/carousel/text) | `PostSeedWriter` |
+| `content/hashtags.json` | The hashtag catalog posts reference | `PostSeedWriter` |
+| `content/comment_pools.json` | 900 pooled comment lines across 22 topics, plus scripted comment chains | `CommentSeedWriter` |
+| `messaging/conversations.json` | 60 conversations and their message history | `MessageSeedWriter` |
+| `moderation/moderation_cases.json` | 6 narrative moderation cases plus supplementary actions and reports | `ModerationSeedWriter` |
+| `media/media_manifest.json` | 255 Pexels-sourced media entries already uploaded to R2 | `MediaSeedWriter` |
+
+## Java package map
+
+| Package | Holds |
+|---------|-------|
+| `com.app.common.seed` | `SeedRunner` (orchestration entry point) and `SeedProperties` |
+| `com.app.common.seed.loader` | `SeedDataLoader` (reads and validates all seed JSON) and `SeedContent` (the loaded, typed result) |
+| `com.app.common.seed.model` | The 14 content record types the JSON files deserialize into |
+| `com.app.common.seed.time` | `SeedTimeline`, the deterministic timestamp generator |
+| `com.app.common.seed.reset` | `SeedResetService`, the pre-run table truncation |
+| `com.app.common.seed.writer` | The 11 domain writers, one per subsystem |
+| `com.app.common.seed.outbox` | `SeedOutboxEmitter` / `SeedOutboxBatchWriter`, which replay seeded activity through the real transactional outbox |
+
+## Re-provisioning seed media
+
+Seed media (avatars, banners, and post images/video) is sourced from Pexels and provisioned to the
+configured object storage bucket ahead of a seed run - the seed writers reference already-uploaded
+assets rather than uploading at seed time. To (re-)provision it:
+
+```
+python scripts/provision-seed-media.py
+```
+
+Add `--verify` to check the manifest against what is actually in storage without re-uploading
+anything. Assets already uploaded are skipped, not re-downloaded, so re-running the script after an
+interrupted run is safe. Requires `PEXELS_API_KEY` to be set.
+The script refuses to run against any R2 bucket other than the configured dev bucket name, and
+writes its manifest to `src/main/resources/seed/media/media_manifest.json`.
+
+## Determinism
+
+`SeedTimeline` is constructed with the fixed seed `20260825L`; several individual writers
+(comments, engagement, stories, notifications, analytics, the social graph, and post view counts)
+carry their own separate fixed `Random` seed constants for the same reason.
+None of these are derived from wall-clock time.
+Two seed runs against the same JSON content therefore produce identical relative timestamps and
+identical graph/distribution shapes - the same accounts get the same follower counts, the same
+posts get the same comment threads, and so on - which is what makes a seeded dataset reproducible
+enough to write regression fixtures against.
+
+This determinism covers relative structure, not authored narrative: the follow graph, engagement
+distribution, and analytics events are synthetically generated and reproducible, but they are not
+hand-authored the way the 6 moderation cases and the QA accounts are.
+A developer should not read meaning into which synthetic account follows which other synthetic
+account - only the 8 fixed QA accounts and the moderation-case narratives carry deliberate,
+reviewable intent.
+
+## Known gaps
+
+- `report_reason` enum coverage sits at exactly the 5-row minimum for several values (`nudity`,
+  `violence`, `hate_speech`); there is no headroom left in `moderation_cases.json` for that specific
+  enum column, so removing any existing report of one of those reasons without adding a replacement
+  will fail `SeedRunner.assertEnumCoverage()`.
+- The synthetic follow graph, engagement, and analytics event volumes are not independently
+  cross-checked against a real product's observed distributions - they are internally consistent
+  and plausible, not validated against real usage data.

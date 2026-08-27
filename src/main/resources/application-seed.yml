@@ -1,0 +1,26 @@
+# Activated alongside `dev` for a seed run only: SPRING_PROFILES_ACTIVE=dev,seed.
+# Holds off the five notification-producing consumers so their notifications rows are not
+# stamped with NOW() during replay of historical seed events; NotificationSeedWriter writes
+# those rows directly with historically correct timestamps instead. hashtag/post/recommendation
+# consumers stay enabled (inherited from application-dev.yml) because their side effects
+# (Elasticsearch sync, Gorse feedback) are safe to run during a seed.
+# message stays enabled too: MessageRabbitBindingConfig binds MessageNotificationConsumer only to
+# message.sent.v1, and SeedOutboxEmitter never emits that routing key, so there is no NOW()-stamped
+# notification for it to produce today. If a future change makes the emitter publish message
+# events, this consumer must be added to the disabled list below.
+app:
+  notification:
+    consumer:
+      enabled: false
+  comment:
+    consumer:
+      enabled: false
+  admin:
+    consumer:
+      enabled: false
+  story:
+    consumer:
+      enabled: false
+  mail:
+    consumer:
+      enabled: false

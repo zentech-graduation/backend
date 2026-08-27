@@ -98,6 +98,10 @@ app:
       revoked-retention: ${RT_PURGE_REVOKED_RETENTION:P7D}
       initial-delay: ${RT_PURGE_INITIAL_DELAY:PT5M}
       fixed-delay: ${RT_PURGE_FIXED_DELAY:PT6H}
+  seed:
+    # SeedRunner's own @ConditionalOnProperty(name = "SEED_DATA") is what decides whether the seed
+    # pipeline runs at all; this only guards what it does once running.
+    require-local-datasource: ${SEED_REQUIRE_LOCAL_DATASOURCE:true}
   outbox:
     publisher:
       enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
