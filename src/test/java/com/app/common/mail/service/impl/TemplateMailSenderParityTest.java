@@ -9,10 +9,6 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-
-import jakarta.mail.Session;
-import jakarta.mail.internet.MimeMessage;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,13 +16,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mail.javamail.JavaMailSender;
 
 import com.app.modules.mail.config.MailProperties;
+import com.app.modules.mail.config.noop.SentMail;
+import com.app.modules.mail.config.noop.SentMailRecorder;
 import com.app.modules.mail.enums.MailTemplate;
 import com.app.modules.mail.service.MailSender;
+import com.app.modules.mail.service.impl.NoopMailSender;
 import com.app.modules.mail.service.impl.ResendMailSender;
-import com.app.modules.mail.service.impl.SmtpMailSender;
 import com.app.modules.mail.util.MailTemplateRenderer;
 import com.resend.Resend;
 import com.resend.services.emails.Emails;
@@ -52,12 +49,11 @@ class TemplateMailSenderParityTest {
 
     @Mock private Emails emails;
 
-    @Mock private JavaMailSender javaMailSender;
-
     @Mock private MailTemplateRenderer mailTemplateRenderer;
 
     private ResendMailSender resendMailSender;
-    private SmtpMailSender smtpMailSender;
+    private NoopMailSender noopMailSender;
+    private SentMailRecorder sentMailRecorder;
 
     @BeforeEach
     void setUp() {
@@ -66,11 +62,10 @@ class TemplateMailSenderParityTest {
         properties.setFromName(FROM_NAME);
         properties.setAppName("Social");
         properties.setFrontendBaseUrl("http://localhost:3000");
+        sentMailRecorder = new SentMailRecorder();
         resendMailSender = new ResendMailSender(resend, properties, mailTemplateRenderer);
-        smtpMailSender = new SmtpMailSender(javaMailSender, properties, mailTemplateRenderer);
+        noopMailSender = new NoopMailSender(properties, mailTemplateRenderer, sentMailRecorder);
         when(resend.emails()).thenReturn(emails);
-        when(javaMailSender.createMimeMessage())
-                .thenAnswer(invocation -> new MimeMessage(Session.getInstance(new Properties())));
         when(mailTemplateRenderer.render(any(MailTemplate.class), any()))
                 .thenAnswer(invocation -> "<html>" + invocation.getArgument(0) + "</html>");
     }
@@ -82,7 +77,7 @@ class TemplateMailSenderParityTest {
                 .thenReturn(mock(CreateEmailResponse.class));
 
         sendEveryMessage(resendMailSender);
-        sendEveryMessage(smtpMailSender);
+        sendEveryMessage(noopMailSender);
 
         ArgumentCaptor<MailTemplate> templateCaptor = ArgumentCaptor.forClass(MailTemplate.class);
         ArgumentCaptor<Map<String, Object>> varCaptor = ArgumentCaptor.forClass(Map.class);
@@ -103,24 +98,22 @@ class TemplateMailSenderParityTest {
                 .thenReturn(mock(CreateEmailResponse.class));
 
         sendEveryMessage(resendMailSender);
-        sendEveryMessage(smtpMailSender);
+        sendEveryMessage(noopMailSender);
 
         ArgumentCaptor<CreateEmailOptions> resendCaptor =
                 ArgumentCaptor.forClass(CreateEmailOptions.class);
         verify(emails, times(TEMPLATE_COUNT)).send(resendCaptor.capture());
-        ArgumentCaptor<MimeMessage> smtpCaptor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(javaMailSender, times(TEMPLATE_COUNT)).send(smtpCaptor.capture());
 
         List<CreateEmailOptions> viaResend = resendCaptor.getAllValues();
-        List<MimeMessage> viaSmtp = smtpCaptor.getAllValues();
+        List<SentMail> viaNoop = sentMailRecorder.sent();
+        assertThat(viaNoop).hasSize(TEMPLATE_COUNT);
         for (int i = 0; i < TEMPLATE_COUNT; i++) {
             CreateEmailOptions expected = viaResend.get(i);
-            MimeMessage actual = viaSmtp.get(i);
-            assertThat(actual.getFrom()[0].toString()).isEqualTo(expected.getFrom());
-            assertThat(actual.getAllRecipients()[0].toString())
-                    .isEqualTo(expected.getTo().getFirst());
-            assertThat(actual.getSubject()).isEqualTo(expected.getSubject());
-            assertThat(actual.getContent()).isEqualTo(expected.getHtml());
+            SentMail actual = viaNoop.get(i);
+            assertThat(FROM_NAME + " <" + FROM_ADDRESS + ">").isEqualTo(expected.getFrom());
+            assertThat(actual.toEmail()).isEqualTo(expected.getTo().getFirst());
+            assertThat(actual.subject()).isEqualTo(expected.getSubject());
+            assertThat(actual.htmlBody()).isEqualTo(expected.getHtml());
         }
     }
 

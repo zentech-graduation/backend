@@ -159,7 +159,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | Module | Status | Sub-packages |
 |--------|--------|--------------|
 | `auth` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, exception, mapper, messaging, oauth2, repository, service/impl, validation |
-| `mail` | **Implemented** | config, config/resend, config/smtp, enums, service/impl, util |
+| `mail` | **Implemented** | config, config/resend, config/noop, enums, service/impl, util |
 | `users` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `social` | **Implemented** | api, controller, converter, dto/response, entity, enums, mapper, messaging, repository, service/impl |
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
@@ -175,7 +175,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 
 **Module responsibilities:**
 - **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
-- **`mail`**: Transactional email via Resend SDK; Thymeleaf templates; `MailTemplate` enum drives template selection; `MailSender` interface abstracts transport. Under the `dev` profile, `app.mail.transport` defaults from `APP_MAIL_TRANSPORT` (set in `.env`) rather than being a fixed literal, so a developer can switch local mail to the real Resend provider without a code change.
+- **`mail`**: Transactional email via Resend SDK; Thymeleaf templates; `MailTemplate` enum drives template selection; `MailSender` interface abstracts transport. Resend is the sole transport in every profile; a non-network `noop` transport exists only for the test phase (Surefire-pinned) and can be selected locally via `APP_MAIL_TRANSPORT=noop` in `.env`, but `MailTransportGuard` refuses it outside the `dev` profile.
 - **`users`**: Public and private user profiles, user settings, role/status management.
 - **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
@@ -225,8 +225,8 @@ hand-maintained roster.
 | `common/enums` | `ApiErrorCodeMessageTest` |
 | `common/exception` | `ApiExceptionTest`, `AppExceptionTest`, `GlobalExceptionHandlerTest`, `HttpNegotiationExceptionHandlersIT`, `MalformedRequestBodyIT` |
 | `common/inbox/service/impl` | `ProcessedMessageServiceImplIT` |
-| `common/mail/config` | `MailPropertiesBindingTest`, `MailTransportSelectionTest` |
-| `common/mail/service/impl` | `MailServiceImplTest`, `ResendMailSenderTest`, `SmtpMailSenderTest`, `TemplateMailSenderParityTest` |
+| `common/mail/config` | `MailPropertiesBindingTest`, `MailTransportEnvOverrideTest`, `MailTransportSelectionTest` |
+| `common/mail/service/impl` | `MailServiceImplTest`, `NoopMailSenderTest`, `ResendMailSenderTest`, `TemplateMailSenderParityTest` |
 | `common/mail/util` | `MailTemplateRendererTest` |
 | `common/messaging` | `DeadLetterPublisherTest` |
 | `common/outbox/repository` | `OutboxEventRepositoryIT` |

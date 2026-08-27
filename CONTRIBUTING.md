@@ -27,29 +27,25 @@ The application starts with the `dev` profile. Swagger UI is available at `http:
 
 ### Local email
 
-The `dev` profile sends every outbound email over SMTP to [Mailpit](https://mailpit.axllent.org/), a local mail sink that `docker compose up -d` starts alongside the database.
-Mailpit accepts any message, delivers none of them onward, and shows each one in a web UI at `http://localhost:8025`.
-Nothing reaches the production mail provider from a development machine, so no provider credential is needed and no provider quota is consumed.
+Resend is the only mail transport; there is no local sink.
+The `dev` profile sends every outbound email through the real Resend provider, exactly as `prod` does.
+A valid `RESEND_API_KEY` in `.env` is required to run the application at all - `ResendMailConfig` refuses to start without one.
 
-This is what makes a fresh clone usable.
 Registration is only half of creating an account: login stays blocked until the address is verified, and the verification link exists nowhere except inside the outbound email.
-With Mailpit that link is one click away.
 
-1. Register an account through `POST /api/v1/auth/register`. Any address works, including `@example.com`.
-2. Open `http://localhost:8025` and open the message titled "Verify your email address".
+1. Register an account through `POST /api/v1/auth/register`, using a real mailbox you control.
+2. Open the "Verify your email address" message in that mailbox.
 3. Follow the verification link in the message.
 4. Log in.
 
-Password reset works the same way: request it, then pick the message up in the same inbox.
+Password reset works the same way: request it, then pick the message up in the same mailbox.
 
-Mailpit is published on the loopback interface only.
-Its web UI has no authentication and would otherwise expose every message it holds to the rest of the network.
-
-To send through the real provider from a development machine instead - for example to give a live email demo - set `APP_MAIL_TRANSPORT=resend` in `.env` together with a valid `RESEND_API_KEY`, then restart the application.
-The reverse is refused: the SMTP sink is permitted only while the `dev` profile is active, and the application will not start with it selected anywhere else.
-There is no recipient allowlist and no redirect sink for this setting: with `resend` selected, every outbound message goes to the real provider, including messages triggered against the seeded dataset's fake addresses.
+There is no recipient allowlist: every outbound message goes to the real provider, including one triggered against a seeded dataset's fake address.
 That consumes Resend send quota, and a bounce from a fake or invalid address raises the sending domain's bounce rate, which can get the domain suspended - a more severe outcome than quota exhaustion.
-Only trigger mail-sending flows (register, forgot-password, and so on) against a real mailbox you control while `resend` is selected, and switch back to `APP_MAIL_TRANSPORT=smtp` (or remove the line) afterward.
+**Only trigger mail-sending flows (register, forgot-password, and so on) against a real mailbox you control.** Never target a seeded or fabricated address.
+
+To run the application locally without sending real mail - for example while working on something unrelated to auth - set `APP_MAIL_TRANSPORT=noop` in `.env` and restart.
+The `noop` transport captures what it would have sent instead of delivering it, and is refused outside the `dev` profile: the application will not start with it selected anywhere else.
 
 ### Troubleshooting: startup fails with a Flyway validation error mentioning version 99
 
@@ -115,8 +111,8 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 The seeded accounts are written pre-verified, so they can be logged into immediately.
 
 The script writes SQL rather than registering through the public API, which is a deliberate choice rather than a workaround.
-Registering through the API would work: the local email flow described under [Local email](#local-email) delivers the verification link to Mailpit, and following it verifies the account.
-But that route needs the application, RabbitMQ, and Mailpit all running and healthy before a single account exists, and it cannot be made idempotent, because a second registration of the same address is a conflict rather than a no-op.
+Registering through the API would work: the local email flow described under [Local email](#local-email) delivers the verification link to a real mailbox, and following it verifies the account.
+But that route needs the application, RabbitMQ, and a real Resend credential all working before a single account exists, and it cannot be made idempotent, because a second registration of the same address is a conflict rather than a no-op.
 Writing to the database directly needs only the compose PostgreSQL service, which is the one thing that must be up regardless.
 
 Register your own account through the API when you want to exercise the real signup path.

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -16,6 +17,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.app.modules.auth.messaging.AuthMailEventConsumer;
 import com.app.modules.mail.service.MailService;
 
 /**
@@ -83,6 +85,19 @@ class SeedProfileConsumerOverrideIT {
     @MockitoBean private MailService mailService;
 
     @Autowired private Environment environment;
+
+    @Autowired private ApplicationContext applicationContext;
+
+    // application-seed.yml is the only thing preventing a seed replay from dispatching real
+    // provider mail to fabricated seeded addresses now that the local Mailpit sink is gone -
+    // asserting the resolved property is false (below) shows the config the guard depends on
+    // is correct, but not that the guard actually wires no listener for it. This asserts the
+    // AuthMailEventConsumer bean itself is absent, which is what actually stops mail.queue from
+    // ever being consumed during a seed run.
+    @Test
+    void seedProfile_mailConsumerBeanIsAbsent() {
+        assertThat(applicationContext.getBeanNamesForType(AuthMailEventConsumer.class)).isEmpty();
+    }
 
     @Test
     void seedProfile_overridesFiveNotificationProducingConsumers_toFalse() {

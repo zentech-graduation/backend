@@ -40,7 +40,7 @@ class MailTransportEnvOverrideTest {
     }
 
     // Leaves the real systemProperties source in place, so the Surefire pin from pom.xml
-    // (APP_MAIL_TRANSPORT=smtp) outranks the defaultProperties override below for the
+    // (APP_MAIL_TRANSPORT=noop) outranks the defaultProperties override below for the
     // placeholder application-dev.yml reads, proving the pin actually protects the suite rather
     // than merely appearing to.
     @Test
@@ -51,7 +51,7 @@ class MailTransportEnvOverrideTest {
         application.setDefaultProperties(Map.of(OVERRIDE_ENV_KEY, "resend"));
 
         try (ConfigurableApplicationContext context = application.run()) {
-            assertThat(context.getEnvironment().getProperty(TRANSPORT_PROPERTY)).isEqualTo("smtp");
+            assertThat(context.getEnvironment().getProperty(TRANSPORT_PROPERTY)).isEqualTo("noop");
         }
     }
 

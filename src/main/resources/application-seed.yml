@@ -1,5 +1,5 @@
 # Activated alongside `dev` for a seed run only: SPRING_PROFILES_ACTIVE=dev,seed.
-# Holds off the five notification-producing consumers so their notifications rows are not
+# Holds off notification, comment, admin, and story consumers so their notifications rows are not
 # stamped with NOW() during replay of historical seed events; NotificationSeedWriter writes
 # those rows directly with historically correct timestamps instead. hashtag/post/recommendation
 # consumers stay enabled (inherited from application-dev.yml) because their side effects
@@ -8,6 +8,13 @@
 # message.sent.v1, and SeedOutboxEmitter never emits that routing key, so there is no NOW()-stamped
 # notification for it to produce today. If a future change makes the emitter publish message
 # events, this consumer must be added to the disabled list below.
+# mail is disabled for a different reason entirely: it writes no notifications row, so the
+# NOW()-stamping argument above does not apply to it. AuthMailEventConsumer dispatches through
+# whatever transport app.mail.transport resolves to - Resend in every environment now that the
+# local Mailpit sink is gone - so a seed replay that reached it would send real provider mail to
+# the seeded dataset's fabricated addresses, consuming send quota and risking a bounce-driven
+# suspension of the sending domain. There is no local sink to absorb that traffic any more, so
+# this line is the only thing standing between a seed run and exactly that outcome.
 app:
   notification:
     consumer:

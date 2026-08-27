@@ -1,7 +1,6 @@
 # Every published port is bound to the loopback interface. These services carry real credentials
 # and hold real data, and publishing them on all interfaces exposes a developer's database, cache,
-# broker, and search cluster to anyone on the same network. Mailpit already documented this
-# reasoning for itself; the rest of the stack now follows it.
+# broker, and search cluster to anyone on the same network.
 services:
   postgres:
     build: ./docker/postgres
@@ -58,17 +57,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Local SMTP sink for development. Bound to the loopback interface only, unlike the services
-  # above: Mailpit accepts mail from anyone and serves every message it receives through an
-  # unauthenticated web UI, so publishing it on all interfaces would expose a developer's inbox
-  # to the local network.
-  mailpit:
-    image: axllent/mailpit
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:1025:1025"
-      - "127.0.0.1:8025:8025"
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.3

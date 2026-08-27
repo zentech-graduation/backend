@@ -11,12 +11,12 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
- * Refuses to start when the mail transport is unusable or when a local mail sink is selected
- * outside development.
+ * Refuses to start when the mail transport is unusable or when the non-network transport is
+ * selected outside development.
  *
  * <p>Profile-specific YAML only sets a default, and an operating-system environment variable
- * outranks it, so a stray {@code APP_MAIL_TRANSPORT=smtp} in production would divert every outbound
- * message into a local sink without raising an error anywhere. This reads the resolved value rather
+ * outranks it, so a stray {@code APP_MAIL_TRANSPORT=noop} in production would silently discard
+ * every outbound message without raising an error anywhere. This reads the resolved value rather
  * than any single file so the override is caught, and reports the resolved transport alongside the
  * active profiles on both the success and the failure path.
  *
@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
 public class MailTransportGuard {
 
     static final String TRANSPORT_PROPERTY = "app.mail.transport";
-    static final String SMTP_TRANSPORT = "smtp";
+    static final String NOOP_TRANSPORT = "noop";
     static final String RESEND_TRANSPORT = "resend";
     static final String DEVELOPMENT_PROFILE = "dev";
 
@@ -39,7 +39,14 @@ public class MailTransportGuard {
      * configuration would have wired a bean for it.
      */
     private static final List<String> ACCEPTED_TRANSPORTS =
-            List.of(RESEND_TRANSPORT, SMTP_TRANSPORT);
+            List.of(RESEND_TRANSPORT, NOOP_TRANSPORT);
+
+    /**
+     * Transports that never reach a real recipient - captured instead of sent - and so are refused
+     * outside development, where a stray environment override could otherwise silently discard
+     * production mail.
+     */
+    private static final List<String> DEVELOPMENT_ONLY_TRANSPORTS = List.of(NOOP_TRANSPORT);
 
     private static final Logger log = LoggerFactory.getLogger(MailTransportGuard.class);
 
@@ -68,12 +75,12 @@ public class MailTransportGuard {
                             + activeProfiles
                             + ".");
         }
-        if (SMTP_TRANSPORT.equalsIgnoreCase(transport)
+        if (DEVELOPMENT_ONLY_TRANSPORTS.stream().anyMatch(t -> t.equalsIgnoreCase(transport))
                 && !activeProfiles.contains(DEVELOPMENT_PROFILE)) {
             throw new IllegalStateException(
                     "Mail transport '"
                             + transport
-                            + "' delivers to a local sink and is permitted only when the '"
+                            + "' never reaches a real recipient and is permitted only when the '"
                             + DEVELOPMENT_PROFILE
                             + "' profile is active, but the active profiles are "
                             + activeProfiles

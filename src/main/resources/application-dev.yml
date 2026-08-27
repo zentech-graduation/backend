@@ -65,13 +65,14 @@ app:
   mail:
     consumer:
       enabled: true
-    # Local development defaults to the Mailpit sink, but a developer can point local mail at
-    # the real Resend provider by setting APP_MAIL_TRANSPORT=resend in .env and restarting, for
-    # example to give a live email demo. Doing so consumes Resend quota and, if the seeded
-    # dataset's fake addresses are targeted, raises the sending domain's bounce rate, which can
-    # get the domain suspended. Only trigger mail flows against real mailboxes you control when
-    # this is set to resend. See .env.example and CONTRIBUTING.md for the full warning.
-    transport: ${APP_MAIL_TRANSPORT:smtp}
+    # Local development sends real mail through Resend by default: there is no local sink.
+    # Every send consumes Resend quota, and a fabricated or seeded recipient produces a bounce
+    # that raises the sending domain's bounce rate, which can get the domain suspended. Only
+    # trigger mail flows (register, forgot-password, and so on) against real mailboxes you
+    # control. To run the application without sending real mail, set APP_MAIL_TRANSPORT=noop in
+    # .env and restart; noop is refused outside this profile by MailTransportGuard. See
+    # .env.example and CONTRIBUTING.md for the full warning.
+    transport: ${APP_MAIL_TRANSPORT:resend}
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:

@@ -1,8 +1,12 @@
 package com.app;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -13,6 +17,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import com.app.modules.mail.service.MailService;
+import com.resend.Resend;
 
 @SpringBootTest(
         properties = {
@@ -55,6 +60,20 @@ class ApplicationTests {
 
     @MockitoBean private MailService mailService;
 
+    @Autowired private ApplicationContext applicationContext;
+
     @Test
     void contextLoads() {}
+
+    // Direct, empirical evidence for the test-phase transport guarantee: this context is not an
+    // isolated ApplicationContextRunner, it is the real full application context every
+    // @SpringBootTest
+    // and *IT in the suite boots, resolving app.mail.transport through the same Surefire-pinned
+    // APP_MAIL_TRANSPORT=noop as every other test. Asserting no Resend bean exists here proves no
+    // outbound-capable mail client is ever constructed anywhere in the test phase, not merely that
+    // it would not be called.
+    @Test
+    void devProfileTestContext_neverConstructsARealResendClient() {
+        assertThat(applicationContext.getBeanNamesForType(Resend.class)).isEmpty();
+    }
 }
