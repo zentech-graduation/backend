@@ -6,9 +6,9 @@
       "target_username": "user_suspended",
       "reporter_usernames": [
         "user_public",
-        "quan.tran94",
-        "trangg.ng",
-        "hieu.devops"
+        "ryan.walsh94",
+        "sophieg.design",
+        "henry.devops"
       ],
       "reported_content": [
         {
@@ -39,35 +39,35 @@
         {
           "event": "report_submitted",
           "at": "2026-02-10T09:40:38.018Z",
-          "reporter": "quan.tran94",
+          "reporter": "ryan.walsh94",
           "report_reason": "spam",
           "report_status": "pending"
         },
         {
           "event": "report_submitted",
           "at": "2026-02-10T10:42:10.194Z",
-          "reporter": "trangg.ng",
+          "reporter": "sophieg.design",
           "report_reason": "scam",
           "report_status": "pending"
         },
         {
           "event": "report_submitted",
           "at": "2026-02-10T12:53:32.741Z",
-          "reporter": "hieu.devops",
+          "reporter": "henry.devops",
           "report_reason": "other",
           "report_status": "pending"
         },
         {
           "event": "report_status_changed",
           "at": "2026-02-10T14:35:08.264Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "report_status": "reviewing",
           "note": "Picking up the four spam reports against this account together - same promotional caption reposted across three listings in one morning."
         },
         {
           "event": "admin_action",
           "at": "2026-02-10T15:01:51.378Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "warn_user",
           "target_user": "user_suspended",
           "reason_key": "spam",
@@ -76,14 +76,14 @@
         {
           "event": "report_status_changed",
           "at": "2026-02-10T15:01:51.378Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "report_status": "resolved",
           "note": "Warned the account owner. No removal - content itself doesn't violate policy, frequency did."
         },
         {
           "event": "report_submitted",
           "at": "2026-02-22T04:09:45.062Z",
-          "reporter": "vy.frontend",
+          "reporter": "vivian.frontend",
           "report_reason": "spam",
           "report_status": "pending",
           "note": "Second wave of reports two weeks later, same pattern resumed."
@@ -91,7 +91,7 @@
         {
           "event": "report_status_changed",
           "at": "2026-02-22T07:38:57.123Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "report_status": "reviewing",
           "note": "Same account, same pattern as the warning two weeks ago. Escalating internally to a strike."
         },
@@ -107,7 +107,7 @@
         {
           "event": "admin_action",
           "at": "2026-02-22T08:44:12.252Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "suspend_user",
           "target_user": "user_suspended",
           "duration_days": 7,
@@ -116,7 +116,7 @@
         {
           "event": "report_status_changed",
           "at": "2026-02-22T08:44:12.252Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "report_status": "resolved",
           "note": "Account suspended 7 days for repeat spam after an unheeded warning."
         }
@@ -128,11 +128,11 @@
       "title": "Fake-investment scam account escalated and banned",
       "target_username": "user_banned",
       "reporter_usernames": [
-        "an.codes",
-        "vy.frontend",
-        "hung.taichinh",
-        "nhung.investsafe",
-        "phuc.senior4"
+        "aaron.codes",
+        "vivian.frontend",
+        "hunter.finance",
+        "nora.investsafe",
+        "phil.senior4"
       ],
       "reported_content": [
         {
@@ -160,49 +160,49 @@
         {
           "event": "report_submitted",
           "at": "2026-04-05T10:14:03.767Z",
-          "reporter": "an.codes",
+          "reporter": "aaron.codes",
           "report_reason": "scam",
           "report_status": "pending"
         },
         {
           "event": "report_submitted",
           "at": "2026-04-05T10:47:18.665Z",
-          "reporter": "vy.frontend",
+          "reporter": "vivian.frontend",
           "report_reason": "scam",
           "report_status": "pending"
         },
         {
           "event": "report_submitted",
           "at": "2026-04-05T11:41:17.434Z",
-          "reporter": "hung.taichinh",
+          "reporter": "hunter.finance",
           "report_reason": "scam",
           "report_status": "pending"
         },
         {
           "event": "report_submitted",
           "at": "2026-04-05T12:25:23.652Z",
-          "reporter": "nhung.investsafe",
+          "reporter": "nora.investsafe",
           "report_reason": "false_information",
           "report_status": "pending"
         },
         {
           "event": "report_submitted",
           "at": "2026-04-05T13:52:42.819Z",
-          "reporter": "phuc.senior4",
+          "reporter": "phil.senior4",
           "report_reason": "scam",
           "report_status": "pending"
         },
         {
           "event": "report_status_changed",
           "at": "2026-04-05T14:43:43.458Z",
-          "actor": "mod.lananh",
+          "actor": "mod.laura",
           "report_status": "reviewing",
           "note": "Five reports, all pointing at the same guaranteed-return investment posts. This is above what a warning fixes."
         },
         {
           "event": "admin_action",
           "at": "2026-04-05T15:52:43.903Z",
-          "actor": "mod.lananh",
+          "actor": "mod.laura",
           "action_type": "escalate_report",
           "target_user": "user_banned",
           "reason": "escalated",
@@ -212,14 +212,14 @@
         {
           "event": "report_status_changed",
           "at": "2026-04-05T15:52:43.903Z",
-          "actor": "mod.lananh",
+          "actor": "mod.laura",
           "report_status": "escalated",
           "note": null
         },
         {
           "event": "admin_action",
           "at": "2026-04-05T17:08:24.092Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "ban_user",
           "target_user": "user_banned",
           "reason_key": "scam",
@@ -228,7 +228,7 @@
         {
           "event": "admin_action",
           "at": "2026-04-05T17:10:43.536Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "remove_post",
           "target_post": "post_0483",
           "note": "Removed as part of the scam-account takedown."
@@ -236,7 +236,7 @@
         {
           "event": "admin_action",
           "at": "2026-04-05T17:13:58.649Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "remove_post",
           "target_post": "post_0484",
           "note": "Removed as part of the scam-account takedown."
@@ -244,7 +244,7 @@
         {
           "event": "admin_action",
           "at": "2026-04-05T17:19:25.287Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "remove_post",
           "target_post": "post_0485",
           "note": "Removed as part of the scam-account takedown."
@@ -252,7 +252,7 @@
         {
           "event": "admin_action",
           "at": "2026-04-05T17:23:17.415Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "remove_post",
           "target_post": "post_0486",
           "note": "Removed as part of the scam-account takedown."
@@ -260,7 +260,7 @@
         {
           "event": "admin_action",
           "at": "2026-04-05T17:28:39.955Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "remove_post",
           "target_post": "post_0489",
           "note": "Removed as part of the scam-account takedown."
@@ -268,7 +268,7 @@
         {
           "event": "report_status_changed",
           "at": "2026-04-05T17:40:21.750Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "report_status": "resolved",
           "note": "Account banned, all flagged posts removed. No appeal was ever filed."
         }
@@ -278,9 +278,9 @@
     {
       "id": "case_03_false_report",
       "title": "Personal-dispute report dismissed after review",
-      "target_username": "an.codes",
+      "target_username": "aaron.codes",
       "reporter_usernames": [
-        "khang.backend"
+        "kevin.backend"
       ],
       "reported_content": [
         {
@@ -292,7 +292,7 @@
         {
           "event": "report_submitted",
           "at": "2026-05-12T14:07:21.586Z",
-          "reporter": "khang.backend",
+          "reporter": "kevin.backend",
           "report_reason": "harassment",
           "report_status": "pending",
           "note": "Reporter's submission text referenced an unrelated old disagreement between the two accounts, not the post's content."
@@ -321,15 +321,15 @@
           "note": "Dismissed - no policy violation found."
         }
       ],
-      "outcome": "Report dismissed with a resolution note; no action taken against an.codes."
+      "outcome": "Report dismissed with a resolution note; no action taken against aaron.codes."
     },
     {
       "id": "case_04_comment_toxicity",
       "title": "Heated argument under a finance post, warning later revoked",
-      "target_username": "toxic.tranluan",
+      "target_username": "toxic.debates",
       "reporter_usernames": [
-        "hung.taichinh",
-        "phuong.ketoan"
+        "hunter.finance",
+        "phoebe.accounting"
       ],
       "reported_content": [
         {
@@ -349,14 +349,14 @@
         {
           "event": "report_submitted",
           "at": "2026-06-02T20:03:03.186Z",
-          "reporter": "hung.taichinh",
+          "reporter": "hunter.finance",
           "report_reason": "harassment",
           "report_status": "pending"
         },
         {
           "event": "report_submitted",
           "at": "2026-06-02T20:21:33.852Z",
-          "reporter": "phuong.ketoan",
+          "reporter": "phoebe.accounting",
           "report_reason": "harassment",
           "report_status": "pending"
         },
@@ -388,7 +388,7 @@
           "at": "2026-06-02T23:20:50.760Z",
           "actor": "mod1",
           "action_type": "warn_user",
-          "target_user": "toxic.tranluan",
+          "target_user": "toxic.debates",
           "reason_key": "harassment",
           "note": "Warned for repeated dismissive comments toward other users in a finance discussion thread."
         },
@@ -402,21 +402,21 @@
         {
           "event": "admin_action",
           "at": "2026-06-09T09:41:21.672Z",
-          "actor": "mod.lananh",
+          "actor": "mod.laura",
           "action_type": "revoke_warning",
-          "target_user": "toxic.tranluan",
+          "target_user": "toxic.debates",
           "reference_time": "2026-06-09T08:34:10.015Z",
           "note": "Reviewed on appeal - the account has no other history and the thread had provocation on both sides that the original review didn't fully weigh. Revoking the warning; the comment removals stand."
         }
       ],
-      "outcome": "The two comments stay removed; the warning against toxic.tranluan was revoked after a later review. Account status is otherwise untouched by this case (suspended separately - see case 1's discipline ladder for a different account)."
+      "outcome": "The two comments stay removed; the warning against toxic.debates was revoked after a later review. Account status is otherwise untouched by this case (suspended separately - see case 1's discipline ladder for a different account)."
     },
     {
       "id": "case_05_recovery_arc",
       "title": "Banned account later reinstated after an administrator review",
       "target_username": "recovered.user1",
       "reporter_usernames": [
-        "sang.dataeng"
+        "sam.dataeng"
       ],
       "reported_content": [
         {
@@ -428,7 +428,7 @@
         {
           "event": "report_submitted",
           "at": "2025-11-20T08:13:12.145Z",
-          "reporter": "sang.dataeng",
+          "reporter": "sam.dataeng",
           "report_reason": "false_information",
           "report_status": "pending",
           "note": "Reported for sharing an unverified claim about a company layoff that turned out to be a misread of a public announcement, not a fabrication."
@@ -436,14 +436,14 @@
         {
           "event": "report_status_changed",
           "at": "2025-11-20T13:59:31.952Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "report_status": "reviewing",
           "note": null
         },
         {
           "event": "admin_action",
           "at": "2025-11-20T16:34:38.306Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "ban_user",
           "target_user": "recovered.user1",
           "reason_key": "false_information",
@@ -452,14 +452,14 @@
         {
           "event": "report_status_changed",
           "at": "2025-11-20T16:34:38.306Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "report_status": "resolved",
           "note": null
         },
         {
           "event": "admin_action",
           "at": "2025-12-20T17:49:09.890Z",
-          "actor": "thuytrang.admin",
+          "actor": "rachel.admin",
           "action_type": "unban_user",
           "target_user": "recovered.user1",
           "note": "On review, the original claim traced back to a genuine (if garbled) public source rather than fabrication - the ban was disproportionate to what actually happened. Reinstating the account. This does not erase the audit history; it corrects the outcome.",
@@ -476,8 +476,8 @@
       "reported_content": [
         {
           "type": "story",
-          "story_ref": "synthetic_story_vy.frontend_1",
-          "owner": "vy.frontend"
+          "story_ref": "synthetic_story_vivian.frontend_1",
+          "owner": "vivian.frontend"
         },
         {
           "type": "message",
@@ -488,39 +488,39 @@
         {
           "type": "post",
           "post_id": "post_0159",
-          "owner": "trangg.ng"
+          "owner": "sophieg.design"
         },
         {
           "type": "comment",
           "comment_ref": "post_0116#comment_sweep_1",
           "post_id": "post_0116",
-          "owner": "vy.frontend"
+          "owner": "vivian.frontend"
         }
       ],
       "timeline": [
         {
           "event": "admin_action",
           "at": "2026-07-14T09:07:28.713Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "remove_story",
-          "target_story_ref": "synthetic_story_vy.frontend_1",
-          "target_user": "vy.frontend",
+          "target_story_ref": "synthetic_story_vivian.frontend_1",
+          "target_user": "vivian.frontend",
           "reason_key": "nudity",
           "note": "Story flagged by an automated screenshot report from a user; removed pending owner clarification."
         },
         {
           "event": "admin_action",
           "at": "2026-07-14T10:02:36.228Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "restore_story",
-          "target_story_ref": "synthetic_story_vy.frontend_1",
-          "target_user": "vy.frontend",
+          "target_story_ref": "synthetic_story_vivian.frontend_1",
+          "target_user": "vivian.frontend",
           "note": "Owner clarified this was a gym progress photo, not a policy violation. Restored - story had not yet expired."
         },
         {
           "event": "admin_action",
           "at": "2026-07-14T10:41:12.558Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "remove_message",
           "target_conversation_id": "conv_015",
           "target_message_index": 4,
@@ -529,7 +529,7 @@
         {
           "event": "admin_action",
           "at": "2026-07-14T11:14:50.175Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "restore_message",
           "target_conversation_id": "conv_015",
           "target_message_index": 4,
@@ -538,7 +538,7 @@
         {
           "event": "admin_action",
           "at": "2026-07-14T12:41:01.944Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "remove_post",
           "target_post": "post_0159",
           "reason_key": "other",
@@ -547,7 +547,7 @@
         {
           "event": "admin_action",
           "at": "2026-07-19T00:32:44.619Z",
-          "actor": "mod.lananh",
+          "actor": "mod.laura",
           "action_type": "restore_post",
           "target_post": "post_0159",
           "note": "Reviewed on the author's request - the item shown was a personal purchase, not sponsored content. Restored to its prior published status."
@@ -555,7 +555,7 @@
         {
           "event": "admin_action",
           "at": "2026-07-19T01:20:34.109Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "remove_comment",
           "target_comment_ref": "post_0116#comment_sweep_1",
           "note": "Removed for an off-topic promotional link left under a design case study."
@@ -563,7 +563,7 @@
         {
           "event": "admin_action",
           "at": "2026-07-19T03:03:07.123Z",
-          "actor": "mod.duchuy",
+          "actor": "mod.marcus",
           "action_type": "restore_comment",
           "target_comment_ref": "post_0116#comment_sweep_1",
           "note": "Comment author clarified the link was to their own portfolio referenced by the post's discussion, not a sales pitch. Restored."
@@ -575,82 +575,82 @@
   "supplementary_actions": [
     {
       "at": "2026-07-19T09:44:04.928Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_user",
-      "target_user": "forex.master.vn",
+      "target_user": "forex.master.pro",
       "note": "Banned for repeated fake-investment posting, same pattern as case_02."
     },
     {
       "at": "2026-07-19T15:39:27.079Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_user",
       "target_user": "gold.scheme.99",
       "note": "Banned for repeated fake-investment posting, same pattern as case_02."
     },
     {
       "at": "2026-07-19T22:44:07.507Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_user",
-      "target_user": "loi.nhuan.cao",
+      "target_user": "high.returns.now",
       "note": "Banned for repeated fake-investment posting, same pattern as case_02."
     },
     {
       "at": "2026-07-20T03:24:44.341Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Reinstated after the suspension term completed and no further violations were recorded."
     },
     {
       "at": "2026-07-20T10:20:46.966Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Reinstated after the suspension term completed and no further violations were recorded."
     },
     {
       "at": "2026-07-20T12:31:56.600Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Reinstated after the suspension term completed and no further violations were recorded."
     },
     {
       "at": "2026-07-20T14:43:34.295Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Reinstated after the suspension term completed and no further violations were recorded."
     },
     {
       "at": "2026-07-20T18:00:16.220Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "suspend_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Suspended for a policy violation unrelated to the two named cases; standard discipline-ladder consequence.",
       "duration_days": 7
     },
     {
       "at": "2026-07-20T23:01:26.651Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "suspend_user",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Suspended for a policy violation unrelated to the two named cases; standard discipline-ladder consequence.",
       "duration_days": 30
     },
     {
       "at": "2026-07-21T07:20:33.840Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "suspend_user",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Suspended for a policy violation unrelated to the two named cases; standard discipline-ladder consequence.",
       "duration_days": 7
     },
     {
       "at": "2026-07-21T09:07:35.771Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "suspend_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Suspended for a policy violation unrelated to the two named cases; standard discipline-ladder consequence.",
       "duration_days": 7
     },
@@ -658,35 +658,35 @@
       "at": "2026-07-21T17:13:35.332Z",
       "actor": null,
       "action_type": "unsuspend_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Automatic reinstatement recorded by the suspension-expiry sweep once the fixed term elapsed."
     },
     {
       "at": "2026-07-21T20:55:45.109Z",
       "actor": null,
       "action_type": "unsuspend_user",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Automatic reinstatement recorded by the suspension-expiry sweep once the fixed term elapsed."
     },
     {
       "at": "2026-07-22T02:26:24.908Z",
       "actor": null,
       "action_type": "unsuspend_user",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Automatic reinstatement recorded by the suspension-expiry sweep once the fixed term elapsed."
     },
     {
       "at": "2026-07-22T09:57:31.376Z",
       "actor": null,
       "action_type": "unsuspend_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Automatic reinstatement recorded by the suspension-expiry sweep once the fixed term elapsed."
     },
     {
       "at": "2026-07-22T15:27:09.755Z",
       "actor": null,
       "action_type": "unsuspend_user",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Automatic reinstatement recorded by the suspension-expiry sweep once the fixed term elapsed."
     },
     {
@@ -723,7 +723,7 @@
     },
     {
       "at": "2026-07-23T12:25:44.175Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_comment",
       "target_user": null,
       "note": "Removed a comment for a blocked-word match unrelated to the two named cases.",
@@ -731,7 +731,7 @@
     },
     {
       "at": "2026-07-23T16:33:07.056Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_comment",
       "target_user": null,
       "note": "Removed a comment for a blocked-word match unrelated to the two named cases.",
@@ -771,35 +771,35 @@
     },
     {
       "at": "2026-07-24T12:18:13.096Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "resolve_report",
       "target_user": null,
       "note": "Closed an escalated report with action taken, recorded separately from the two named report-heavy cases."
     },
     {
       "at": "2026-07-24T20:10:50.428Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "resolve_report",
       "target_user": null,
       "note": "Closed an escalated report with action taken, recorded separately from the two named report-heavy cases."
     },
     {
       "at": "2026-07-24T21:35:55.710Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "resolve_report",
       "target_user": null,
       "note": "Closed an escalated report with action taken, recorded separately from the two named report-heavy cases."
     },
     {
       "at": "2026-07-25T03:09:49.911Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "resolve_report",
       "target_user": null,
       "note": "Closed an escalated report with action taken, recorded separately from the two named report-heavy cases."
     },
     {
       "at": "2026-07-25T11:27:24.021Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "resolve_report",
       "target_user": null,
       "note": "Closed an escalated report with action taken, recorded separately from the two named report-heavy cases."
@@ -809,6 +809,7 @@
       "actor": "mod1",
       "action_type": "dismiss_report",
       "target_user": null,
+      "target_report_ref": "supp_report_dismiss_01",
       "note": "Closed with no policy violation found, distinct from case_03."
     },
     {
@@ -816,6 +817,7 @@
       "actor": "mod1",
       "action_type": "dismiss_report",
       "target_user": null,
+      "target_report_ref": "supp_report_dismiss_02",
       "note": "Closed with no policy violation found, distinct from case_03."
     },
     {
@@ -823,6 +825,7 @@
       "actor": "mod1",
       "action_type": "dismiss_report",
       "target_user": null,
+      "target_report_ref": "supp_report_dismiss_03",
       "note": "Closed with no policy violation found, distinct from case_03."
     },
     {
@@ -830,142 +833,143 @@
       "actor": "mod1",
       "action_type": "dismiss_report",
       "target_user": null,
+      "target_report_ref": "supp_report_dismiss_04",
       "note": "Closed with no policy violation found, distinct from case_03."
     },
     {
       "at": "2026-07-26T15:15:18.300Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "change_user_role",
-      "target_user": "mod.lananh",
+      "target_user": "mod.laura",
       "note": "Promoted user to moderator after a probationary community-support period.",
       "from_role": "user",
       "to_role": "moderator"
     },
     {
       "at": "2026-07-26T21:46:22.872Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "change_user_role",
-      "target_user": "mod.duchuy",
+      "target_user": "mod.marcus",
       "note": "Promoted user to moderator after a probationary community-support period.",
       "from_role": "user",
       "to_role": "moderator"
     },
     {
       "at": "2026-07-27T04:06:38.230Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "change_user_role",
-      "target_user": "mod.lananh",
+      "target_user": "mod.laura",
       "note": "Promoted user to moderator after a probationary community-support period.",
       "from_role": "user",
       "to_role": "moderator"
     },
     {
       "at": "2026-07-27T05:56:00.564Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "change_user_role",
-      "target_user": "mod.duchuy",
+      "target_user": "mod.marcus",
       "note": "Promoted user to moderator after a probationary community-support period.",
       "from_role": "user",
       "to_role": "moderator"
     },
     {
       "at": "2026-07-27T07:30:37.659Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "change_user_role",
-      "target_user": "hung.taichinh",
+      "target_user": "hunter.finance",
       "note": "Promoted user to moderator after a probationary community-support period.",
       "from_role": "user",
       "to_role": "moderator"
     },
     {
       "at": "2026-07-27T08:32:06.323Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "force_logout",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Revoked all active refresh tokens as part of a status-change action, per the account-status transition contract."
     },
     {
       "at": "2026-07-27T11:51:45.148Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "force_logout",
-      "target_user": "toxic.tranluan",
+      "target_user": "toxic.debates",
       "note": "Revoked all active refresh tokens as part of a status-change action, per the account-status transition contract."
     },
     {
       "at": "2026-07-27T14:58:55.036Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "force_logout",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Revoked all active refresh tokens as part of a status-change action, per the account-status transition contract."
     },
     {
       "at": "2026-07-27T19:21:20.813Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "force_logout",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Revoked all active refresh tokens as part of a status-change action, per the account-status transition contract."
     },
     {
       "at": "2026-07-28T01:06:24.299Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "force_logout",
       "target_user": "user_suspended",
       "note": "Revoked all active refresh tokens as part of a status-change action, per the account-status transition contract."
     },
     {
       "at": "2026-07-28T07:34:06.125Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "First warning issued for a minor policy violation unrelated to the two named cases."
     },
     {
       "at": "2026-07-28T13:11:21.073Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "First warning issued for a minor policy violation unrelated to the two named cases."
     },
     {
       "at": "2026-07-28T18:30:29.154Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "First warning issued for a minor policy violation unrelated to the two named cases."
     },
     {
       "at": "2026-07-29T02:00:18.995Z",
       "actor": "mod1",
       "action_type": "revoke_warning",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Revoked on review - the underlying report did not hold up to scrutiny."
     },
     {
       "at": "2026-07-29T04:23:56.341Z",
       "actor": "mod1",
       "action_type": "revoke_warning",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Revoked on review - the underlying report did not hold up to scrutiny."
     },
     {
       "at": "2026-07-29T07:48:52.611Z",
       "actor": "mod1",
       "action_type": "revoke_warning",
-      "target_user": "khang.backend",
+      "target_user": "kevin.backend",
       "note": "Revoked on review - the underlying report did not hold up to scrutiny."
     },
     {
       "at": "2026-07-29T09:01:42.374Z",
       "actor": "mod1",
       "action_type": "revoke_warning",
-      "target_user": "an.codes",
+      "target_user": "aaron.codes",
       "note": "Revoked on review - the underlying report did not hold up to scrutiny."
     },
     {
       "at": "2026-07-29T13:04:07.894Z",
       "actor": null,
       "action_type": "issue_strike",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Third counting warning within the window triggered this strike automatically.",
       "triggered_by": "warn_user"
     },
@@ -973,7 +977,7 @@
       "at": "2026-07-29T17:45:30.600Z",
       "actor": null,
       "action_type": "issue_strike",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Third counting warning within the window triggered this strike automatically.",
       "triggered_by": "warn_user"
     },
@@ -981,7 +985,7 @@
       "at": "2026-07-29T21:14:41.436Z",
       "actor": null,
       "action_type": "issue_strike",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Third counting warning within the window triggered this strike automatically.",
       "triggered_by": "warn_user"
     },
@@ -989,48 +993,48 @@
       "at": "2026-07-30T03:45:08.656Z",
       "actor": null,
       "action_type": "issue_strike",
-      "target_user": "toxic.tranluan",
+      "target_user": "toxic.debates",
       "note": "Third counting warning within the window triggered this strike automatically.",
       "triggered_by": "warn_user"
     },
     {
       "at": "2026-07-30T09:48:20.359Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_strike",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Revoked after an administrator review found the underlying warning chain included one revoked warning that should not have counted toward the strike."
     },
     {
       "at": "2026-07-30T12:00:37.404Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_strike",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Revoked after an administrator review found the underlying warning chain included one revoked warning that should not have counted toward the strike."
     },
     {
       "at": "2026-07-30T19:43:27.125Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_strike",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Revoked after an administrator review found the underlying warning chain included one revoked warning that should not have counted toward the strike."
     },
     {
       "at": "2026-07-31T02:25:28.503Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_strike",
-      "target_user": "toxic.tranluan",
+      "target_user": "toxic.debates",
       "note": "Revoked after an administrator review found the underlying warning chain included one revoked warning that should not have counted toward the strike."
     },
     {
       "at": "2026-07-31T04:07:49.376Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_strike",
       "target_user": "user_suspended",
       "note": "Revoked after an administrator review found the underlying warning chain included one revoked warning that should not have counted toward the strike."
     },
     {
       "at": "2026-07-31T12:08:59.477Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "escalate_report",
       "target_user": null,
       "note": "Escalated to administrator review - beyond a moderator's authority to resolve.",
@@ -1038,7 +1042,7 @@
     },
     {
       "at": "2026-07-31T15:24:54.458Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "escalate_report",
       "target_user": null,
       "note": "Escalated to administrator review - beyond a moderator's authority to resolve.",
@@ -1046,7 +1050,7 @@
     },
     {
       "at": "2026-07-31T23:35:47.155Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "escalate_report",
       "target_user": null,
       "note": "Escalated to administrator review - beyond a moderator's authority to resolve.",
@@ -1054,7 +1058,7 @@
     },
     {
       "at": "2026-08-01T03:32:57.807Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "escalate_report",
       "target_user": null,
       "note": "Escalated to administrator review - beyond a moderator's authority to resolve.",
@@ -1062,7 +1066,7 @@
     },
     {
       "at": "2026-08-01T04:38:45.770Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "create_hashtag",
       "target_user": null,
       "note": "Administrative creation of a hashtag ahead of a planned content campaign.",
@@ -1070,7 +1074,7 @@
     },
     {
       "at": "2026-08-01T06:02:23.397Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "create_hashtag",
       "target_user": null,
       "note": "Administrative creation of a hashtag ahead of a planned content campaign.",
@@ -1078,7 +1082,7 @@
     },
     {
       "at": "2026-08-01T13:06:34.995Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "create_hashtag",
       "target_user": null,
       "note": "Administrative creation of a hashtag ahead of a planned content campaign.",
@@ -1086,7 +1090,7 @@
     },
     {
       "at": "2026-08-01T18:42:03.176Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "create_hashtag",
       "target_user": null,
       "note": "Administrative creation of a hashtag ahead of a planned content campaign.",
@@ -1094,7 +1098,7 @@
     },
     {
       "at": "2026-08-01T22:27:37.071Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "create_hashtag",
       "target_user": null,
       "note": "Administrative creation of a hashtag ahead of a planned content campaign.",
@@ -1102,7 +1106,7 @@
     },
     {
       "at": "2026-08-02T03:32:12.775Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
@@ -1110,7 +1114,7 @@
     },
     {
       "at": "2026-08-02T10:06:38.711Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
@@ -1118,7 +1122,7 @@
     },
     {
       "at": "2026-08-02T14:42:57.437Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
@@ -1126,7 +1130,7 @@
     },
     {
       "at": "2026-08-02T21:17:59.849Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
@@ -1134,15 +1138,15 @@
     },
     {
       "at": "2026-08-03T05:15:23.958Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "edit_hashtag",
       "target_user": null,
       "note": "Corrected a hashtag's status note for clarity in the administrative registry.",
-      "hashtag_name": "saigoncafe"
+      "hashtag_name": "austincafe"
     },
     {
       "at": "2026-08-03T07:04:26.782Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
@@ -1150,7 +1154,7 @@
     },
     {
       "at": "2026-08-03T09:08:36.672Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
@@ -1158,7 +1162,7 @@
     },
     {
       "at": "2026-08-03T13:04:19.681Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
@@ -1166,7 +1170,7 @@
     },
     {
       "at": "2026-08-03T20:37:55.598Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
@@ -1174,7 +1178,7 @@
     },
     {
       "at": "2026-08-04T01:53:03.845Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "ban_hashtag",
       "target_user": null,
       "note": "Banned - scam-adjacent usage pattern matching the reasoning in hashtags.json's banned set.",
@@ -1182,7 +1186,7 @@
     },
     {
       "at": "2026-08-04T07:03:19.897Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_hashtag",
       "target_user": null,
       "note": "Returned to circulation after the underlying misuse pattern was no longer observed - illustrative record; hashtags.json's five banned tags remain banned in the shipped dataset.",
@@ -1190,7 +1194,7 @@
     },
     {
       "at": "2026-08-04T11:54:01.607Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_hashtag",
       "target_user": null,
       "note": "Returned to circulation after the underlying misuse pattern was no longer observed - illustrative record; hashtags.json's five banned tags remain banned in the shipped dataset.",
@@ -1198,7 +1202,7 @@
     },
     {
       "at": "2026-08-04T19:12:09.330Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_hashtag",
       "target_user": null,
       "note": "Returned to circulation after the underlying misuse pattern was no longer observed - illustrative record; hashtags.json's five banned tags remain banned in the shipped dataset.",
@@ -1206,7 +1210,7 @@
     },
     {
       "at": "2026-08-04T21:51:03.506Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_hashtag",
       "target_user": null,
       "note": "Returned to circulation after the underlying misuse pattern was no longer observed - illustrative record; hashtags.json's five banned tags remain banned in the shipped dataset.",
@@ -1214,7 +1218,7 @@
     },
     {
       "at": "2026-08-04T23:24:40.760Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "unban_hashtag",
       "target_user": null,
       "note": "Returned to circulation after the underlying misuse pattern was no longer observed - illustrative record; hashtags.json's five banned tags remain banned in the shipped dataset.",
@@ -1222,7 +1226,7 @@
     },
     {
       "at": "2026-08-05T06:05:51.953Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
@@ -1230,7 +1234,7 @@
     },
     {
       "at": "2026-08-05T13:34:36.747Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
@@ -1238,7 +1242,7 @@
     },
     {
       "at": "2026-08-05T21:43:46.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
@@ -1246,7 +1250,7 @@
     },
     {
       "at": "2026-08-06T06:01:09.921Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
@@ -1254,7 +1258,7 @@
     },
     {
       "at": "2026-08-06T11:43:18.574Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "delete_hashtag",
       "target_user": null,
       "note": "Taken out of circulation entirely, matching the reasoning behind hashtags.json's three deleted tags.",
@@ -1262,33 +1266,33 @@
     },
     {
       "at": "2026-08-06T15:32:00.132Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_story",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Removed a story for a policy violation unrelated to case_06's sweep.",
       "target_story_ref": "synthetic_story_supp_0"
     },
     {
       "at": "2026-08-06T18:46:54.058Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_story",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Removed a story for a policy violation unrelated to case_06's sweep.",
       "target_story_ref": "synthetic_story_supp_1"
     },
     {
       "at": "2026-08-07T01:37:05.006Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_story",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Removed a story for a policy violation unrelated to case_06's sweep.",
       "target_story_ref": "synthetic_story_supp_2"
     },
     {
       "at": "2026-08-07T07:09:00.056Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_story",
-      "target_user": "toxic.tranluan",
+      "target_user": "toxic.debates",
       "note": "Removed a story for a policy violation unrelated to case_06's sweep.",
       "target_story_ref": "synthetic_story_supp_3"
     },
@@ -1296,7 +1300,7 @@
       "at": "2026-08-07T14:17:14.966Z",
       "actor": "mod1",
       "action_type": "restore_story",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Restored after review; had not yet expired.",
       "target_story_ref": "synthetic_story_supp_0"
     },
@@ -1304,7 +1308,7 @@
       "at": "2026-08-07T16:30:36.188Z",
       "actor": "mod1",
       "action_type": "restore_story",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Restored after review; had not yet expired.",
       "target_story_ref": "synthetic_story_supp_1"
     },
@@ -1312,7 +1316,7 @@
       "at": "2026-08-07T19:17:52.760Z",
       "actor": "mod1",
       "action_type": "restore_story",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Restored after review; had not yet expired.",
       "target_story_ref": "synthetic_story_supp_2"
     },
@@ -1320,13 +1324,13 @@
       "at": "2026-08-07T21:16:10.249Z",
       "actor": "mod1",
       "action_type": "restore_story",
-      "target_user": "toxic.tranluan",
+      "target_user": "toxic.debates",
       "note": "Restored after review; had not yet expired.",
       "target_story_ref": "synthetic_story_supp_3"
     },
     {
       "at": "2026-08-08T00:36:40.225Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_message",
       "target_user": null,
       "note": "Removed a message reported by its recipient, unrelated to case_06.",
@@ -1335,7 +1339,7 @@
     },
     {
       "at": "2026-08-08T05:19:35.919Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_message",
       "target_user": null,
       "note": "Removed a message reported by its recipient, unrelated to case_06.",
@@ -1344,7 +1348,7 @@
     },
     {
       "at": "2026-08-08T11:38:50.391Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_message",
       "target_user": null,
       "note": "Removed a message reported by its recipient, unrelated to case_06.",
@@ -1353,7 +1357,7 @@
     },
     {
       "at": "2026-08-08T18:27:31.120Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "remove_message",
       "target_user": null,
       "note": "Removed a message reported by its recipient, unrelated to case_06.",
@@ -1398,35 +1402,35 @@
     },
     {
       "at": "2026-08-09T19:35:59.025Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_session",
-      "target_user": "khang.strikeout",
+      "target_user": "kingston.strikeout",
       "note": "Revoked one suspicious session (new device, unfamiliar IP) at the account owner's request, without ending their other active sessions."
     },
     {
       "at": "2026-08-09T22:22:30.689Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_session",
-      "target_user": "toxic.tranluan",
+      "target_user": "toxic.debates",
       "note": "Revoked one suspicious session (new device, unfamiliar IP) at the account owner's request, without ending their other active sessions."
     },
     {
       "at": "2026-08-10T01:20:21.018Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_session",
-      "target_user": "rao.vat.gia.re",
+      "target_user": "cheap.deals.now",
       "note": "Revoked one suspicious session (new device, unfamiliar IP) at the account owner's request, without ending their other active sessions."
     },
     {
       "at": "2026-08-10T09:35:36.230Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_session",
-      "target_user": "loan.tempban",
+      "target_user": "layla.tempban",
       "note": "Revoked one suspicious session (new device, unfamiliar IP) at the account owner's request, without ending their other active sessions."
     },
     {
       "at": "2026-08-10T12:22:56.043Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_session",
       "target_user": "user_suspended",
       "note": "Revoked one suspicious session (new device, unfamiliar IP) at the account owner's request, without ending their other active sessions."
@@ -1435,7 +1439,7 @@
       "at": "2025-09-03T10:15:00.000Z",
       "actor": "mod1",
       "action_type": "warn_user",
-      "target_user": "quan.tran94",
+      "target_user": "ryan.walsh94",
       "reason_key": "spam",
       "note": "Warned for repeatedly posting the same promotional caption across several unrelated posts in a short window."
     },
@@ -1443,59 +1447,59 @@
       "at": "2025-09-10T09:00:00.000Z",
       "actor": "mod1",
       "action_type": "revoke_warning",
-      "target_user": "quan.tran94",
+      "target_user": "ryan.walsh94",
       "note": "Revoked on review - the posts turned out to be a scheduled series the author had disclosed elsewhere."
     },
     {
       "at": "2025-09-18T14:30:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "hieu.devops",
+      "target_user": "henry.devops",
       "reason_key": "other",
       "note": "Warned for sharing a former employer's internal code snippet in a public post."
     },
     {
       "at": "2025-09-25T11:00:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "revoke_warning",
-      "target_user": "hieu.devops",
+      "target_user": "henry.devops",
       "note": "Revoked after the author showed the snippet was their own open-source contribution, not confidential."
     },
     {
       "at": "2025-10-02T09:45:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "warn_user",
-      "target_user": "vy.frontend",
+      "target_user": "vivian.frontend",
       "reason_key": "harassment",
       "note": "Warned for a string of mocking replies aimed at the same user across several unrelated threads."
     },
     {
       "at": "2025-10-09T16:20:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "revoke_warning",
-      "target_user": "vy.frontend",
+      "target_user": "vivian.frontend",
       "note": "Revoked after both parties confirmed the exchange was a running joke between friends, not harassment."
     },
     {
       "at": "2025-10-16T13:10:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "warn_user",
-      "target_user": "phong.qa",
+      "target_user": "peter.qa",
       "reason_key": "false_information",
       "note": "Warned for posting an unverified claim about a local business closing that turned out to be false."
     },
     {
       "at": "2025-10-23T10:05:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_warning",
-      "target_user": "phong.qa",
+      "target_user": "peter.qa",
       "note": "Revoked after the author posted a correction and cited a source once one became available."
     },
     {
       "at": "2025-10-30T08:50:00.000Z",
       "actor": "mod1",
       "action_type": "warn_user",
-      "target_user": "duy.freelancedev",
+      "target_user": "derek.freelancedev",
       "reason_key": "scam",
       "note": "Warned for advertising freelance services alongside client testimonials that could not be verified."
     },
@@ -1503,83 +1507,83 @@
       "at": "2025-11-06T12:40:00.000Z",
       "actor": "mod1",
       "action_type": "revoke_warning",
-      "target_user": "duy.freelancedev",
+      "target_user": "derek.freelancedev",
       "note": "Revoked after the author provided contactable references confirming the testimonials were genuine."
     },
     {
       "at": "2025-11-13T15:25:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "tin.sysadmin",
+      "target_user": "tyler.sysadmin",
       "reason_key": "spam",
       "note": "Warned for posting the same job-referral link under several unrelated hashtags in one afternoon."
     },
     {
       "at": "2025-11-20T09:15:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "revoke_warning",
-      "target_user": "tin.sysadmin",
+      "target_user": "tyler.sysadmin",
       "note": "Revoked - a single afternoon of cross-posting was judged too minor to stand as a lasting warning."
     },
     {
       "at": "2025-11-27T11:05:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "warn_user",
-      "target_user": "long.embedded",
+      "target_user": "leo.embedded",
       "reason_key": "other",
       "note": "Warned for using a thumbnail image unrelated to the post's actual content."
     },
     {
       "at": "2025-12-04T14:50:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "revoke_warning",
-      "target_user": "long.embedded",
+      "target_user": "leo.embedded",
       "note": "Revoked after the author swapped the thumbnail and explained it was an upload mistake, not intentional."
     },
     {
       "at": "2025-12-11T10:30:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "warn_user",
-      "target_user": "linh.uxui",
+      "target_user": "lily.uxui",
       "reason_key": "hate_speech",
       "note": "Warned after a comment thread on their post included a demeaning remark about another user's background that they did not moderate."
     },
     {
       "at": "2025-12-18T13:00:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_warning",
-      "target_user": "linh.uxui",
+      "target_user": "lily.uxui",
       "note": "Revoked - the offending comment was from a third party and had already been removed by the time of the warning."
     },
     {
       "at": "2025-12-25T09:20:00.000Z",
       "actor": "mod1",
       "action_type": "warn_user",
-      "target_user": "bao.design",
+      "target_user": "blake.design",
       "reason_key": "nudity",
       "note": "Warned for a post with a partially obscured image that sat right at the edge of the nudity policy."
     },
     {
       "at": "2026-01-08T14:15:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "chi.productdesign",
+      "target_user": "chloe.productdesign",
       "reason_key": "spam",
       "note": "Warned for cross-posting identical promotional copy across five unrelated hashtags in one sitting."
     },
     {
       "at": "2026-01-15T10:40:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "warn_user",
-      "target_user": "hai.uxresearch",
+      "target_user": "harper.uxresearch",
       "reason_key": "violence",
       "note": "Warned for sharing a graphic workplace-accident photo without a content warning."
     },
     {
       "at": "2026-01-22T16:05:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "warn_user",
-      "target_user": "mai.visualdesign",
+      "target_user": "maya.visualdesign",
       "reason_key": "harassment",
       "note": "Warned for a series of mocking replies directed at a first-time poster's early work."
     },
@@ -1587,31 +1591,31 @@
       "at": "2026-01-29T11:30:00.000Z",
       "actor": "mod1",
       "action_type": "warn_user",
-      "target_user": "yen.brandmarketing",
+      "target_user": "yasmin.brandmarketing",
       "reason_key": "false_information",
       "note": "Warned for promoting a skincare product with an exaggerated, unverifiable health claim."
     },
     {
       "at": "2026-02-05T09:50:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "hoangphotos",
+      "target_user": "derekshoots",
       "reason_key": "other",
       "note": "Warned for reposting another photographer's work without attribution after being asked directly to stop."
     },
     {
       "at": "2026-02-12T13:20:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "warn_user",
-      "target_user": "kimanh.captures",
+      "target_user": "kimberly.captures",
       "reason_key": "spam",
       "note": "Warned for commenting the same discount code on unrelated posts across the feed."
     },
     {
       "at": "2026-02-19T15:10:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "warn_user",
-      "target_user": "duc.lensman",
+      "target_user": "dean.lensman",
       "reason_key": "scam",
       "note": "Warned for offering a 'guaranteed' investment return in a comment thread unrelated to finance."
     },
@@ -1619,23 +1623,23 @@
       "at": "2026-02-26T10:05:00.000Z",
       "actor": "mod1",
       "action_type": "warn_user",
-      "target_user": "yen.filmphoto",
+      "target_user": "yolanda.filmphoto",
       "reason_key": "nudity",
       "note": "Warned after a video post was flagged during a spot check for content bordering on the nudity policy."
     },
     {
       "at": "2026-03-05T14:40:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "tai.videographer",
+      "target_user": "tyson.videographer",
       "reason_key": "hate_speech",
       "note": "Warned for a caption that included a slur directed at a nationality; edited after the report was filed."
     },
     {
       "at": "2026-03-12T09:15:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "warn_user",
-      "target_user": "linh.tran02",
+      "target_user": "lauren.t02",
       "reason_key": "harassment",
       "note": "Warned for persistent unwanted comments on another user's posts after an earlier informal notice."
     },
@@ -1643,22 +1647,22 @@
       "at": "2026-04-16T10:00:00.000Z",
       "actor": null,
       "action_type": "issue_strike",
-      "target_user": "linh.tran02",
+      "target_user": "lauren.t02",
       "note": "Escalated to a strike after the same unwanted-comment pattern continued despite the earlier warning.",
       "triggered_by": "warn_user"
     },
     {
       "at": "2026-04-23T09:30:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_strike",
-      "target_user": "linh.tran02",
+      "target_user": "lauren.t02",
       "note": "Revoked after the recipient confirmed the contact had stopped and declined to pursue the matter further."
     },
     {
       "at": "2026-03-19T13:45:00.000Z",
       "actor": "mod1",
       "action_type": "warn_user",
-      "target_user": "khoa.uni21",
+      "target_user": "kyle.uni21",
       "reason_key": "spam",
       "note": "Warned for using a job-market hashtag to post listings unrelated to the hashtag's actual purpose."
     },
@@ -1666,15 +1670,15 @@
       "at": "2026-04-30T11:20:00.000Z",
       "actor": null,
       "action_type": "issue_strike",
-      "target_user": "khoa.uni21",
+      "target_user": "kyle.uni21",
       "note": "Escalated to a strike after repeating the same off-topic listing pattern following the warning.",
       "triggered_by": "warn_user"
     },
     {
       "at": "2026-03-26T10:20:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "warn_user",
-      "target_user": "tam.ftu",
+      "target_user": "tamara.nyu",
       "reason_key": "false_information",
       "note": "Warned for sharing an unverified rumor about a scholarship deadline that caused avoidable confusion."
     },
@@ -1682,13 +1686,13 @@
       "at": "2026-05-07T14:10:00.000Z",
       "actor": null,
       "action_type": "issue_strike",
-      "target_user": "tam.ftu",
+      "target_user": "tamara.nyu",
       "note": "Escalated to a strike after sharing a second unverified claim of the same kind after the warning.",
       "triggered_by": "warn_user"
     },
     {
       "at": "2026-04-02T15:35:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "warn_user",
       "target_user": "shop.mimidress",
       "reason_key": "scam",
@@ -1704,14 +1708,14 @@
     },
     {
       "at": "2026-05-21T11:00:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "issue_strike",
       "target_user": "closet.by.hana",
       "note": "Strike issued directly for operating an undisclosed second storefront account to evade an earlier sales restriction."
     },
     {
       "at": "2026-05-28T13:30:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "revoke_strike",
       "target_user": "closet.by.hana",
       "note": "Revoked after the second account was confirmed to belong to a co-owner and not the restricted account holder."
@@ -1720,79 +1724,83 @@
       "at": "2026-06-04T10:15:00.000Z",
       "actor": "mod1",
       "action_type": "issue_strike",
-      "target_user": "streetwear.sg1",
+      "target_user": "streetwear.atx1",
       "note": "Strike issued directly for a coordinated review-manipulation attempt flagged by the trust and safety tooling."
     },
     {
       "at": "2026-06-11T09:00:00.000Z",
       "actor": "mod1",
       "action_type": "revoke_strike",
-      "target_user": "streetwear.sg1",
+      "target_user": "streetwear.atx1",
       "note": "Revoked after the flagged reviews were traced to a third-party bot campaign unrelated to the account owner."
     },
     {
       "at": "2026-06-18T14:20:00.000Z",
-      "actor": "mod.lananh",
+      "actor": "mod.laura",
       "action_type": "issue_strike",
-      "target_user": "khoi.runs",
+      "target_user": "kane.runs",
       "note": "Strike issued directly for impersonating a verified running coach account in direct messages."
     },
     {
       "at": "2026-06-25T10:50:00.000Z",
-      "actor": "mod.duchuy",
+      "actor": "mod.marcus",
       "action_type": "issue_strike",
-      "target_user": "trang.liftheavy",
+      "target_user": "tessa.liftheavy",
       "note": "Strike issued directly for selling counterfeit supplement products arranged through direct messages."
     },
     {
       "at": "2026-07-02T13:15:00.000Z",
-      "actor": "thuytrang.admin",
+      "actor": "rachel.admin",
       "action_type": "issue_strike",
-      "target_user": "vu.marathon",
+      "target_user": "victor.marathon",
       "note": "Strike issued directly for a doxxing attempt against another user in a comment thread."
     }
   ],
   "supplementary_reports": [
     {
-      "at": "2026-08-10T15:09:02.780Z",
+      "id": "supp_report_dismiss_01",
+      "at": "2026-07-24T09:00:00.000Z",
       "reporter": "user_public",
-      "target_username": "rao.vat.gia.re",
+      "target_username": "cheap.deals.now",
       "report_type": "post",
       "report_reason": "spam",
       "report_status": "dismissed",
-      "note": "Standalone report, status dismissed, not tied to case_01..case_06."
+      "note": "Standalone report, status dismissed, not tied to case_01..case_06. Closed by the dismiss_report action naming this id as target_report_ref."
     },
     {
-      "at": "2026-08-10T17:11:36.281Z",
-      "reporter": "quan.tran94",
+      "id": "supp_report_dismiss_02",
+      "at": "2026-07-24T15:00:00.000Z",
+      "reporter": "ryan.walsh94",
       "target_username": "gold.scheme.99",
       "report_type": "post",
       "report_reason": "nudity",
       "report_status": "dismissed",
-      "note": "Standalone report, status dismissed, not tied to case_01..case_06."
+      "note": "Standalone report, status dismissed, not tied to case_01..case_06. Closed by the dismiss_report action naming this id as target_report_ref."
     },
     {
-      "at": "2026-08-10T20:50:35.404Z",
-      "reporter": "trangg.ng",
-      "target_username": "forex.master.vn",
+      "id": "supp_report_dismiss_03",
+      "at": "2026-07-25T09:00:00.000Z",
+      "reporter": "sophieg.design",
+      "target_username": "forex.master.pro",
       "report_type": "post",
       "report_reason": "violence",
       "report_status": "dismissed",
-      "note": "Standalone report, status dismissed, not tied to case_01..case_06."
+      "note": "Standalone report, status dismissed, not tied to case_01..case_06. Closed by the dismiss_report action naming this id as target_report_ref."
     },
     {
-      "at": "2026-08-11T00:21:13.605Z",
-      "reporter": "hieu.devops",
-      "target_username": "loi.nhuan.cao",
+      "id": "supp_report_dismiss_04",
+      "at": "2026-07-25T12:00:00.000Z",
+      "reporter": "henry.devops",
+      "target_username": "high.returns.now",
       "report_type": "post",
       "report_reason": "hate_speech",
       "report_status": "dismissed",
-      "note": "Standalone report, status dismissed, not tied to case_01..case_06."
+      "note": "Standalone report, status dismissed, not tied to case_01..case_06. Closed by the dismiss_report action naming this id as target_report_ref."
     },
     {
       "at": "2026-08-11T03:18:54.522Z",
-      "reporter": "an.codes",
-      "target_username": "toxic.tranluan",
+      "reporter": "aaron.codes",
+      "target_username": "toxic.debates",
       "report_type": "post",
       "report_reason": "harassment",
       "report_status": "escalated",
@@ -1800,8 +1808,8 @@
     },
     {
       "at": "2026-08-11T04:07:37.853Z",
-      "reporter": "vy.frontend",
-      "target_username": "loan.tempban",
+      "reporter": "vivian.frontend",
+      "target_username": "layla.tempban",
       "report_type": "post",
       "report_reason": "false_information",
       "report_status": "escalated",
@@ -1809,7 +1817,7 @@
     },
     {
       "at": "2026-08-11T05:45:47.815Z",
-      "reporter": "hung.taichinh",
+      "reporter": "hunter.finance",
       "target_username": "user_banned",
       "report_type": "post",
       "report_reason": "scam",
@@ -1819,7 +1827,7 @@
     {
       "at": "2026-08-11T09:22:03.435Z",
       "reporter": "user_public",
-      "target_username": "khang.strikeout",
+      "target_username": "kingston.strikeout",
       "report_type": "post",
       "report_reason": "other",
       "report_status": "escalated",
@@ -1827,8 +1835,8 @@
     },
     {
       "at": "2026-08-11T13:18:29.718Z",
-      "reporter": "quan.tran94",
-      "target_username": "rao.vat.gia.re",
+      "reporter": "ryan.walsh94",
+      "target_username": "cheap.deals.now",
       "report_type": "post",
       "report_reason": "spam",
       "report_status": "dismissed",
@@ -1836,7 +1844,7 @@
     },
     {
       "at": "2026-08-11T15:00:54.799Z",
-      "reporter": "trangg.ng",
+      "reporter": "sophieg.design",
       "target_username": "gold.scheme.99",
       "report_type": "post",
       "report_reason": "nudity",
@@ -1845,7 +1853,7 @@
     },
     {
       "at": "2026-08-11T19:09:02.560Z",
-      "reporter": "hieu.devops",
+      "reporter": "henry.devops",
       "target_username": "gold.scheme.99",
       "report_type": "post",
       "report_reason": "nudity",
@@ -1854,7 +1862,7 @@
     },
     {
       "at": "2026-08-11T23:17:23.935Z",
-      "reporter": "an.codes",
+      "reporter": "aaron.codes",
       "target_username": "gold.scheme.99",
       "report_type": "post",
       "report_reason": "nudity",
@@ -1863,7 +1871,7 @@
     },
     {
       "at": "2026-08-12T00:06:35.627Z",
-      "reporter": "vy.frontend",
+      "reporter": "vivian.frontend",
       "target_username": "gold.scheme.99",
       "report_type": "post",
       "report_reason": "nudity",
@@ -1872,8 +1880,8 @@
     },
     {
       "at": "2026-08-12T00:39:22.552Z",
-      "reporter": "hung.taichinh",
-      "target_username": "forex.master.vn",
+      "reporter": "hunter.finance",
+      "target_username": "forex.master.pro",
       "report_type": "post",
       "report_reason": "violence",
       "report_status": "dismissed",
@@ -1882,7 +1890,7 @@
     {
       "at": "2026-08-12T02:11:27.436Z",
       "reporter": "user_public",
-      "target_username": "forex.master.vn",
+      "target_username": "forex.master.pro",
       "report_type": "post",
       "report_reason": "violence",
       "report_status": "escalated",
@@ -1890,8 +1898,8 @@
     },
     {
       "at": "2026-08-12T06:18:14.556Z",
-      "reporter": "quan.tran94",
-      "target_username": "forex.master.vn",
+      "reporter": "ryan.walsh94",
+      "target_username": "forex.master.pro",
       "report_type": "post",
       "report_reason": "violence",
       "report_status": "pending",
@@ -1899,26 +1907,26 @@
     },
     {
       "at": "2026-08-12T09:03:12.230Z",
-      "reporter": "trangg.ng",
-      "target_username": "khang.strikeout",
+      "reporter": "sophieg.design",
+      "target_username": "kingston.strikeout",
       "report_type": "post",
       "report_reason": "violence",
       "report_status": "reviewing",
-      "note": "Standalone report authored to reach reason coverage for 'violence'; targets a different account than the earlier trangg.ng/forex.master.vn entry so the (reporter, type, entity) key stays unique."
+      "note": "Standalone report authored to reach reason coverage for 'violence'; targets a different account than the earlier sophieg.design/forex.master.pro entry so the (reporter, type, entity) key stays unique."
     },
     {
       "at": "2026-08-12T13:27:16.395Z",
-      "reporter": "hieu.devops",
-      "target_username": "rao.vat.gia.re",
+      "reporter": "henry.devops",
+      "target_username": "cheap.deals.now",
       "report_type": "post",
       "report_reason": "hate_speech",
       "report_status": "resolved",
-      "note": "Standalone report authored to reach reason coverage for 'hate_speech'; targets a different account than the earlier hieu.devops/loi.nhuan.cao entry so the (reporter, type, entity) key stays unique."
+      "note": "Standalone report authored to reach reason coverage for 'hate_speech'; targets a different account than the earlier henry.devops/high.returns.now entry so the (reporter, type, entity) key stays unique."
     },
     {
       "at": "2026-08-12T14:06:20.970Z",
-      "reporter": "an.codes",
-      "target_username": "loi.nhuan.cao",
+      "reporter": "aaron.codes",
+      "target_username": "high.returns.now",
       "report_type": "post",
       "report_reason": "hate_speech",
       "report_status": "dismissed",
@@ -1926,8 +1934,8 @@
     },
     {
       "at": "2026-08-12T18:56:28.653Z",
-      "reporter": "vy.frontend",
-      "target_username": "loi.nhuan.cao",
+      "reporter": "vivian.frontend",
+      "target_username": "high.returns.now",
       "report_type": "post",
       "report_reason": "hate_speech",
       "report_status": "escalated",
@@ -1935,8 +1943,8 @@
     },
     {
       "at": "2026-08-12T22:52:38.390Z",
-      "reporter": "hung.taichinh",
-      "target_username": "loi.nhuan.cao",
+      "reporter": "hunter.finance",
+      "target_username": "high.returns.now",
       "report_type": "post",
       "report_reason": "hate_speech",
       "report_status": "pending",
@@ -1945,7 +1953,7 @@
     {
       "at": "2026-08-13T00:13:28.202Z",
       "reporter": "user_public",
-      "target_username": "toxic.tranluan",
+      "target_username": "toxic.debates",
       "report_type": "post",
       "report_reason": "harassment",
       "report_status": "reviewing",
@@ -1953,8 +1961,8 @@
     },
     {
       "at": "2026-08-13T03:15:54.311Z",
-      "reporter": "quan.tran94",
-      "target_username": "loan.tempban",
+      "reporter": "ryan.walsh94",
+      "target_username": "layla.tempban",
       "report_type": "post",
       "report_reason": "false_information",
       "report_status": "resolved",
@@ -1962,8 +1970,8 @@
     },
     {
       "at": "2026-08-13T03:50:17.877Z",
-      "reporter": "trangg.ng",
-      "target_username": "loan.tempban",
+      "reporter": "sophieg.design",
+      "target_username": "layla.tempban",
       "report_type": "post",
       "report_reason": "false_information",
       "report_status": "dismissed",
@@ -1971,8 +1979,8 @@
     },
     {
       "at": "2026-08-13T08:37:06.254Z",
-      "reporter": "hieu.devops",
-      "target_username": "khang.strikeout",
+      "reporter": "henry.devops",
+      "target_username": "kingston.strikeout",
       "report_type": "post",
       "report_reason": "other",
       "report_status": "escalated",
@@ -1980,8 +1988,8 @@
     },
     {
       "at": "2026-08-13T09:25:06.709Z",
-      "reporter": "an.codes",
-      "target_username": "khang.strikeout",
+      "reporter": "aaron.codes",
+      "target_username": "kingston.strikeout",
       "report_type": "post",
       "report_reason": "other",
       "report_status": "pending",
@@ -1989,8 +1997,8 @@
     },
     {
       "at": "2026-08-13T14:24:17.746Z",
-      "reporter": "vy.frontend",
-      "target_username": "khang.strikeout",
+      "reporter": "vivian.frontend",
+      "target_username": "kingston.strikeout",
       "report_type": "post",
       "report_reason": "other",
       "report_status": "reviewing",

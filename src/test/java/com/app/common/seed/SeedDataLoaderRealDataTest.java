@@ -26,6 +26,10 @@ class SeedDataLoaderRealDataTest {
         assertThat(content.moderationCases()).hasSize(6);
         assertThat(content.supplementaryModerationActions()).hasSize(153);
         assertThat(content.supplementaryModerationReports()).hasSize(27);
-        assertThat(content.mediaManifest()).hasSize(120 + 15 + 95 + 25);
+        // 125 images (120 original + 5 reclassified from the former avatar pool - posts.json
+        // still references them, see media_manifest.json's _reclassified_avatar_pool_note), 15
+        // videos, 25 banners. Avatars are no longer in this file at all - see users.json's
+        // avatar_url field and UserSeedWriter.
+        assertThat(content.mediaManifest()).hasSize(125 + 15 + 25);
     }
 }

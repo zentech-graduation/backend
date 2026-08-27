@@ -8,8 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Local development's mail transport can now be switched to the real Resend provider by setting `APP_MAIL_TRANSPORT=resend` in `.env` and restarting, instead of always defaulting to the local Mailpit sink; there is no recipient allowlist, so only trigger mail-sending flows against real mailboxes you control while it is set this way.
+- The development seed dataset's usernames, display names, email addresses, bios, cities, business names, and captions are now written entirely in English, replacing content that previously mixed in romanized Vietnamese names and places.
+- Seeded avatars are now sourced from an external portrait-photo service instead of the object storage bucket; cover photos are unaffected and remain hosted there.
 
 ### Fixed
+- Every account in the development seed dataset now has a real, resolvable avatar image; previously every seeded user rendered with none.
+- A development seed run now emits notifications for post removal, post restoration, and report dismissal, matching the platform's current notification types; a seed run previously failed outright because these types had no seeded coverage.
 - A development seed run now purges every broker queue, resets the search indexes, and truncates the recommender's own data store before writing, and refuses to start unless the seed profile is active alongside dev; without this, a second seed run against an already-seeded stack could dead-letter on stale messages and leave search and recommendation state accumulating across runs instead of reflecting only the latest run.
 - A development seed run started under Spring Boot DevTools no longer reseeds a second time on a hot restart within the same process.
 - A scripted direct-message conversation could restart its own dialogue from the beginning partway through instead of ending naturally; affected conversations now end at the last genuine line.

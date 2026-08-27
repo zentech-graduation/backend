@@ -31,13 +31,15 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>The manifest records one physical R2 object per entry (the {@code
  * seed/library/{manifest_id}.{ext}} key uploaded once by Task 1), but every owner that references
- * that entry - a post author, or a user via {@code avatar_media_ref}/{@code banner_media_ref} -
- * needs its own {@code media_assets} row, because {@code storage_key} is globally unique and the
- * production write path never lets two owners share a key. This writer therefore inserts one row
- * per (manifest entry, owner) <b>use</b>, minting a fresh {@code
- * users/{ownerId}/media/{randomUUID}.{ext}}-shaped key via {@link MediaStorageKeyGenerator} for
- * every row while reusing the manifest entry's single real {@code cdn_url}, so every reader gets a
- * working image without a duplicate upload.
+ * that entry - a post author, or a user via {@code banner_media_ref} - needs its own {@code
+ * media_assets} row, because {@code storage_key} is globally unique and the production write path
+ * never lets two owners share a key. Avatars are the one exception: {@code users.avatar_url} is a
+ * literal externally-hosted URL {@link UserSeedWriter} writes directly from {@code users.json}'s
+ * {@code avatar_url} field, never touching R2 or this table, so this writer only ever collects
+ * banner uses. This writer therefore inserts one row per (manifest entry, owner) <b>use</b>,
+ * minting a fresh {@code users/{ownerId}/media/{randomUUID}.{ext}}-shaped key via {@link
+ * MediaStorageKeyGenerator} for every row while reusing the manifest entry's single real {@code
+ * cdn_url}, so every reader gets a working image without a duplicate upload.
  *
  * <p><b>Composite-key convention</b>: the returned map is keyed by {@code manifestId + "::" +
  * ownerUserId} - the manifest entry's id, then the owner's generated {@code users.id} rendered via
@@ -70,8 +72,8 @@ public class MediaSeedWriter {
 
     /**
      * Inserts one {@code media_assets} row per (manifest entry, owner) use referenced by {@code
-     * users.json} (avatar/banner) and {@code posts.json} (post media), and returns the
-     * composite-key map documented on this class.
+     * users.json} (banner) and {@code posts.json} (post media), and returns the composite-key map
+     * documented on this class.
      *
      * @param usersByUsername username-to-id map produced by {@link UserSeedWriter#write}
      * @return a map from {@code manifestId + "::" + ownerUserId} (owner id rendered via {@link
@@ -86,7 +88,7 @@ public class MediaSeedWriter {
         // LinkedHashMap dedupes repeated (manifestId, ownerUsername) uses to exactly one row while
         // keeping insertion order deterministic for the batch insert below.
         Map<String, Use> usesByDedupeKey = new LinkedHashMap<>();
-        collectUserAvatarAndBannerUses(content, usesByDedupeKey);
+        collectUserBannerUses(content, usesByDedupeKey);
         collectPostMediaUses(content, usesByDedupeKey);
 
         Map<UUID, Instant> createdAtByUserId = fetchCreatedAtByUserId();
@@ -164,11 +166,11 @@ public class MediaSeedWriter {
         return createdAtByUserId;
     }
 
-    private void collectUserAvatarAndBannerUses(SeedContent content, Map<String, Use> uses) {
+    // Avatars no longer flow through this method - users.avatar_url is a literal external URL
+    // UserSeedWriter writes straight from users.json, so only banner_media_ref ever needs a
+    // media_assets row here.
+    private void collectUserBannerUses(SeedContent content, Map<String, Use> uses) {
         for (UserSeed user : content.users()) {
-            if (user.avatarMediaRef() != null) {
-                putUse(uses, user.avatarMediaRef(), user.username());
-            }
             if (user.bannerMediaRef() != null) {
                 putUse(uses, user.bannerMediaRef(), user.username());
             }

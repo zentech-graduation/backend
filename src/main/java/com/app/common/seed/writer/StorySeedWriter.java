@@ -66,11 +66,11 @@ public class StorySeedWriter {
     // existing story owned by this username", so every one of them must own at least one story.
     private static final List<String> GUARANTEED_STORY_OWNERS =
             List.of(
-                    "vy.frontend",
-                    "khang.strikeout",
-                    "rao.vat.gia.re",
-                    "loan.tempban",
-                    "toxic.tranluan");
+                    "vivian.frontend",
+                    "kingston.strikeout",
+                    "cheap.deals.now",
+                    "layla.tempban",
+                    "toxic.debates");
 
     private static final String INSERT_STORY_SQL =
             "INSERT INTO stories (id, user_id, media_asset_id, story_type, expires_at, created_at)"

@@ -12,7 +12,8 @@ It never runs in production, and it refuses to run against anything but a local 
 | Users | 90 (8 fixed QA accounts, 82 generated) |
 | Posts | 722 (image/video/carousel/text) |
 | Hashtags | 152 |
-| Media assets (Pexels-sourced) | 255 (120 images, 15 videos, 95 avatars, 25 banners) |
+| Media assets (Pexels-sourced, R2-hosted) | 165 (125 images, 15 videos, 25 banners) |
+| Avatars (randomuser.me, externally hosted) | 90, one per user, never uploaded to R2 |
 | Comment pool entries | 900 across 22 topic pools |
 | Conversations / messages | 60 conversations, ~1,100 messages |
 | Moderation cases (full narrative) | 6 |
@@ -126,7 +127,7 @@ describes.
 | `content/comment_pools.json` | 900 pooled comment lines across 22 topics, plus scripted comment chains | `CommentSeedWriter` |
 | `messaging/conversations.json` | 60 conversations and their message history | `MessageSeedWriter` |
 | `moderation/moderation_cases.json` | 6 narrative moderation cases plus supplementary actions and reports | `ModerationSeedWriter` |
-| `media/media_manifest.json` | 255 Pexels-sourced media entries already uploaded to R2 | `MediaSeedWriter` |
+| `media/media_manifest.json` | 165 Pexels-sourced media entries already uploaded to R2 (avatars are not in this file - see "Avatars" below) | `MediaSeedWriter`, `UserSeedWriter` (banner `cdn_url` lookup) |
 
 ## Java package map
 
@@ -140,9 +141,24 @@ describes.
 | `com.app.common.seed.writer` | The 11 domain writers, one per subsystem |
 | `com.app.common.seed.outbox` | `SeedOutboxEmitter` / `SeedOutboxBatchWriter`, which replay seeded activity through the real transactional outbox |
 
+## Avatars
+
+Every seeded user carries a literal, deterministic `avatar_url` authored directly in `users.json`
+- a real portrait photograph from `https://randomuser.me/api/portraits/{men|women}/{0-99}.jpg`.
+This is an external runtime dependency: the app never uploads or proxies these images, so a
+seeded avatar is only reachable while randomuser.me itself is reachable. It was chosen because it
+is the only option found that is simultaneously photographic (not illustrated, per an earlier
+product decision), free with no API key or rate limit, and large enough (200 distinct images) to
+give all 90 users a distinct face. Assignment is positional - alternating `men`/`women` by the
+user's index in `users.json`'s array, sequential portrait index per gender bucket - so it is
+stable across seed runs as long as that array's order does not change, and no two users collide.
+`UserSeedWriter` writes this value straight to `users.avatar_url`; it never touches R2 or
+`media_assets`. Banners are unaffected and still come from R2 via `banner_media_ref`, resolved
+against `media_manifest.json`'s `cdn_url` the same way as before.
+
 ## Re-provisioning seed media
 
-Seed media (avatars, banners, and post images/video) is sourced from Pexels and provisioned to the
+Seed media (banners and post images/video) is sourced from Pexels and provisioned to the
 configured object storage bucket ahead of a seed run - the seed writers reference already-uploaded
 assets rather than uploading at seed time. To (re-)provision it:
 

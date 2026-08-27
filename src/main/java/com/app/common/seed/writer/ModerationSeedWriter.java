@@ -213,6 +213,7 @@ public class ModerationSeedWriter {
     private final Map<String, UUID> conversationIdBySeedId = new HashMap<>();
     private final Map<String, List<UUID>> messageIdsByConversationSeedId = new HashMap<>();
     private final Map<String, UUID> hashtagIdByName = new HashMap<>();
+    private final Map<String, UUID> reportIdByRef = new HashMap<>();
     private final Map<UUID, Instant> postCreatedAtById = new HashMap<>();
     private final Map<UUID, Integer> strikeNumberByUser = new HashMap<>();
     private final Set<String> usedReportKeys = new HashSet<>();
@@ -618,6 +619,13 @@ public class ModerationSeedWriter {
                         postIdBySeedId,
                         content,
                         timeline);
+        // Only dismiss_report/resolve_report entries ever carry a targetReportRef; every other
+        // action type's admin_actions.report_id stays null, as it always did before this field
+        // existed.
+        UUID reportId =
+                action.targetReportRef() == null
+                        ? null
+                        : reportIdByRef.get(action.targetReportRef());
 
         UUID adminActionId = UUID.randomUUID();
         jdbc.update(
@@ -628,7 +636,7 @@ public class ModerationSeedWriter {
                 targetUserId,
                 target == null ? null : target.entityType(),
                 target == null ? null : target.entityId(),
-                null,
+                reportId,
                 reason,
                 java.sql.Timestamp.from(translatedAt));
 
@@ -709,6 +717,9 @@ public class ModerationSeedWriter {
                 null,
                 null,
                 java.sql.Timestamp.from(createdAt));
+        if (report.id() != null) {
+            reportIdByRef.put(report.id(), reportId);
+        }
         return reportId;
     }
 

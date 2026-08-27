@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.app.common.seed.loader.SeedContent;
+import com.app.common.seed.model.MediaManifestEntry;
 import com.app.common.seed.model.UserSeed;
 import com.app.common.seed.time.SeedTimeline;
 
@@ -36,8 +37,8 @@ public class UserSeedWriter {
 
     private static final String INSERT_USER_SQL =
             "INSERT INTO users (id, username, email, display_name, bio, role, status, is_private,"
-                    + " is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?::user_role,"
-                    + " ?::user_status, ?, ?, ?)";
+                    + " is_verified, created_at, avatar_url, banner_url) VALUES (?, ?, ?, ?, ?,"
+                    + " ?::user_role, ?::user_status, ?, ?, ?, ?, ?)";
 
     private static final String INSERT_CREDENTIALS_SQL =
             "INSERT INTO user_credentials (user_id, password_hash, email_verified,"
@@ -65,6 +66,7 @@ public class UserSeedWriter {
     public Map<String, UUID> write(SeedContent content, SeedTimeline timeline) {
         List<UserSeed> users = content.users();
         String sharedPasswordHash = passwordEncoder.encode("Password123!");
+        Map<String, String> cdnUrlByManifestId = cdnUrlByManifestId(content);
 
         Map<String, UUID> usersByUsername = new HashMap<>();
         List<Object[]> userRows = new ArrayList<>();
@@ -75,6 +77,14 @@ public class UserSeedWriter {
             UUID userId = UUID.randomUUID();
             Instant createdAt = timeline.userCreatedAt(user);
             usersByUsername.put(user.username(), userId);
+            // bannerMediaRef resolves against the static manifest content already loaded, not
+            // against media_assets - MediaSeedWriter (which mints the actual media_assets row for
+            // this same manifest entry) runs after UserSeedWriter and reads users.created_at back
+            // from the DB, so resolving here avoids an extra UPDATE pass after that writer runs.
+            String bannerUrl =
+                    user.bannerMediaRef() == null
+                            ? null
+                            : cdnUrlByManifestId.get(user.bannerMediaRef());
 
             userRows.add(
                     new Object[] {
@@ -87,7 +97,9 @@ public class UserSeedWriter {
                         user.status(),
                         user.isPrivate(),
                         false,
-                        Timestamp.from(createdAt)
+                        Timestamp.from(createdAt),
+                        user.avatarUrl(),
+                        bannerUrl
                     });
             credentialRows.add(
                     new Object[] {
@@ -124,6 +136,24 @@ public class UserSeedWriter {
         ps.setBoolean(8, (Boolean) row[7]);
         ps.setBoolean(9, (Boolean) row[8]);
         ps.setTimestamp(10, (Timestamp) row[9]);
+        ps.setString(11, (String) row[10]);
+        if (row[11] == null) {
+            ps.setNull(12, Types.VARCHAR);
+        } else {
+            ps.setString(12, (String) row[11]);
+        }
+    }
+
+    // MediaManifestEntry.cdnUrl is the single real R2 URL every reader shares for that manifest
+    // entry (see media_manifest.json's _storage_key_strategy) - resolving banner_url against this
+    // map, not against a media_assets row, is what lets this writer stay a single INSERT per table
+    // instead of depending on MediaSeedWriter having already run.
+    private Map<String, String> cdnUrlByManifestId(SeedContent content) {
+        Map<String, String> cdnUrlByManifestId = new HashMap<>();
+        for (MediaManifestEntry entry : content.mediaManifest()) {
+            cdnUrlByManifestId.put(entry.id(), entry.cdnUrl());
+        }
+        return cdnUrlByManifestId;
     }
 
     private void bindCredentialRow(PreparedStatement ps, Object[] row) throws SQLException {

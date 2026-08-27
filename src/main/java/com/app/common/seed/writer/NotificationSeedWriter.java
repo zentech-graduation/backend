@@ -26,9 +26,10 @@ import lombok.extern.slf4j.Slf4j;
  * event an earlier writer already persisted that would, on the production write path, have fanned
  * out through a RabbitMQ consumer into a notification row - {@link SocialGraphSeedWriter}'s {@code
  * follows}, {@link CommentSeedWriter}'s {@code comments}, {@link StorySeedWriter}'s {@code
- * story_views}, {@link ModerationSeedWriter}'s {@code user_warnings}, {@link
- * EngagementSeedWriter}'s {@code post_likes}/{@code comment_likes}, and {@link MessageSeedWriter}'s
- * {@code messages}.
+ * story_views}, {@link ModerationSeedWriter}'s {@code user_warnings} and {@code admin_actions} (for
+ * {@code post_removed}/{@code report_post_removed}/{@code post_restored}/{@code report_dismissed}),
+ * {@link EngagementSeedWriter}'s {@code post_likes}/{@code comment_likes}, and {@link
+ * MessageSeedWriter}'s {@code messages}.
  *
  * <p>Those consumers ({@code SocialNotificationConsumer}, {@code CommentNotificationConsumer},
  * {@code StoryNotificationConsumer}, {@code AdminNotificationConsumer}, {@code
@@ -40,7 +41,12 @@ import lombok.extern.slf4j.Slf4j;
  * com.app.modules.notification.service.NotificationService#create}'s own Javadoc documents this);
  * {@code LIKE_COMMENT}/{@code MENTION_COMMENT} carry {@code entityType="comment"} plus the owning
  * post's id, matching {@code CommentNotificationConsumer}; {@code MESSAGE} carries {@code
- * entityType="message"} and a null {@code postId}, matching {@code MessageNotificationConsumer}.
+ * entityType="message"} and a null {@code postId}, matching {@code MessageNotificationConsumer};
+ * {@code POST_REMOVED}/{@code POST_RESTORED} carry {@code entityType="post"} and a null {@code
+ * postId}, {@code REPORT_POST_REMOVED}/{@code REPORT_DISMISSED} carry {@code entityType="report"}
+ * with {@code entityId}=the report id, matching {@code AdminServiceImpl.notifySystem}'s calls
+ * exactly - including that all four carry a null {@code actorId}, since production sends them as
+ * system notifications rather than attributing them to the acting admin.
  *
  * <p><b>Mentions have no real source</b>: no seed content encodes a literal {@code @username} in a
  * caption or comment body, so {@code MENTION_POST}/{@code MENTION_COMMENT} cannot be read back the
@@ -84,6 +90,7 @@ public class NotificationSeedWriter {
     private static final String STORY_ENTITY_TYPE = "story";
     private static final String POST_ENTITY_TYPE = "post";
     private static final String MESSAGE_ENTITY_TYPE = "message";
+    private static final String REPORT_ENTITY_TYPE = "report";
 
     private static final String INSERT_NOTIFICATION_SQL =
             "INSERT INTO notifications (id, recipient_id, actor_id, type, entity_type, entity_id,"
@@ -108,6 +115,10 @@ public class NotificationSeedWriter {
         List<Candidate> warningCandidates = fetchWarningCandidates();
         List<Candidate> mentionCandidates = new ArrayList<>(fetchMentionPostCandidates(random));
         mentionCandidates.addAll(fetchMentionCommentCandidates(random));
+        List<Candidate> postRemovedCandidates = fetchPostRemovedCandidates();
+        List<Candidate> reportPostRemovedCandidates = fetchReportPostRemovedCandidates();
+        List<Candidate> postRestoredCandidates = fetchPostRestoredCandidates();
+        List<Candidate> reportDismissedCandidates = fetchReportDismissedCandidates();
 
         List<Candidate> sampledCandidates = new ArrayList<>();
         sampledCandidates.addAll(fetchFollowCandidates());
@@ -135,6 +146,10 @@ public class NotificationSeedWriter {
         all.addAll(likePostCandidates);
         all.addAll(likeCommentCandidates);
         all.addAll(messageCandidates);
+        all.addAll(postRemovedCandidates);
+        all.addAll(reportPostRemovedCandidates);
+        all.addAll(postRestoredCandidates);
+        all.addAll(reportDismissedCandidates);
 
         List<Object[]> rows = new ArrayList<>();
         for (Candidate candidate : all) {
@@ -158,7 +173,9 @@ public class NotificationSeedWriter {
         jdbc.batchUpdate(INSERT_NOTIFICATION_SQL, rows, rows.size(), this::bindRow);
         log.info(
                 "[seed] notifications: {} rows written ({} warning, {} mention, {} sampled from"
-                        + " {} candidates, {} like_post, {} like_comment, {} message)",
+                        + " {} candidates, {} like_post, {} like_comment, {} message, {}"
+                        + " post_removed, {} report_post_removed, {} post_restored, {}"
+                        + " report_dismissed)",
                 rows.size(),
                 warningCandidates.size(),
                 mentionCandidates.size(),
@@ -166,7 +183,11 @@ public class NotificationSeedWriter {
                 sampledCandidates.size(),
                 likePostCandidates.size(),
                 likeCommentCandidates.size(),
-                messageCandidates.size());
+                messageCandidates.size(),
+                postRemovedCandidates.size(),
+                reportPostRemovedCandidates.size(),
+                postRestoredCandidates.size(),
+                reportDismissedCandidates.size());
     }
 
     // Reservoir-style uniform sample without replacement: shuffling the whole candidate list and
@@ -285,6 +306,119 @@ public class NotificationSeedWriter {
                     Instant createdAt = rs.getTimestamp("created_at").toInstant();
                     candidates.add(
                             new Candidate(userId, null, "warning", null, null, null, createdAt));
+                });
+        return candidates;
+    }
+
+    // Every removed post's owner, regardless of whether the removal was linked to a report -
+    // mirrors AdminServiceImpl.notifySystem's unconditional POST_REMOVED call, which (like every
+    // notification in this group) carries a null actor_id since the recipient is told the system
+    // acted, not which admin acted.
+    private List<Candidate> fetchPostRemovedCandidates() {
+        List<Candidate> candidates = new ArrayList<>();
+        jdbc.query(
+                "SELECT aa.target_entity_id AS post_id, p.user_id AS owner_id, aa.created_at AS"
+                        + " created_at FROM admin_actions aa JOIN posts p ON p.id ="
+                        + " aa.target_entity_id WHERE aa.action_type = 'remove_post'",
+                rs -> {
+                    UUID postId = (UUID) rs.getObject("post_id");
+                    UUID ownerId = (UUID) rs.getObject("owner_id");
+                    Instant createdAt = rs.getTimestamp("created_at").toInstant();
+                    candidates.add(
+                            new Candidate(
+                                    ownerId,
+                                    null,
+                                    "post_removed",
+                                    POST_ENTITY_TYPE,
+                                    postId,
+                                    null,
+                                    createdAt));
+                });
+        return candidates;
+    }
+
+    // Production only sends this when the removed post is the exact entity_id of the linked
+    // report (AdminServiceImpl.isMatchingPostReport). ModerationSeedWriter's case narratives reuse
+    // one case-level report id across every remove_post action the case scripts, so requiring an
+    // exact entity_id match here would leave only a single candidate; this reads a remove_post
+    // action's linked report as "resolved a post-type report against this same account" instead,
+    // which is what the case narrative actually means even though no single report row names
+    // every removed post individually.
+    private List<Candidate> fetchReportPostRemovedCandidates() {
+        List<Candidate> candidates = new ArrayList<>();
+        jdbc.query(
+                "SELECT aa.report_id AS report_id, aa.target_entity_id AS post_id, p.user_id AS"
+                        + " owner_id, r.reporter_id AS reporter_id, aa.created_at AS created_at"
+                        + " FROM admin_actions aa JOIN reports r ON r.id = aa.report_id JOIN"
+                        + " posts p ON p.id = aa.target_entity_id WHERE aa.action_type ="
+                        + " 'remove_post' AND r.report_type = 'post' AND r.reporter_id <>"
+                        + " p.user_id",
+                rs -> {
+                    UUID reportId = (UUID) rs.getObject("report_id");
+                    UUID postId = (UUID) rs.getObject("post_id");
+                    UUID reporterId = (UUID) rs.getObject("reporter_id");
+                    Instant createdAt = rs.getTimestamp("created_at").toInstant();
+                    candidates.add(
+                            new Candidate(
+                                    reporterId,
+                                    null,
+                                    "report_post_removed",
+                                    REPORT_ENTITY_TYPE,
+                                    reportId,
+                                    postId,
+                                    createdAt));
+                });
+        return candidates;
+    }
+
+    private List<Candidate> fetchPostRestoredCandidates() {
+        List<Candidate> candidates = new ArrayList<>();
+        jdbc.query(
+                "SELECT aa.target_entity_id AS post_id, p.user_id AS owner_id, aa.created_at AS"
+                        + " created_at FROM admin_actions aa JOIN posts p ON p.id ="
+                        + " aa.target_entity_id WHERE aa.action_type = 'restore_post'",
+                rs -> {
+                    UUID postId = (UUID) rs.getObject("post_id");
+                    UUID ownerId = (UUID) rs.getObject("owner_id");
+                    Instant createdAt = rs.getTimestamp("created_at").toInstant();
+                    candidates.add(
+                            new Candidate(
+                                    ownerId,
+                                    null,
+                                    "post_restored",
+                                    POST_ENTITY_TYPE,
+                                    postId,
+                                    null,
+                                    createdAt));
+                });
+        return candidates;
+    }
+
+    // Only fires for a dismiss_report admin_actions row that actually carries a report_id -
+    // ModerationSeedWriter.applySupplementaryAction leaves report_id null on a dismiss_report
+    // entry with no target_report_ref, matching that a background-dismissed report (set directly
+    // via writeBackgroundReports, never through an admin_actions row) has no audit trail to derive
+    // a notification from either.
+    private List<Candidate> fetchReportDismissedCandidates() {
+        List<Candidate> candidates = new ArrayList<>();
+        jdbc.query(
+                "SELECT aa.report_id AS report_id, r.reporter_id AS reporter_id, aa.created_at AS"
+                        + " created_at FROM admin_actions aa JOIN reports r ON r.id ="
+                        + " aa.report_id WHERE aa.action_type = 'dismiss_report' AND"
+                        + " aa.report_id IS NOT NULL",
+                rs -> {
+                    UUID reportId = (UUID) rs.getObject("report_id");
+                    UUID reporterId = (UUID) rs.getObject("reporter_id");
+                    Instant createdAt = rs.getTimestamp("created_at").toInstant();
+                    candidates.add(
+                            new Candidate(
+                                    reporterId,
+                                    null,
+                                    "report_dismissed",
+                                    REPORT_ENTITY_TYPE,
+                                    reportId,
+                                    null,
+                                    createdAt));
                 });
         return candidates;
     }

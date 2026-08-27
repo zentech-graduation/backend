@@ -431,7 +431,7 @@
         "is_reply_bait": false
       },
       {
-        "text": "is there an online design conference happening in saigon",
+        "text": "is there an online design conference happening in austin",
         "tone": "question",
         "language": "en",
         "depth_suitability": "either",
@@ -622,7 +622,7 @@
     ],
     "photography": [
       {
-        "text": "morning light in hoi an is unreal, what settings get that color",
+        "text": "morning light in savannah is unreal, what settings get that color",
         "tone": "question",
         "language": "en",
         "depth_suitability": "either",
@@ -783,7 +783,7 @@
         "is_reply_bait": false
       },
       {
-        "text": "can you shoot weddings out of town from da nang",
+        "text": "can you shoot weddings out of town from denver",
         "tone": "question",
         "language": "en",
         "depth_suitability": "either",
@@ -946,7 +946,7 @@
         "is_reply_bait": false
       },
       {
-        "text": "tuition going up another 2 million is genuinely rough on students",
+        "text": "tuition going up another $200 is genuinely rough on students",
         "tone": "supportive",
         "language": "en",
         "depth_suitability": "either",
@@ -1848,7 +1848,7 @@
         "is_reply_bait": false
       },
       {
-        "text": "the banh mi here is the best in the area honestly",
+        "text": "the sandwiches here are the best in the area honestly",
         "tone": "supportive",
         "language": "en",
         "depth_suitability": "top_level",
@@ -2785,7 +2785,7 @@
         "is_reply_bait": true
       },
       {
-        "text": "just had a service done, cost over 500k this time",
+        "text": "just had a service done, cost over $60 this time",
         "tone": "info",
         "language": "en",
         "depth_suitability": "either",
@@ -2904,7 +2904,7 @@
         "is_reply_bait": false
       },
       {
-        "text": "scraped the fairing in a minor bump, repair cost almost a million",
+        "text": "scraped the fairing in a minor bump, repair cost almost $100",
         "tone": "info",
         "language": "en",
         "depth_suitability": "either",
@@ -3202,7 +3202,7 @@
     ],
     "parenting": [
       {
-        "text": "preschool tuition up another 1.5 million a month is genuinely rough",
+        "text": "preschool tuition up another $150 a month is genuinely rough",
         "tone": "supportive",
         "language": "en",
         "depth_suitability": "either",
@@ -4971,14 +4971,14 @@
         "is_reply_bait": false
       },
       {
-        "text": "saigon moves fast and costs move just as fast",
+        "text": "austin moves fast and costs move just as fast",
         "tone": "info",
         "language": "en",
         "depth_suitability": "either",
         "is_reply_bait": false
       },
       {
-        "text": "hanoi living is way pricier than i expected",
+        "text": "portland living is way pricier than i expected",
         "tone": "info",
         "language": "en",
         "depth_suitability": "either",
@@ -5549,7 +5549,7 @@
         "is_reply_bait": false
       },
       {
-        "text": "someone i know lost tens of millions trusting this kind of thing",
+        "text": "someone i know lost thousands of dollars trusting this kind of thing",
         "tone": "info",
         "language": "en",
         "depth_suitability": "either",
@@ -6155,7 +6155,7 @@
         "is_reply_bait": false
       },
       {
-        "text": "worked remotely from da lat for a month once, pretty great experience",
+        "text": "worked remotely from asheville for a month once, pretty great experience",
         "tone": "info",
         "language": "en",
         "depth_suitability": "either",
@@ -6351,25 +6351,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "how did the migration end up with no rollback, was there no checklist",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "there was a checklist but we were slammed on a deadline and skipped a step",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "should probably make checklist review mandatory before merging a deploy then",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "agreed, adding that to the process next week",
           "tone": "supportive",
           "language": "en"
@@ -6381,25 +6381,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "what orm do you use to avoid n+1 queries",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "i use jpa with a batch fetch size, cut down a good chunk of queries",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "what batch fetch size do you set it to",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "i set it to 50, adjust based on your data though",
           "tone": "info",
           "language": "en"
@@ -6411,25 +6411,25 @@
       "topic_tag": "design",
       "turns": [
         {
-          "speaker_username": "trangg.ng",
+          "speaker_username": "sophieg.design",
           "text": "3 out of 5 users getting lost on the submit button probably means the placement's off",
           "tone": "disagree",
           "language": "en"
         },
         {
-          "speaker_username": "linh.uxui",
+          "speaker_username": "lily.uxui",
           "text": "yeah, we're already moving the button above the fold",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "bao.design",
+          "speaker_username": "blake.design",
           "text": "can i see the new version, curious",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "chi.productdesign",
+          "speaker_username": "chloe.productdesign",
           "text": "i'll update the case study next week with it",
           "tone": "supportive",
           "language": "en"
@@ -6441,31 +6441,31 @@
       "topic_tag": "photography",
       "turns": [
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "how much for the family photo combo",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "basic combo is 1.5m, add an album and it's 2.2m",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duc.lensman",
+          "speaker_username": "dean.lensman",
           "text": "how many edited photos come with that",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "20 heavily edited, the rest are full raw shots with basic crops",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "ok i'll dm you to book a slot",
           "tone": "supportive",
           "language": "en"
@@ -6513,13 +6513,13 @@
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "yeah, knees caving in, fixing it made a huge difference on the joint pain",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "trang.liftheavy",
+          "speaker_username": "tessa.liftheavy",
           "text": "same thing happened to me, gonna find a coach to fix mine too",
           "tone": "supportive",
           "language": "en"
@@ -6531,25 +6531,25 @@
       "topic_tag": "running",
       "turns": [
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "is 45km a week too much, worried about injury",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nga.gymlife",
+          "speaker_username": "nadia.gymlife",
           "text": "depends on your base, ramping up gradually week by week is fine, just don't spike it",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "tu.trailrunner",
+          "speaker_username": "tucker.trailrunner",
           "text": "so what percentage increase per week is safe",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "around 10%, more than that risks overuse injury",
           "tone": "info",
           "language": "en"
@@ -6561,13 +6561,13 @@
       "topic_tag": "job-market",
       "turns": [
         {
-          "speaker_username": "quan.tran94",
+          "speaker_username": "ryan.walsh94",
           "text": "sent resumes to a dozen companies and no callbacks, is something wrong with my resume",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khanh.newgrad25",
+          "speaker_username": "kellan.newgrad25",
           "text": "probably the format isn't standing out, try customizing it per job",
           "tone": "info",
           "language": "en"
@@ -6585,25 +6585,25 @@
       "topic_tag": "personal-finance",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "a small loss the first 3 months, should i pull out or keep holding",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "phuong.ketoan",
+          "speaker_username": "phoebe.accounting",
           "text": "if it's a long term investment just hold, don't panic over short term swings",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "so how long counts as long term here",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "depends on the goal, usually measured in years not months",
           "tone": "info",
           "language": "en"
@@ -6615,25 +6615,25 @@
       "topic_tag": "property-price",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "which bank has the lowest mortgage rate right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "i'm financing through vietcombank, the first year promo rate is pretty good",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "is the floating rate high after the first year",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "it goes up but it's manageable, just read the contract carefully before signing",
           "tone": "info",
           "language": "en"
@@ -6657,7 +6657,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "streetwear.sg1",
+          "speaker_username": "streetwear.atx1",
           "text": "thanks for the heads up, gonna try a small",
           "tone": "supportive",
           "language": "en"
@@ -6669,7 +6669,7 @@
       "topic_tag": "fnb",
       "turns": [
         {
-          "speaker_username": "quanan.cohuong",
+          "speaker_username": "grandma.roses",
           "text": "what time does this place close",
           "tone": "question",
           "language": "en"
@@ -6681,7 +6681,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "banhmi.co3",
+          "speaker_username": "corner.sandwich3",
           "text": "great, i can swing by tonight then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -6693,19 +6693,19 @@
       "topic_tag": "studying-abroad",
       "turns": [
         {
-          "speaker_username": "linh.tran02",
+          "speaker_username": "lauren.t02",
           "text": "what ielts score does this scholarship require",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoa.uni21",
+          "speaker_username": "kyle.uni21",
           "text": "6.5 overall minimum, no band below 6.0",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "yen.study",
+          "speaker_username": "yuna.study",
           "text": "guess i need to redo my writing prep then, thanks for the info",
           "tone": "supportive",
           "language": "en"
@@ -6717,25 +6717,25 @@
       "topic_tag": "rental",
       "turns": [
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "how many months deposit is reasonable for a lease",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "tuyen.silent",
+          "speaker_username": "tristan.silent",
           "text": "usually 1-2 months, if it's more than 3 you should think twice",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "phuc.senior4",
+          "speaker_username": "phil.senior4",
           "text": "mine's asking for 3 months deposit, is that normal",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "that's a bit high, try negotiating it down",
           "tone": "info",
           "language": "en"
@@ -6747,19 +6747,19 @@
       "topic_tag": "motorbike",
       "turns": [
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "winner or exciter, which one holds up better",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "the winner's engine feels more durable from what i've seen, fewer small breakdowns",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "guess i'll upgrade to the winner then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -6771,19 +6771,19 @@
       "topic_tag": "freelance-work",
       "turns": [
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "how do i politely remind a client who's paying late",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "i usually send a gentle email reminder 3 days before the due date, works pretty well",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "gonna try that, thanks",
           "tone": "supportive",
           "language": "en"
@@ -6795,19 +6795,19 @@
       "topic_tag": "cost-of-living",
       "turns": [
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "cost of living jumped a lot this month, is anyone cutting back",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoa.quietacc",
+          "speaker_username": "hope.quietacc",
           "text": "i cut back on eating out, cooking more at home to save",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "good idea, gonna try that too",
           "tone": "supportive",
           "language": "en"
@@ -6819,19 +6819,19 @@
       "topic_tag": "gold-price",
       "turns": [
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "gold's rising, should i buy more right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "if you're accumulating long term just buy gradually, don't dump it all in at once",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "ok, gonna split it into smaller purchases, thanks for the advice",
           "tone": "supportive",
           "language": "en"
@@ -6843,19 +6843,19 @@
       "topic_tag": "fake-investment",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "has anyone invested with this group, the ad's promising crazy high returns",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "stay away, returns like that aren't realistic, could be a scam",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "thanks for the warning, almost transferred money",
           "tone": "supportive",
           "language": "en"
@@ -6867,19 +6867,19 @@
       "topic_tag": "parenting",
       "turns": [
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "what's preschool tuition looking like around district 7",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "thuytrang.admin",
-          "text": "roughly 4-6 million a month depending on public or private",
+          "speaker_username": "rachel.admin",
+          "text": "roughly $400-600 a month depending on public or private",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "guess i need to rebalance the budget then",
           "tone": "supportive",
           "language": "en"
@@ -6891,25 +6891,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "how did the migration end up with no rollback, was there no checklist",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "there was a checklist but we were slammed on a deadline and skipped a step",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "should probably make checklist review mandatory before merging a deploy then",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "agreed, adding that to the process next week",
           "tone": "supportive",
           "language": "en"
@@ -6921,25 +6921,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "what orm do you use to avoid n+1 queries",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "i use jpa with a batch fetch size, cut down a good chunk of queries",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "what batch fetch size do you set it to",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "i set it to 50, adjust based on your data though",
           "tone": "info",
           "language": "en"
@@ -6951,25 +6951,25 @@
       "topic_tag": "design",
       "turns": [
         {
-          "speaker_username": "trangg.ng",
+          "speaker_username": "sophieg.design",
           "text": "3 out of 5 users getting lost on the submit button probably means the placement's off",
           "tone": "disagree",
           "language": "en"
         },
         {
-          "speaker_username": "linh.uxui",
+          "speaker_username": "lily.uxui",
           "text": "yeah, we're already moving the button above the fold",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "bao.design",
+          "speaker_username": "blake.design",
           "text": "can i see the new version, curious",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "chi.productdesign",
+          "speaker_username": "chloe.productdesign",
           "text": "i'll update the case study next week with it",
           "tone": "supportive",
           "language": "en"
@@ -6981,31 +6981,31 @@
       "topic_tag": "photography",
       "turns": [
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "how much for the family photo combo",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "basic combo is 1.5m, add an album and it's 2.2m",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duc.lensman",
+          "speaker_username": "dean.lensman",
           "text": "how many edited photos come with that",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "20 heavily edited, the rest are full raw shots with basic crops",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "ok i'll dm you to book a slot",
           "tone": "supportive",
           "language": "en"
@@ -7053,13 +7053,13 @@
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "yeah, knees caving in, fixing it made a huge difference on the joint pain",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "trang.liftheavy",
+          "speaker_username": "tessa.liftheavy",
           "text": "same thing happened to me, gonna find a coach to fix mine too",
           "tone": "supportive",
           "language": "en"
@@ -7071,25 +7071,25 @@
       "topic_tag": "running",
       "turns": [
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "is 45km a week too much, worried about injury",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nga.gymlife",
+          "speaker_username": "nadia.gymlife",
           "text": "depends on your base, ramping up gradually week by week is fine, just don't spike it",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "tu.trailrunner",
+          "speaker_username": "tucker.trailrunner",
           "text": "so what percentage increase per week is safe",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "around 10%, more than that risks overuse injury",
           "tone": "info",
           "language": "en"
@@ -7101,13 +7101,13 @@
       "topic_tag": "job-market",
       "turns": [
         {
-          "speaker_username": "quan.tran94",
+          "speaker_username": "ryan.walsh94",
           "text": "sent resumes to a dozen companies and no callbacks, is something wrong with my resume",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khanh.newgrad25",
+          "speaker_username": "kellan.newgrad25",
           "text": "probably the format isn't standing out, try customizing it per job",
           "tone": "info",
           "language": "en"
@@ -7125,25 +7125,25 @@
       "topic_tag": "personal-finance",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "a small loss the first 3 months, should i pull out or keep holding",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "phuong.ketoan",
+          "speaker_username": "phoebe.accounting",
           "text": "if it's a long term investment just hold, don't panic over short term swings",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "so how long counts as long term here",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "depends on the goal, usually measured in years not months",
           "tone": "info",
           "language": "en"
@@ -7155,25 +7155,25 @@
       "topic_tag": "property-price",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "which bank has the lowest mortgage rate right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "i'm financing through vietcombank, the first year promo rate is pretty good",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "is the floating rate high after the first year",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "it goes up but it's manageable, just read the contract carefully before signing",
           "tone": "info",
           "language": "en"
@@ -7197,7 +7197,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "streetwear.sg1",
+          "speaker_username": "streetwear.atx1",
           "text": "thanks for the heads up, gonna try a small",
           "tone": "supportive",
           "language": "en"
@@ -7209,7 +7209,7 @@
       "topic_tag": "fnb",
       "turns": [
         {
-          "speaker_username": "quanan.cohuong",
+          "speaker_username": "grandma.roses",
           "text": "what time does this place close",
           "tone": "question",
           "language": "en"
@@ -7221,7 +7221,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "banhmi.co3",
+          "speaker_username": "corner.sandwich3",
           "text": "great, i can swing by tonight then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -7233,19 +7233,19 @@
       "topic_tag": "studying-abroad",
       "turns": [
         {
-          "speaker_username": "linh.tran02",
+          "speaker_username": "lauren.t02",
           "text": "what ielts score does this scholarship require",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoa.uni21",
+          "speaker_username": "kyle.uni21",
           "text": "6.5 overall minimum, no band below 6.0",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "yen.study",
+          "speaker_username": "yuna.study",
           "text": "guess i need to redo my writing prep then, thanks for the info",
           "tone": "supportive",
           "language": "en"
@@ -7257,25 +7257,25 @@
       "topic_tag": "rental",
       "turns": [
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "how many months deposit is reasonable for a lease",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "tuyen.silent",
+          "speaker_username": "tristan.silent",
           "text": "usually 1-2 months, if it's more than 3 you should think twice",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "phuc.senior4",
+          "speaker_username": "phil.senior4",
           "text": "mine's asking for 3 months deposit, is that normal",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "that's a bit high, try negotiating it down",
           "tone": "info",
           "language": "en"
@@ -7287,19 +7287,19 @@
       "topic_tag": "motorbike",
       "turns": [
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "winner or exciter, which one holds up better",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "the winner's engine feels more durable from what i've seen, fewer small breakdowns",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "guess i'll upgrade to the winner then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -7311,19 +7311,19 @@
       "topic_tag": "freelance-work",
       "turns": [
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "how do i politely remind a client who's paying late",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "i usually send a gentle email reminder 3 days before the due date, works pretty well",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "gonna try that, thanks",
           "tone": "supportive",
           "language": "en"
@@ -7335,19 +7335,19 @@
       "topic_tag": "cost-of-living",
       "turns": [
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "cost of living jumped a lot this month, is anyone cutting back",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoa.quietacc",
+          "speaker_username": "hope.quietacc",
           "text": "i cut back on eating out, cooking more at home to save",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "good idea, gonna try that too",
           "tone": "supportive",
           "language": "en"
@@ -7359,19 +7359,19 @@
       "topic_tag": "gold-price",
       "turns": [
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "gold's rising, should i buy more right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "if you're accumulating long term just buy gradually, don't dump it all in at once",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "ok, gonna split it into smaller purchases, thanks for the advice",
           "tone": "supportive",
           "language": "en"
@@ -7383,19 +7383,19 @@
       "topic_tag": "fake-investment",
       "turns": [
         {
-          "speaker_username": "trangg.ng",
+          "speaker_username": "sophieg.design",
           "text": "has anyone invested with this group, the ad's promising crazy high returns",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "linh.uxui",
+          "speaker_username": "lily.uxui",
           "text": "stay away, returns like that aren't realistic, could be a scam",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "bao.design",
+          "speaker_username": "blake.design",
           "text": "thanks for the warning, almost transferred money",
           "tone": "supportive",
           "language": "en"
@@ -7407,19 +7407,19 @@
       "topic_tag": "parenting",
       "turns": [
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "what's preschool tuition looking like around district 7",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "thuytrang.admin",
-          "text": "roughly 4-6 million a month depending on public or private",
+          "speaker_username": "rachel.admin",
+          "text": "roughly $400-600 a month depending on public or private",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "guess i need to rebalance the budget then",
           "tone": "supportive",
           "language": "en"
@@ -7431,25 +7431,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "how did the migration end up with no rollback, was there no checklist",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "there was a checklist but we were slammed on a deadline and skipped a step",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "should probably make checklist review mandatory before merging a deploy then",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "agreed, adding that to the process next week",
           "tone": "supportive",
           "language": "en"
@@ -7461,25 +7461,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "what orm do you use to avoid n+1 queries",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "i use jpa with a batch fetch size, cut down a good chunk of queries",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "what batch fetch size do you set it to",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "i set it to 50, adjust based on your data though",
           "tone": "info",
           "language": "en"
@@ -7491,25 +7491,25 @@
       "topic_tag": "design",
       "turns": [
         {
-          "speaker_username": "trangg.ng",
+          "speaker_username": "sophieg.design",
           "text": "3 out of 5 users getting lost on the submit button probably means the placement's off",
           "tone": "disagree",
           "language": "en"
         },
         {
-          "speaker_username": "linh.uxui",
+          "speaker_username": "lily.uxui",
           "text": "yeah, we're already moving the button above the fold",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "bao.design",
+          "speaker_username": "blake.design",
           "text": "can i see the new version, curious",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "chi.productdesign",
+          "speaker_username": "chloe.productdesign",
           "text": "i'll update the case study next week with it",
           "tone": "supportive",
           "language": "en"
@@ -7521,31 +7521,31 @@
       "topic_tag": "photography",
       "turns": [
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "how much for the family photo combo",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "basic combo is 1.5m, add an album and it's 2.2m",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duc.lensman",
+          "speaker_username": "dean.lensman",
           "text": "how many edited photos come with that",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "20 heavily edited, the rest are full raw shots with basic crops",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "ok i'll dm you to book a slot",
           "tone": "supportive",
           "language": "en"
@@ -7593,13 +7593,13 @@
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "yeah, knees caving in, fixing it made a huge difference on the joint pain",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "trang.liftheavy",
+          "speaker_username": "tessa.liftheavy",
           "text": "same thing happened to me, gonna find a coach to fix mine too",
           "tone": "supportive",
           "language": "en"
@@ -7611,25 +7611,25 @@
       "topic_tag": "running",
       "turns": [
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "is 45km a week too much, worried about injury",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nga.gymlife",
+          "speaker_username": "nadia.gymlife",
           "text": "depends on your base, ramping up gradually week by week is fine, just don't spike it",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "tu.trailrunner",
+          "speaker_username": "tucker.trailrunner",
           "text": "so what percentage increase per week is safe",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "around 10%, more than that risks overuse injury",
           "tone": "info",
           "language": "en"
@@ -7641,13 +7641,13 @@
       "topic_tag": "job-market",
       "turns": [
         {
-          "speaker_username": "quan.tran94",
+          "speaker_username": "ryan.walsh94",
           "text": "sent resumes to a dozen companies and no callbacks, is something wrong with my resume",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khanh.newgrad25",
+          "speaker_username": "kellan.newgrad25",
           "text": "probably the format isn't standing out, try customizing it per job",
           "tone": "info",
           "language": "en"
@@ -7665,25 +7665,25 @@
       "topic_tag": "personal-finance",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "a small loss the first 3 months, should i pull out or keep holding",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "phuong.ketoan",
+          "speaker_username": "phoebe.accounting",
           "text": "if it's a long term investment just hold, don't panic over short term swings",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "so how long counts as long term here",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "depends on the goal, usually measured in years not months",
           "tone": "info",
           "language": "en"
@@ -7695,25 +7695,25 @@
       "topic_tag": "property-price",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "which bank has the lowest mortgage rate right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "i'm financing through vietcombank, the first year promo rate is pretty good",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "is the floating rate high after the first year",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "it goes up but it's manageable, just read the contract carefully before signing",
           "tone": "info",
           "language": "en"
@@ -7737,7 +7737,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "streetwear.sg1",
+          "speaker_username": "streetwear.atx1",
           "text": "thanks for the heads up, gonna try a small",
           "tone": "supportive",
           "language": "en"
@@ -7749,7 +7749,7 @@
       "topic_tag": "fnb",
       "turns": [
         {
-          "speaker_username": "quanan.cohuong",
+          "speaker_username": "grandma.roses",
           "text": "what time does this place close",
           "tone": "question",
           "language": "en"
@@ -7761,7 +7761,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "banhmi.co3",
+          "speaker_username": "corner.sandwich3",
           "text": "great, i can swing by tonight then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -7773,19 +7773,19 @@
       "topic_tag": "studying-abroad",
       "turns": [
         {
-          "speaker_username": "linh.tran02",
+          "speaker_username": "lauren.t02",
           "text": "what ielts score does this scholarship require",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoa.uni21",
+          "speaker_username": "kyle.uni21",
           "text": "6.5 overall minimum, no band below 6.0",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "yen.study",
+          "speaker_username": "yuna.study",
           "text": "guess i need to redo my writing prep then, thanks for the info",
           "tone": "supportive",
           "language": "en"
@@ -7797,25 +7797,25 @@
       "topic_tag": "rental",
       "turns": [
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "how many months deposit is reasonable for a lease",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "tuyen.silent",
+          "speaker_username": "tristan.silent",
           "text": "usually 1-2 months, if it's more than 3 you should think twice",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "phuc.senior4",
+          "speaker_username": "phil.senior4",
           "text": "mine's asking for 3 months deposit, is that normal",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "that's a bit high, try negotiating it down",
           "tone": "info",
           "language": "en"
@@ -7827,19 +7827,19 @@
       "topic_tag": "motorbike",
       "turns": [
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "winner or exciter, which one holds up better",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "the winner's engine feels more durable from what i've seen, fewer small breakdowns",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "guess i'll upgrade to the winner then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -7851,19 +7851,19 @@
       "topic_tag": "freelance-work",
       "turns": [
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "how do i politely remind a client who's paying late",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "i usually send a gentle email reminder 3 days before the due date, works pretty well",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "gonna try that, thanks",
           "tone": "supportive",
           "language": "en"
@@ -7875,19 +7875,19 @@
       "topic_tag": "cost-of-living",
       "turns": [
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "cost of living jumped a lot this month, is anyone cutting back",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoa.quietacc",
+          "speaker_username": "hope.quietacc",
           "text": "i cut back on eating out, cooking more at home to save",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "good idea, gonna try that too",
           "tone": "supportive",
           "language": "en"
@@ -7899,19 +7899,19 @@
       "topic_tag": "gold-price",
       "turns": [
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "gold's rising, should i buy more right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "if you're accumulating long term just buy gradually, don't dump it all in at once",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "ok, gonna split it into smaller purchases, thanks for the advice",
           "tone": "supportive",
           "language": "en"
@@ -7923,19 +7923,19 @@
       "topic_tag": "fake-investment",
       "turns": [
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "has anyone invested with this group, the ad's promising crazy high returns",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "stay away, returns like that aren't realistic, could be a scam",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duc.lensman",
+          "speaker_username": "dean.lensman",
           "text": "thanks for the warning, almost transferred money",
           "tone": "supportive",
           "language": "en"
@@ -7947,19 +7947,19 @@
       "topic_tag": "parenting",
       "turns": [
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "what's preschool tuition looking like around district 7",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "thuytrang.admin",
-          "text": "roughly 4-6 million a month depending on public or private",
+          "speaker_username": "rachel.admin",
+          "text": "roughly $400-600 a month depending on public or private",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "guess i need to rebalance the budget then",
           "tone": "supportive",
           "language": "en"
@@ -7971,25 +7971,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "how did the migration end up with no rollback, was there no checklist",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "there was a checklist but we were slammed on a deadline and skipped a step",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "should probably make checklist review mandatory before merging a deploy then",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "agreed, adding that to the process next week",
           "tone": "supportive",
           "language": "en"
@@ -8001,25 +8001,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "what orm do you use to avoid n+1 queries",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "i use jpa with a batch fetch size, cut down a good chunk of queries",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "what batch fetch size do you set it to",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "i set it to 50, adjust based on your data though",
           "tone": "info",
           "language": "en"
@@ -8031,25 +8031,25 @@
       "topic_tag": "design",
       "turns": [
         {
-          "speaker_username": "trangg.ng",
+          "speaker_username": "sophieg.design",
           "text": "3 out of 5 users getting lost on the submit button probably means the placement's off",
           "tone": "disagree",
           "language": "en"
         },
         {
-          "speaker_username": "linh.uxui",
+          "speaker_username": "lily.uxui",
           "text": "yeah, we're already moving the button above the fold",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "bao.design",
+          "speaker_username": "blake.design",
           "text": "can i see the new version, curious",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "chi.productdesign",
+          "speaker_username": "chloe.productdesign",
           "text": "i'll update the case study next week with it",
           "tone": "supportive",
           "language": "en"
@@ -8061,31 +8061,31 @@
       "topic_tag": "photography",
       "turns": [
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "how much for the family photo combo",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "basic combo is 1.5m, add an album and it's 2.2m",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duc.lensman",
+          "speaker_username": "dean.lensman",
           "text": "how many edited photos come with that",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "20 heavily edited, the rest are full raw shots with basic crops",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "kimanh.captures",
+          "speaker_username": "kimberly.captures",
           "text": "ok i'll dm you to book a slot",
           "tone": "supportive",
           "language": "en"
@@ -8133,13 +8133,13 @@
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "yeah, knees caving in, fixing it made a huge difference on the joint pain",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "trang.liftheavy",
+          "speaker_username": "tessa.liftheavy",
           "text": "same thing happened to me, gonna find a coach to fix mine too",
           "tone": "supportive",
           "language": "en"
@@ -8151,25 +8151,25 @@
       "topic_tag": "running",
       "turns": [
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "is 45km a week too much, worried about injury",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nga.gymlife",
+          "speaker_username": "nadia.gymlife",
           "text": "depends on your base, ramping up gradually week by week is fine, just don't spike it",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "tu.trailrunner",
+          "speaker_username": "tucker.trailrunner",
           "text": "so what percentage increase per week is safe",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "vu.marathon",
+          "speaker_username": "victor.marathon",
           "text": "around 10%, more than that risks overuse injury",
           "tone": "info",
           "language": "en"
@@ -8181,13 +8181,13 @@
       "topic_tag": "job-market",
       "turns": [
         {
-          "speaker_username": "quan.tran94",
+          "speaker_username": "ryan.walsh94",
           "text": "sent resumes to a dozen companies and no callbacks, is something wrong with my resume",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khanh.newgrad25",
+          "speaker_username": "kellan.newgrad25",
           "text": "probably the format isn't standing out, try customizing it per job",
           "tone": "info",
           "language": "en"
@@ -8205,25 +8205,25 @@
       "topic_tag": "personal-finance",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "a small loss the first 3 months, should i pull out or keep holding",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "phuong.ketoan",
+          "speaker_username": "phoebe.accounting",
           "text": "if it's a long term investment just hold, don't panic over short term swings",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "so how long counts as long term here",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "depends on the goal, usually measured in years not months",
           "tone": "info",
           "language": "en"
@@ -8235,25 +8235,25 @@
       "topic_tag": "property-price",
       "turns": [
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "which bank has the lowest mortgage rate right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "i'm financing through vietcombank, the first year promo rate is pretty good",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "is the floating rate high after the first year",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "nhung.investsafe",
+          "speaker_username": "nora.investsafe",
           "text": "it goes up but it's manageable, just read the contract carefully before signing",
           "tone": "info",
           "language": "en"
@@ -8277,7 +8277,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "streetwear.sg1",
+          "speaker_username": "streetwear.atx1",
           "text": "thanks for the heads up, gonna try a small",
           "tone": "supportive",
           "language": "en"
@@ -8289,7 +8289,7 @@
       "topic_tag": "fnb",
       "turns": [
         {
-          "speaker_username": "quanan.cohuong",
+          "speaker_username": "grandma.roses",
           "text": "what time does this place close",
           "tone": "question",
           "language": "en"
@@ -8301,7 +8301,7 @@
           "language": "en"
         },
         {
-          "speaker_username": "banhmi.co3",
+          "speaker_username": "corner.sandwich3",
           "text": "great, i can swing by tonight then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -8313,19 +8313,19 @@
       "topic_tag": "studying-abroad",
       "turns": [
         {
-          "speaker_username": "linh.tran02",
+          "speaker_username": "lauren.t02",
           "text": "what ielts score does this scholarship require",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoa.uni21",
+          "speaker_username": "kyle.uni21",
           "text": "6.5 overall minimum, no band below 6.0",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "yen.study",
+          "speaker_username": "yuna.study",
           "text": "guess i need to redo my writing prep then, thanks for the info",
           "tone": "supportive",
           "language": "en"
@@ -8337,25 +8337,25 @@
       "topic_tag": "rental",
       "turns": [
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "how many months deposit is reasonable for a lease",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "tuyen.silent",
+          "speaker_username": "tristan.silent",
           "text": "usually 1-2 months, if it's more than 3 you should think twice",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "phuc.senior4",
+          "speaker_username": "phil.senior4",
           "text": "mine's asking for 3 months deposit, is that normal",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "lam.warehouse",
+          "speaker_username": "logan.warehouse",
           "text": "that's a bit high, try negotiating it down",
           "tone": "info",
           "language": "en"
@@ -8367,19 +8367,19 @@
       "topic_tag": "motorbike",
       "turns": [
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "winner or exciter, which one holds up better",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoi.runs",
+          "speaker_username": "kane.runs",
           "text": "the winner's engine feels more durable from what i've seen, fewer small breakdowns",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hang.10k",
+          "speaker_username": "hailey.10k",
           "text": "guess i'll upgrade to the winner then, thanks",
           "tone": "supportive",
           "language": "en"
@@ -8391,19 +8391,19 @@
       "topic_tag": "freelance-work",
       "turns": [
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "how do i politely remind a client who's paying late",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoangphotos",
+          "speaker_username": "derekshoots",
           "text": "i usually send a gentle email reminder 3 days before the due date, works pretty well",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "duy.freelancedev",
+          "speaker_username": "derek.freelancedev",
           "text": "gonna try that, thanks",
           "tone": "supportive",
           "language": "en"
@@ -8415,19 +8415,19 @@
       "topic_tag": "cost-of-living",
       "turns": [
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "cost of living jumped a lot this month, is anyone cutting back",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hoa.quietacc",
+          "speaker_username": "hope.quietacc",
           "text": "i cut back on eating out, cooking more at home to save",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "dat.reader",
+          "speaker_username": "dante.reader",
           "text": "good idea, gonna try that too",
           "tone": "supportive",
           "language": "en"
@@ -8439,19 +8439,19 @@
       "topic_tag": "gold-price",
       "turns": [
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "gold's rising, should i buy more right now",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "hung.taichinh",
+          "speaker_username": "hunter.finance",
           "text": "if you're accumulating long term just buy gradually, don't dump it all in at once",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "khiem.finance",
+          "speaker_username": "keith.finance",
           "text": "ok, gonna split it into smaller purchases, thanks for the advice",
           "tone": "supportive",
           "language": "en"
@@ -8463,19 +8463,19 @@
       "topic_tag": "fake-investment",
       "turns": [
         {
-          "speaker_username": "linh.tran02",
+          "speaker_username": "lauren.t02",
           "text": "has anyone invested with this group, the ad's promising crazy high returns",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khoa.uni21",
+          "speaker_username": "kyle.uni21",
           "text": "stay away, returns like that aren't realistic, could be a scam",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "yen.study",
+          "speaker_username": "yuna.study",
           "text": "thanks for the warning, almost transferred money",
           "tone": "supportive",
           "language": "en"
@@ -8487,19 +8487,19 @@
       "topic_tag": "parenting",
       "turns": [
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "what's preschool tuition looking like around district 7",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "thuytrang.admin",
-          "text": "roughly 4-6 million a month depending on public or private",
+          "speaker_username": "rachel.admin",
+          "text": "roughly $400-600 a month depending on public or private",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "quyen.familyonly",
+          "speaker_username": "quinn.familyonly",
           "text": "guess i need to rebalance the budget then",
           "tone": "supportive",
           "language": "en"
@@ -8511,25 +8511,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "how did the migration end up with no rollback, was there no checklist",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "there was a checklist but we were slammed on a deadline and skipped a step",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "should probably make checklist review mandatory before merging a deploy then",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "agreed, adding that to the process next week",
           "tone": "supportive",
           "language": "en"
@@ -8541,25 +8541,25 @@
       "topic_tag": "software-engineering",
       "turns": [
         {
-          "speaker_username": "minh.nguyen.dev",
+          "speaker_username": "james.carter.dev",
           "text": "what orm do you use to avoid n+1 queries",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "khang.backend",
+          "speaker_username": "kevin.backend",
           "text": "i use jpa with a batch fetch size, cut down a good chunk of queries",
           "tone": "info",
           "language": "en"
         },
         {
-          "speaker_username": "hieu.devops",
+          "speaker_username": "henry.devops",
           "text": "what batch fetch size do you set it to",
           "tone": "question",
           "language": "en"
         },
         {
-          "speaker_username": "an.codes",
+          "speaker_username": "aaron.codes",
           "text": "i set it to 50, adjust based on your data though",
           "tone": "info",
           "language": "en"
