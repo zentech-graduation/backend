@@ -65,9 +65,13 @@ app:
   mail:
     consumer:
       enabled: true
-    # Local development delivers to the Mailpit sink from docker-compose, so no message ever
-    # reaches the production provider and no provider credential is required.
-    transport: smtp
+    # Local development defaults to the Mailpit sink, but a developer can point local mail at
+    # the real Resend provider by setting APP_MAIL_TRANSPORT=resend in .env and restarting, for
+    # example to give a live email demo. Doing so consumes Resend quota and, if the seeded
+    # dataset's fake addresses are targeted, raises the sending domain's bounce rate, which can
+    # get the domain suspended. Only trigger mail flows against real mailboxes you control when
+    # this is set to resend. See .env.example and CONTRIBUTING.md for the full warning.
+    transport: ${APP_MAIL_TRANSPORT:smtp}
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:

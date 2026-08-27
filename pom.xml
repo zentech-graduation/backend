@@ -301,6 +301,20 @@
                              imported file, because a system property outranks spring.config.import,
                              so tests never seed while local development keeps SEED_DATA=true. -->
                         <SEED_DATA>false</SEED_DATA>
+                        <!-- application-dev.yml now defaults app.mail.transport from APP_MAIL_TRANSPORT so a
+                             developer can point local mail at the real Resend provider. Without this pin, a
+                             developer who has set APP_MAIL_TRANSPORT=resend in .env for that reason would also
+                             have every @SpringBootTest/*IT in the suite instantiate ResendMailConfig instead of
+                             SmtpMailConfig, reaching the real provider from tests. Pinned as the placeholder's
+                             input key (APP_MAIL_TRANSPORT), not the resolved property key (app.mail.transport):
+                             application-dev.yml only reads transport: ${APP_MAIL_TRANSPORT:smtp}, so pinning
+                             this key overrides just that placeholder. Pinning app.mail.transport directly was
+                             tried first and reached every profile document unconditionally, since a system
+                             property outranks every config-data source including application-prod.yml's own
+                             literal transport: resend, which made MailTransportGuard refuse prod-profile test
+                             contexts and made the property look non-absent to ApplicationContextRunner tests
+                             that assert on its absence. -->
+                        <APP_MAIL_TRANSPORT>smtp</APP_MAIL_TRANSPORT>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

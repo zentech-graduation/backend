@@ -146,6 +146,8 @@ app:
       enabled: ${MAIL_CONSUMER_ENABLED:false}
     # Deliberately literal, not an environment placeholder. An APP_MAIL_TRANSPORT environment
     # variable still outranks this, and MailTransportGuard is what closes the dangerous direction.
+    # The dev profile resolves this from APP_MAIL_TRANSPORT instead (application-dev.yml); this
+    # base literal is what prod inherits unmodified.
     transport: resend
     resend:
       # Defaulted to empty so a developer running the smtp transport needs no Resend credential.

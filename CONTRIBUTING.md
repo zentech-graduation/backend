@@ -45,8 +45,11 @@ Password reset works the same way: request it, then pick the message up in the s
 Mailpit is published on the loopback interface only.
 Its web UI has no authentication and would otherwise expose every message it holds to the rest of the network.
 
-To send through the real provider from a development machine instead, set `APP_MAIL_TRANSPORT=resend` together with a valid `RESEND_API_KEY`.
+To send through the real provider from a development machine instead - for example to give a live email demo - set `APP_MAIL_TRANSPORT=resend` in `.env` together with a valid `RESEND_API_KEY`, then restart the application.
 The reverse is refused: the SMTP sink is permitted only while the `dev` profile is active, and the application will not start with it selected anywhere else.
+There is no recipient allowlist and no redirect sink for this setting: with `resend` selected, every outbound message goes to the real provider, including messages triggered against the seeded dataset's fake addresses.
+That consumes Resend send quota, and a bounce from a fake or invalid address raises the sending domain's bounce rate, which can get the domain suspended - a more severe outcome than quota exhaustion.
+Only trigger mail-sending flows (register, forgot-password, and so on) against a real mailbox you control while `resend` is selected, and switch back to `APP_MAIL_TRANSPORT=smtp` (or remove the line) afterward.
 
 ### Troubleshooting: startup fails with a Flyway validation error mentioning version 99
 
