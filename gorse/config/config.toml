@@ -35,10 +35,14 @@ positive_feedback_ttl = 0
 item_ttl = 0
 
 # Popularity over all positive feedback; queried through the non-personalized API as a
-# cold-start and circuit-breaker fallback source
+# cold-start and circuit-breaker fallback source.
+# The score is len(feedback), not count(feedback): v0.5.11's Expr count() expects a boolean
+# predicate as its second argument, so count(feedback) fails at evaluation with "interface {}
+# is data.Feedback, not bool" on every dataset load and this recommender returned an empty list
+# for its entire life. The error is logged, never fatal, which is why it went unnoticed.
 [[recommend.non-personalized]]
 name = "popular"
-score = "count(feedback)"
+score = "len(feedback)"
 
 # Topic labels on seeded items make tag-based neighbors align with persona topics
 [[recommend.item-to-item]]
