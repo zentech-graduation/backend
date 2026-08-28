@@ -29,7 +29,9 @@ import com.app.common.seed.time.SeedTimeline;
 import com.app.common.seed.writer.CommentSeedWriter;
 import com.app.common.seed.writer.EngagementSeedWriter;
 import com.app.common.seed.writer.MediaSeedWriter;
+import com.app.common.seed.writer.MessageSeedWriter;
 import com.app.common.seed.writer.PostSeedWriter;
+import com.app.common.seed.writer.StorySeedWriter;
 import com.app.common.seed.writer.UserSeedWriter;
 import com.app.modules.mail.service.MailService;
 
@@ -94,6 +96,8 @@ class SeedOutboxEmitterIT {
     @Autowired private SeedResetService seedResetService;
     @Autowired private UserSeedWriter userSeedWriter;
     @Autowired private MediaSeedWriter mediaSeedWriter;
+    @Autowired private StorySeedWriter storySeedWriter;
+    @Autowired private MessageSeedWriter messageSeedWriter;
     @Autowired private PostSeedWriter postSeedWriter;
     @Autowired private CommentSeedWriter commentSeedWriter;
     @Autowired private EngagementSeedWriter engagementSeedWriter;
@@ -276,6 +280,13 @@ class SeedOutboxEmitterIT {
         List<UUID> commentIds =
                 commentSeedWriter.write(content, usersByUsername, postIdBySeedId, timeline);
         engagementSeedWriter.write(content, usersByUsername, postIdBySeedId, commentIds, timeline);
+        // Messages are seeded here purely so post_share rows exist: they are what the emitter
+        // reads back to produce post.shared.v1, and without them the share bucket is empty.
+        // StorySeedWriter must precede it: MessageSeedWriter fails outright on a seeded
+        // story_share whose referenced story does not exist yet.
+        storySeedWriter.write(content, usersByUsername, timeline);
+        messageSeedWriter.write(
+                content, usersByUsername, mediaByCompositeKey, postIdBySeedId, timeline);
         return new SeededIds(content, usersByUsername, postIdBySeedId);
     }
 
