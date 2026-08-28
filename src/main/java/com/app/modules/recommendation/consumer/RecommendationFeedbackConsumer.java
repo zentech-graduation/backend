@@ -168,7 +168,19 @@ public class RecommendationFeedbackConsumer {
                                 actorId.toString(),
                                 postId.toString(),
                                 event.occurredAt(),
-                                UNIT_FEEDBACK_VALUE)));
+                                feedbackValue(event))));
+    }
+
+    // An impression carries its dwell so a future positive_feedback_types threshold can promote a
+    // long dwell to positive feedback without a code change. A view recorded by the single-post
+    // view endpoint, and any message enqueued before dwell existed, carries no dwell key and falls
+    // back to the unit value rather than being treated as a zero-second read.
+    private static double feedbackValue(DomainEventEnvelope event) {
+        Object raw = event.data() == null ? null : event.data().get("dwellSeconds");
+        if (raw instanceof Number dwell) {
+            return dwell.doubleValue();
+        }
+        return UNIT_FEEDBACK_VALUE;
     }
 
     private static FeedbackMapping mapEventType(String eventType) {

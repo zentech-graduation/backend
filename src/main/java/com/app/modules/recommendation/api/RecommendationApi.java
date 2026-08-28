@@ -1,10 +1,13 @@
 package com.app.modules.recommendation.api;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -13,6 +16,7 @@ import com.app.common.config.openapi.CursorErrorResponses;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.post.dto.response.FeedPostResponse;
+import com.app.modules.recommendation.dto.request.ImpressionBatchRequest;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -63,4 +67,43 @@ public interface RecommendationApi {
                     @Min(1)
                     @Max(100)
                     int limit);
+
+    @Operation(
+            summary = "Report post impressions",
+            description =
+                    "Accepts a batch of impressions, each carrying the post seen, how long it"
+                            + " stayed visible, and the surface it was seen on. Each impression"
+                            + " carries a client-generated id, so resubmitting a batch after a"
+                            + " network failure records nothing twice. Returns immediately without"
+                            + " contacting the recommender. Does not affect the public view count."
+                            + " Requires authentication.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "202",
+                description = "Batch accepted for asynchronous processing"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Malformed batch, unknown property, or more than 100 impressions",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "Missing or invalid access token",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping(ApiConstants.Recommendations.IMPRESSIONS)
+    ResponseEntity<ApiResponse<Void>> recordImpressions(
+            @Valid @RequestBody ImpressionBatchRequest request);
 }

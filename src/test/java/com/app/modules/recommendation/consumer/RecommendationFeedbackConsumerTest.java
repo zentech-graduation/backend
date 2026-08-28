@@ -179,6 +179,44 @@ class RecommendationFeedbackConsumerTest {
     }
 
     @Test
+    void consume_impressionWithDwell_sendsDwellAsFeedbackValue() throws Exception {
+        stubProcessOnce();
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        EVENT_ID,
+                        PostEventTypes.POST_VIEWED_V1,
+                        OCCURRED_AT,
+                        USER_ID,
+                        "post",
+                        POST_ID,
+                        Map.of(
+                                "postId",
+                                POST_ID.toString(),
+                                "dwellSeconds",
+                                4.5,
+                                "surface",
+                                "feed"));
+
+        consumer.consume(message(envelope), channel);
+
+        ArgumentCaptor<List<GorseFeedback>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).insertFeedback(captor.capture());
+        assertThat(captor.getValue().get(0).feedbackType()).isEqualTo("read");
+        assertThat(captor.getValue().get(0).value()).isEqualTo(4.5);
+    }
+
+    @Test
+    void consume_viewWithoutDwell_fallsBackToUnitFeedbackValue() throws Exception {
+        stubProcessOnce();
+
+        consumer.consume(message(envelope(PostEventTypes.POST_VIEWED_V1)), channel);
+
+        ArgumentCaptor<List<GorseFeedback>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).insertFeedback(captor.capture());
+        assertThat(captor.getValue().get(0).value()).isEqualTo(1.0);
+    }
+
+    @Test
     void consume_unknownEventType_nacksWithoutRequeueForBrokerDeadLettering() throws Exception {
         Message message = message(envelope("unknown.event.type"));
         stubProcessOnce();
