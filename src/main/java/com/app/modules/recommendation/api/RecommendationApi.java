@@ -35,8 +35,9 @@ public interface RecommendationApi {
             description =
                     "Returns posts ranked for the authenticated user by the recommender. Degrades"
                             + " to the popularity ranking and then to the chronological following"
-                            + " feed when the recommender is unavailable. Requires"
-                            + " authentication.")
+                            + " feed when the recommender is unavailable, unless excludeFollowed is"
+                            + " true, in which case an exhausted result is an empty page instead of"
+                            + " the following feed. Requires authentication.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -66,7 +67,15 @@ public interface RecommendationApi {
                     @RequestParam(defaultValue = "20")
                     @Min(1)
                     @Max(100)
-                    int limit);
+                    int limit,
+            @Parameter(
+                            description =
+                                    "When true, excludes posts from accounts the viewer already"
+                                            + " follows. Serves the discovery (\"Explore\") variant"
+                                            + " of this feed; default is the personalized \"for"
+                                            + " you\" feed with no such exclusion.")
+                    @RequestParam(defaultValue = "false")
+                    boolean excludeFollowed);
 
     @Operation(
             summary = "Report post impressions",

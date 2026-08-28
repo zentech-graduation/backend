@@ -35,6 +35,7 @@ import com.app.modules.recommendation.client.dto.GorseScore;
 import com.app.modules.recommendation.config.GorseProperties;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource.SourceBatch;
+import com.app.modules.social.service.SocialService;
 
 @ExtendWith(MockitoExtension.class)
 class RecommendationFeedServiceImplTest {
@@ -43,6 +44,7 @@ class RecommendationFeedServiceImplTest {
     @Mock private PostLookupService postLookupService;
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private PostService postService;
+    @Mock private SocialService socialService;
 
     private GorseProperties gorseProperties;
     private RecommendationFeedServiceImpl service;
@@ -59,6 +61,7 @@ class RecommendationFeedServiceImplTest {
                         postLookupService,
                         postVisibilityService,
                         postService,
+                        socialService,
                         gorseProperties);
         // Feed assembly is a pass-through in these tests; only ranking-score attachment matters.
         // Fallback-path tests never reach the assembler, so this stub is lenient.
@@ -69,6 +72,11 @@ class RecommendationFeedServiceImplTest {
                             List<Post> posts = inv.getArgument(1);
                             return posts.stream().map(p -> feedResponse(p.getId())).toList();
                         });
+        // Only the excludeFollowed tests care about this; every other test passes false and never
+        // reaches the call.
+        lenient()
+                .when(socialService.getAcceptedFollowingExcludingBlocks(viewerId))
+                .thenReturn(List.of());
     }
 
     private Post publishedPost(UUID id, UUID ownerId) {
@@ -118,7 +126,8 @@ class RecommendationFeedServiceImplTest {
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
                 .thenReturn(Set.of(ownerId));
 
-        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 1, false);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).rankingScore()).isEqualTo(5.0);
@@ -134,7 +143,7 @@ class RecommendationFeedServiceImplTest {
         when(postService.getFeed(viewerId, garbageCursor, 20)).thenReturn(chronoPage);
 
         CursorPageResponse<FeedPostResponse> page =
-                service.getRecommendedFeed(viewerId, garbageCursor, 20);
+                service.getRecommendedFeed(viewerId, garbageCursor, 20, false);
 
         assertThat(page).isSameAs(chronoPage);
         verify(recommendationSource, never()).fetch(any(), anyChar(), anyInt(), anyInt(), anyInt());
@@ -185,7 +194,8 @@ class RecommendationFeedServiceImplTest {
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ok2OwnerId)))
                 .thenReturn(Set.of(ok2OwnerId));
 
-        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 2);
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 2, false);
 
         assertThat(page.getContent()).hasSize(2);
         assertThat(page.getContent().get(0).id()).isEqualTo(okPost1);
@@ -203,7 +213,8 @@ class RecommendationFeedServiceImplTest {
                         List.of(feedResponse(UUID.randomUUID())), false, "a", "b", false);
         when(postService.getFeed(viewerId, null, 5)).thenReturn(chronoPage);
 
-        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 5);
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 5, false);
 
         assertThat(page).isSameAs(chronoPage);
         verify(postLookupService, never()).findActiveByIds(anyList());
@@ -223,7 +234,8 @@ class RecommendationFeedServiceImplTest {
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
                 .thenReturn(Set.of(ownerId));
 
-        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 1, false);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(decodeCursor(page.getPageInfo().getEndCursor())).startsWith("p:");
@@ -242,7 +254,8 @@ class RecommendationFeedServiceImplTest {
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
                 .thenReturn(Set.of(ownerId));
 
-        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 1, false);
 
         assertThat(page.getContent().get(0).rankingScore()).isNull();
     }
@@ -256,7 +269,7 @@ class RecommendationFeedServiceImplTest {
         // Not the first page (offset 7 > 0), so an empty result returns as an empty ranked page
         // rather than restarting the chronological feed from page one.
         CursorPageResponse<FeedPostResponse> page =
-                service.getRecommendedFeed(viewerId, popularCursor, 5);
+                service.getRecommendedFeed(viewerId, popularCursor, 5, false);
 
         assertThat(page.getContent()).isEmpty();
         verify(postService, never()).getFeed(any(), any(), anyInt());
@@ -290,7 +303,8 @@ class RecommendationFeedServiceImplTest {
                         viewerId, Set.of(gorseOnlyOwner, topUpOwner)))
                 .thenReturn(Set.of(gorseOnlyOwner, topUpOwner));
 
-        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 2);
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 2, false);
 
         assertThat(page.getContent()).hasSize(2);
         assertThat(decodeCursor(page.getPageInfo().getEndCursor())).isEqualTo("g:1:3");
@@ -313,9 +327,73 @@ class RecommendationFeedServiceImplTest {
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(onlyOwner)))
                 .thenReturn(Set.of(onlyOwner));
 
-        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 1, false);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(decodeCursor(page.getPageInfo().getEndCursor())).isEqualTo("g:1:0");
+    }
+
+    @Test
+    void getRecommendedFeed_excludeFollowed_removesFollowedOwnersCandidates() {
+        UUID followedOwnerPost = UUID.randomUUID();
+        UUID otherOwnerPost = UUID.randomUUID();
+        UUID followedOwnerId = UUID.randomUUID();
+        UUID otherOwnerId = UUID.randomUUID();
+        Post followedPost = publishedPost(followedOwnerPost, followedOwnerId);
+        Post otherPost = publishedPost(otherOwnerPost, otherOwnerId);
+        when(socialService.getAcceptedFollowingExcludingBlocks(viewerId))
+                .thenReturn(List.of(followedOwnerId));
+        // fetchSize for limit=2 with multiplier 2 is 4.
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(0), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'g',
+                                List.of(
+                                        new GorseScore(followedOwnerPost.toString(), 9.0),
+                                        new GorseScore(otherOwnerPost.toString(), 8.0)),
+                                2,
+                                0));
+        when(postLookupService.findActiveByIds(anyList()))
+                .thenReturn(List.of(followedPost, otherPost));
+        when(postVisibilityService.filterVisibleOwnerIds(
+                        viewerId, Set.of(followedOwnerId, otherOwnerId)))
+                .thenReturn(Set.of(followedOwnerId, otherOwnerId));
+        // Excluding the followed post leaves the page short of its limit of 2, so a second round
+        // runs at the advanced gorseOffset; an empty batch ends it there.
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(2), eq(0)))
+                .thenReturn(new SourceBatch('g', List.of(), 0, 0));
+
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 2, true);
+
+        assertThat(page.getContent())
+                .extracting(FeedPostResponse::id)
+                .containsExactly(otherOwnerPost);
+    }
+
+    @Test
+    void
+            getRecommendedFeed_excludeFollowedAndBothSourcesEmpty_returnsEmptyPageInsteadOfFollowingFeed() {
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(10), eq(0), eq(0)))
+                .thenReturn(new SourceBatch('g', List.of(), 0, 0));
+
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 5, true);
+
+        assertThat(page.getContent()).isEmpty();
+        verify(postService, never()).getFeed(any(), any(), anyInt());
+    }
+
+    @Test
+    void
+            getRecommendedFeed_excludeFollowedWithMalformedCursor_returnsEmptyPageInsteadOfFollowingFeed() {
+        String garbageCursor = "not-a-valid-ranked-cursor!!!";
+
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, garbageCursor, 20, true);
+
+        assertThat(page.getContent()).isEmpty();
+        verify(postService, never()).getFeed(any(), any(), anyInt());
     }
 }

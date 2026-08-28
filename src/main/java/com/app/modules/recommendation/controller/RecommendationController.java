@@ -34,16 +34,17 @@ public class RecommendationController extends BaseController implements Recommen
     /**
      * Serves one page of the personalized feed for the authenticated user.
      *
-     * <p>Accepts an optional opaque cursor and page size, returns ranked published posts visible to
-     * the caller. Requires authentication.
+     * <p>Accepts an optional opaque cursor, page size, and an {@code excludeFollowed} flag that
+     * switches this endpoint to the discovery ("Explore") variant by excluding posts from accounts
+     * the viewer already follows. Requires authentication.
      */
     @Override
     @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<CursorPageResponse<FeedPostResponse>>> getRecommendedFeed(
-            String cursor, int limit) {
+            String cursor, int limit, boolean excludeFollowed) {
         CursorPageResponse<FeedPostResponse> page =
                 recommendationFeedService.getRecommendedFeed(
-                        SecurityUtils.getCurrentUserId(), cursor, limit);
+                        SecurityUtils.getCurrentUserId(), cursor, limit, excludeFollowed);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, page));
     }
 

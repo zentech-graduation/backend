@@ -25,6 +25,7 @@ import com.app.modules.recommendation.config.GorseProperties;
 import com.app.modules.recommendation.service.RecommendationFeedService;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource.SourceBatch;
+import com.app.modules.social.service.SocialService;
 
 @Service
 public class RecommendationFeedServiceImpl implements RecommendationFeedService {
@@ -41,6 +42,7 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
     private final PostLookupService postLookupService;
     private final PostVisibilityService postVisibilityService;
     private final PostService postService;
+    private final SocialService socialService;
     private final GorseProperties gorseProperties;
 
     public RecommendationFeedServiceImpl(
@@ -48,20 +50,28 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             PostLookupService postLookupService,
             PostVisibilityService postVisibilityService,
             PostService postService,
+            SocialService socialService,
             GorseProperties gorseProperties) {
         this.recommendationSource = recommendationSource;
         this.postLookupService = postLookupService;
         this.postVisibilityService = postVisibilityService;
         this.postService = postService;
+        this.socialService = socialService;
         this.gorseProperties = gorseProperties;
     }
 
     @Override
     public CursorPageResponse<FeedPostResponse> getRecommendedFeed(
-            UUID viewerId, String cursor, int limit) {
+            UUID viewerId, String cursor, int limit, boolean excludeFollowed) {
         int pageSize = normalizeLimit(limit);
         FeedCursor decoded = FeedCursor.decode(cursor);
         if (decoded == null) {
+            if (excludeFollowed) {
+                // A non-ranked cursor means the previous page came from the chronological
+                // following feed, which by definition shows exactly the accounts Explore exists
+                // to exclude - so it must never be entered here.
+                return emptyPage();
+            }
             // Not a ranked cursor: the previous page came from the chronological fallback, whose
             // timestamp cursors the post module owns. Delegate so pagination continues seamlessly.
             return postService.getFeed(viewerId, cursor, pageSize);
@@ -73,6 +83,12 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
         List<FeedPostResponse> content = new ArrayList<>(pageSize);
         Set<UUID> seenPostIds = new HashSet<>();
         int fetchSize = Math.max(pageSize * gorseProperties.getRecommendMultiplier(), pageSize);
+        // Computed once per request, not per round: the follow graph does not change mid-request,
+        // and this keeps a heavy-follow viewer's page from issuing the query once per round.
+        Set<UUID> excludedOwnerIds =
+                excludeFollowed
+                        ? new HashSet<>(socialService.getAcceptedFollowingExcludingBlocks(viewerId))
+                        : Set.of();
 
         for (int round = 0; round < MAX_SOURCE_ROUNDS && content.size() < pageSize; round++) {
             SourceBatch batch =
@@ -84,7 +100,9 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             if (scores.isEmpty()) {
                 break;
             }
-            int consumed = appendVisible(viewerId, scores, content, seenPostIds, pageSize);
+            int consumed =
+                    appendVisible(
+                            viewerId, scores, content, seenPostIds, pageSize, excludedOwnerIds);
             // The batch does not report a ready-made next offset: appendVisible may stop before
             // reaching the end of scores once the page fills, and only that consumed count says
             // how far into each underlying list this round actually looked. Advancing gorseOffset
@@ -99,6 +117,9 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
         }
 
         if (content.isEmpty() && decoded.isFirstPage()) {
+            if (excludeFollowed) {
+                return emptyPage();
+            }
             // Both ranked sources empty or unavailable: serve the chronological following feed
             // (its own cursor scheme takes over on subsequent pages).
             return postService.getFeed(viewerId, null, pageSize);
@@ -116,6 +137,10 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
                 content, hasNextPage, startCursor, endCursor, !decoded.isFirstPage());
     }
 
+    private static CursorPageResponse<FeedPostResponse> emptyPage() {
+        return CursorPageResponse.of(List.of(), false, null, null, false);
+    }
+
     /**
      * Hydrates a candidate batch, filters it down to posts the viewer may see, and appends up to
      * the page capacity. Returns how many raw candidates were consumed (accepted or rejected);
@@ -126,7 +151,8 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             List<GorseScore> scores,
             List<FeedPostResponse> content,
             Set<UUID> seenPostIds,
-            int pageSize) {
+            int pageSize,
+            Set<UUID> excludedOwnerIds) {
         Map<UUID, Post> postsById =
                 postLookupService.findActiveByIds(parseIds(scores)).stream()
                         .collect(Collectors.toMap(Post::getId, Function.identity()));
@@ -150,7 +176,8 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             if (post == null
                     || post.getStatus() != PostStatus.PUBLISHED
                     || viewerId.equals(post.getUserId())
-                    || !visibleOwnerIds.contains(post.getUserId())) {
+                    || !visibleOwnerIds.contains(post.getUserId())
+                    || excludedOwnerIds.contains(post.getUserId())) {
                 continue;
             }
             accepted.add(post);
