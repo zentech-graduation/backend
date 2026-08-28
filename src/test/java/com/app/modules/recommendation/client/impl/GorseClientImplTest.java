@@ -90,7 +90,11 @@ class GorseClientImplTest {
     void insertFeedback_postsFeedbackBatchWithAuthHeader() {
         GorseFeedback feedback =
                 new GorseFeedback(
-                        "like", "user-1", "item-1", OffsetDateTime.parse("2026-07-26T00:00:00Z"));
+                        "like",
+                        "user-1",
+                        "item-1",
+                        OffsetDateTime.parse("2026-07-26T00:00:00Z"),
+                        1.0);
         server.expect(requestTo("http://gorse.test/api/feedback"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-API-Key", API_KEY))

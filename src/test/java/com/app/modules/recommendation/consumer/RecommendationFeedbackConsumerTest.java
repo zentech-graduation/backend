@@ -299,6 +299,18 @@ class RecommendationFeedbackConsumerTest {
         assertThat(feedback.get(0).timestamp()).isEqualTo(OCCURRED_AT);
     }
 
+    @Test
+    void consume_binarySignal_sendsUnitFeedbackValue() throws Exception {
+        stubProcessOnce();
+        Message message = message(envelope(PostEventTypes.POST_LIKED_V1));
+
+        consumer.consume(message, channel);
+
+        ArgumentCaptor<List<GorseFeedback>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).insertFeedback(captor.capture());
+        assertThat(captor.getValue().get(0).value()).isEqualTo(1.0);
+    }
+
     private Message message(DomainEventEnvelope envelope) {
         return MessageBuilder.withBody(
                         DomainEventEnvelopeJson.write(envelope).getBytes(StandardCharsets.UTF_8))

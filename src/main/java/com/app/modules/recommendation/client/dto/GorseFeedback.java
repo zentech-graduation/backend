@@ -9,4 +9,8 @@ public record GorseFeedback(
         @JsonProperty("FeedbackType") String feedbackType,
         @JsonProperty("UserId") String userId,
         @JsonProperty("ItemId") String itemId,
-        @JsonProperty("Timestamp") OffsetDateTime timestamp) {}
+        @JsonProperty("Timestamp") OffsetDateTime timestamp,
+        // Carried so a future positive_feedback_types threshold can promote long dwells to
+        // positive feedback without a code change. No threshold is configured today, so v0.5.11
+        // reads this field and ignores it.
+        @JsonProperty("Value") double value) {}

@@ -55,6 +55,9 @@ public class RecommendationFeedbackConsumer {
 
     static final String CONSUMER_NAME = "recommendation-feedback-consumer";
 
+    // Binary signals carry no magnitude of their own; a like is a like.
+    private static final double UNIT_FEEDBACK_VALUE = 1.0;
+
     private static final Logger log = LoggerFactory.getLogger(RecommendationFeedbackConsumer.class);
 
     private final DomainEventMessageParser parser;
@@ -164,7 +167,8 @@ public class RecommendationFeedbackConsumer {
                                 mapping.gorseFeedbackType(),
                                 actorId.toString(),
                                 postId.toString(),
-                                event.occurredAt())));
+                                event.occurredAt(),
+                                UNIT_FEEDBACK_VALUE)));
     }
 
     private static FeedbackMapping mapEventType(String eventType) {
