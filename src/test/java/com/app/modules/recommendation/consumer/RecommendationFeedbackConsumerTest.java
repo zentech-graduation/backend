@@ -40,6 +40,7 @@ import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
 import com.app.modules.comment.messaging.CommentEventTypes;
+import com.app.modules.message.messaging.MessageEventTypes;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.recommendation.client.GorseClient;
 import com.app.modules.recommendation.client.dto.GorseFeedback;
@@ -214,6 +215,46 @@ class RecommendationFeedbackConsumerTest {
         ArgumentCaptor<List<GorseFeedback>> captor = ArgumentCaptor.forClass(List.class);
         verify(gorseClient).insertFeedback(captor.capture());
         assertThat(captor.getValue().get(0).value()).isEqualTo(1.0);
+    }
+
+    @Test
+    void consume_postShared_recordsUserEventAndPushesShareFeedback() throws Exception {
+        stubProcessOnce();
+        Message message = message(envelope(MessageEventTypes.POST_SHARED_V1));
+
+        consumer.consume(message, channel);
+
+        verify(userEventJdbcRepository)
+                .insertIgnoreDuplicate(
+                        EVENT_ID, USER_ID, UserEventType.POST_SHARE, "post", POST_ID, OCCURRED_AT);
+        verifyFeedbackPushed("share");
+        verify(channel).basicAck(1L, false);
+    }
+
+    @Test
+    void consume_commentLiked_attributesWeakLikeToParentPost() throws Exception {
+        stubProcessOnce();
+        Message message = message(envelope(CommentEventTypes.COMMENT_LIKED_V1));
+
+        consumer.consume(message, channel);
+
+        verify(userEventJdbcRepository)
+                .insertIgnoreDuplicate(
+                        EVENT_ID,
+                        USER_ID,
+                        UserEventType.COMMENT_LIKE,
+                        "post",
+                        POST_ID,
+                        OCCURRED_AT);
+        ArgumentCaptor<List<GorseFeedback>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).insertFeedback(captor.capture());
+        GorseFeedback feedback = captor.getValue().get(0);
+        // The signal is attributed to the parent post, not the comment, and weighted below a
+        // direct post like.
+        assertThat(feedback.itemId()).isEqualTo(POST_ID.toString());
+        assertThat(feedback.feedbackType()).isEqualTo("like");
+        assertThat(feedback.value()).isEqualTo(0.5);
+        verify(channel).basicAck(1L, false);
     }
 
     @Test

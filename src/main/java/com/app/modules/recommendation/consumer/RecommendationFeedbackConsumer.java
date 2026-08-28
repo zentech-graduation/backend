@@ -23,6 +23,7 @@ import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.modules.comment.messaging.CommentEventTypes;
+import com.app.modules.message.messaging.MessageEventTypes;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.recommendation.client.GorseClient;
 import com.app.modules.recommendation.client.dto.GorseFeedback;
@@ -57,6 +58,13 @@ public class RecommendationFeedbackConsumer {
 
     // Binary signals carry no magnitude of their own; a like is a like.
     private static final double UNIT_FEEDBACK_VALUE = 1.0;
+
+    // A comment like is a user-to-comment relation, but Gorse's item space is posts, so the only
+    // usable mapping attributes it to the comment's parent post. That is a deliberate reduction of
+    // the signal, not the raw signal, so it is weighted below a direct post like. It reuses the
+    // like feedback type rather than introducing its own, because a new type would need its own
+    // entry in positive_feedback_types and would dilute the bucket the model trains on.
+    private static final double COMMENT_LIKE_FEEDBACK_VALUE = 0.5;
 
     private static final Logger log = LoggerFactory.getLogger(RecommendationFeedbackConsumer.class);
 
@@ -176,6 +184,9 @@ public class RecommendationFeedbackConsumer {
     // view endpoint, and any message enqueued before dwell existed, carries no dwell key and falls
     // back to the unit value rather than being treated as a zero-second read.
     private static double feedbackValue(DomainEventEnvelope event) {
+        if (CommentEventTypes.COMMENT_LIKED_V1.equals(event.eventType())) {
+            return COMMENT_LIKE_FEEDBACK_VALUE;
+        }
         Object raw = event.data() == null ? null : event.data().get("dwellSeconds");
         if (raw instanceof Number dwell) {
             return dwell.doubleValue();
@@ -193,6 +204,10 @@ public class RecommendationFeedbackConsumer {
                     new FeedbackMapping(UserEventType.POST_VIEW, "read");
             case CommentEventTypes.COMMENT_CREATED_V1 ->
                     new FeedbackMapping(UserEventType.POST_COMMENT, "comment");
+            case CommentEventTypes.COMMENT_LIKED_V1 ->
+                    new FeedbackMapping(UserEventType.COMMENT_LIKE, "like");
+            case MessageEventTypes.POST_SHARED_V1 ->
+                    new FeedbackMapping(UserEventType.POST_SHARE, "share");
             default -> throw new PermanentMessageException("unknown event type: " + eventType);
         };
     }

@@ -32,7 +32,10 @@ cache_size = 200
 cache_expire = "1h"
 
 [recommend.data_source]
-positive_feedback_types = ["like", "save", "comment"]
+# share is a positive example: it costs the user more effort than a like and is a deliberate
+# endorsement to a specific person, not a passive signal. A comment like is deliberately absent
+# here - it is mapped onto the like type at reduced weight rather than given its own type.
+positive_feedback_types = ["like", "save", "comment", "share"]
 read_feedback_types = ["read"]
 positive_feedback_ttl = 0
 item_ttl = 0
