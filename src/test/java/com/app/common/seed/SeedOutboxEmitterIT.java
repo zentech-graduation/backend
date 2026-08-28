@@ -119,8 +119,8 @@ class SeedOutboxEmitterIT {
     }
 
     @Test
-    void emitFullVolume_writesOneEventPerRowAndNeverEmitsPostViewed() {
-        seedDomainWriters();
+    void emitFullVolume_writesOneEventPerRowAndEmitsSeededViews() {
+        SeededIds seeded = seedDomainWriters();
 
         Integer publishedPostCount =
                 jdbcTemplate.queryForObject(
@@ -136,13 +136,16 @@ class SeedOutboxEmitterIT {
                 jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM comments WHERE deleted_at IS NULL", Integer.class);
 
-        SeedOutboxEmitter.EmissionCounts counts = seedOutboxEmitter.emitFullVolume();
+        SeedOutboxEmitter.EmissionCounts counts =
+                seedOutboxEmitter.emitFullVolume(
+                        seeded.content(), seeded.usersByUsername(), seeded.postIdBySeedId());
 
         assertThat(counts.postIndex()).isEqualTo(publishedPostCount);
         assertThat(counts.hashtagIndex()).isEqualTo(hashtagCount);
         assertThat(counts.likes()).isEqualTo(likeCount);
         assertThat(counts.saves()).isEqualTo(saveCount);
         assertThat(counts.comments()).isEqualTo(commentCount);
+        assertThat(counts.views()).isPositive();
 
         Map<String, Integer> countByType = countOutboxEventsByType();
         assertThat(countByType.get("post.index.upsert.v1")).isEqualTo(publishedPostCount);
@@ -150,21 +153,90 @@ class SeedOutboxEmitterIT {
         assertThat(countByType.get("post.liked.v1")).isEqualTo(likeCount);
         assertThat(countByType.get("post.saved.v1")).isEqualTo(saveCount);
         assertThat(countByType.get("comment.created.v1")).isEqualTo(commentCount);
-        assertThat(countByType).doesNotContainKey("post.viewed.v1");
+        assertThat(countByType.get("post.viewed.v1")).isEqualTo(counts.views());
 
         Integer total =
                 jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox_events", Integer.class);
         assertThat(total)
                 .isEqualTo(
-                        publishedPostCount + hashtagCount + likeCount + saveCount + commentCount);
+                        publishedPostCount
+                                + hashtagCount
+                                + likeCount
+                                + saveCount
+                                + commentCount
+                                + counts.views());
 
         // Every row must still be PENDING: the outbox publisher is disabled in this test, so
-        // nothing has drained yet — proves emission alone, not the live-stack drain.
+        // nothing has drained yet - proves emission alone, not the live-stack drain.
         Integer pendingCount =
                 jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM outbox_events WHERE status = 'PENDING'",
                         Integer.class);
         assertThat(pendingCount).isEqualTo(total);
+    }
+
+    @Test
+    void emitFullVolume_viewSetCoversEveryLikeAndSavePair() {
+        SeededIds seeded = seedDomainWriters();
+
+        seedOutboxEmitter.emitFullVolume(
+                seeded.content(), seeded.usersByUsername(), seeded.postIdBySeedId());
+
+        // Reading precedes liking, so no like or save pair may be missing from the view set.
+        // Self-reactions are excluded: PostViewServiceImpl never emits an event for a post owner
+        // viewing their own post, so the seeded view set deliberately cannot cover those pairs.
+        Integer uncovered =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ("
+                                + " SELECT user_id, post_id FROM post_likes"
+                                + " UNION SELECT user_id, post_id FROM post_saves) r"
+                                + " JOIN posts p ON p.id = r.post_id"
+                                + " WHERE p.user_id <> r.user_id"
+                                + " AND NOT EXISTS ("
+                                + "   SELECT 1 FROM outbox_events e"
+                                + "   WHERE e.event_type = 'post.viewed.v1'"
+                                + "     AND e.aggregate_id = r.post_id"
+                                + "     AND e.payload ->> 'actorId' = r.user_id::text)",
+                        Integer.class);
+        assertThat(uncovered).isZero();
+    }
+
+    @Test
+    void emitFullVolume_viewSetIsWeightedByEngagementBand() {
+        SeededIds seeded = seedDomainWriters();
+
+        seedOutboxEmitter.emitFullVolume(
+                seeded.content(), seeded.usersByUsername(), seeded.postIdBySeedId());
+
+        // A viral-band post must attract more views than a low-band one, or the trending score's
+        // numerator carries no information.
+        double viralAverage = averageViewsForBand(seeded, "viral");
+        double lowAverage = averageViewsForBand(seeded, "low");
+        assertThat(viralAverage).isGreaterThan(lowAverage);
+    }
+
+    private double averageViewsForBand(SeededIds seeded, String band) {
+        List<UUID> postIds =
+                seeded.content().posts().stream()
+                        .filter(post -> "published".equals(post.status()))
+                        .filter(post -> band.equals(post.engagementBand()))
+                        .map(post -> seeded.postIdBySeedId().get(post.id()))
+                        .filter(java.util.Objects::nonNull)
+                        .toList();
+        if (postIds.isEmpty()) {
+            return 0.0;
+        }
+        int total = 0;
+        for (UUID postId : postIds) {
+            Integer count =
+                    jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM outbox_events WHERE event_type ="
+                                    + " 'post.viewed.v1' AND aggregate_id = ?",
+                            Integer.class,
+                            postId);
+            total += count == null ? 0 : count;
+        }
+        return (double) total / postIds.size();
     }
 
     @Test
@@ -184,7 +256,12 @@ class SeedOutboxEmitterIT {
         assertThat(payloadJson).contains("\"createdAt\"");
     }
 
-    private void seedDomainWriters() {
+    private record SeededIds(
+            SeedContent content,
+            Map<String, UUID> usersByUsername,
+            Map<String, UUID> postIdBySeedId) {}
+
+    private SeededIds seedDomainWriters() {
         seedResetService.reset();
         SeedContent content = new SeedDataLoader().load();
         SeedTimeline timeline = new SeedTimeline(20260825L, Instant.parse("2026-08-25T00:00:00Z"));
@@ -196,6 +273,7 @@ class SeedOutboxEmitterIT {
         List<UUID> commentIds =
                 commentSeedWriter.write(content, usersByUsername, postIdBySeedId, timeline);
         engagementSeedWriter.write(content, usersByUsername, postIdBySeedId, commentIds, timeline);
+        return new SeededIds(content, usersByUsername, postIdBySeedId);
     }
 
     private Map<String, Integer> countOutboxEventsByType() {

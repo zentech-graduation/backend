@@ -37,6 +37,7 @@ public class SeedOutboxBatchWriter {
     private static final String HASHTAG_INDEX_UPSERT_V1 = "hashtag.index.upsert.v1";
     private static final String POST_LIKED_V1 = "post.liked.v1";
     private static final String POST_SAVED_V1 = "post.saved.v1";
+    private static final String POST_VIEWED_V1 = "post.viewed.v1";
     private static final String COMMENT_CREATED_V1 = "comment.created.v1";
 
     private final OutboxService outboxService;
@@ -74,6 +75,27 @@ public class SeedOutboxBatchWriter {
     @Transactional
     void emitCommentBatch(List<SeedOutboxEmitter.CommentRow> batch) {
         batch.forEach(this::enqueueComment);
+    }
+
+    @Transactional
+    void emitViewBatch(List<SeedOutboxEmitter.ReactionRow> batch) {
+        batch.forEach(this::enqueueView);
+    }
+
+    // Payload shape mirrors PostViewServiceImpl's enqueue call exactly. No dwellSeconds key: a
+    // seeded view is not an impression measured in a viewport, and the consumer falls back to the
+    // unit feedback value when the key is absent.
+    private void enqueueView(SeedOutboxEmitter.ReactionRow row) {
+        outboxService.enqueue(
+                POST_VIEWED_V1,
+                POST_VIEWED_V1,
+                AGGREGATE_TYPE_POST,
+                row.postId(),
+                row.userId(),
+                Map.of(
+                        "postId", row.postId().toString(),
+                        "postOwnerId", row.postOwnerId().toString(),
+                        "userId", row.userId().toString()));
     }
 
     // Payload shape mirrors PostServiceImpl.enqueuePostIndexUpsert exactly: the consumer re-derives

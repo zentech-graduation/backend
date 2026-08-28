@@ -3,14 +3,22 @@ package com.app.common.seed.outbox;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+
+import com.app.common.seed.loader.SeedContent;
+import com.app.common.seed.model.PersonaSeed;
+import com.app.common.seed.model.PostSeed;
+import com.app.common.seed.model.UserSeed;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,9 +34,21 @@ import lombok.extern.slf4j.Slf4j;
  * after every domain writer has run is the same pattern {@link CommentSeedWriter} and {@link
  * EngagementSeedWriter} already use to resolve state a prior writer did not expose.
  *
- * <p><b>{@code post.viewed.v1} is never emitted</b> - {@code posts.view_count} was already written
- * directly by {@link PostSeedWriter}, and view activity already landed in {@code user_events}
- * directly via {@link AnalyticsSeedWriter}. No view events go through the broker.
+ * <p><b>{@code post.viewed.v1} is emitted</b>, and this module is now its only producer during a
+ * seed. The recommender's factorization machine ranker trains read feedback as its negative
+ * examples, so a seeded database with no read signal teaches it nothing; {@link
+ * AnalyticsSeedWriter} therefore no longer writes {@code post_view} rows of its own, and the same
+ * logical view cannot produce two rows. Emitting these events still never touches {@code
+ * posts.view_count}, which {@link PostSeedWriter} sets directly and which no application code
+ * writes.
+ *
+ * <p>The view set is built so the signal is learnable rather than uniform noise. It is the union of
+ * every {@code post_likes} and {@code post_saves} pair, which makes a user's read set a superset of
+ * what they liked or saved because reading precedes liking, plus extra viewers drawn per post in
+ * proportion to that post's engagement band and restricted to users whose persona topics intersect
+ * the post's topics. A uniform random draw would leave every user looking identical to
+ * collaborative filtering, and an unweighted one would make the trending score meaningless by
+ * giving a low-band post as many views as a viral-band one.
  *
  * <p>Enqueuing happens through the real {@code OutboxService} bean (wrapped in {@link
  * SeedOutboxBatchWriter}'s own {@code @Transactional} methods), which guarantees the payload always
@@ -44,6 +64,18 @@ public class SeedOutboxEmitter {
     // A few hundred enqueue calls per transaction, not one transaction for the whole ~21,000+ event
     // volume, so the emission phase never holds locks for its full duration.
     private static final int BATCH_SIZE = 300;
+
+    // Total post.viewed.v1 events a full seed emits, distributed across published posts in
+    // proportion to their engagement band. Sized to stay the same order of magnitude as the
+    // existing like volume so the outbox publisher drains the run in minutes, not hours.
+    private static final int VIEW_EVENT_TARGET = 12_000;
+
+    // The same band weights EngagementSeedWriter applies to likes and saves, so the view, like and
+    // save signals agree on which posts are popular instead of contradicting one another.
+    private static final Map<String, Integer> VIEW_WEIGHT_BY_BAND =
+            Map.of("low", 1, "medium", 3, "high", 8, "viral", 20);
+
+    private static final long VIEW_RANDOM_SEED = 5_512_907L;
 
     private static final String PUBLISHED_STATUS_FILTER =
             "SELECT id, user_id, created_at FROM posts WHERE status = 'published'::post_status";
@@ -79,9 +111,9 @@ public class SeedOutboxEmitter {
 
     /** Per-event-type counts of what {@link #emitFullVolume()} actually enqueued. */
     public record EmissionCounts(
-            int postIndex, int hashtagIndex, int likes, int saves, int comments) {
+            int postIndex, int hashtagIndex, int likes, int saves, int comments, int views) {
         public int total() {
-            return postIndex + hashtagIndex + likes + saves + comments;
+            return postIndex + hashtagIndex + likes + saves + comments + views;
         }
     }
 
@@ -136,7 +168,10 @@ public class SeedOutboxEmitter {
      *
      * @return the number of events enqueued per type
      */
-    public EmissionCounts emitFullVolume() {
+    public EmissionCounts emitFullVolume(
+            SeedContent content,
+            Map<String, UUID> usersByUsername,
+            Map<String, UUID> postIdBySeedId) {
         List<PostIndexRow> posts = fetchPublishedPosts();
         List<UUID> hashtagIds = fetchAllHashtagIds();
         List<ReactionRow> likes = fetchPostLikes();
@@ -149,23 +184,165 @@ public class SeedOutboxEmitter {
         emitBatched(saves, batchWriter::emitSaveBatch);
         emitBatched(comments, batchWriter::emitCommentBatch);
 
+        List<ReactionRow> views = buildViewRows(content, usersByUsername, postIdBySeedId);
+        emitBatched(views, batchWriter::emitViewBatch);
+
         EmissionCounts counts =
                 new EmissionCounts(
                         posts.size(),
                         hashtagIds.size(),
                         likes.size(),
                         saves.size(),
-                        comments.size());
+                        comments.size(),
+                        views.size());
         log.info(
                 "[seed] outbox full volume emitted: postIndex={}, hashtagIndex={}, likes={}, saves={},"
-                        + " comments={}, total={}",
+                        + " comments={}, views={}, total={}",
                 counts.postIndex(),
                 counts.hashtagIndex(),
                 counts.likes(),
                 counts.saves(),
                 counts.comments(),
+                counts.views(),
                 counts.total());
         return counts;
+    }
+
+    // The read set is the union of every like and save pair with a band-weighted, persona-matched
+    // draw. Deduplicated on (user, post), so one logical view never yields two events no matter how
+    // many times a pair is reachable.
+    private List<ReactionRow> buildViewRows(
+            SeedContent content,
+            Map<String, UUID> usersByUsername,
+            Map<String, UUID> postIdBySeedId) {
+        Map<UUID, UUID> ownerByPostId = fetchPostOwners();
+        Set<String> seenPairs = new LinkedHashSet<>();
+        List<ReactionRow> views = new ArrayList<>();
+
+        // Reading precedes liking, so every like and save pair must already be a read pair.
+        for (ReactionRow reaction : fetchPostLikes()) {
+            addView(views, seenPairs, reaction.postId(), reaction.postOwnerId(), reaction.userId());
+        }
+        for (ReactionRow reaction : fetchPostSaves()) {
+            addView(views, seenPairs, reaction.postId(), reaction.postOwnerId(), reaction.userId());
+        }
+
+        Map<UUID, Set<String>> topicsByUserId = new HashMap<>();
+        List<UUID> allUserIds = new ArrayList<>();
+        indexUserTopics(content, usersByUsername, topicsByUserId, allUserIds);
+
+        List<PostSeed> published =
+                content.posts().stream()
+                        .filter(post -> "published".equals(post.status()))
+                        .filter(post -> postIdBySeedId.containsKey(post.id()))
+                        .toList();
+        int totalWeight = 0;
+        for (PostSeed post : published) {
+            totalWeight += VIEW_WEIGHT_BY_BAND.getOrDefault(post.engagementBand(), 1);
+        }
+        if (totalWeight == 0) {
+            return views;
+        }
+
+        Random random = new Random(VIEW_RANDOM_SEED);
+        for (PostSeed post : published) {
+            UUID postId = postIdBySeedId.get(post.id());
+            UUID ownerId = ownerByPostId.get(postId);
+            if (ownerId == null) {
+                continue;
+            }
+            int weight = VIEW_WEIGHT_BY_BAND.getOrDefault(post.engagementBand(), 1);
+            int target =
+                    Math.max(
+                            2, (int) Math.round((double) VIEW_EVENT_TARGET * weight / totalWeight));
+            List<UUID> candidates = candidateViewers(post, ownerId, topicsByUserId, allUserIds);
+            if (candidates.isEmpty()) {
+                continue;
+            }
+            int added = 0;
+            for (int attempt = 0; added < target && attempt < target * 4; attempt++) {
+                UUID viewerId = candidates.get(random.nextInt(candidates.size()));
+                if (addView(views, seenPairs, postId, ownerId, viewerId)) {
+                    added++;
+                }
+            }
+        }
+        return views;
+    }
+
+    private void indexUserTopics(
+            SeedContent content,
+            Map<String, UUID> usersByUsername,
+            Map<UUID, Set<String>> topicsByUserId,
+            List<UUID> allUserIds) {
+        Map<String, List<String>> topicsByPersonaId = new HashMap<>();
+        for (PersonaSeed persona : content.personas()) {
+            topicsByPersonaId.put(
+                    persona.id(), persona.topics() == null ? List.of() : persona.topics());
+        }
+        for (UserSeed user : content.users()) {
+            UUID userId = usersByUsername.get(user.username());
+            if (userId == null) {
+                continue;
+            }
+            allUserIds.add(userId);
+            topicsByUserId.put(
+                    userId,
+                    new LinkedHashSet<>(
+                            topicsByPersonaId.getOrDefault(user.personaId(), List.of())));
+        }
+    }
+
+    // Viewers whose persona topics intersect the post's own topics, so a user's reads cluster the
+    // way their persona does and collaborative filtering has structure to learn. A post no persona
+    // matches falls back to the whole population rather than receiving no views at all.
+    private List<UUID> candidateViewers(
+            PostSeed post,
+            UUID ownerId,
+            Map<UUID, Set<String>> topicsByUserId,
+            List<UUID> allUserIds) {
+        List<String> postTopics = post.topicTags() == null ? List.of() : post.topicTags();
+        List<UUID> matched = new ArrayList<>();
+        for (Map.Entry<UUID, Set<String>> entry : topicsByUserId.entrySet()) {
+            if (entry.getKey().equals(ownerId)) {
+                continue;
+            }
+            for (String topic : postTopics) {
+                if (entry.getValue().contains(topic)) {
+                    matched.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        if (!matched.isEmpty()) {
+            return matched;
+        }
+        return allUserIds.stream().filter(id -> !id.equals(ownerId)).toList();
+    }
+
+    // A self-view is never recorded, matching PostViewServiceImpl, which accepts a post owner's own
+    // view but never emits an event for it.
+    private boolean addView(
+            List<ReactionRow> views,
+            Set<String> seenPairs,
+            UUID postId,
+            UUID ownerId,
+            UUID viewerId) {
+        if (viewerId.equals(ownerId) || !seenPairs.add(viewerId + "::" + postId)) {
+            return false;
+        }
+        views.add(new ReactionRow(postId, ownerId, viewerId));
+        return true;
+    }
+
+    private Map<UUID, UUID> fetchPostOwners() {
+        Map<UUID, UUID> owners = new HashMap<>();
+        jdbc.query(
+                PUBLISHED_STATUS_FILTER,
+                (java.sql.ResultSet rs) -> {
+                    owners.put((UUID) rs.getObject("id"), (UUID) rs.getObject("user_id"));
+                });
+        return owners;
     }
 
     private void requireNonEmpty(List<?> rows, String description) {
