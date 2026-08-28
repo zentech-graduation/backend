@@ -202,7 +202,7 @@ class DomainWritersSeedWriterIT {
 
         Integer conversationCount =
                 jdbcTemplate.queryForObject("SELECT COUNT(*) FROM conversations", Integer.class);
-        assertThat(conversationCount).isEqualTo(60);
+        assertThat(conversationCount).isEqualTo(85);
 
         Integer messageCount =
                 jdbcTemplate.queryForObject("SELECT COUNT(*) FROM messages", Integer.class);
@@ -215,7 +215,7 @@ class DomainWritersSeedWriterIT {
         Integer directPairKeyCount =
                 jdbcTemplate.queryForObject(
                         "SELECT COUNT(DISTINCT direct_pair_key) FROM conversations", Integer.class);
-        assertThat(directPairKeyCount).isEqualTo(60);
+        assertThat(directPairKeyCount).isEqualTo(85);
     }
 
     private void assertNotificationCreatedAtWritten() {
