@@ -40,6 +40,19 @@ public interface GorseClient {
     List<GorseScore> popular(int n, int offset);
 
     /**
+     * Fetches the time-decayed trending ranking (recommender name {@code trending}).
+     *
+     * <p>Used both as a discovery surface on its own and as the source {@link
+     * com.app.modules.recommendation.service.impl.feed.RecommendationSource} tops up from once a
+     * user's personalized candidate list runs short.
+     *
+     * @param n maximum number of items to return
+     * @param offset zero-based offset into the trending list
+     * @return scored item ids ordered by trending score; empty when not yet computed
+     */
+    List<GorseScore> trending(int n, int offset);
+
+    /**
      * Inserts or updates users.
      *
      * @param users users in Gorse wire format

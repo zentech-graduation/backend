@@ -260,6 +260,9 @@ app:
   recommendation:
     consumer:
       enabled: ${RECOMMENDATION_CONSUMER_ENABLED:false}
+    read-set-window: ${RECOMMENDATION_READ_SET_WINDOW:P90D}
+    read-set-max-rows: ${RECOMMENDATION_READ_SET_MAX_ROWS:2000}
+    top-up-overfetch-multiplier: ${RECOMMENDATION_TOPUP_OVERFETCH_MULTIPLIER:3}
   websocket:
     revocation:
       interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
