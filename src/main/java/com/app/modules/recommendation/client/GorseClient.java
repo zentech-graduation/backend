@@ -68,8 +68,14 @@ public interface GorseClient {
     /**
      * Inserts feedback rows.
      *
-     * <p>Verified idempotent in v0.5.11: re-inserting an existing (type, user, item) tuple
-     * overwrites rather than duplicates, so redelivery-driven replays are safe.
+     * <p>Row-idempotent in v0.5.11: re-inserting an existing (type, user, item) tuple keeps a
+     * single row rather than duplicating it.
+     *
+     * <p>The row's {@code Value} is <b>accumulated, not overwritten</b>. Measured: inserting 2.0
+     * then 5.0 for one tuple leaves one row holding 7.0. So a value is a running total for that
+     * pair - the intended reading for dwell seconds - and a replay that reached this method twice
+     * would inflate it. Redelivery is safe only because the inbox guard skips the handler on a
+     * duplicate event id; do not weaken that guard on the assumption this call is fully idempotent.
      *
      * @param feedback feedback rows in Gorse wire format
      */

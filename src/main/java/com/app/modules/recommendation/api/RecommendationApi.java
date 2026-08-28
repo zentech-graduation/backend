@@ -96,6 +96,13 @@ public interface RecommendationApi {
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "415",
+                description = "Request body is not application/json",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "429",
                 description = "Rate limit exceeded",
                 content =
