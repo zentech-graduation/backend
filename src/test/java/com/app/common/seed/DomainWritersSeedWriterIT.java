@@ -121,7 +121,8 @@ class DomainWritersSeedWriterIT {
         engagementSeedWriter.write(content, usersByUsername, postIdBySeedId, commentIds, timeline);
         socialGraphSeedWriter.write(content, usersByUsername, timeline);
         storySeedWriter.write(content, usersByUsername, timeline);
-        messageSeedWriter.write(content, usersByUsername, timeline);
+        messageSeedWriter.write(
+                content, usersByUsername, mediaByCompositeKey, postIdBySeedId, timeline);
         // Must run before NotificationSeedWriter: warning notifications are read back from
         // user_warnings, which this call is what populates. Matches SeedRunner.runWriterChain().
         List<UUID> reportIds =
@@ -201,7 +202,7 @@ class DomainWritersSeedWriterIT {
 
         Integer conversationCount =
                 jdbcTemplate.queryForObject("SELECT COUNT(*) FROM conversations", Integer.class);
-        assertThat(conversationCount).isEqualTo(60);
+        assertThat(conversationCount).isEqualTo(85);
 
         Integer messageCount =
                 jdbcTemplate.queryForObject("SELECT COUNT(*) FROM messages", Integer.class);
@@ -214,7 +215,7 @@ class DomainWritersSeedWriterIT {
         Integer directPairKeyCount =
                 jdbcTemplate.queryForObject(
                         "SELECT COUNT(DISTINCT direct_pair_key) FROM conversations", Integer.class);
-        assertThat(directPairKeyCount).isEqualTo(60);
+        assertThat(directPairKeyCount).isEqualTo(85);
     }
 
     private void assertNotificationCreatedAtWritten() {

@@ -19,6 +19,7 @@ import com.app.common.seed.model.CommentPoolSeed;
 import com.app.common.seed.model.ConversationSeed;
 import com.app.common.seed.model.HashtagSeed;
 import com.app.common.seed.model.MediaManifestEntry;
+import com.app.common.seed.model.MessageSeed;
 import com.app.common.seed.model.ModerationCaseSeed;
 import com.app.common.seed.model.ModerationSupplementaryAction;
 import com.app.common.seed.model.ModerationSupplementaryReport;
@@ -92,11 +93,20 @@ public class SeedDataLoader {
                 mediaManifest.stream().map(MediaManifestEntry::id).collect(Collectors.toSet());
         Set<String> commentPoolTopics = commentPools.pools().keySet();
 
+        Set<String> publishedPostIds =
+                posts.stream()
+                        .filter(p -> "published".equals(p.status()))
+                        .map(PostSeed::id)
+                        .collect(Collectors.toSet());
+
         validatePostAuthorsExist(posts, usernames);
         validatePostMediaRefsResolve(posts, mediaIds);
         validatePostTopicsHaveCommentPools(posts, commentPoolTopics);
         validateConversationParticipantsExist(conversations, usernames);
         validateMessageReferencesResolve(conversations, moderationCases, supplementaryActions);
+        validateMessageMediaAndShareReferencesResolve(
+                conversations, usernames, mediaIds, publishedPostIds);
+        validateConversationParticipantScopedFieldsResolve(conversations);
         validateSupplementaryReportsAreUnique(supplementaryReports);
 
         return new SeedContent(
@@ -239,6 +249,84 @@ public class SeedDataLoader {
                             + "' which only has "
                             + messageCount
                             + " message(s)");
+        }
+    }
+
+    // A message's media_ref/shared_post_seed_id/shared_story_owner are bare strings the same way a
+    // post's media_refs and a conversation's participants are - validated here so an authoring typo
+    // fails the load instead of surfacing as a write-time IllegalStateException deep inside
+    // MessageSeedWriter. shared_story_owner is checked only for username existence: a story's
+    // liveness is a runtime property StorySeedWriter decides, which this static loader has no way
+    // to predict.
+    private void validateMessageMediaAndShareReferencesResolve(
+            List<ConversationSeed> conversations,
+            Set<String> usernames,
+            Set<String> mediaIds,
+            Set<String> publishedPostIds) {
+        for (ConversationSeed conversation : conversations) {
+            for (MessageSeed message : conversation.messages()) {
+                if (message.mediaRef() != null && !mediaIds.contains(message.mediaRef())) {
+                    throw new IllegalStateException(
+                            "conversations.json: conversation '"
+                                    + conversation.id()
+                                    + "' has a message with media_ref '"
+                                    + message.mediaRef()
+                                    + "' which does not exist in media_manifest.json");
+                }
+                if (message.sharedPostSeedId() != null
+                        && !publishedPostIds.contains(message.sharedPostSeedId())) {
+                    throw new IllegalStateException(
+                            "conversations.json: conversation '"
+                                    + conversation.id()
+                                    + "' has a post_share message referencing shared_post_seed_id '"
+                                    + message.sharedPostSeedId()
+                                    + "' which is not a published post in posts.json");
+                }
+                if (message.sharedStoryOwner() != null
+                        && !usernames.contains(message.sharedStoryOwner())) {
+                    throw new IllegalStateException(
+                            "conversations.json: conversation '"
+                                    + conversation.id()
+                                    + "' has a story_share message referencing"
+                                    + " shared_story_owner '"
+                                    + message.sharedStoryOwner()
+                                    + "' which does not exist in users.json");
+                }
+            }
+        }
+    }
+
+    // manuallyUnreadFor and nicknames both name a participant of the conversation they appear on -
+    // manuallyUnreadFor directly, nicknames via its map keys (the owning participant, not the
+    // nicknamed one).
+    private void validateConversationParticipantScopedFieldsResolve(
+            List<ConversationSeed> conversations) {
+        for (ConversationSeed conversation : conversations) {
+            Set<String> participants = new HashSet<>(conversation.participants());
+            if (conversation.manuallyUnreadFor() != null) {
+                for (String username : conversation.manuallyUnreadFor()) {
+                    if (!participants.contains(username)) {
+                        throw new IllegalStateException(
+                                "conversations.json: conversation '"
+                                        + conversation.id()
+                                        + "' has manually_unread_for entry '"
+                                        + username
+                                        + "' which is not one of this conversation's participants");
+                    }
+                }
+            }
+            if (conversation.nicknames() != null) {
+                for (String username : conversation.nicknames().keySet()) {
+                    if (!participants.contains(username)) {
+                        throw new IllegalStateException(
+                                "conversations.json: conversation '"
+                                        + conversation.id()
+                                        + "' has a nicknames entry keyed by '"
+                                        + username
+                                        + "' which is not one of this conversation's participants");
+                    }
+                }
+            }
         }
     }
 

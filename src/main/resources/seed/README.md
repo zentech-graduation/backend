@@ -15,7 +15,7 @@ It never runs in production, and it refuses to run against anything but a local 
 | Media assets (Pexels-sourced, R2-hosted) | 165 (125 images, 15 videos, 25 banners) |
 | Avatars (randomuser.me, externally hosted) | 90, one per user, never uploaded to R2 |
 | Comment pool entries | 900 across 22 topic pools |
-| Conversations / messages | 60 conversations, ~1,100 messages |
+| Conversations / messages | 85 conversations, ~1,600 messages |
 | Moderation cases (full narrative) | 6 |
 | Reports | ~180 (narrative + standalone) |
 | Warnings / strikes | 27 / 14 |
@@ -113,6 +113,43 @@ fixtures - every other account is generated content and should not be relied on 
 | `user_suspended` | Suspended with an active suspension expiry in the future. Tied to `moderation_cases.json` case 1 (spam escalation). |
 | `user_banned` | Banned, with a full moderation history. Primary target of `moderation_cases.json` case 2 (scam account). |
 
+## Admin conversations
+
+`admin` participates in 25 of the 85 seeded conversations - the other 60 are between generated
+accounts and never involve `admin` at all, which is why a pre-Phase-6 seed left `admin`'s own inbox
+empty.
+The 25 partners are chosen deliberately, not drawn at random: every persona in `personas.json` is
+represented by at least one partner, and each conversation's subject matter matches its partner's
+persona (a photographer negotiates a shoot, a shop owner handles an order and exchange, a developer
+walks through a code review, and so on).
+
+| Property | Actual |
+|---|---|
+| Conversations involving `admin` | 25 |
+| Long (30-50 messages) | 8 |
+| Medium (8-20 messages) | 10 |
+| Short (2-5 messages) | 5 |
+| Single unanswered message | 2 |
+| `image` / `video` / `post_share` / `story_share` messages | 40 / 8 / 12 / 5 |
+| Conversations unread for `admin` | 8 |
+
+Within those 25, the set also exercises every state `message/DATA_RULES.md` describes: at least one
+administratively-removed message (including one that carried an image, proving the read path
+withholds media and shares, not only text), at least one sender-deleted message, one conversation
+with the manual unread flag (`conversation_participants.is_manually_unread`, V53) set on an
+otherwise fully-read thread, and one conversation where `admin` has set a private nickname
+(`conversation_participants.nickname`, V52) for the other participant.
+
+`post_share` and `story_share` messages reference real rows: a `post_share` resolves via
+`PostSeedWriter`'s seed-id map to an actual published post, and a `story_share` resolves via a
+seed-time-only lookup (`MessageSeedWriter.fetchLiveStoryIdByOwnerUsername`) of the most recent story
+a named username owns that is still live (not expired, not administratively removed) as of the seed
+run's own `SeedTimeline.referenceNow()` - never SQL `NOW()`, since a fixed-instant test harness
+computes story liveness relative to that same reference, not the wall clock. An image or video
+message's `media_ref` is resolved the same way a post's media is: `MediaSeedWriter` mints a real
+`media_assets` row owned by the message's sender for the referenced manifest entry, reusing entries
+already in `media_manifest.json` rather than provisioning anything new.
+
 ## File map
 
 Files used across nearly every writer stay at the top level; everything else is grouped by what it
@@ -125,7 +162,7 @@ describes.
 | `content/posts.json` | 722 authored posts (image/video/carousel/text) | `PostSeedWriter` |
 | `content/hashtags.json` | The hashtag catalog posts reference | `PostSeedWriter` |
 | `content/comment_pools.json` | 900 pooled comment lines across 22 topics, plus scripted comment chains | `CommentSeedWriter` |
-| `messaging/conversations.json` | 60 conversations and their message history | `MessageSeedWriter` |
+| `messaging/conversations.json` | 85 conversations and their message history (60 between generated accounts, 25 involving `admin`) | `MessageSeedWriter` |
 | `moderation/moderation_cases.json` | 6 narrative moderation cases plus supplementary actions and reports | `ModerationSeedWriter` |
 | `media/media_manifest.json` | 165 Pexels-sourced media entries already uploaded to R2 (avatars are not in this file - see "Avatars" below) | `MediaSeedWriter`, `UserSeedWriter` (banner `cdn_url` lookup) |
 

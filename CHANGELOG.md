@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- The development seed dataset now gives the `admin` review account a realistic 25-conversation inbox, spanning every seeded persona and exercising image, video, shared-post, shared-story, administrator-removed, sender-deleted, manually-unread, and private-nickname messaging states.
+- The development seed dataset's image, video, shared-post, and shared-story messages now resolve to real, visible media assets, posts, and stories instead of decorative placeholders.
 - A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
 
 ### Changed

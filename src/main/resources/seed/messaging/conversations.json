@@ -7292,6 +7292,3264 @@
       "unread_for": [
         "henry.devops"
       ]
+    },
+    {
+      "id": "conv_admin_001",
+      "participants": [
+        "admin",
+        "james.carter.dev"
+      ],
+      "scenario": "dev_code_review",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "hey got a sec? opened PR #482, need a review before eod",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "on it, gimme 10",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 5
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "ok looked at the diff. why are we retrying the payment call 3x with no backoff",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 17
+        },
+        {
+          "sender": "admin",
+          "text": "legacy code, i just moved it not owned it lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 19
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "fair. still flagging it, can be a follow up ticket",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 22
+        },
+        {
+          "sender": "admin",
+          "text": "yeah go for it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 24
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "left 4 comments, mostly nits. one real one about the null check on line 88",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 30
+        },
+        {
+          "sender": "admin",
+          "text": "oh good catch, that would've npe'd on an empty cart",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 35
+        },
+        {
+          "sender": "admin",
+          "text": "fixing now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 36
+        },
+        {
+          "sender": "admin",
+          "text": "pushed. re-review?",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 45
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "approved, ship it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 59
+        },
+        {
+          "sender": "admin",
+          "text": "thanks 🙏",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "btw prod's been throwing weird 500s for like an hour, you seeing that",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 361
+        },
+        {
+          "sender": "admin",
+          "text": "checking now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 364
+        },
+        {
+          "sender": "admin",
+          "text": "yeah error rate is up, looks like the payment service",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 370
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "same one we just touched lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 374
+        },
+        {
+          "sender": "admin",
+          "text": "unrelated i think, different endpoint, pulling logs",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 376
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "lol this is literally what i was complaining about last week",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 391,
+          "shared_post_seed_id": "post_0083"
+        },
+        {
+          "sender": "admin",
+          "text": "hah yeah. found it, connection pool exhausted - someone left a debug flag on that logs full request bodies",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 395
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "oh no",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 398
+        },
+        {
+          "sender": "admin",
+          "text": "including auth headers",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 400
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "wait that means api keys are sitting in plaintext logs rn",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 405
+        },
+        {
+          "sender": "admin",
+          "text": "yeah, patching it now, don't paste anything from those logs anywhere ok",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 408
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "too late, already grabbed a snippet to check the fields, sending you what i see",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 428
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "sk_live_9f2c... does this look like a real key to you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 429,
+          "admin_removed_at_offset_minutes": 90
+        },
+        {
+          "sender": "admin",
+          "text": "james delete that now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 431
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "deleting",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 432
+        },
+        {
+          "sender": "admin",
+          "text": "i'll get it pulled from the thread too just in case, don't paste keys in chat even test ones",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 435
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "my bad, panicked",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 439
+        },
+        {
+          "sender": "admin",
+          "text": "patch is out, rotated the key just in case",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1039
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "good, sorry again about that",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1047
+        },
+        {
+          "sender": "admin",
+          "text": "all good, better safe",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1050
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "anyway PR's live, no more 500s on my end",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1060
+        },
+        {
+          "sender": "admin",
+          "text": "confirmed, error rate's back to normal",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1065
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "company just cut 15% of eng btw, found out this morning",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 2065,
+          "shared_post_seed_id": "post_0084"
+        },
+        {
+          "sender": "admin",
+          "text": "oh damn, you good?",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2071
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "yeah i'm fine, just weird morale-wise, half my team's gone",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2080
+        },
+        {
+          "sender": "admin",
+          "text": "that's rough, layoffs right after a security scare is a lot for one week",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2084
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "tell me about it. thanks for reviewing today, needed the distraction honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2091
+        },
+        {
+          "sender": "admin",
+          "text": "anytime",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2094
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "random q - know anyone hiring backend? asking for a friend on my team, they got cut",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4094
+        },
+        {
+          "sender": "admin",
+          "text": "i can ask around, send me their resume",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4104
+        },
+        {
+          "sender": "james.carter.dev",
+          "text": "appreciate it, will do tomorrow",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4109
+        },
+        {
+          "sender": "admin",
+          "text": "np",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4111
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_002",
+      "participants": [
+        "admin",
+        "henry.devops"
+      ],
+      "scenario": "dev_oncall_handover",
+      "messages": [
+        {
+          "sender": "henry.devops",
+          "text": "handing off oncall to you at midnight, quick summary incoming",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "go ahead",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4
+        },
+        {
+          "sender": "henry.devops",
+          "text": "3 pages this week, all the same noisy alert on the redis eviction metric, safe to ignore",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 8
+        },
+        {
+          "sender": "henry.devops",
+          "text": "one real incident tuesday, db connection pool maxed during the traffic spike, already root-caused",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11
+        },
+        {
+          "sender": "admin",
+          "text": "what was the fix",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 16
+        },
+        {
+          "sender": "henry.devops",
+          "text": "bumped max pool size + added a circuit breaker on the slow query path, PR's merged",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 20
+        },
+        {
+          "sender": "admin",
+          "text": "nice, anything still open",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 26
+        },
+        {
+          "sender": "henry.devops",
+          "text": "yeah one - the retry storm on webhook delivery when a partner endpoint is down, still flaky",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 31
+        },
+        {
+          "sender": "admin",
+          "text": "got a ticket for it?",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 34
+        },
+        {
+          "sender": "henry.devops",
+          "text": "OPS-441, not glamorous but somebody's gonna hit it eventually",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 38
+        },
+        {
+          "sender": "admin",
+          "text": "noted, i'll look tomorrow if it's quiet tonight",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 44
+        },
+        {
+          "sender": "henry.devops",
+          "text": "appreciate it. dashboards are all green rn",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 344
+        },
+        {
+          "sender": "henry.devops",
+          "text": "ops is gonna be a nightmare once we're really remote, half the runbooks assume someone's physically at a desk",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 349
+        },
+        {
+          "sender": "admin",
+          "text": "yeah we should fix that before it bites us",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 357
+        },
+        {
+          "sender": "henry.devops",
+          "text": "on my list for next quarter, low priority for now though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 757
+        },
+        {
+          "sender": "admin",
+          "text": "quiet night so far, thanks for the handoff",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1657
+        },
+        {
+          "sender": "henry.devops",
+          "text": "any pages overnight?",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2157
+        },
+        {
+          "sender": "admin",
+          "text": "nope, clean shift",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2163
+        },
+        {
+          "sender": "henry.devops",
+          "text": "love to hear it. took a small ops contract over the weekend btw, extra cash never hurts",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 2167,
+          "shared_post_seed_id": "post_0109"
+        },
+        {
+          "sender": "admin",
+          "text": "nice, hope it pays well",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2172
+        },
+        {
+          "sender": "henry.devops",
+          "text": "decent, mostly just monitoring setup for a small saas, easy money",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2178
+        },
+        {
+          "sender": "admin",
+          "text": "smart. anyway OPS-441 - i poked at it, looks like it needs exponential backoff not just retries",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2478
+        },
+        {
+          "sender": "henry.devops",
+          "text": "yeah that's probably it, want me to pair on it tomorrow",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2486
+        },
+        {
+          "sender": "admin",
+          "text": "sure, afternoon works",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2491
+        },
+        {
+          "sender": "henry.devops",
+          "text": "cool, i'll block time",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2494
+        },
+        {
+          "sender": "admin",
+          "text": "appreciate the clean handoff btw, way better than last month's",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2694
+        },
+        {
+          "sender": "henry.devops",
+          "text": "lol last month was a mess, glad it's not a pattern",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2700
+        },
+        {
+          "sender": "henry.devops",
+          "text": "on-call this week, phone's staying right next to me even at dinner",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3700
+        },
+        {
+          "sender": "admin",
+          "text": "rough. rotation needs another person honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3707
+        },
+        {
+          "sender": "henry.devops",
+          "text": "agreed, i'll bring it up at the next planning meeting",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3712
+        },
+        {
+          "sender": "admin",
+          "text": "back up 4 me if it gets bad tonight",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4012
+        },
+        {
+          "sender": "henry.devops",
+          "text": "always. go sleep",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4016
+        },
+        {
+          "sender": "admin",
+          "text": "thanks henry",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4019
+        },
+        {
+          "sender": "henry.devops",
+          "text": "np, that's what the rotation's for",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4021
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_003",
+      "participants": [
+        "admin",
+        "peter.qa"
+      ],
+      "scenario": "dev_bug_repro",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "can you try repro'ing VR-889 again? i can't get it to happen on my end",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "peter.qa",
+          "text": "tried like 15 times, only happens on the ios build, never android",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 31
+        },
+        {
+          "sender": "peter.qa",
+          "text": "and only with a slow network throttle on, feels like a race condition",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 35
+        },
+        {
+          "sender": "peter.qa",
+          "text": "attaching the exact repro steps in the ticket now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 41
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_004",
+      "participants": [
+        "admin",
+        "kevin.backend"
+      ],
+      "scenario": "dev_job_referral",
+      "messages": [
+        {
+          "sender": "kevin.backend",
+          "text": "hey, heard you might know of backend openings? asking around",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "maybe, what's your situation",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 41
+        },
+        {
+          "sender": "kevin.backend",
+          "text": "not urgent, just picked up a side freelance gig to keep busy and it's making me want a change",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 46,
+          "shared_post_seed_id": "post_0102"
+        },
+        {
+          "sender": "admin",
+          "text": "haha fair. i'll keep an ear out, what stack are you strongest in",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 76
+        },
+        {
+          "sender": "kevin.backend",
+          "text": "java/spring mostly, some go from a past job",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 82
+        },
+        {
+          "sender": "admin",
+          "text": "ok that overlaps with a team i know, let me ask",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 482
+        },
+        {
+          "sender": "admin",
+          "text": "they're not actively hiring rn but said to send a resume anyway for when they are",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2482
+        },
+        {
+          "sender": "kevin.backend",
+          "text": "appreciate it, sending it your way tonight",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2494
+        },
+        {
+          "sender": "kevin.backend",
+          "text": "sent",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2794
+        },
+        {
+          "sender": "admin",
+          "text": "forwarded, no promises but it's in front of the right person now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2854
+        },
+        {
+          "sender": "kevin.backend",
+          "text": "that's all i can ask for, thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2862
+        },
+        {
+          "sender": "admin",
+          "text": "np, good luck",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2866
+        },
+        {
+          "sender": "kevin.backend",
+          "text": "checked my payslip again, raise this year is not gonna cut it lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7866
+        },
+        {
+          "sender": "admin",
+          "text": "yeah that tracks with what everyone's saying rn",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7906
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_005",
+      "participants": [
+        "admin",
+        "sophieg.design"
+      ],
+      "scenario": "design_mockup_revisions",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "onboarding flow mockups look great, couple notes though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "go for it, i can take it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 21
+        },
+        {
+          "sender": "admin",
+          "text": "step 3 feels cramped, the cta and the skip link are too close together",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 26
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "yeah i noticed that too, was gonna flag it myself",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 30
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "here's v2 with more spacing",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 90,
+          "media_ref": "pexels_img_001"
+        },
+        {
+          "sender": "admin",
+          "text": "way better",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 98
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "and the empty state, feedback loop from the last usability test said the illustration reads as an error not an empty state",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 103
+        },
+        {
+          "sender": "admin",
+          "text": "oh good catch",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 106
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "reworked it, softer colors, added a little cta",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 196,
+          "media_ref": "pexels_img_002"
+        },
+        {
+          "sender": "admin",
+          "text": "love it, ship this version",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 206
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "ran a quick usability test, half the testers still missed the skip link even in v2",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 606,
+          "shared_post_seed_id": "post_0153"
+        },
+        {
+          "sender": "admin",
+          "text": "hm, maybe it needs to be a real button not a text link",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 636
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "trying that",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 1136,
+          "media_ref": "pexels_img_003"
+        },
+        {
+          "sender": "admin",
+          "text": "yeah that reads clearer",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1151
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "cool, locking that in then",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1157
+        },
+        {
+          "sender": "admin",
+          "text": "any update on the brand color pass for the settings page",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2357
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "yep, three options",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 2402,
+          "media_ref": "pexels_img_004"
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "option 2 personally, feels more on-brand without being too loud",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 2407,
+          "media_ref": "pexels_img_005"
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "option 3 for reference too",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 2411,
+          "media_ref": "pexels_img_006"
+        },
+        {
+          "sender": "admin",
+          "text": "agreed on option 2",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2431
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "one more pass with the final spacing tokens applied",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 2441,
+          "media_ref": "pexels_img_041"
+        },
+        {
+          "sender": "admin",
+          "text": "yep that's ready to hand off",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2449
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "great, i'll finalize specs and hand off to dev this week",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2457
+        },
+        {
+          "sender": "admin",
+          "text": "thanks, this whole flow feels a lot more polished now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3157
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "appreciate that, it's been through like 6 rounds lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3163
+        },
+        {
+          "sender": "admin",
+          "text": "worth it though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3168
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "grabbed coffee with a designer from a different team today, good to swap notes outside our bubble",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 6168
+        },
+        {
+          "sender": "admin",
+          "text": "should do that more as a team honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 6198
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "agreed, gonna suggest a monthly design crit with the other pods",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 6206
+        },
+        {
+          "sender": "admin",
+          "text": "yes please, do it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 6211
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "will bring it up friday",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 6215
+        },
+        {
+          "sender": "admin",
+          "text": "one more thing - can you send the source files for the onboarding flow, need them for a stakeholder deck",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7115
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "sure, figma link coming",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7135
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "sent, let me know if access doesn't work",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7138
+        },
+        {
+          "sender": "admin",
+          "text": "got it, works great, thanks sophie",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7153
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "np, let me know how the deck lands",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7157
+        },
+        {
+          "sender": "admin",
+          "text": "will do",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7160
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "finished a ux research course, now i see obvious problems everywhere lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11160
+        },
+        {
+          "sender": "admin",
+          "text": "the curse of knowledge 😅",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11200
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "exactly, can't unsee it now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11206
+        },
+        {
+          "sender": "admin",
+          "text": "put it to good use on our stuff",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11211
+        },
+        {
+          "sender": "sophieg.design",
+          "text": "already have a list going, will bring some to the next design review",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11217
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_006",
+      "participants": [
+        "admin",
+        "blake.design"
+      ],
+      "scenario": "design_freelance_gig",
+      "messages": [
+        {
+          "sender": "blake.design",
+          "text": "hey, you still looking for someone to redo the landing page hero? i freelance on the side",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "maybe, what's your rate look like",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "blake.design",
+          "text": "depends on scope but here's a quick draft direction to see if it's your style",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 261,
+          "media_ref": "pexels_img_039"
+        },
+        {
+          "sender": "admin",
+          "text": "like this a lot actually, let's talk details next week",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 301
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_007",
+      "participants": [
+        "admin",
+        "yasmin.brandmarketing"
+      ],
+      "scenario": "design_brand_asset",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "need the logo lockup in svg for the investor deck, do you have it handy",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "yasmin.brandmarketing",
+          "text": "yep, one sec",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 31
+        },
+        {
+          "sender": "yasmin.brandmarketing",
+          "text": "here's the full brand kit preview, svg is in the zip i'm sending after",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 36,
+          "media_ref": "pexels_img_040"
+        },
+        {
+          "sender": "admin",
+          "text": "perfect, this is exactly what i need",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 51
+        },
+        {
+          "sender": "yasmin.brandmarketing",
+          "text": "sent the zip, has light/dark versions too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 59
+        },
+        {
+          "sender": "admin",
+          "text": "got it, thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 65
+        },
+        {
+          "sender": "yasmin.brandmarketing",
+          "text": "np, let me know if the deck needs anything else brand-wise",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 70
+        },
+        {
+          "sender": "admin",
+          "text": "will do, might need a one-pager version later this month",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 970
+        },
+        {
+          "sender": "yasmin.brandmarketing",
+          "text": "sure, just give me a couple days notice",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 990
+        },
+        {
+          "sender": "admin",
+          "text": "will do, appreciate it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 996
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_008",
+      "participants": [
+        "admin",
+        "derekshoots"
+      ],
+      "scenario": "photo_wedding_job",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "hey, saw your work on a friend's wedding, do you have any dates open in october",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "derekshoots",
+          "text": "hey! let me check the calendar, one sec",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "derekshoots",
+          "text": "got the 11th and the 25th open",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 69
+        },
+        {
+          "sender": "admin",
+          "text": "18th would've been perfect but 25th could work, what's your package look like",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 99
+        },
+        {
+          "sender": "derekshoots",
+          "text": "full day coverage, edited gallery, a few prints included, sending the pdf",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 109
+        },
+        {
+          "sender": "derekshoots",
+          "text": "here's a sample gallery from a similar venue so you can see the style",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 509,
+          "media_ref": "pexels_img_007"
+        },
+        {
+          "sender": "admin",
+          "text": "this is beautiful, exactly the vibe we want",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 549
+        },
+        {
+          "sender": "derekshoots",
+          "text": "appreciate that, 6 months full time now and still figuring out pricing honestly",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 554,
+          "shared_post_seed_id": "post_0017"
+        },
+        {
+          "sender": "admin",
+          "text": "well the work speaks for itself",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 574
+        },
+        {
+          "sender": "derekshoots",
+          "text": "thank you, means a lot",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 580
+        },
+        {
+          "sender": "admin",
+          "text": "let's lock in the 25th, what do you need from us",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 640
+        },
+        {
+          "sender": "derekshoots",
+          "text": "50% deposit to hold the date, venue address, and a rough timeline whenever you have one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 648
+        },
+        {
+          "sender": "admin",
+          "text": "sending deposit today",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 653
+        },
+        {
+          "sender": "derekshoots",
+          "text": "got it, you're booked 🎉",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 683
+        },
+        {
+          "sender": "admin",
+          "text": "excited!",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 686
+        },
+        {
+          "sender": "derekshoots",
+          "text": "quick gear question on my end, any preference on candid vs posed ratio",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3686
+        },
+        {
+          "sender": "admin",
+          "text": "mostly candid, we're not big posed-photo people",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3776
+        },
+        {
+          "sender": "derekshoots",
+          "text": "perfect, that's honestly my favorite way to shoot",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3782
+        },
+        {
+          "sender": "derekshoots",
+          "text": "1 year freelancing now, income's actually more stable than i expected at this point",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 8782,
+          "shared_post_seed_id": "post_0018"
+        },
+        {
+          "sender": "admin",
+          "text": "that's great to hear, good luck out there",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 8842
+        },
+        {
+          "sender": "derekshoots",
+          "text": "thanks! ok random one - any allergies for the flower crowns if that's part of the day",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 10842
+        },
+        {
+          "sender": "admin",
+          "text": "not that i know of, i'll double check and let you know",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 10902
+        },
+        {
+          "sender": "admin",
+          "text": "confirmed, no allergies",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11302
+        },
+        {
+          "sender": "derekshoots",
+          "text": "great, noted",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 11307
+        },
+        {
+          "sender": "derekshoots",
+          "text": "sending the finalized timeline draft for you to check",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 15307,
+          "media_ref": "pexels_img_008"
+        },
+        {
+          "sender": "admin",
+          "text": "looks right to me, approved",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15347
+        },
+        {
+          "sender": "derekshoots",
+          "text": "perfect, see you on the 25th",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15353
+        },
+        {
+          "sender": "admin",
+          "text": "the day is here! good luck out there today",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 55353
+        },
+        {
+          "sender": "derekshoots",
+          "text": "thank you!! shooting the getting-ready shots now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 55553
+        },
+        {
+          "sender": "derekshoots",
+          "text": "quick preview from this morning",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 55643,
+          "media_ref": "pexels_img_009"
+        },
+        {
+          "sender": "admin",
+          "text": "omg this is stunning",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 55658
+        },
+        {
+          "sender": "derekshoots",
+          "text": "glad you like it, ceremony's up next",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 55668
+        },
+        {
+          "sender": "derekshoots",
+          "text": "got a great one from the vows",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 55968,
+          "media_ref": "pexels_img_010"
+        },
+        {
+          "sender": "admin",
+          "text": "crying a little ngl",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 55976
+        },
+        {
+          "sender": "derekshoots",
+          "text": "haha that's the goal honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 55981
+        },
+        {
+          "sender": "derekshoots",
+          "text": "reception shots coming, this one has a great candid moment but need to double check consent on a face in the background first, will send after i confirm",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 56381,
+          "admin_removed_at_offset_minutes": 60,
+          "media_ref": "pexels_img_011"
+        },
+        {
+          "sender": "admin",
+          "text": "oh no was there an issue",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 56581
+        },
+        {
+          "sender": "derekshoots",
+          "text": "yeah someone's ID was visible on a table in frame, pulling it and re-editing, sorry about that",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 56601
+        },
+        {
+          "sender": "admin",
+          "text": "no worries, appreciate you catching it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 56607
+        },
+        {
+          "sender": "derekshoots",
+          "text": "reshot version without the issue",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 56907,
+          "media_ref": "pexels_img_012"
+        },
+        {
+          "sender": "admin",
+          "text": "perfect, this is the one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 56922
+        },
+        {
+          "sender": "derekshoots",
+          "text": "full gallery in about 3 weeks, sending a few more previews meanwhile",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 57522,
+          "media_ref": "pexels_img_013"
+        },
+        {
+          "sender": "admin",
+          "text": "take your time, these look amazing already",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 57562
+        },
+        {
+          "sender": "derekshoots",
+          "text": "one more preview, this is my favorite from the whole day",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 61562,
+          "media_ref": "pexels_img_014"
+        },
+        {
+          "sender": "admin",
+          "text": "yeah that's the one we're framing",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61592
+        },
+        {
+          "sender": "derekshoots",
+          "text": "figured you'd say that lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61597
+        },
+        {
+          "sender": "derekshoots",
+          "text": "gallery's ready! link incoming",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 101597,
+          "media_ref": "pexels_img_015"
+        },
+        {
+          "sender": "admin",
+          "text": "just went through the whole thing, worth every penny, thank you derek",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 101797
+        },
+        {
+          "sender": "derekshoots",
+          "text": "so glad you love it, thanks for trusting me with the day",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 101812
+        },
+        {
+          "sender": "admin",
+          "text": "would book again in a heartbeat",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 101822
+        }
+      ],
+      "unread_for": [],
+      "nicknames": {
+        "admin": "Wedding Guy"
+      }
+    },
+    {
+      "id": "conv_admin_009",
+      "participants": [
+        "admin",
+        "kimberly.captures"
+      ],
+      "scenario": "photo_event_pricing",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "doing a company event next month, do you shoot corporate stuff too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "yep, weddings are my main thing but i do corporate a fair bit",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 41
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "here's a sample set from a conference i shot last quarter",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 51,
+          "media_ref": "pexels_img_017"
+        },
+        {
+          "sender": "admin",
+          "text": "this is exactly the energy we want, candid not stiff headshots",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 81
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "that's my whole approach honestly, more of these",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 87,
+          "media_ref": "pexels_img_018"
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "and a couple from the same event's networking hour",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 91,
+          "media_ref": "pexels_img_019"
+        },
+        {
+          "sender": "admin",
+          "text": "how do you price half-day corporate coverage",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 151
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "sending my rate sheet now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 159
+        },
+        {
+          "sender": "admin",
+          "text": "that works for our budget, let's book it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 189
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "great, sending the contract today",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 195
+        },
+        {
+          "sender": "admin",
+          "text": "signed and sent back",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 395
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "perfect, you're on the calendar",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 405
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "shot a smaller event this week, still editing but wanted to share the vibe",
+          "message_type": "story_share",
+          "offset_minutes_from_conversation_start": 3405,
+          "shared_story_owner": "kimberly.captures"
+        },
+        {
+          "sender": "admin",
+          "text": "love this, exactly the direction",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3445
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "glad it landed",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 3450,
+          "media_ref": "pexels_img_020"
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "couple more from the shoot, testing a new lens on low light",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 3456,
+          "media_ref": "pexels_img_021"
+        },
+        {
+          "sender": "admin",
+          "text": "sharp even in low light, nice",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3476
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "yeah i'm pretty happy with it, might be my go-to for indoor events now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3481
+        },
+        {
+          "sender": "kimberly.captures",
+          "text": "last one, group shot from the closing session",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 3487,
+          "media_ref": "pexels_img_022"
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_010",
+      "participants": [
+        "admin",
+        "tyson.videographer"
+      ],
+      "scenario": "photo_video_delivery",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "video from the launch event ready yet? need it for the recap post",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "almost, color grading now, should have a rough cut tonight",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "here's the rough cut, let me know what you think before final pass",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 561,
+          "media_ref": "pexels_vid_001"
+        },
+        {
+          "sender": "admin",
+          "text": "love the pacing, can we trim the intro by like 5 seconds though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 601
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "yep easy fix",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 609
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "here's v2 with the trim",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 909,
+          "media_ref": "pexels_vid_002"
+        },
+        {
+          "sender": "admin",
+          "text": "perfect, this is the one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 929
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "great, exporting the final 4k now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 939
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "also cut a short vertical version for stories if you want it",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 1029,
+          "media_ref": "pexels_vid_003"
+        },
+        {
+          "sender": "admin",
+          "text": "yes! send that too, will use it separately",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1044
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "sending final files in a few hours once export finishes",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1444
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "here's the final 4k, full res in the drive link",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 1944,
+          "media_ref": "pexels_vid_004"
+        },
+        {
+          "sender": "admin",
+          "text": "this looks incredible, thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1984
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "glad you're happy with it, always down for the next one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1994
+        },
+        {
+          "sender": "admin",
+          "text": "definitely, we'll book you again for the next launch",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2000
+        },
+        {
+          "sender": "tyson.videographer",
+          "text": "here's a behind the scenes clip too if you want it for socials",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 5000,
+          "media_ref": "pexels_vid_009"
+        },
+        {
+          "sender": "admin",
+          "text": "yes definitely using this",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 5030
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_011",
+      "participants": [
+        "admin",
+        "lauren.t02"
+      ],
+      "scenario": "student_deadline_studygroup",
+      "messages": [
+        {
+          "sender": "lauren.t02",
+          "text": "hii do u know if the stats final got pushed or is it still thursday",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "still thursday as far as i know",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 41
+        },
+        {
+          "sender": "lauren.t02",
+          "text": "ugh ok. re-registered for probability and stats this sem, praying it goes better",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 241
+        },
+        {
+          "sender": "admin",
+          "text": "you got this, want to study together before the final",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 541
+        },
+        {
+          "sender": "lauren.t02",
+          "text": "yes pls i need it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 551
+        },
+        {
+          "sender": "lauren.t02",
+          "text": "went home this weekend, dreading exam season starting monday tho",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 4551,
+          "shared_post_seed_id": "post_0289"
+        },
+        {
+          "sender": "admin",
+          "text": "same energy honestly, sunday scaries but for a whole semester",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4611
+        },
+        {
+          "sender": "lauren.t02",
+          "text": "lmaooo exactly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4617
+        },
+        {
+          "sender": "lauren.t02",
+          "text": "library thursday around 5? bringing snacks",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7617
+        },
+        {
+          "sender": "admin",
+          "text": "works for me, see you then",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7657
+        },
+        {
+          "sender": "lauren.t02",
+          "text": "yesss",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7660
+        },
+        {
+          "sender": "lauren.t02",
+          "text": "wait can u bring ur notes from the midterm review too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7720
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_012",
+      "participants": [
+        "admin",
+        "kyle.uni21"
+      ],
+      "scenario": "student_rent_partjob",
+      "messages": [
+        {
+          "sender": "kyle.uni21",
+          "text": "rent's going up again next lease renewal, landlord just emailed",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "how much",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 41
+        },
+        {
+          "sender": "kyle.uni21",
+          "text": "like $120 more a month, might have to pick up more shifts",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 46
+        },
+        {
+          "sender": "admin",
+          "text": "that's rough for a student budget",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 52
+        },
+        {
+          "sender": "kyle.uni21",
+          "text": "yeah trying to find a part time thing with flexible hours around classes",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 352
+        },
+        {
+          "sender": "admin",
+          "text": "campus job board has some decent ones sometimes",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 412
+        },
+        {
+          "sender": "kyle.uni21",
+          "text": "checked, mostly taken already this early in the sem",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 422
+        },
+        {
+          "sender": "kyle.uni21",
+          "text": "might just do more tutoring hours instead, at least i control the schedule",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 622
+        },
+        {
+          "sender": "admin",
+          "text": "smart, probably pays better too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 652
+        },
+        {
+          "sender": "kyle.uni21",
+          "text": "yeah for sure, just annoying to have to hustle more on top of classes",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 658
+        },
+        {
+          "sender": "admin",
+          "text": "hang in there, it's a phase",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 678
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_013",
+      "participants": [
+        "admin",
+        "yuna.study"
+      ],
+      "scenario": "student_studygroup_ask",
+      "messages": [
+        {
+          "sender": "yuna.study",
+          "text": "hey is the probability study group still meeting today or did it get moved",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_014",
+      "participants": [
+        "admin",
+        "shop.mimidress"
+      ],
+      "scenario": "shop_order_exchange",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "hi, do you still have the wrap dress in size M?",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "hi!! yes we do, checking stock now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 21
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "confirmed in stock, want me to hold one for you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29
+        },
+        {
+          "sender": "admin",
+          "text": "yes please",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 32
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "here's the color options we have it in",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 132,
+          "media_ref": "pexels_img_025"
+        },
+        {
+          "sender": "admin",
+          "text": "the burgundy one, i'll place the order now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 152
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "perfect, sending the checkout link",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 157
+        },
+        {
+          "sender": "admin",
+          "text": "wait can i also add the matching-",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 187,
+          "is_deleted": true
+        },
+        {
+          "sender": "admin",
+          "text": "sorry wrong chat, ignore that, ordering just the dress",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 188
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "haha no worries! order confirmed on our end, shipping tomorrow",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 198
+        },
+        {
+          "sender": "admin",
+          "text": "great, thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 203
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "quick update, courier's a bit delayed this week, might be 2 extra days sorry",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2203
+        },
+        {
+          "sender": "admin",
+          "text": "no worries, thanks for the heads up",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 2243
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "here's the tracking once it ships",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 5243,
+          "media_ref": "pexels_img_026"
+        },
+        {
+          "sender": "admin",
+          "text": "got it, thanks",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 5249
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "package arrived yet?",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9249
+        },
+        {
+          "sender": "admin",
+          "text": "yes! just tried it on, fits great actually",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9449
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "yay so glad",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9454
+        },
+        {
+          "sender": "admin",
+          "text": "actually the color is a little different than the photo but not a bad different, still love it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9484
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "yeah screens can be off sometimes, glad it still works for you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9492
+        },
+        {
+          "sender": "admin",
+          "text": "one thing though, i think i want to exchange for a size S actually, runs a bit big",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12492
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "no problem, we do free exchanges within 14 days",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12522
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "here's the exchange form, just fill in your order number",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 12532,
+          "media_ref": "pexels_img_027"
+        },
+        {
+          "sender": "admin",
+          "text": "filled it out and sent",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12732
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "got it, S is in stock, shipping the swap tomorrow",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12752
+        },
+        {
+          "sender": "admin",
+          "text": "awesome thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12758
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "here's a peek at our new restock too if you're interested",
+          "message_type": "story_share",
+          "offset_minutes_from_conversation_start": 15758,
+          "shared_story_owner": "shop.mimidress"
+        },
+        {
+          "sender": "admin",
+          "text": "ooh sending me into temptation lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15798
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "that's the plan 😂",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15803
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "here's the new arrivals, size chart's the same as before",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 15811,
+          "media_ref": "pexels_img_028"
+        },
+        {
+          "sender": "admin",
+          "text": "the green one is gorgeous, might get it too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15871
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "we have limited stock on that color, want me to hold one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15877
+        },
+        {
+          "sender": "admin",
+          "text": "yes please, size S",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15880
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "held! here's the checkout link whenever you're ready",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 15890,
+          "media_ref": "pexels_img_029"
+        },
+        {
+          "sender": "admin",
+          "text": "ordering now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15930
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "perfect, thank you for shopping with us again",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15938
+        },
+        {
+          "sender": "admin",
+          "text": "you have great pieces, will keep coming back",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 15943
+        },
+        {
+          "sender": "shop.mimidress",
+          "text": "here's a flat lay of the green one, forgot to send this earlier",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 16003,
+          "media_ref": "pexels_img_030"
+        },
+        {
+          "sender": "admin",
+          "text": "even better than i imagined",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 16023
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_015",
+      "participants": [
+        "admin",
+        "closet.by.hana"
+      ],
+      "scenario": "shop_restock",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "will the cream cardigan be restocked? sold out when i checked last week",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "yes! restock's coming friday, want me to notify you when it's up",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "admin",
+          "text": "please, don't want to miss it again",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 66
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "noted, i'll message you directly the moment it's live",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 72
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "here's a preview of the restock batch, cardigan's included",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 3072,
+          "media_ref": "pexels_img_031"
+        },
+        {
+          "sender": "admin",
+          "text": "yes that's the one, thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3092
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "np! also got a couple new colorways this time",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 3097,
+          "media_ref": "pexels_img_032"
+        },
+        {
+          "sender": "admin",
+          "text": "the sage green is really nice too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3127
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "it's been popular in the previews, might sell out fast",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3133
+        },
+        {
+          "sender": "admin",
+          "text": "ok now i want both lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3141
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "haha i mean i won't stop you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3144
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "restock is live now!",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 7144,
+          "media_ref": "pexels_img_033"
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "cream cardigan and sage green both in stock rn",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 7146
+        },
+        {
+          "sender": "closet.by.hana",
+          "text": "already half sold out, told you it'd move fast",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 7161,
+          "media_ref": "pexels_img_023"
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_016",
+      "participants": [
+        "admin",
+        "victor.marathon"
+      ],
+      "scenario": "gym_training_plan",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "signed up for my first marathon, terrified. any training tips",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "congrats! how many weeks out are you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "admin",
+          "text": "16 weeks",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 66
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "solid window, i can send you the plan i used",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 70
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "here it is, adjust the paces to your own baseline",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 270
+        },
+        {
+          "sender": "admin",
+          "text": "this is way more structured than what i had, thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 290
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "np, the long runs are the part people underestimate, don't skip those",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 296
+        },
+        {
+          "sender": "admin",
+          "text": "noted",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 299
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "signed up for my first marathon ever, starting the plan today too actually",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 4299,
+          "shared_post_seed_id": "post_0009"
+        },
+        {
+          "sender": "admin",
+          "text": "no way, we're basically training buddies then",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4339
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "haha kind of, different cities but same suffering",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4345
+        },
+        {
+          "sender": "admin",
+          "text": "week 1 done, legs are already mad at me",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 14345
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "that's normal, gets easier by week 3 i promise",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 14405
+        },
+        {
+          "sender": "admin",
+          "text": "hope so lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 14410
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "form check on my long run today, feels off in my left ankle",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 44410,
+          "media_ref": "pexels_vid_006"
+        },
+        {
+          "sender": "admin",
+          "text": "your foot strike looks a little heavy on that side honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 44440
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "yeah i noticed that too, gonna get new shoes",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 44448
+        },
+        {
+          "sender": "admin",
+          "text": "probably smart before it becomes an injury",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 44454
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "ran 45km this week, most i've ever done, feeling it",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 52454,
+          "media_ref": "pexels_vid_007"
+        },
+        {
+          "sender": "admin",
+          "text": "that's insane, nice work",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 52494
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "thanks, taper week can't come soon enough though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 52500
+        },
+        {
+          "sender": "admin",
+          "text": "week 10 check in, pace is finally where the plan says it should be",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 92500
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "that's the breakthrough week for most people, keep it up",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 92560
+        },
+        {
+          "sender": "admin",
+          "text": "thanks for the plan, genuinely don't think i'd have stuck with it otherwise",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 92568
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "that's what training buddies are for even remote ones",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 92574
+        },
+        {
+          "sender": "admin",
+          "text": "race is in 3 weeks, nervous",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 122574
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "you'll be ready, trust the taper",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 122634
+        },
+        {
+          "sender": "admin",
+          "text": "trying to",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 122639
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "finished my first full marathon, 4:32:10, still processing it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 142639
+        },
+        {
+          "sender": "admin",
+          "text": "incredible time, congrats!!",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 142679
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "thank you!! your race is coming up right, you got this",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 142689
+        },
+        {
+          "sender": "admin",
+          "text": "trying to channel your energy honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 142695
+        },
+        {
+          "sender": "victor.marathon",
+          "text": "you will, lmk how it goes",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 142700
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_017",
+      "participants": [
+        "admin",
+        "hailey.10k"
+      ],
+      "scenario": "gym_race_day",
+      "messages": [
+        {
+          "sender": "hailey.10k",
+          "text": "10k this saturday, what time do the gates open",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "6am i think, gates close at 6:45",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 31
+        },
+        {
+          "sender": "hailey.10k",
+          "text": "ok setting an alarm for 4:30 then lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 35
+        },
+        {
+          "sender": "hailey.10k",
+          "text": "just signed up for my first 10k, nervous i haven't prepped enough",
+          "message_type": "story_share",
+          "offset_minutes_from_conversation_start": 95,
+          "shared_story_owner": "hailey.10k"
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_018",
+      "participants": [
+        "admin",
+        "cafe.gochoc"
+      ],
+      "scenario": "fnb_catering_quote",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "hi, do you do catering for smaller office events? thinking 30 people",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "hey! yes we do, what kind of spread are you thinking",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "admin",
+          "text": "pastries and coffee for a morning meeting mostly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 66
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "we can do a full spread, here's what a similar order looked like last month",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 266,
+          "media_ref": "pexels_img_034"
+        },
+        {
+          "sender": "admin",
+          "text": "this looks great, what's the price for 30 people",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 296
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "sending a quote now, depends a bit on pastry mix",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 304
+        },
+        {
+          "sender": "admin",
+          "text": "that works for our budget",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 364
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "great, what date",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 369
+        },
+        {
+          "sender": "admin",
+          "text": "the 14th, morning delivery by 8:30",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 373
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "noted, i'll confirm availability and get back to you today",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 383
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "confirmed, we can do it",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 683
+        },
+        {
+          "sender": "admin",
+          "text": "perfect, sending a deposit",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 703
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "landlord says they won't renew our old lease btw, found a new spot though",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 4703,
+          "shared_post_seed_id": "post_0014"
+        },
+        {
+          "sender": "admin",
+          "text": "oh no, that's stressful, glad you found somewhere",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4763
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "yeah it's been a lot but the new location is actually better foot traffic",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4771
+        },
+        {
+          "sender": "admin",
+          "text": "silver lining i guess",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4776
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "will the catering still be from the current location or should i plan around the move",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4782
+        },
+        {
+          "sender": "admin",
+          "text": "when's the move happening",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 5082
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "not until next month, so your order's unaffected, don't worry",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 5122
+        },
+        {
+          "sender": "admin",
+          "text": "good, that's a relief",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 5128
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "here's a peek behind the counter this morning, prepping for a big order",
+          "message_type": "story_share",
+          "offset_minutes_from_conversation_start": 9128,
+          "shared_story_owner": "cafe.gochoc"
+        },
+        {
+          "sender": "admin",
+          "text": "looks like a lot of work honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9168
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "practical, a bit tired, but coffee keeps me upright lol",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9173
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "quick clip of the espresso machine doing its thing",
+          "message_type": "video",
+          "offset_minutes_from_conversation_start": 9373,
+          "media_ref": "pexels_vid_005"
+        },
+        {
+          "sender": "admin",
+          "text": "that machine is a beast",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9393
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "she's earned her keep, older than the shop itself basically",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9399
+        },
+        {
+          "sender": "admin",
+          "text": "day before the event, just confirming timing still works",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 17399
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "yep still on for 8:30am delivery",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 17419
+        },
+        {
+          "sender": "admin",
+          "text": "perfect, see you then",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 17424
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "delivery's out for the event, should be there any minute",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 29424,
+          "media_ref": "pexels_img_035"
+        },
+        {
+          "sender": "admin",
+          "text": "just arrived, looks amazing",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29444
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "so glad, hope the meeting goes well",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29450
+        },
+        {
+          "sender": "admin",
+          "text": "everyone's raving about the pastries already",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29650
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "that's the best kind of feedback, thank you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29658
+        },
+        {
+          "sender": "admin",
+          "text": "will definitely book you again for the next one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29698
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "anytime, just give me a bit of notice next time",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29704
+        },
+        {
+          "sender": "admin",
+          "text": "will do",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 29707
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "reopened at the new location, regulars are finding us already",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 69707,
+          "media_ref": "pexels_img_036"
+        },
+        {
+          "sender": "admin",
+          "text": "congrats on the move! will stop by sometime",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 69767
+        },
+        {
+          "sender": "cafe.gochoc",
+          "text": "would love that, coffee's on the house first visit",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 69775
+        },
+        {
+          "sender": "admin",
+          "text": "deal",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 69779
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_019",
+      "participants": [
+        "admin",
+        "corner.sandwich3"
+      ],
+      "scenario": "fnb_supplier_issue",
+      "messages": [
+        {
+          "sender": "corner.sandwich3",
+          "text": "our usual bread supplier's been late 3 times this month, anyone you'd recommend",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "not off the top of my head, what's going on with them",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "no idea honestly, no explanation just late deliveries and vague texts",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 69
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "here's what we got yesterday, half the order was missing",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 269,
+          "media_ref": "pexels_img_037"
+        },
+        {
+          "sender": "admin",
+          "text": "that's rough for a sandwich shop, bread's kind of the whole thing",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 289
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "exactly lol, might switch this week honestly, done waiting around",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 295
+        },
+        {
+          "sender": "admin",
+          "text": "worth shopping around at this point",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 300
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "found a new place, first order came in on time and looks solid",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 4300,
+          "media_ref": "pexels_img_038"
+        },
+        {
+          "sender": "admin",
+          "text": "that's a relief",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4315
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "yeah, gonna give them a trial month before fully switching over",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4321
+        },
+        {
+          "sender": "admin",
+          "text": "smart to keep the old one as backup for now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4326
+        },
+        {
+          "sender": "admin",
+          "text": "how's the trial going so far",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12326
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "3 for 3 on time deliveries, cautiously optimistic",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12386
+        },
+        {
+          "sender": "admin",
+          "text": "good sign",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12391
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "import costs went up again this quarter too though, might have to adjust a few prices",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 18391
+        },
+        {
+          "sender": "admin",
+          "text": "seems like everyone's dealing with that rn",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 18451
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "yeah, trying not to pass all of it onto customers at once",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 18459
+        },
+        {
+          "sender": "admin",
+          "text": "that's the right call long term i think",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 18465
+        },
+        {
+          "sender": "corner.sandwich3",
+          "text": "new menu board's up with the adjusted prices, kept it minimal",
+          "message_type": "image",
+          "offset_minutes_from_conversation_start": 21465,
+          "media_ref": "pexels_img_024"
+        },
+        {
+          "sender": "admin",
+          "text": "looks clean, good call",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 21495
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_020",
+      "participants": [
+        "admin",
+        "hunter.finance"
+      ],
+      "scenario": "finance_expense_question",
+      "messages": [
+        {
+          "sender": "hunter.finance",
+          "text": "quick one - are conference travel expenses deductible if it's partly personal too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "not totally sure, why do you ask",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 41
+        },
+        {
+          "sender": "hunter.finance",
+          "text": "going to a conference next month, tacking on a couple personal days after",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 46
+        },
+        {
+          "sender": "admin",
+          "text": "i'd guess only the business portion counts but check with an actual accountant on that one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 52
+        },
+        {
+          "sender": "hunter.finance",
+          "text": "haha fair, i am one, just wanted a sanity check from someone not billing me by the hour",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 60
+        },
+        {
+          "sender": "admin",
+          "text": "lol makes sense",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 64
+        },
+        {
+          "sender": "hunter.finance",
+          "text": "preschool tuition for my kid went up $150 this year too, everything's more expensive lately",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3064
+        },
+        {
+          "sender": "admin",
+          "text": "yeah it's rough out there for anyone with kids rn",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3124
+        },
+        {
+          "sender": "hunter.finance",
+          "text": "tell me about it, budgeting spreadsheet's gotten a lot more complicated",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 3130
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_021",
+      "participants": [
+        "admin",
+        "phoebe.accounting"
+      ],
+      "scenario": "finance_quick_check",
+      "messages": [
+        {
+          "sender": "phoebe.accounting",
+          "text": "quick one - do you remember what the split was on that shared invoice? need it before eod",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_022",
+      "participants": [
+        "admin",
+        "keith.finance"
+      ],
+      "scenario": "finance_gold_debate",
+      "messages": [
+        {
+          "sender": "keith.finance",
+          "text": "you seeing gold prices this week? up again",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "yeah, seems like everyone's piling in as a hedge",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        },
+        {
+          "sender": "keith.finance",
+          "text": "interest rates on savings accounts keep dropping too, feels connected honestly",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 67,
+          "shared_post_seed_id": "post_0427"
+        },
+        {
+          "sender": "admin",
+          "text": "i mean it's a classic pattern, rates down, gold up",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 107
+        },
+        {
+          "sender": "keith.finance",
+          "text": "got into a debate with a coworker over whether it's a bubble or a real hedge",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 407
+        },
+        {
+          "sender": "admin",
+          "text": "which side were you on",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 427
+        },
+        {
+          "sender": "keith.finance",
+          "text": "hedge, historically it holds value better than people give it credit for",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 435
+        },
+        {
+          "sender": "admin",
+          "text": "i'd push back a little, past performance isn't a guarantee",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 465
+        },
+        {
+          "sender": "keith.finance",
+          "text": "fair point, i'll give you that one",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 471
+        },
+        {
+          "sender": "keith.finance",
+          "text": "preschool tuition for my kid went up $150 this year, numbers just don't stop climbing lately",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4471
+        },
+        {
+          "sender": "admin",
+          "text": "yeah that's everywhere rn unfortunately",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4511
+        },
+        {
+          "sender": "keith.finance",
+          "text": "trying to budget around it but it's tight",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4517
+        },
+        {
+          "sender": "admin",
+          "text": "hang in there",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 4522
+        },
+        {
+          "sender": "keith.finance",
+          "text": "property prices in my area are up too, thinking about whether to wait or buy now",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12522
+        },
+        {
+          "sender": "admin",
+          "text": "honestly nobody can time that market reliably",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12582
+        },
+        {
+          "sender": "keith.finance",
+          "text": "yeah that's what everyone says, doesn't make the decision easier though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12588
+        },
+        {
+          "sender": "keith.finance",
+          "text": "ran the numbers again, waiting a year probably costs more than buying now given rates",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12888
+        },
+        {
+          "sender": "admin",
+          "text": "that tracks with what i've read too",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12928
+        },
+        {
+          "sender": "keith.finance",
+          "text": "gonna start looking seriously then, wish me luck",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12936
+        },
+        {
+          "sender": "admin",
+          "text": "good luck, it's a big decision",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 12942
+        },
+        {
+          "sender": "keith.finance",
+          "text": "argued with a different coworker today about crypto vs gold as a hedge, exhausting week for debates apparently",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 22942
+        },
+        {
+          "sender": "admin",
+          "text": "you really do like a good argument huh",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 23002
+        },
+        {
+          "sender": "keith.finance",
+          "text": "guilty, numbers just don't lie though, i can't help myself",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 23008
+        },
+        {
+          "sender": "admin",
+          "text": "fair enough",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 23013
+        },
+        {
+          "sender": "keith.finance",
+          "text": "found a property i actually like, sending you the listing for a sanity check",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 43013
+        },
+        {
+          "sender": "keith.finance",
+          "text": "here it is",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 43023
+        },
+        {
+          "sender": "admin",
+          "text": "looks solid on paper, run the inspection numbers before you commit though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 43083
+        },
+        {
+          "sender": "keith.finance",
+          "text": "already scheduled one for next week",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 43091
+        },
+        {
+          "sender": "admin",
+          "text": "smart",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 43095
+        },
+        {
+          "sender": "keith.finance",
+          "text": "inspection came back clean, making an offer",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 51095
+        },
+        {
+          "sender": "admin",
+          "text": "exciting! keep me posted",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 51155
+        },
+        {
+          "sender": "keith.finance",
+          "text": "will do, appreciate you talking it through with me this whole time",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 51163
+        },
+        {
+          "sender": "admin",
+          "text": "anytime, you clearly do your homework on this stuff",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 51169
+        },
+        {
+          "sender": "keith.finance",
+          "text": "have to, numbers are the whole job",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 51174
+        }
+      ],
+      "unread_for": [],
+      "manually_unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_023",
+      "participants": [
+        "admin",
+        "dante.reader"
+      ],
+      "scenario": "lurker_checkin",
+      "messages": [
+        {
+          "sender": "dante.reader",
+          "text": "hey",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "dante.reader",
+          "text": "saw your post. rough week huh",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 201
+        },
+        {
+          "sender": "dante.reader",
+          "text": "here if you need to talk",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 209
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
+    },
+    {
+      "id": "conv_admin_024",
+      "participants": [
+        "admin",
+        "mia.commentonly"
+      ],
+      "scenario": "lurker_catchup",
+      "messages": [
+        {
+          "sender": "mia.commentonly",
+          "text": "hey haven't talked in a while, how's it going",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "admin",
+          "text": "good! just busy, you?",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 201
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "same honestly, work's been a lot",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 221
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "saw this and thought of you",
+          "message_type": "post_share",
+          "offset_minutes_from_conversation_start": 521,
+          "shared_post_seed_id": "post_0008"
+        },
+        {
+          "sender": "admin",
+          "text": "haha nice, didn't know you followed marathon stuff",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 561
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "i don't really, it just showed up and seemed like your thing",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 567
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "honestly kind of thinking about quitting my j-",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 667,
+          "is_deleted": true
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "nvm ignore that, bad day talking",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 668
+        },
+        {
+          "sender": "admin",
+          "text": "hey you ok? here if you wanna vent",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 676
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "yeah i'm fine, just tired, thanks though",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 686
+        },
+        {
+          "sender": "admin",
+          "text": "anytime",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 690
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "random story from earlier",
+          "message_type": "story_share",
+          "offset_minutes_from_conversation_start": 6690,
+          "shared_story_owner": "mia.commentonly"
+        },
+        {
+          "sender": "admin",
+          "text": "lol love that",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 6730
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "yeah it was a good moment",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 6735
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "anyway hope work calms down for you soon",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9735
+        },
+        {
+          "sender": "admin",
+          "text": "you too honestly",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 9775
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "we should actually catch up in person sometime, been forever",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 10075
+        },
+        {
+          "sender": "admin",
+          "text": "yeah for real, let's find a weekend",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 10095
+        },
+        {
+          "sender": "mia.commentonly",
+          "text": "i'll check my calendar and get back to you",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 10103
+        },
+        {
+          "sender": "admin",
+          "text": "sounds good",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 10107
+        }
+      ],
+      "unread_for": []
+    },
+    {
+      "id": "conv_admin_025",
+      "participants": [
+        "admin",
+        "high.returns.now"
+      ],
+      "scenario": "spam_investment_pitch",
+      "messages": [
+        {
+          "sender": "high.returns.now",
+          "text": "🚀 GUARANTEED 20% MONTHLY RETURNS - limited spots left in our investment pool, message me to learn more!!",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 1
+        },
+        {
+          "sender": "high.returns.now",
+          "text": "u still there?? spots filling fast, don't miss this",
+          "message_type": "text",
+          "offset_minutes_from_conversation_start": 61
+        }
+      ],
+      "unread_for": [
+        "admin"
+      ]
     }
   ]
 }

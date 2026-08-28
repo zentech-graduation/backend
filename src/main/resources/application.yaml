@@ -3,6 +3,7 @@ spring:
     name: luvax
   profiles:
     active: dev
+    #active: dev,seed
   config:
     import:
       - optional:file:.env[.properties]

@@ -22,7 +22,7 @@ class SeedDataLoaderRealDataTest {
         assertThat(content.users()).hasSize(90);
         assertThat(content.hashtags()).hasSize(152);
         assertThat(content.posts()).hasSize(722);
-        assertThat(content.conversations()).hasSize(60);
+        assertThat(content.conversations()).hasSize(85);
         assertThat(content.moderationCases()).hasSize(6);
         assertThat(content.supplementaryModerationActions()).hasSize(153);
         assertThat(content.supplementaryModerationReports()).hasSize(27);
