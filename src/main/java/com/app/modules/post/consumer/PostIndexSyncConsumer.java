@@ -171,6 +171,24 @@ public class PostIndexSyncConsumer {
                 // missing or soft-deleted row is permanently dropped.
                 Optional<Post> post = postRepository.findById(payload.postId());
                 if (post.isEmpty()) {
+                    // Absent means soft-deleted or gone: the lookup is @SQLRestriction-filtered on
+                    // deleted_at. Returning silently would leave the item live in the recommender,
+                    // because auto_insert_item recreates it, unhidden, the moment any feedback
+                    // references it.
+                    // Hidden by upsert rather than by hideItem: PATCH /api/item on an id Gorse has
+                    // never seen answers 200 with RowAffected 1 and stores nothing, so the hide is
+                    // lost whenever this queue reaches the post before the feedback queue does.
+                    // The two queues drain concurrently, so that ordering is a race. An upsert
+                    // creates the row hidden either way.
+                    gorseClient.upsertItems(
+                            List.of(
+                                    new GorseItem(
+                                            payload.postId().toString(),
+                                            true,
+                                            List.of(),
+                                            List.of(),
+                                            payload.createdAt(),
+                                            null)));
                     return;
                 }
                 boolean published = post.get().getStatus() == PostStatus.PUBLISHED;
@@ -197,6 +215,10 @@ public class PostIndexSyncConsumer {
                 PostIndexDeleteEvent payload =
                         objectMapper.convertValue(event.data(), PostIndexDeleteEvent.class);
                 postSearchRepository.deleteById(payload.postId().toString());
+                // Hidden rather than deleted in the recommender: Gorse keeps the feedback that
+                // references this item, and hiding is what stops it being served while leaving the
+                // collaborative signal it contributed intact.
+                gorseClient.hideItem(payload.postId().toString());
             }
             default ->
                     throw new PermanentMessageException("unknown event type: " + event.eventType());

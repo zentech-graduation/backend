@@ -191,6 +191,14 @@ class PostIndexSyncConsumerTest {
         consumer.consume(message, channel);
 
         verify(postSearchRepository, never()).save(any());
+        // A post that is gone or soft-deleted must be hidden in the recommender, not merely
+        // skipped: auto_insert_item would otherwise recreate it unhidden from feedback alone.
+        // Hidden by upsert, not by hideItem, because hideItem stores nothing for an id Gorse has
+        // not seen yet while still reporting success.
+        ArgumentCaptor<List<GorseItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).upsertItems(captor.capture());
+        assertThat(captor.getValue().get(0).hidden()).isTrue();
+        verify(gorseClient, never()).hideItem(any());
         verify(channel).basicAck(1L, false);
     }
 

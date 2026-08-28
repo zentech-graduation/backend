@@ -54,7 +54,12 @@ public interface GorseClient {
     void upsertItems(List<GorseItem> items);
 
     /**
-     * Hides an item so it is never recommended again; safe to call for unknown items.
+     * Hides an existing item so it is never recommended again.
+     *
+     * <p>Only effective for an item Gorse already holds. Verified against v0.5.11: called with an
+     * unknown id it answers {@code 200} with {@code RowAffected: 1} and stores nothing, so the item
+     * stays absent and {@code auto_insert_item} later creates it visible from feedback alone.
+     * Upsert the item with {@code IsHidden} set instead when its presence is not guaranteed.
      *
      * @param itemId item id to hide
      */
