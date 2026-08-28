@@ -44,12 +44,18 @@ item_ttl = 0
 # against the running binary: an out-of-range decay here aborts startup with a validator error,
 # while the same key under [recommend] is silently ignored and the feature stays off with no
 # warning of any kind.
-# Replacement is enabled because the published catalogue is roughly seven hundred posts.
-# Impression-level read marking exhausts it within a handful of sessions, so permanently
-# excluding read items would leave every recommendation surface blank. Read items come back at
-# reduced weight instead of disappearing.
+# enable_replacement was true for one measurement cycle (see
+# .workspace/reports/rec_onboarding/prompt1_verification.md, section G5). Measured against the
+# seeded dataset: replacement reintroduces read items immediately rather than on exhaustion (65 of
+# the top 200 were already-read for a user with 244 of 773 posts read) and ranks them slightly
+# ahead of unread items (mean rank 92.2 vs 103.0), the opposite of the intended behaviour.
+# Exhaustion is now handled in the application (RecommendationSource topup) instead: gorse
+# excludes read items outright, and the application backfills from trending, unread first, only
+# once gorse's own list runs short. positive_replacement_decay and read_replacement_decay stay at
+# their measured defaults, inert while replacement is off, so the record that this was evaluated
+# is not lost.
 [recommend.replacement]
-enable_replacement = true
+enable_replacement = false
 positive_replacement_decay = 0.8
 read_replacement_decay = 0.6
 
