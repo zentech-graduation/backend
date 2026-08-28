@@ -244,8 +244,10 @@ These are accepted trade-offs, not defects.
 Useful framing for a design review or thesis defense.
 
 **What Gorse does.**
-It collects user-item feedback and periodically trains a collaborative filtering model — matrix factorization, which represents every user and every item as a latent vector so that a predicted score is their dot product.
+It collects user-item feedback and periodically trains a collaborative filtering model - matrix factorization, which represents every user and every item as a latent vector so that a predicted score is their dot product.
 It also computes item and user neighbors.
+Those three, plus time-decayed trending, are merged into one candidate list and re-ranked by a factorization machine, which is what lets features beyond the user-item pair - notably a post's hashtag labels - influence the final order.
+The factorization machine trains read feedback as its negative examples, which is why impressions are ingested at all.
 Results are precomputed into a cache, so the recommend API is a cache read rather than a model inference, which keeps it fast.
 
 **Why a separate service.**
@@ -258,5 +260,10 @@ Publishing happens afterwards with broker confirms, retries, and a dead-letter q
 A recommender outage therefore degrades recommendations without ever failing a user's like or save.
 
 **Cold start.**
-A user with no history is served by Gorse's configured fallback recommenders (`latest`), then by the application's own popularity and chronological fallbacks.
-New posts are distributed by the `latest` recommender until they accumulate enough feedback to be ranked collaboratively.
+A user with no history is served by Gorse's configured fallback recommender, `non-personalized/trending`, then by the application's own popularity and chronological fallbacks.
+Trending is positive feedback count divided by item age raised to a fractional power, so a new post competes on recent engagement rather than having to out-accumulate the whole back catalogue; a plain all-time count would pin the same viral posts to every cold-start session permanently.
+
+**Repeat suppression.**
+Posts a user has already read are not excluded permanently.
+Replacement is enabled, so a read post returns at reduced weight once the candidate pool is exhausted.
+That is deliberate on a catalogue of roughly seven hundred published posts: impression-level read marking exhausts it within a handful of sessions, and permanent exclusion would leave every recommendation surface blank.
