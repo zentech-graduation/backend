@@ -68,22 +68,34 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
         }
 
         char source = decoded.source();
-        int offset = decoded.offset();
-        int rawConsumed = 0;
+        int gorseOffset = decoded.gorseOffset();
+        int trendingOffset = decoded.trendingOffset();
         List<FeedPostResponse> content = new ArrayList<>(pageSize);
         Set<UUID> seenPostIds = new HashSet<>();
         int fetchSize = Math.max(pageSize * gorseProperties.getRecommendMultiplier(), pageSize);
 
         for (int round = 0; round < MAX_SOURCE_ROUNDS && content.size() < pageSize; round++) {
             SourceBatch batch =
-                    recommendationSource.fetch(viewerId, source, fetchSize, offset + rawConsumed);
+                    recommendationSource.fetch(
+                            viewerId, source, fetchSize, gorseOffset, trendingOffset);
             // A degraded batch flips the cursor source so later pages keep reading the same list
             source = batch.source();
             List<GorseScore> scores = batch.scores();
             if (scores.isEmpty()) {
                 break;
             }
-            rawConsumed += appendVisible(viewerId, scores, content, seenPostIds, pageSize);
+            int consumed = appendVisible(viewerId, scores, content, seenPostIds, pageSize);
+            // The batch does not report a ready-made next offset: appendVisible may stop before
+            // reaching the end of scores once the page fills, and only that consumed count says
+            // how far into each underlying list this round actually looked. Advancing gorseOffset
+            // by the full batch size regardless of consumption would silently skip whatever was
+            // never inspected - the bug this precise accounting exists to avoid.
+            gorseOffset += Math.min(consumed, batch.primaryCount());
+            if (consumed > batch.primaryCount()) {
+                // The topup portion was reached this round, so its whole fetched chunk - not just
+                // the candidates taken from it - is considered spent (see RecommendationSource).
+                trendingOffset += batch.trendingChunkFetched();
+            }
         }
 
         if (content.isEmpty() && decoded.isFirstPage()) {
@@ -91,13 +103,17 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             // (its own cursor scheme takes over on subsequent pages).
             return postService.getFeed(viewerId, null, pageSize);
         }
-        String startCursor = content.isEmpty() ? null : FeedCursor.encode(source, offset);
+        String startCursor =
+                content.isEmpty()
+                        ? null
+                        : FeedCursor.encode(
+                                source, decoded.gorseOffset(), decoded.trendingOffset());
         String endCursor =
-                content.isEmpty() ? null : FeedCursor.encode(source, offset + rawConsumed);
+                content.isEmpty() ? null : FeedCursor.encode(source, gorseOffset, trendingOffset);
         // A full page implies the source still had candidates left when the selector stopped.
         boolean hasNextPage = content.size() == pageSize;
         return CursorPageResponse.of(
-                content, hasNextPage, startCursor, endCursor, decoded.offset() > 0);
+                content, hasNextPage, startCursor, endCursor, !decoded.isFirstPage());
     }
 
     /**
@@ -178,24 +194,31 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
     }
 
     /**
-     * Opaque ranked-feed cursor: base64 of {@code <source>:<offset>} where source is 'g' (Gorse
-     * recommend) or 'p' (popularity fallback). {@code decode} returns null for any other cursor
-     * shape, which the service treats as a chronological-feed cursor to delegate.
+     * Opaque ranked-feed cursor: base64 of {@code <source>:<gorseOffset>:<trendingOffset>} where
+     * source is 'g' (Gorse recommend) or 'p' (popularity fallback). {@code gorseOffset} positions
+     * Gorse's personalized or popularity list; {@code trendingOffset} independently positions the
+     * trending list the exhaustion topup reads from. Both must be carried so revisiting a page with
+     * the same cursor always reproduces the same composition - a single shared offset cannot
+     * represent a position in two independently-paginated lists at once. {@code decode} returns
+     * null for any other cursor shape, including the two-field cursors this format replaces, which
+     * the service treats as a chronological-feed cursor to delegate.
      */
-    record FeedCursor(char source, int offset) {
+    record FeedCursor(char source, int gorseOffset, int trendingOffset) {
 
         boolean isFirstPage() {
-            return offset == 0;
+            return gorseOffset == 0 && trendingOffset == 0;
         }
 
-        static String encode(char source, int offset) {
+        static String encode(char source, int gorseOffset, int trendingOffset) {
             return Base64.getEncoder()
-                    .encodeToString((source + ":" + offset).getBytes(StandardCharsets.UTF_8));
+                    .encodeToString(
+                            (source + ":" + gorseOffset + ":" + trendingOffset)
+                                    .getBytes(StandardCharsets.UTF_8));
         }
 
         static FeedCursor decode(String cursor) {
             if (cursor == null || cursor.isBlank()) {
-                return new FeedCursor(RecommendationSource.SOURCE_GORSE, 0);
+                return new FeedCursor(RecommendationSource.SOURCE_GORSE, 0, 0);
             }
             String raw;
             try {
@@ -203,21 +226,24 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             } catch (IllegalArgumentException e) {
                 return null;
             }
-            if (raw.length() < 3
-                    || raw.charAt(1) != ':'
-                    || (raw.charAt(0) != RecommendationSource.SOURCE_GORSE
-                            && raw.charAt(0) != RecommendationSource.SOURCE_POPULAR)) {
+            String[] parts = raw.split(":", -1);
+            if (parts.length != 3
+                    || parts[0].length() != 1
+                    || (parts[0].charAt(0) != RecommendationSource.SOURCE_GORSE
+                            && parts[0].charAt(0) != RecommendationSource.SOURCE_POPULAR)) {
                 return null;
             }
             try {
-                int offset = Integer.parseInt(raw.substring(2));
-                if (offset < 0 || offset > MAX_OFFSET) {
-                    return new FeedCursor(raw.charAt(0), 0);
-                }
-                return new FeedCursor(raw.charAt(0), offset);
+                int gorseOffset = clampOffset(Integer.parseInt(parts[1]));
+                int trendingOffset = clampOffset(Integer.parseInt(parts[2]));
+                return new FeedCursor(parts[0].charAt(0), gorseOffset, trendingOffset);
             } catch (NumberFormatException e) {
                 return null;
             }
+        }
+
+        private static int clampOffset(int offset) {
+            return offset < 0 || offset > MAX_OFFSET ? 0 : offset;
         }
     }
 }

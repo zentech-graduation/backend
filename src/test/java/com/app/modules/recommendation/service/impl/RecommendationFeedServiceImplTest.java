@@ -110,8 +110,10 @@ class RecommendationFeedServiceImplTest {
         UUID postId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         Post post = publishedPost(postId, ownerId);
-        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0)))
-                .thenReturn(new SourceBatch('g', List.of(new GorseScore(postId.toString(), 5.0))));
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'g', List.of(new GorseScore(postId.toString(), 5.0)), 1, 0));
         when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
                 .thenReturn(Set.of(ownerId));
@@ -120,7 +122,7 @@ class RecommendationFeedServiceImplTest {
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).rankingScore()).isEqualTo(5.0);
-        verify(recommendationSource).fetch(viewerId, 'g', 2, 0);
+        verify(recommendationSource).fetch(viewerId, 'g', 2, 0, 0);
         verify(postService, never()).getFeed(any(), any(), anyInt());
     }
 
@@ -135,7 +137,7 @@ class RecommendationFeedServiceImplTest {
                 service.getRecommendedFeed(viewerId, garbageCursor, 20);
 
         assertThat(page).isSameAs(chronoPage);
-        verify(recommendationSource, never()).fetch(any(), anyChar(), anyInt(), anyInt());
+        verify(recommendationSource, never()).fetch(any(), anyChar(), anyInt(), anyInt(), anyInt());
     }
 
     @Test
@@ -153,15 +155,18 @@ class RecommendationFeedServiceImplTest {
         Post ok2 = publishedPost(okPost2, ok2OwnerId);
 
         // First round: 3 candidates, but only ok1 survives (owned + blocked filtered) - page of 2
-        // is not yet full, so a second round must run.
-        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(0)))
+        // is not yet full, so a second round must run. All 3 are primary (no topup), so gorseOffset
+        // advances by all 3 and trendingOffset stays at 0.
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(0), eq(0)))
                 .thenReturn(
                         new SourceBatch(
                                 'g',
                                 List.of(
                                         new GorseScore(ownedByViewer.toString(), 9.0),
                                         new GorseScore(blockedPost.toString(), 8.0),
-                                        new GorseScore(okPost1.toString(), 7.0))));
+                                        new GorseScore(okPost1.toString(), 7.0)),
+                                3,
+                                0));
         when(postLookupService.findActiveByIds(List.of(ownedByViewer, blockedPost, okPost1)))
                 .thenReturn(List.of(viewerOwned, blocked, ok1));
         // The batch visibility check runs once for the round's distinct owner set; blockedOwnerId
@@ -170,9 +175,12 @@ class RecommendationFeedServiceImplTest {
                         viewerId, Set.of(viewerId, blockedOwnerId, ok1OwnerId)))
                 .thenReturn(Set.of(viewerId, ok1OwnerId));
 
-        // Second round starts at offset 3 (all 3 raw candidates from round 1 were consumed).
-        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(3)))
-                .thenReturn(new SourceBatch('g', List.of(new GorseScore(okPost2.toString(), 6.0))));
+        // Second round starts at gorseOffset 3 (all 3 raw candidates from round 1 were consumed);
+        // trendingOffset stays 0 since topup was never reached.
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(3), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'g', List.of(new GorseScore(okPost2.toString(), 6.0)), 1, 0));
         when(postLookupService.findActiveByIds(List.of(okPost2))).thenReturn(List.of(ok2));
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ok2OwnerId)))
                 .thenReturn(Set.of(ok2OwnerId));
@@ -182,14 +190,14 @@ class RecommendationFeedServiceImplTest {
         assertThat(page.getContent()).hasSize(2);
         assertThat(page.getContent().get(0).id()).isEqualTo(okPost1);
         assertThat(page.getContent().get(1).id()).isEqualTo(okPost2);
-        verify(recommendationSource).fetch(viewerId, 'g', 4, 0);
-        verify(recommendationSource).fetch(viewerId, 'g', 4, 3);
+        verify(recommendationSource).fetch(viewerId, 'g', 4, 0, 0);
+        verify(recommendationSource).fetch(viewerId, 'g', 4, 3, 0);
     }
 
     @Test
     void getRecommendedFeed_bothSourcesEmptyOnFirstPage_fallsBackToChronologicalFeed() {
-        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(10), eq(0)))
-                .thenReturn(new SourceBatch('g', List.of()));
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(10), eq(0), eq(0)))
+                .thenReturn(new SourceBatch('g', List.of(), 0, 0));
         CursorPageResponse<FeedPostResponse> chronoPage =
                 CursorPageResponse.of(
                         List.of(feedResponse(UUID.randomUUID())), false, "a", "b", false);
@@ -207,8 +215,10 @@ class RecommendationFeedServiceImplTest {
         UUID ownerId = UUID.randomUUID();
         Post post = publishedPost(postId, ownerId);
         // Gorse degraded mid-round-trip: RecommendationSource itself flips the tagged source.
-        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0)))
-                .thenReturn(new SourceBatch('p', List.of(new GorseScore(postId.toString(), null))));
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'p', List.of(new GorseScore(postId.toString(), null)), 1, 0));
         when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
                 .thenReturn(Set.of(ownerId));
@@ -224,8 +234,10 @@ class RecommendationFeedServiceImplTest {
         UUID postId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         Post post = publishedPost(postId, ownerId);
-        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0)))
-                .thenReturn(new SourceBatch('g', List.of(new GorseScore(postId.toString(), null))));
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'g', List.of(new GorseScore(postId.toString(), null)), 1, 0));
         when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
         when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(ownerId)))
                 .thenReturn(Set.of(ownerId));
@@ -237,9 +249,9 @@ class RecommendationFeedServiceImplTest {
 
     @Test
     void getRecommendedFeed_previousPagePopularCursor_continuesFromPopularSource() {
-        String popularCursor = Base64.getEncoder().encodeToString("p:7".getBytes());
-        when(recommendationSource.fetch(eq(viewerId), eq('p'), eq(10), eq(7)))
-                .thenReturn(new SourceBatch('p', List.of()));
+        String popularCursor = Base64.getEncoder().encodeToString("p:7:0".getBytes());
+        when(recommendationSource.fetch(eq(viewerId), eq('p'), eq(10), eq(7), eq(0)))
+                .thenReturn(new SourceBatch('p', List.of(), 0, 0));
 
         // Not the first page (offset 7 > 0), so an empty result returns as an empty ranked page
         // rather than restarting the chronological feed from page one.
@@ -248,5 +260,62 @@ class RecommendationFeedServiceImplTest {
 
         assertThat(page.getContent()).isEmpty();
         verify(postService, never()).getFeed(any(), any(), anyInt());
+    }
+
+    @Test
+    void getRecommendedFeed_topupReached_advancesGorseAndTrendingOffsetsIndependently() {
+        UUID gorseOnlyPost = UUID.randomUUID();
+        UUID gorseOnlyOwner = UUID.randomUUID();
+        UUID topUpPost = UUID.randomUUID();
+        UUID topUpOwner = UUID.randomUUID();
+        Post gorsePost = publishedPost(gorseOnlyPost, gorseOnlyOwner);
+        Post topUpPostEntity = publishedPost(topUpPost, topUpOwner);
+        // Batch has 1 primary (gorse) entry and 1 topup entry; both get consumed filling the
+        // page, so the topup portion is reached and its whole fetched chunk (3) is spent, while
+        // gorseOffset only advances by the 1 primary entry actually consumed. fetchSize for
+        // limit=2 with multiplier 2 is 4 - gorse and topup together fell short of it, which is
+        // exactly the exhaustion case topup exists for.
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(4), eq(0), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'g',
+                                List.of(
+                                        new GorseScore(gorseOnlyPost.toString(), 9.0),
+                                        new GorseScore(topUpPost.toString(), 5.0)),
+                                1,
+                                3));
+        when(postLookupService.findActiveByIds(anyList()))
+                .thenReturn(List.of(gorsePost, topUpPostEntity));
+        when(postVisibilityService.filterVisibleOwnerIds(
+                        viewerId, Set.of(gorseOnlyOwner, topUpOwner)))
+                .thenReturn(Set.of(gorseOnlyOwner, topUpOwner));
+
+        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 2);
+
+        assertThat(page.getContent()).hasSize(2);
+        assertThat(decodeCursor(page.getPageInfo().getEndCursor())).isEqualTo("g:1:3");
+    }
+
+    @Test
+    void getRecommendedFeed_topupFetchedButNeverReached_trendingOffsetDoesNotAdvance() {
+        UUID onlyPost = UUID.randomUUID();
+        UUID onlyOwner = UUID.randomUUID();
+        Post post = publishedPost(onlyPost, onlyOwner);
+        // primaryCount 1 equals scores.size() consumed (page fills on the single primary entry),
+        // so the topup portion carried in the batch - if any - is never reached and
+        // trendingOffset must stay put even though the batch reports a non-zero chunk fetched.
+        // fetchSize for limit=1 with multiplier 2 is 2.
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(2), eq(0), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'g', List.of(new GorseScore(onlyPost.toString(), 9.0)), 1, 4));
+        when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of(post));
+        when(postVisibilityService.filterVisibleOwnerIds(viewerId, Set.of(onlyOwner)))
+                .thenReturn(Set.of(onlyOwner));
+
+        CursorPageResponse<FeedPostResponse> page = service.getRecommendedFeed(viewerId, null, 1);
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(decodeCursor(page.getPageInfo().getEndCursor())).isEqualTo("g:1:0");
     }
 }
