@@ -86,8 +86,14 @@ type = "items"
 
 [recommend.collaborative]
 type = "mf"
-# Demo-friendly cadence so live feedback visibly shifts the feed; raise outside demos
-fit_period = "2m"
+# Raised from the 2m demo cadence on measurement. The factorization machine itself is cheap to
+# fit - the AFM click model converges in about 3.4s over 50 epochs - but the per-user ranking pass
+# it feeds is not: measured at 57.2s, 61.7s and 61.7s across three consecutive cycles on the
+# seeded dataset (106 users, 792 items, ~44,000 feedback rows). Against the old 2m period that is
+# a 52% duty cycle, leaving the master almost continuously busy and one slow cycle away from
+# overlapping fits. At 5m the same pass is roughly 21%, which leaves headroom as the dataset
+# grows while still refreshing often enough to demo. Re-measure before lowering it.
+fit_period = "5m"
 fit_epoch = 100
 
 # Factorization machine over a merged candidate list. This is what puts the item-to-item and
