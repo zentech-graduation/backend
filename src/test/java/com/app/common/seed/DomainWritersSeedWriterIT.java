@@ -121,7 +121,8 @@ class DomainWritersSeedWriterIT {
         engagementSeedWriter.write(content, usersByUsername, postIdBySeedId, commentIds, timeline);
         socialGraphSeedWriter.write(content, usersByUsername, timeline);
         storySeedWriter.write(content, usersByUsername, timeline);
-        messageSeedWriter.write(content, usersByUsername, timeline);
+        messageSeedWriter.write(
+                content, usersByUsername, mediaByCompositeKey, postIdBySeedId, timeline);
         // Must run before NotificationSeedWriter: warning notifications are read back from
         // user_warnings, which this call is what populates. Matches SeedRunner.runWriterChain().
         List<UUID> reportIds =

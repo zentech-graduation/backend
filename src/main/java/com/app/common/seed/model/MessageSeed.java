@@ -6,4 +6,7 @@ public record MessageSeed(
         String messageType,
         int offsetMinutesFromConversationStart,
         Integer adminRemovedAtOffsetMinutes,
-        boolean isDeleted) {}
+        boolean isDeleted,
+        String mediaRef,
+        String sharedPostSeedId,
+        String sharedStoryOwner) {}

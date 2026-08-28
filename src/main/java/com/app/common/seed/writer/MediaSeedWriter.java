@@ -17,7 +17,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import com.app.common.seed.loader.SeedContent;
+import com.app.common.seed.model.ConversationSeed;
 import com.app.common.seed.model.MediaManifestEntry;
+import com.app.common.seed.model.MessageSeed;
 import com.app.common.seed.model.PostSeed;
 import com.app.common.seed.model.UserSeed;
 import com.app.modules.media.enums.MediaType;
@@ -90,6 +92,7 @@ public class MediaSeedWriter {
         Map<String, Use> usesByDedupeKey = new LinkedHashMap<>();
         collectUserBannerUses(content, usesByDedupeKey);
         collectPostMediaUses(content, usesByDedupeKey);
+        collectMessageMediaUses(content, usesByDedupeKey);
 
         Map<UUID, Instant> createdAtByUserId = fetchCreatedAtByUserId();
 
@@ -181,6 +184,19 @@ public class MediaSeedWriter {
         for (PostSeed post : content.posts()) {
             for (String mediaRef : post.mediaRefs()) {
                 putUse(uses, mediaRef, post.authorUsername());
+            }
+        }
+    }
+
+    // An image/video message's media_ref becomes a use owned by its sender, the same way a post's
+    // media_refs are owned by the post's author - a DM attachment is an upload the sender made, not
+    // one shared from an existing media_assets row.
+    private void collectMessageMediaUses(SeedContent content, Map<String, Use> uses) {
+        for (ConversationSeed conversation : content.conversations()) {
+            for (MessageSeed message : conversation.messages()) {
+                if (message.mediaRef() != null) {
+                    putUse(uses, message.mediaRef(), message.sender());
+                }
             }
         }
     }

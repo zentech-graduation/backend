@@ -47,7 +47,8 @@ class SeedTimelineTest {
         Instant previous = null;
         for (int offsetMinutes : scriptedOffsetsMinutes) {
             MessageSeed message =
-                    new MessageSeed("alice", "hi", "text", offsetMinutes, null, false);
+                    new MessageSeed(
+                            "alice", "hi", "text", offsetMinutes, null, false, null, null, null);
             Instant createdAt = timeline.messageCreatedAt(message, conversationCreatedAt);
             assertThat(createdAt).isAfterOrEqualTo(conversationCreatedAt);
             if (previous != null) {
@@ -63,7 +64,8 @@ class SeedTimelineTest {
     @Test
     void messageCreatedAt_sameSeedProducesIdenticalTimestampForSameOffset() {
         Instant conversationCreatedAt = Instant.parse("2026-08-20T09:00:00Z");
-        MessageSeed message = new MessageSeed("alice", "hi", "text", 42, null, false);
+        MessageSeed message =
+                new MessageSeed("alice", "hi", "text", 42, null, false, null, null, null);
 
         SeedTimeline first = new SeedTimeline(FIXED_SEED, Instant.parse("2026-08-25T00:00:00Z"));
         SeedTimeline second = new SeedTimeline(FIXED_SEED, Instant.parse("2026-08-25T00:00:00Z"));
