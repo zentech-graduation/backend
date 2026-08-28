@@ -122,10 +122,8 @@ class SeedOutboxEmitterIT {
     void emitFullVolume_writesOneEventPerRowAndEmitsSeededViews() {
         SeededIds seeded = seedDomainWriters();
 
-        Integer publishedPostCount =
-                jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM posts WHERE status = 'published'::post_status",
-                        Integer.class);
+        Integer allPostCount =
+                jdbcTemplate.queryForObject("SELECT COUNT(*) FROM posts", Integer.class);
         Integer hashtagCount =
                 jdbcTemplate.queryForObject("SELECT COUNT(*) FROM hashtags", Integer.class);
         Integer likeCount =
@@ -140,31 +138,36 @@ class SeedOutboxEmitterIT {
                 seedOutboxEmitter.emitFullVolume(
                         seeded.content(), seeded.usersByUsername(), seeded.postIdBySeedId());
 
-        assertThat(counts.postIndex()).isEqualTo(publishedPostCount);
+        assertThat(counts.postIndex()).isEqualTo(allPostCount);
         assertThat(counts.hashtagIndex()).isEqualTo(hashtagCount);
         assertThat(counts.likes()).isEqualTo(likeCount);
         assertThat(counts.saves()).isEqualTo(saveCount);
         assertThat(counts.comments()).isEqualTo(commentCount);
         assertThat(counts.views()).isPositive();
+        // Seeded post_share messages must produce share feedback, or "share" sits in
+        // positive_feedback_types with an empty bucket behind it.
+        assertThat(counts.shares()).isPositive();
 
         Map<String, Integer> countByType = countOutboxEventsByType();
-        assertThat(countByType.get("post.index.upsert.v1")).isEqualTo(publishedPostCount);
+        assertThat(countByType.get("post.index.upsert.v1")).isEqualTo(allPostCount);
         assertThat(countByType.get("hashtag.index.upsert.v1")).isEqualTo(hashtagCount);
         assertThat(countByType.get("post.liked.v1")).isEqualTo(likeCount);
         assertThat(countByType.get("post.saved.v1")).isEqualTo(saveCount);
         assertThat(countByType.get("comment.created.v1")).isEqualTo(commentCount);
         assertThat(countByType.get("post.viewed.v1")).isEqualTo(counts.views());
+        assertThat(countByType.get("post.shared.v1")).isEqualTo(counts.shares());
 
         Integer total =
                 jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox_events", Integer.class);
         assertThat(total)
                 .isEqualTo(
-                        publishedPostCount
+                        allPostCount
                                 + hashtagCount
                                 + likeCount
                                 + saveCount
                                 + commentCount
-                                + counts.views());
+                                + counts.views()
+                                + counts.shares());
 
         // Every row must still be PENDING: the outbox publisher is disabled in this test, so
         // nothing has drained yet - proves emission alone, not the live-stack drain.

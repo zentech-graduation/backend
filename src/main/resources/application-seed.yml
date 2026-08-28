@@ -5,9 +5,11 @@
 # consumers stay enabled (inherited from application-dev.yml) because their side effects
 # (Elasticsearch sync, Gorse feedback, Gorse item labels) are safe to run during a seed.
 # The recommendation consumer now carries substantially more traffic than it used to:
-# SeedOutboxEmitter emits one post.viewed.v1 per seeded view, roughly 12,000 additional events on
-# top of the like/save/comment volume, because the factorization machine ranker needs read feedback
-# as its negative training examples. It stays enabled regardless - it is the only writer of those
+# SeedOutboxEmitter emits one post.viewed.v1 per seeded view, measured at 21,967 additional events
+# on top of the like/save/comment volume (45,393 outbox rows in total for a full run), because the
+# factorization machine ranker needs read feedback as its negative training examples. The view
+# count exceeds the emitter's own VIEW_EVENT_TARGET because the read set is the union of that
+# band-weighted draw with every like and save pair, and those alone number over seventeen thousand. It stays enabled regardless - it is the only writer of those
 # user_events rows now that AnalyticsSeedWriter no longer draws post_view, so disabling it would
 # silently produce a seeded database with no read signal at all. Expect the outbox publisher to
 # take minutes rather than seconds to drain a seed run at its default 100-rows-per-second rate,

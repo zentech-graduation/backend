@@ -38,6 +38,7 @@ public class SeedOutboxBatchWriter {
     private static final String POST_LIKED_V1 = "post.liked.v1";
     private static final String POST_SAVED_V1 = "post.saved.v1";
     private static final String POST_VIEWED_V1 = "post.viewed.v1";
+    private static final String POST_SHARED_V1 = "post.shared.v1";
     private static final String COMMENT_CREATED_V1 = "comment.created.v1";
 
     private final OutboxService outboxService;
@@ -80,6 +81,25 @@ public class SeedOutboxBatchWriter {
     @Transactional
     void emitViewBatch(List<SeedOutboxEmitter.ReactionRow> batch) {
         batch.forEach(this::enqueueView);
+    }
+
+    @Transactional
+    void emitShareBatch(List<SeedOutboxEmitter.ShareRow> batch) {
+        batch.forEach(this::enqueueShare);
+    }
+
+    // Payload shape mirrors MessageServiceImpl's own post.shared.v1 enqueue: the aggregate is the
+    // shared post, not the message that carried it.
+    private void enqueueShare(SeedOutboxEmitter.ShareRow row) {
+        outboxService.enqueue(
+                POST_SHARED_V1,
+                POST_SHARED_V1,
+                AGGREGATE_TYPE_POST,
+                row.postId(),
+                row.senderId(),
+                Map.of(
+                        "postId", row.postId().toString(),
+                        "messageId", row.messageId().toString()));
     }
 
     // Payload shape mirrors PostViewServiceImpl's enqueue call exactly. No dwellSeconds key: a

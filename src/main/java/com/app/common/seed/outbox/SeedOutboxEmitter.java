@@ -80,6 +80,20 @@ public class SeedOutboxEmitter {
     private static final String PUBLISHED_STATUS_FILTER =
             "SELECT id, user_id, created_at FROM posts WHERE status = 'published'::post_status";
 
+    // Every post, not only the published ones. The index-sync consumer derives the recommender
+    // item's IsHidden flag from the post's real status, so a non-published post that never
+    // receives an upsert event is not merely missing from the recommender - Gorse's
+    // auto_insert_item creates it anyway the first time any feedback references it, unlabelled
+    // and visible. Measured before this filter existed: 19 non-published posts were live items
+    // with IsHidden false. The Elasticsearch half of that consumer still drops them.
+    private static final String ALL_POSTS_FILTER = "SELECT id, user_id, created_at FROM posts";
+
+    private static final String POST_SHARE_MESSAGES_SQL =
+            "SELECT m.id AS message_id, m.shared_post_id, m.sender_id, p.user_id AS post_owner_id"
+                    + " FROM messages m JOIN posts p ON p.id = m.shared_post_id"
+                    + " WHERE m.message_type = 'post_share'::message_type"
+                    + " AND m.shared_post_id IS NOT NULL AND m.sender_id IS NOT NULL";
+
     private final JdbcTemplate jdbc;
     private final SeedOutboxBatchWriter batchWriter;
 
@@ -91,6 +105,9 @@ public class SeedOutboxEmitter {
 
     /** One {@code post_likes}/{@code post_saves} row's identifying data. */
     public record ReactionRow(UUID postId, UUID postOwnerId, UUID userId) {}
+
+    /** One seeded post-share message's identifying data. */
+    public record ShareRow(UUID postId, UUID postOwnerId, UUID senderId, UUID messageId) {}
 
     /** One non-soft-deleted comment row's identifying data. */
     public record CommentRow(
@@ -111,9 +128,15 @@ public class SeedOutboxEmitter {
 
     /** Per-event-type counts of what {@link #emitFullVolume()} actually enqueued. */
     public record EmissionCounts(
-            int postIndex, int hashtagIndex, int likes, int saves, int comments, int views) {
+            int postIndex,
+            int hashtagIndex,
+            int likes,
+            int saves,
+            int comments,
+            int views,
+            int shares) {
         public int total() {
-            return postIndex + hashtagIndex + likes + saves + comments + views;
+            return postIndex + hashtagIndex + likes + saves + comments + views + shares;
         }
     }
 
@@ -172,7 +195,7 @@ public class SeedOutboxEmitter {
             SeedContent content,
             Map<String, UUID> usersByUsername,
             Map<String, UUID> postIdBySeedId) {
-        List<PostIndexRow> posts = fetchPublishedPosts();
+        List<PostIndexRow> posts = fetchAllPosts();
         List<UUID> hashtagIds = fetchAllHashtagIds();
         List<ReactionRow> likes = fetchPostLikes();
         List<ReactionRow> saves = fetchPostSaves();
@@ -187,6 +210,9 @@ public class SeedOutboxEmitter {
         List<ReactionRow> views = buildViewRows(content, usersByUsername, postIdBySeedId);
         emitBatched(views, batchWriter::emitViewBatch);
 
+        List<ShareRow> shares = fetchPostShares();
+        emitBatched(shares, batchWriter::emitShareBatch);
+
         EmissionCounts counts =
                 new EmissionCounts(
                         posts.size(),
@@ -194,16 +220,18 @@ public class SeedOutboxEmitter {
                         likes.size(),
                         saves.size(),
                         comments.size(),
-                        views.size());
+                        views.size(),
+                        shares.size());
         log.info(
                 "[seed] outbox full volume emitted: postIndex={}, hashtagIndex={}, likes={}, saves={},"
-                        + " comments={}, views={}, total={}",
+                        + " comments={}, views={}, shares={}, total={}",
                 counts.postIndex(),
                 counts.hashtagIndex(),
                 counts.likes(),
                 counts.saves(),
                 counts.comments(),
                 counts.views(),
+                counts.shares(),
                 counts.total());
         return counts;
     }
@@ -345,6 +373,21 @@ public class SeedOutboxEmitter {
         return owners;
     }
 
+    // Sharing a post is implemented as sending it inside a conversation, and MessageSeedWriter
+    // writes those rows straight to the database rather than through MessageServiceImpl, so the
+    // real post.shared.v1 producer never runs during a seed. Without this the share feedback
+    // bucket is empty and "share" sits in positive_feedback_types with nothing in it.
+    private List<ShareRow> fetchPostShares() {
+        return jdbc.query(
+                POST_SHARE_MESSAGES_SQL,
+                (rs, rowNum) ->
+                        new ShareRow(
+                                (UUID) rs.getObject("shared_post_id"),
+                                (UUID) rs.getObject("post_owner_id"),
+                                (UUID) rs.getObject("sender_id"),
+                                (UUID) rs.getObject("message_id")));
+    }
+
     private void requireNonEmpty(List<?> rows, String description) {
         if (rows.isEmpty()) {
             throw new IllegalStateException(
@@ -365,10 +408,18 @@ public class SeedOutboxEmitter {
         }
     }
 
+    private List<PostIndexRow> fetchAllPosts() {
+        return fetchPostIndexRows(ALL_POSTS_FILTER);
+    }
+
     private List<PostIndexRow> fetchPublishedPosts() {
+        return fetchPostIndexRows(PUBLISHED_STATUS_FILTER);
+    }
+
+    private List<PostIndexRow> fetchPostIndexRows(String sql) {
         Map<UUID, List<String>> hashtagIdsByPostId = fetchHashtagIdsByPostId();
         return jdbc.query(
-                PUBLISHED_STATUS_FILTER,
+                sql,
                 (rs, rowNum) -> {
                     UUID postId = (UUID) rs.getObject("id");
                     return new PostIndexRow(
