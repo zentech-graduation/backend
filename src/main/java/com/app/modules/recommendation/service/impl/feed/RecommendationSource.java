@@ -99,7 +99,17 @@ public class RecommendationSource {
         if (shortfall <= 0) {
             return new SourceBatch(SOURCE_GORSE, gorseScores, gorseScores.size(), 0);
         }
-        TopUpResult topUp = topUp(viewerId, shortfall, trendingOffset, gorseScores);
+        // Gorse's own ranker merges the trending recommender as one of its inputs (see
+        // gorse/config/config.toml [recommend.ranker]), so an item already shown via gorse on an
+        // earlier page is a realistic topup candidate unless excluded by its full history, not
+        // just this round's results. On the first page (gorseOffset 0) gorseScores already is
+        // that full history, so no extra call is needed; on a later page, fetch the complete
+        // prefix gorse has served this viewer from position 0 up to now.
+        List<GorseScore> gorseShownSoFar =
+                gorseOffset == 0
+                        ? gorseScores
+                        : gorseClient.recommend(viewerId, gorseOffset + gorseScores.size(), 0);
+        TopUpResult topUp = topUp(viewerId, shortfall, trendingOffset, gorseShownSoFar);
         List<GorseScore> combined = new ArrayList<>(gorseScores);
         combined.addAll(topUp.candidates());
         return new SourceBatch(SOURCE_GORSE, combined, gorseScores.size(), topUp.chunkFetched());
