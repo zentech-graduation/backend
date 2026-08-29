@@ -64,6 +64,48 @@ Stories expire after 24 hours, while Gorse fits on a schedule and caches recomme
 There is also no item-space fit: stories are not posts, and inserting them as items would pollute the catalogue the post recommender ranks over.
 Story views are recorded in `user_events` only.
 
+### Exhaustion topup, not replacement
+
+`enable_replacement` is `false`.
+It was measured on, once, against the seeded dataset: 65 of the top 200 personalized results for a test user were already-read and ranked ahead of unread items (mean rank 92.2 versus 103.0), which reintroduces read items immediately rather than only once the unread catalogue is exhausted.
+See `.workspace/reports/rec_onboarding/prompt1_verification.md` section G5 for the full measurement.
+
+Exhaustion is instead handled in `RecommendationSource`, the candidate-source pipeline stage.
+Gorse's personalized list excludes read items outright with replacement off.
+When Gorse returns fewer candidates than requested, the source backfills from the time-decayed trending recommender in two ordered passes: trending items the viewer has not read, then trending items the viewer has read.
+A read item therefore only ever appears once every unread trending candidate has been exhausted, and always at the tail of the batch.
+The topup target is the caller's own over-fetch parameter, already sized for downstream visibility filtering; no separate configuration exists for it.
+A topup failure (the trending call or the read-set query) is caught inside `RecommendationSource` and degrades silently to serving Gorse's results alone; it never trips the `gorse` circuit breaker, because that would discard a primary response that already succeeded over an enrichment step that did not.
+Topup is only attempted for the personalized path; it is never attempted when the source has already degraded to the popularity ranking, since that state already indicates Gorse is unreliable.
+
+**The read-set is a bounded, lossy snapshot, not a complete history.**
+It is read from `user_events` inside a configurable time window (`app.recommendation.read-set-window`, default 90 days) capped at a configurable row count (`app.recommendation.read-set-max-rows`, default 2000).
+A viewer whose read history exceeds either bound simply gets an incomplete read-set, which can make the topup's second pass show something read long ago as if it were merely "read recently."
+This is accepted rather than engineered around.
+The query needs no new index: `idx_user_events_user (user_id, created_at DESC)` (V15) already serves the `user_id` equality plus `created_at` range predicates the query issues.
+
+**Pagination is deterministic across pages, with one accepted trade-off and one known residual gap.**
+The ranked-feed cursor carries two independent offsets: one into Gorse's personalized (or popularity) list, one into the trending list the topup reads from.
+Both only ever advance forward and are fully carried in the cursor.
+Within a topup round, the whole fetched trending chunk is considered spent once any of it is reached, not just the candidates actually selected from it; an unread candidate beyond what was needed to fill the shortfall, or a read candidate scanned past while filling from unread, is not retried on a later page.
+This is a deliberate simplicity/determinism trade-off in the same family as the read-set window and cap.
+
+Measured against a running stack: before a fix, paginating one viewer through three pages produced 81 duplicate ids out of 300, because Gorse's own `[recommend.ranker]` merges the trending recommender as one of its inputs, so an item Gorse's personalized list had already shown on an earlier page was a realistic candidate for the trending topup to resurface on a later page.
+The topup now excludes the viewer's complete Gorse history up to the current page, not only the current round's results, which brought the measured duplicate count to zero across the same three-page run.
+The reverse direction is not closed: Gorse's own paginated output cannot be filtered against what the topup already showed on an earlier page, since Gorse's API accepts no exclusion list, so a full fix would require post-hoc filtering with the same precise offset accounting the topup fix required.
+This residual gap was not observed in the measured run and is documented here as a known limitation, not engineered around.
+See `.workspace/reports/rec_onboarding/prompt2_verification.md` for the numbers.
+
+### Explore: excluding followed accounts
+
+`GET /api/v1/recommendations/feed` accepts an `excludeFollowed` query parameter, default `false`.
+When `true` it serves the discovery ("Explore") variant of the same pipeline: candidates authored by accounts the viewer already follows (via `SocialService.getAcceptedFollowingExcludingBlocks`) are removed in the same filtering step that already applies the block and visibility rules, not in a second pipeline or a second endpoint.
+
+**The chronological-following fallback is suppressed under `excludeFollowed`, not merely filtered.**
+When both ranked sources are exhausted or unavailable on the first page, the personalized feed normally falls back to the chronological following feed.
+That fallback is, by definition, exactly the accounts an Explore-style caller asked to exclude, so entering it under `excludeFollowed` would show precisely the wrong content.
+An exhausted Explore result is therefore an honest empty page instead.
+
 ---
 
 ## Section 1: Canonical Data

@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
+- Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
 - A batched post-impression endpoint that records what a viewer actually saw, how long it stayed visible, and which surface it appeared on; resubmitting a batch after a network failure records nothing twice, and the call never affects a post's public view count.
 - A time-decayed trending ranking now serves cold-start users in place of a chronological list, so a post's standing falls off as it ages instead of accumulating forever.
 - Sharing a post in a conversation and liking a comment now feed the recommender, the latter attributed to the comment's parent post at reduced weight because the recommender ranks posts rather than comments.
@@ -17,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
 
 ### Changed
+- Personalized recommendations no longer resurface already-seen posts until the unread catalogue is genuinely exhausted, and only at the tail, replacing the previous score-based replacement mechanism.
 - Personalized recommendations are now ranked by a factorization machine over a merged candidate list combining collaborative filtering, post-to-post and viewer-to-viewer neighbours, and trending, rather than by collaborative filtering alone.
 - Posts a viewer has already seen now return to their recommendations at reduced weight instead of being excluded permanently, which on a catalogue of this size would otherwise empty every recommendation surface within a few sessions.
 - Seeded post shares now reach the recommender, so the share signal is no longer an empty category behind a configured positive-feedback type.
@@ -32,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Seeded avatars are now sourced from an external portrait-photo service instead of the object storage bucket; cover photos are unaffected and remain hosted there.
 
 ### Fixed
+- Exhausted recommendation replacement previously reintroduced read posts immediately and ranked them ahead of unread ones, contrary to the intended behaviour; exhaustion is now handled by an application-level backfill instead.
 - The recommender's popularity ranking returned an empty list in every environment because its scoring expression was rejected at evaluation time on the pinned recommender version; the fallback that degraded ranked feeds to popularity therefore had nothing to serve.
 - Draft, archived, removed, and deleted posts were live, visible recommender items and could be recommended, because the recommender created them from engagement signals alone and nothing ever marked them hidden.
 - Running the seeder's integration tests truncated the developer's real local recommender database instead of the disposable test one.
