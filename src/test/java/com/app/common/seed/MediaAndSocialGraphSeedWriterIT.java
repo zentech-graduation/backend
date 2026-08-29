@@ -167,6 +167,15 @@ class MediaAndSocialGraphSeedWriterIT {
                         Integer.class,
                         neverFollowedId);
         assertThat(neverFollowedFollowerCount).isZero();
+        // user_new_empty is the fixture the recommendation cold-start case reads: a viewer whose
+        // own following feed is empty must still see content from the personalized feed. That only
+        // holds if the account follows nobody either, not merely that nobody follows it.
+        Integer emptySocialGraphFollowingCount =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM follows WHERE follower_id = ?",
+                        Integer.class,
+                        neverFollowedId);
+        assertThat(emptySocialGraphFollowingCount).isZero();
 
         UUID boostedUserId = usersByUsername.get("user_power");
         Integer boostedFollowerCount =

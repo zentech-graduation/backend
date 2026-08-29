@@ -35,11 +35,14 @@ import lombok.extern.slf4j.Slf4j;
  * re-running the writer against the same seed content reproduces the same graph.
  *
  * <p>Three QA-account behaviours documented in {@code users.json}'s {@code qa_note} fields are
- * guaranteed by construction rather than left to chance: {@code user_new_empty} never receives a
- * follow ("zero followers" per its note), {@code user_private} always receives a minimum number of
- * inbound pending requests ("pending follow requests inbound" per its note), and {@code user_power}
- * always receives a large explicit batch of accepted followers ("high follower count" per its
- * note).
+ * guaranteed by construction rather than left to chance: {@code user_new_empty} is excluded from
+ * both sides of every follow assignment this writer makes, so it neither receives a follow ("zero
+ * followers" per its note) nor is ever picked as a follower of anyone else ("zero following" per
+ * its note) - the isolated node the cold-start recommendation case needs, where both the account's
+ * own following feed and its inbound audience are empty. {@code user_private} always receives a
+ * minimum number of inbound pending requests ("pending follow requests inbound" per its note), and
+ * {@code user_power} always receives a large explicit batch of accepted followers ("high follower
+ * count" per its note).
  */
 @Slf4j
 @Service
@@ -54,7 +57,7 @@ public class SocialGraphSeedWriter {
     private static final int MIN_FOLLOWING_PER_USER = 15;
     private static final int MAX_FOLLOWING_PER_USER = 40;
 
-    private static final String NEVER_FOLLOWED_USERNAME = "user_new_empty";
+    private static final String EMPTY_SOCIAL_GRAPH_USERNAME = "user_new_empty";
     private static final String GUARANTEED_PENDING_TARGET_USERNAME = "user_private";
     private static final int GUARANTEED_PENDING_COUNT = 6;
     private static final String BOOSTED_FOLLOWER_USERNAME = "user_power";
@@ -218,6 +221,9 @@ public class SocialGraphSeedWriter {
             if (follower.username().equals(GUARANTEED_PENDING_TARGET_USERNAME)) {
                 continue;
             }
+            if (follower.username().equals(EMPTY_SOCIAL_GRAPH_USERNAME)) {
+                continue;
+            }
             if (blockedDirectedPairs.contains(
                     follower.username() + "->" + GUARANTEED_PENDING_TARGET_USERNAME)) {
                 continue;
@@ -257,6 +263,9 @@ public class SocialGraphSeedWriter {
             if (follower.username().equals(BOOSTED_FOLLOWER_USERNAME)) {
                 continue;
             }
+            if (follower.username().equals(EMPTY_SOCIAL_GRAPH_USERNAME)) {
+                continue;
+            }
             if (blockedDirectedPairs.contains(
                     follower.username() + "->" + BOOSTED_FOLLOWER_USERNAME)) {
                 continue;
@@ -292,6 +301,9 @@ public class SocialGraphSeedWriter {
             if (followRows.size() >= TOTAL_FOLLOWS_TARGET) {
                 break;
             }
+            if (follower.username().equals(EMPTY_SOCIAL_GRAPH_USERNAME)) {
+                continue;
+            }
             int targetFollowingCount =
                     MIN_FOLLOWING_PER_USER
                             + random.nextInt(MAX_FOLLOWING_PER_USER - MIN_FOLLOWING_PER_USER + 1);
@@ -308,7 +320,7 @@ public class SocialGraphSeedWriter {
                 if (candidate.username().equals(follower.username())) {
                     continue;
                 }
-                if (candidate.username().equals(NEVER_FOLLOWED_USERNAME)) {
+                if (candidate.username().equals(EMPTY_SOCIAL_GRAPH_USERNAME)) {
                     continue;
                 }
                 if (followPairs.contains(follower.username() + "->" + candidate.username())) {
