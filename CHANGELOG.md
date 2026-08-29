@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Seeded avatars are now sourced from an external portrait-photo service instead of the object storage bucket; cover photos are unaffected and remain hosted there.
 
 ### Fixed
+- The `user_new_empty` development seed account now genuinely follows nobody, matching its documented "zero following" cold-start fixture; previously it only guaranteed nobody followed it, while it still followed a normal-sized batch of other accounts.
 - Every account in the development seed dataset now has a real, resolvable avatar image; previously every seeded user rendered with none.
 - A development seed run now emits notifications for post removal, post restoration, and report dismissal, matching the platform's current notification types; a seed run previously failed outright because these types had no seeded coverage.
 - A development seed run now purges every broker queue, resets the search indexes, and truncates the recommender's own data store before writing, and refuses to start unless the seed profile is active alongside dev; without this, a second seed run against an already-seeded stack could dead-letter on stale messages and leave search and recommendation state accumulating across runs instead of reflecting only the latest run.
