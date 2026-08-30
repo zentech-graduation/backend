@@ -29,8 +29,16 @@ app:
   hashtag:
     consumer:
       enabled: true
+  # PostLiveFanoutConsumer and the /ws/posts endpoint registered by PostWebSocketConfig are both
+  # gated on app.post.live.enabled, which defaults to false in application.yaml. Absent here, the
+  # endpoint was permitted by SecurityConfig and reachable while nothing fanned out to it. This is
+  # the third time this profile has silently disabled a live tier - see the comment and message
+  # blocks below. All three live tiers are now stated explicitly in this file so the next one
+  # added is added here too rather than inheriting the fail-closed default by accident.
   post:
     consumer:
+      enabled: true
+    live:
       enabled: true
   comment:
     consumer:

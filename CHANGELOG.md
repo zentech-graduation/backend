@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+<!-- p1 -->
+### Fixed
+- Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
+
 ### Added
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
