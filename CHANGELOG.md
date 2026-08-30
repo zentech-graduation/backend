@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Seeded avatars are now sourced from an external portrait-photo service instead of the object storage bucket; cover photos are unaffected and remain hosted there.
 
 ### Fixed
+- The personalized recommender's cached results now refresh every 5 minutes instead of every hour, matching how often its underlying model retrains; a freshly read post could previously keep reappearing in a viewer's personalized feed for up to an hour after being read.
 - Exhausted recommendation replacement previously reintroduced read posts immediately and ranked them ahead of unread ones, contrary to the intended behaviour; exhaustion is now handled by an application-level backfill instead.
 - The recommender's popularity ranking returned an empty list in every environment because its scoring expression was rejected at evaluation time on the pinned recommender version; the fallback that degraded ranked feeds to popularity therefore had nothing to serve.
 - Draft, archived, removed, and deleted posts were live, visible recommender items and could be recommended, because the recommender created them from engagement signals alone and nothing ever marked them hidden.

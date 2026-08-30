@@ -29,7 +29,12 @@ cache_expire = "10s"
 
 [recommend]
 cache_size = 200
-cache_expire = "1h"
+# Matches [master] fit_period below: caching a personalized result past the point where the
+# model that produced it is already stale buys nothing, and this feature's whole premise is
+# that a fresh read (via the impression pipeline) is reflected on the viewer's next visit
+# within one sitting, not up to an hour later. The prior 1h default sat far behind the 5m fit
+# cadence and made freshly-recorded reads invisible to /api/recommend for most of that hour.
+cache_expire = "5m"
 
 [recommend.data_source]
 # share is a positive example: it costs the user more effort than a like and is a deliberate
