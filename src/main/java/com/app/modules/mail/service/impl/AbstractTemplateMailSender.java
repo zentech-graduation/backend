@@ -112,6 +112,25 @@ public abstract class AbstractTemplateMailSender implements MailSender {
      * @param toEmail the unproven address the submitter gave
      * @return the provider's identifier for the accepted message, or null
      */
+    /**
+     * Renders and delivers one campaign mail.
+     *
+     * @param subject the administrator-authored subject
+     * @param bodyHtml the already-sanitized body from {@code CampaignBodyRenderer}
+     * @param unsubscribeUrl the recipient's opt-out link, supplied by the application
+     * @param toEmail recipient email address
+     * @return the provider's identifier for the accepted message, or null
+     */
+    public String sendCampaign(
+            String subject, String bodyHtml, String unsubscribeUrl, String toEmail) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("subject", subject);
+        variables.put("appName", mailProperties.getAppName());
+        variables.put("bodyHtml", bodyHtml);
+        variables.put("unsubscribeUrl", unsubscribeUrl);
+        return deliver(toEmail, subject, mailTemplateRenderer.renderCampaign(variables));
+    }
+
     public String sendSupportConfirmation(Map<String, Object> variables, String toEmail) {
         String html =
                 mailTemplateRenderer.render(SupportMailTemplate.CONFIRM_SUPPORT_REQUEST, variables);

@@ -8,12 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- p1 -->
 ### Added
+- An email opt-out that suppresses campaign mail only; account and security mail ignore it, and the send path records who was skipped and why.
+- Campaign bodies are rendered by one server-side pipeline and filtered against an allowlist, so a body carrying a script tag, an event handler or a javascript link is neutralised before it reaches anyone.
+- Administrators can compose and schedule custom mail campaigns from read-only Markdown samples, with a server-rendered preview that cannot diverge from the mail that is actually sent.
 - Every punitive moderation notice now carries a single-use appeal link that works without signing in, which is what makes the notice actionable for an account that cannot authenticate.
 - A public support form gated by Cloudflare Turnstile and an email confirmation step, so a submission reaches staff only after the submitter proves control of the address.
 - An appeal opened from a moderation notice redeems a single-use link that authorises exactly one ticket and mints no session.
 - A support centre with three entry paths, so a banned or suspended account - which cannot reach any authenticated endpoint - now has a route to contest a decision, which it previously did not.
 
 ### Fixed
+- Campaign personalisation tokens are now substituted correctly; the sanitizer rewrites double braces as a template-injection defence, which would otherwise have left every placeholder visible to recipients.
 - A stalled mail provider can no longer hold a consumer thread indefinitely; each send is bounded by a configurable call timeout, which is the only HTTP bound the Resend SDK permits from outside it.
 - Every read path that reaches comments or stories through native SQL now hides administratively removed rows, including the report target lookup, the platform statistics gauges and the development seed pipeline.
 - Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.

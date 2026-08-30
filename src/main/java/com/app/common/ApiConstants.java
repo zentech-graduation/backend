@@ -175,6 +175,8 @@ public final class ApiConstants {
         public static final String PUBLIC_TICKET = "/public/tickets";
         // Anonymous. Confirms the address a public submission was made from.
         public static final String CONFIRM = "/public/confirm";
+        // Anonymous. Campaign mail opt-out, followed from a mail client with no session.
+        public static final String UNSUBSCRIBE = "/unsubscribe";
     }
 
     public static final class Admin {
@@ -245,6 +247,14 @@ public final class ApiConstants {
         public static final String SUPPORT_TICKET_CLAIM = "/support/tickets/{ticketId}/claim";
         public static final String SUPPORT_TICKET_RESPOND = "/support/tickets/{ticketId}/respond";
         public static final String SUPPORT_TICKET_ESCALATE = "/support/tickets/{ticketId}/escalate";
+        // Mail campaigns, administrator only.
+        public static final String MAIL_TEMPLATES = "/mail/templates";
+        public static final String CAMPAIGNS = "/mail/campaigns";
+        public static final String CAMPAIGN_BY_ID = "/mail/campaigns/{campaignId}";
+        // A literal segment, so no "/mail/campaigns/{campaignId}" template can shadow it.
+        public static final String CAMPAIGN_PREVIEW = "/mail/campaigns/preview";
+        public static final String CAMPAIGN_SCHEDULE = "/mail/campaigns/{campaignId}/schedule";
+
         public static final String HASHTAGS = "/hashtags";
         // Declared before HASHTAG_BY_ID for readability only. The literal segment wins over the
         // "/hashtags/{hashtagId}" template in Spring MVC's pattern comparator regardless of
