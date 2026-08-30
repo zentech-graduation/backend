@@ -52,6 +52,9 @@ app:
   admin:
     consumer:
       enabled: true
+    moderation-mail:
+      consumer:
+        enabled: true
   story:
     consumer:
       enabled: true

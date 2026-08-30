@@ -51,6 +51,9 @@ app:
   admin:
     consumer:
       enabled: true
+    moderation-mail:
+      consumer:
+        enabled: true
   story:
     consumer:
       enabled: true
@@ -89,6 +92,13 @@ app:
     # it as authoritative in every profile, while the fallback keeps a checkout with no .env
     # bootable, which is what continuous integration relies on.
     cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET:dev-insecure-cookie-signing-secret-change-me}
+    # Cloudflare's published always-passes test key, defaulted the same way the signing secret
+    # above is: TURNSTILE_SECRET_KEY still outranks it, so a real key configured in the environment
+    # wins, while a checkout with no .env boots and the test suite makes no outbound call.
+    # It verifies every token it is given, so it must never reach production.
+    turnstile:
+      secret-key: ${TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA}
+      verify-url: ${TURNSTILE_VERIFY_URL:https://challenges.cloudflare.com/turnstile/v0/siteverify}
     refresh-cookie:
       # Local development serves the API over plain HTTP, where a Secure cookie is never stored.
       secure: false

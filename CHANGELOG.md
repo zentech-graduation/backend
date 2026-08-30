@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
 
 ### Added
+- A per-recipient hourly budget now bounds moderation mail, the first send throttle of any kind on this path.
+- Moderation notices now reach banned, suspended and deactivated accounts, which the existing mail path refused by design and which were therefore the only population never told what had happened to them.
 - Every outbound email is now recorded with its recipient, template, status and the provider's message identifier, which was previously discarded at the point of the call.
 - Nine moderation notice email templates covering account bans, reinstatements, suspensions, warnings and the four content removals, each stating the action, the date and, for a fixed-term suspension, when it ends.
 - Comments and stories now carry an administrative removal tombstone independent of the owner's own deletion, so restoring administratively removed content no longer undoes a deletion its author performed.

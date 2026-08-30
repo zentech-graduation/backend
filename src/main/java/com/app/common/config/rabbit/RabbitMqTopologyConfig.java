@@ -26,6 +26,11 @@ public class RabbitMqTopologyConfig {
     public static final String MAIL_DEAD_LETTER_QUEUE = "mail.dlq";
     public static final String MAIL_DEAD_LETTER_ROUTING_KEY = "mail.dead-letter";
 
+    public static final String MODERATION_MAIL_QUEUE = "moderation.mail.queue";
+    public static final String MODERATION_MAIL_DEAD_LETTER_QUEUE = "moderation.mail.dlq";
+    public static final String MODERATION_MAIL_DEAD_LETTER_ROUTING_KEY =
+            "moderation.mail.dead-letter";
+
     public static final String NOTIFICATION_QUEUE = "notification.queue";
     public static final String NOTIFICATION_DEAD_LETTER_QUEUE = "notification.dlq";
     public static final String NOTIFICATION_DEAD_LETTER_ROUTING_KEY = "notification.dead-letter";
@@ -115,6 +120,33 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(mailDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(MAIL_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    // Moderation notices travel on their own queue rather than sharing mail.queue. The auth mail
+    // handler refuses any account that is not ACTIVE, which is correct for auth mail and is exactly
+    // the population a moderation notice has to reach, so the two cannot share a consumer. A
+    // separate queue also lets moderation mail be disabled on its own, which matters most in the
+    // seed profile where a replay would otherwise send real provider mail to fabricated addresses.
+    //
+    // No x-dead-letter-exchange argument, following mailQueue above: this queue's consumer
+    // publishes to the dead-letter exchange itself and never rejects, so the broker argument would
+    // never fire.
+    @Bean
+    Queue moderationMailQueue() {
+        return QueueBuilder.durable(MODERATION_MAIL_QUEUE).build();
+    }
+
+    @Bean
+    Queue moderationMailDeadLetterQueue() {
+        return QueueBuilder.durable(MODERATION_MAIL_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding moderationMailDeadLetterBinding(
+            Queue moderationMailDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(moderationMailDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(MODERATION_MAIL_DEAD_LETTER_ROUTING_KEY);
     }
 
     @Bean
