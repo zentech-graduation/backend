@@ -159,6 +159,12 @@ public class HashtagServiceImpl implements HashtagService {
                                         ph -> ph.getId().getHashtagId(), Collectors.toList())));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> getHashtagNamesForPost(UUID postId) {
+        return hashtagRepository.findNamesByPostId(postId);
+    }
+
     private LinkedHashSet<String> normalizedSet(Collection<String> rawTags) {
         LinkedHashSet<String> names = new LinkedHashSet<>();
         for (String raw : rawTags) {

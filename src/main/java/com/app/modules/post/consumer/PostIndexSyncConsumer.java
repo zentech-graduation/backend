@@ -2,6 +2,7 @@ package com.app.modules.post.consumer;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -24,6 +25,7 @@ import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
+import com.app.modules.hashtag.service.HashtagService;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.event.PostIndexDeleteEvent;
@@ -32,6 +34,8 @@ import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.search.PostDocument;
 import com.app.modules.post.search.PostSearchRepository;
+import com.app.modules.recommendation.client.GorseClient;
+import com.app.modules.recommendation.client.dto.GorseItem;
 import com.rabbitmq.client.Channel;
 
 import tools.jackson.databind.ObjectMapper;
@@ -60,6 +64,8 @@ public class PostIndexSyncConsumer {
     private final ConsumerRetryProperties retryProperties;
     private final PostSearchRepository postSearchRepository;
     private final PostRepository postRepository;
+    private final HashtagService hashtagService;
+    private final GorseClient gorseClient;
     private final ObjectMapper objectMapper;
     private final Sleeper sleeper;
 
@@ -71,6 +77,8 @@ public class PostIndexSyncConsumer {
             ConsumerRetryProperties retryProperties,
             PostSearchRepository postSearchRepository,
             PostRepository postRepository,
+            HashtagService hashtagService,
+            GorseClient gorseClient,
             ObjectMapper objectMapper) {
         this(
                 parser,
@@ -79,6 +87,8 @@ public class PostIndexSyncConsumer {
                 retryProperties,
                 postSearchRepository,
                 postRepository,
+                hashtagService,
+                gorseClient,
                 objectMapper,
                 Thread::sleep);
     }
@@ -90,6 +100,8 @@ public class PostIndexSyncConsumer {
             ConsumerRetryProperties retryProperties,
             PostSearchRepository postSearchRepository,
             PostRepository postRepository,
+            HashtagService hashtagService,
+            GorseClient gorseClient,
             ObjectMapper objectMapper,
             Sleeper sleeper) {
         this.parser = parser;
@@ -98,6 +110,8 @@ public class PostIndexSyncConsumer {
         this.retryProperties = retryProperties;
         this.postSearchRepository = postSearchRepository;
         this.postRepository = postRepository;
+        this.hashtagService = hashtagService;
+        this.gorseClient = gorseClient;
         this.objectMapper = objectMapper;
         this.sleeper = sleeper;
     }
@@ -154,9 +168,34 @@ public class PostIndexSyncConsumer {
                 PostIndexUpsertEvent payload =
                         objectMapper.convertValue(event.data(), PostIndexUpsertEvent.class);
                 // Q4 gate: PostgreSQL is source of truth. A stale or out-of-order upsert against a
-                // missing, soft-deleted, or non-published row is permanently dropped, not indexed.
+                // missing or soft-deleted row is permanently dropped.
                 Optional<Post> post = postRepository.findById(payload.postId());
-                if (post.isEmpty() || post.get().getStatus() != PostStatus.PUBLISHED) {
+                if (post.isEmpty()) {
+                    // Absent means soft-deleted or gone: the lookup is @SQLRestriction-filtered on
+                    // deleted_at. Returning silently would leave the item live in the recommender,
+                    // because auto_insert_item recreates it, unhidden, the moment any feedback
+                    // references it.
+                    // Hidden by upsert rather than by hideItem: PATCH /api/item on an id Gorse has
+                    // never seen answers 200 with RowAffected 1 and stores nothing, so the hide is
+                    // lost whenever this queue reaches the post before the feedback queue does.
+                    // The two queues drain concurrently, so that ordering is a race. An upsert
+                    // creates the row hidden either way.
+                    gorseClient.upsertItems(
+                            List.of(
+                                    new GorseItem(
+                                            payload.postId().toString(),
+                                            true,
+                                            List.of(),
+                                            List.of(),
+                                            payload.createdAt(),
+                                            null)));
+                    return;
+                }
+                boolean published = post.get().getStatus() == PostStatus.PUBLISHED;
+                upsertRecommenderItem(payload, post.get(), published);
+                // A non-published row is still pushed to the recommender above, as hidden, so it
+                // stops being recommended. Elasticsearch instead drops it entirely.
+                if (!published) {
                     return;
                 }
                 // Caption is read from the source-of-truth row, not the event payload, so user
@@ -176,10 +215,32 @@ public class PostIndexSyncConsumer {
                 PostIndexDeleteEvent payload =
                         objectMapper.convertValue(event.data(), PostIndexDeleteEvent.class);
                 postSearchRepository.deleteById(payload.postId().toString());
+                // Hidden rather than deleted in the recommender: Gorse keeps the feedback that
+                // references this item, and hiding is what stops it being served while leaving the
+                // collaborative signal it contributed intact.
+                gorseClient.hideItem(payload.postId().toString());
             }
             default ->
                     throw new PermanentMessageException("unknown event type: " + event.eventType());
         }
+    }
+
+    // Labels are hashtag names, not ids: [[recommend.item-to-item]] is type = "tags" keyed on
+    // item.Labels, and the recommender computes tag similarity on the label strings themselves.
+    // Names are read from the source-of-truth rows for the same reason the caption is, rather than
+    // being carried in the event payload where a later rename would leave them stale.
+    // Timestamp is the post's creation time so the trending recommender's age term is meaningful.
+    private void upsertRecommenderItem(PostIndexUpsertEvent payload, Post post, boolean published) {
+        List<String> labels = hashtagService.getHashtagNamesForPost(payload.postId());
+        gorseClient.upsertItems(
+                List.of(
+                        new GorseItem(
+                                payload.postId().toString(),
+                                !published,
+                                List.of(),
+                                labels,
+                                post.getCreatedAt(),
+                                null)));
     }
 
     private void validateEnvelope(DomainEventEnvelope event) {

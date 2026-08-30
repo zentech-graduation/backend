@@ -30,6 +30,7 @@ import com.app.modules.message.entity.Conversation;
 import com.app.modules.message.entity.ConversationParticipant;
 import com.app.modules.message.entity.Message;
 import com.app.modules.message.entity.MessageWriteIdempotency;
+import com.app.modules.message.enums.MessageType;
 import com.app.modules.message.mapper.MessageMapper;
 import com.app.modules.message.messaging.MessageEventTypes;
 import com.app.modules.message.repository.ConversationParticipantRepository;
@@ -376,6 +377,26 @@ public class MessageServiceImpl implements MessageService {
                 saved.getId(),
                 actorId,
                 data);
+        enqueuePostShared(saved, actorId);
+    }
+
+    // Sharing a post is implemented as sending it inside a conversation, so this module is where
+    // the action happens and therefore where the event belongs. It is a separate event from
+    // message.sent.v1 because its aggregate is the shared post, not the message, and the
+    // recommender binds to it without having to parse every message that crosses the broker.
+    private void enqueuePostShared(Message saved, UUID actorId) {
+        if (saved.getMessageType() != MessageType.POST_SHARE || saved.getSharedPostId() == null) {
+            return;
+        }
+        outboxService.enqueue(
+                MessageEventTypes.POST_SHARED_V1,
+                MessageEventTypes.POST_SHARED_V1,
+                "post",
+                saved.getSharedPostId(),
+                actorId,
+                Map.of(
+                        "postId", saved.getSharedPostId().toString(),
+                        "messageId", saved.getId().toString()));
     }
 
     /**

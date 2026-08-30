@@ -3,6 +3,7 @@ package com.app.common.seed;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -78,6 +79,13 @@ public class SeedRunner {
                     new EnumColumn("platform_stats", "granularity", "stat_granularity"));
 
     private static final int MIN_ROWS_PER_ENUM_VALUE = 5;
+
+    // user_events.event_type = 'post_view' is produced by the recommendation consumer draining
+    // post.viewed.v1 from the outbox, which happens asynchronously after this run returns. The
+    // assertion below reads the database synchronously, so it would always see zero and always
+    // fail. Coverage for this one value is asserted against the drained system instead.
+    private static final Map<String, Set<String>> ASYNC_ENUM_VALUES =
+            Map.of("user_events.event_type", Set.of("post_view"));
 
     private final JdbcTemplate jdbc;
     private final SeedResetService resetService;
@@ -188,11 +196,13 @@ public class SeedRunner {
             log.info("[seed] phase=domain-write starting");
             SeedContent content = new SeedDataLoader().load();
             SeedTimeline timeline = new SeedTimeline(20260825L, java.time.Instant.now());
-            runWriterChain(content, timeline);
+            WriterChainResult chain = runWriterChain(content, timeline);
             log.info("[seed] phase=domain-write complete");
 
             log.info("[seed] phase=outbox-emission starting");
-            SeedOutboxEmitter.EmissionCounts counts = seedOutboxEmitter.emitFullVolume();
+            SeedOutboxEmitter.EmissionCounts counts =
+                    seedOutboxEmitter.emitFullVolume(
+                            content, chain.usersByUsername(), chain.postIdBySeedId());
             log.info("[seed] phase=outbox-emission complete: total={}", counts.total());
 
             assertEnumCoverage();
@@ -214,7 +224,11 @@ public class SeedRunner {
         }
     }
 
-    private void runWriterChain(SeedContent content, SeedTimeline timeline) {
+    /** The id maps later phases need from the writer chain. */
+    private record WriterChainResult(
+            Map<String, UUID> usersByUsername, Map<String, UUID> postIdBySeedId) {}
+
+    private WriterChainResult runWriterChain(SeedContent content, SeedTimeline timeline) {
         Map<String, UUID> usersByUsername = userSeedWriter.write(content, timeline);
         Map<String, UUID> mediaByCompositeKey = mediaSeedWriter.write(content, usersByUsername);
         Map<String, UUID> postIdBySeedId =
@@ -231,6 +245,7 @@ public class SeedRunner {
         moderationSeedWriter.write(content, usersByUsername, postIdBySeedId, timeline);
         notificationSeedWriter.write(timeline);
         analyticsSeedWriter.write(timeline);
+        return new WriterChainResult(usersByUsername, postIdBySeedId);
     }
 
     /**
@@ -248,7 +263,13 @@ public class SeedRunner {
         for (EnumColumn column : ENUM_COLUMNS) {
             Map<String, Integer> declaredValues = fetchEnumValues(column.enumTypeName());
             Map<String, Integer> actualCounts = fetchColumnCounts(column);
+            Set<String> asyncValues =
+                    ASYNC_ENUM_VALUES.getOrDefault(
+                            column.table() + "." + column.column(), Set.of());
             for (String value : declaredValues.keySet()) {
+                if (asyncValues.contains(value)) {
+                    continue;
+                }
                 int count = actualCounts.getOrDefault(value, 0);
                 if (count < MIN_ROWS_PER_ENUM_VALUE) {
                     shortfalls.add(
