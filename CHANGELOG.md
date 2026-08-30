@@ -406,6 +406,7 @@ A conversation that already has messages in it is kept, because unfollowing some
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
 ### Documentation
+- The mail queue now records why it carries no broker-level dead-letter argument, and which queue in the topology is the genuine outlier.
 - Recorded why a small number of harmless startup proxy warnings and one non-JSON error response for an over-long request remain as accepted, understood gaps rather than unexplained rough edges.
 - Recorded that follower and following counts are visible to everyone regardless of the viewer's own blocks, so comparing a count against a filtered list can reveal that a block exists somewhere in that list, as a known and accepted tradeoff rather than an oversight.
 - Corrected internal module documentation for the hashtag module, which was still marked as unimplemented scaffolding despite being fully implemented.

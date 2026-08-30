@@ -85,6 +85,20 @@ public class RabbitMqTopologyConfig {
                 .build();
     }
 
+    // No x-dead-letter-exchange argument, deliberately. The broker argument only routes a message
+    // that is rejected with requeue=false, expires on a TTL, or is dropped on queue overflow.
+    // AuthMailEventConsumer never rejects: it publishes the failed message to social.events.dlx
+    // itself through DeadLetterPublisher and then acks, and nacks with requeue=true only when that
+    // publish fails. The argument would therefore never fire on this queue.
+    //
+    // This is the consistent rule across the topology rather than an exception to it. Every queue
+    // whose consumer rejects with requeue=false carries the argument (comment, message,
+    // recommendation and story notification); every queue whose consumer publishes to the
+    // dead-letter exchange itself omits it (mail, notification, hashtag.index.sync,
+    // post.index.sync). The one queue that breaks the rule is adminNotificationQueue below, which
+    // carries the argument while AdminNotificationConsumer uses the application-level route, so
+    // the argument is inert there. It is left in place because changing the arguments of an
+    // existing durable queue fails redeclaration with PRECONDITION_FAILED against a live broker.
     @Bean
     Queue mailQueue() {
         return QueueBuilder.durable(MAIL_QUEUE).build();
