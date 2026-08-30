@@ -8,8 +8,10 @@ import com.app.modules.mail.enums.ModerationMailTemplate;
 /**
  * The closed mapping from a moderation action to the notice its subject receives.
  *
- * <p>Nine actions produce mail. Every other action type is absent on purpose, and the absences
- * carry as much intent as the entries:
+ * <p>Eleven actions produce mail: the nine moderation decisions, plus the two that answer a support
+ * ticket. The ticket notices travel this path rather than a new one precisely because it applies no
+ * ACTIVE-only gate - a banned account asking to be unbanned is the case that has to work. Every
+ * other action type is absent on purpose, and the absences carry as much intent as the entries:
  *
  * <ul>
  *   <li>No {@code RESTORE_*} action mails. Telling someone their content is back draws attention to
@@ -26,16 +28,29 @@ import com.app.modules.mail.enums.ModerationMailTemplate;
 public final class ModerationMailTemplates {
 
     private static final Map<AdminActionType, ModerationMailTemplate> BY_ACTION =
-            Map.of(
-                    AdminActionType.BAN_USER, ModerationMailTemplate.ACCOUNT_BANNED,
-                    AdminActionType.UNBAN_USER, ModerationMailTemplate.ACCOUNT_REINSTATED,
-                    AdminActionType.SUSPEND_USER, ModerationMailTemplate.ACCOUNT_SUSPENDED,
-                    AdminActionType.UNSUSPEND_USER, ModerationMailTemplate.ACCOUNT_SUSPENSION_ENDED,
-                    AdminActionType.WARN_USER, ModerationMailTemplate.ACCOUNT_WARNING,
-                    AdminActionType.REMOVE_POST, ModerationMailTemplate.POST_REMOVED,
-                    AdminActionType.REMOVE_COMMENT, ModerationMailTemplate.COMMENT_REMOVED,
-                    AdminActionType.REMOVE_STORY, ModerationMailTemplate.STORY_REMOVED,
-                    AdminActionType.REMOVE_MESSAGE, ModerationMailTemplate.MESSAGE_REMOVED);
+            // Map.ofEntries rather than Map.of: there are eleven pairs and Map.of stops at ten.
+            Map.ofEntries(
+                    Map.entry(AdminActionType.BAN_USER, ModerationMailTemplate.ACCOUNT_BANNED),
+                    Map.entry(
+                            AdminActionType.UNBAN_USER, ModerationMailTemplate.ACCOUNT_REINSTATED),
+                    Map.entry(
+                            AdminActionType.SUSPEND_USER, ModerationMailTemplate.ACCOUNT_SUSPENDED),
+                    Map.entry(
+                            AdminActionType.UNSUSPEND_USER,
+                            ModerationMailTemplate.ACCOUNT_SUSPENSION_ENDED),
+                    Map.entry(AdminActionType.WARN_USER, ModerationMailTemplate.ACCOUNT_WARNING),
+                    Map.entry(AdminActionType.REMOVE_POST, ModerationMailTemplate.POST_REMOVED),
+                    Map.entry(
+                            AdminActionType.REMOVE_COMMENT, ModerationMailTemplate.COMMENT_REMOVED),
+                    Map.entry(AdminActionType.REMOVE_STORY, ModerationMailTemplate.STORY_REMOVED),
+                    Map.entry(
+                            AdminActionType.REMOVE_MESSAGE, ModerationMailTemplate.MESSAGE_REMOVED),
+                    Map.entry(
+                            AdminActionType.RESPOND_SUPPORT_TICKET,
+                            ModerationMailTemplate.SUPPORT_TICKET_ANSWERED),
+                    Map.entry(
+                            AdminActionType.REJECT_SUPPORT_TICKET,
+                            ModerationMailTemplate.SUPPORT_TICKET_REJECTED));
 
     private ModerationMailTemplates() {}
 

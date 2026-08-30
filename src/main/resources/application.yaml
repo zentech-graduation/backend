@@ -229,6 +229,25 @@ app:
       consumer:
         enabled: ${MODERATION_MAIL_CONSUMER_ENABLED:false}
 
+  support:
+    turnstile:
+      # Empty by default, and SupportTurnstileVerifier refuses to verify with a blank secret, so a
+      # deployment that forgets to set TURNSTILE_SECRET_KEY fails the public form closed rather than
+      # silently admitting every submission. The dev profile defaults it to Cloudflare's test key.
+      secret-key: ${TURNSTILE_SECRET_KEY:}
+      verify-url: ${TURNSTILE_VERIFY_URL:https://challenges.cloudflare.com/turnstile/v0/siteverify}
+      # Bounds on the siteverify call. Cloudflare is a hard dependency of the public entry path, so
+      # the timeouts are short: a slow verifier must fail the submission quickly rather than hold a
+      # request thread.
+      connect-timeout: ${TURNSTILE_CONNECT_TIMEOUT:3s}
+      read-timeout: ${TURNSTILE_READ_TIMEOUT:5s}
+    campaign:
+      sender:
+        enabled: ${CAMPAIGN_SENDER_ENABLED:false}
+        initial-delay: ${CAMPAIGN_SENDER_INITIAL_DELAY:60s}
+        fixed-delay: ${CAMPAIGN_SENDER_FIXED_DELAY:60s}
+        batch-size: ${CAMPAIGN_SENDER_BATCH_SIZE:20}
+
   # Platform statistics collection and roll-up.
   #
   # A single application instance is assumed. There is no distributed scheduler lock in this
@@ -274,6 +293,30 @@ app:
       interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
   rate-limit:
     endpoint-rules:
+      # The public support form. Three per hour keyed on the caller's IP, which is the hourly half
+      # of the bound; the daily half of ten is enforced in SupportTicketServiceImpl on the same
+      # Redis primitive, keyed on the submitted address, because a rule here carries one window.
+      #
+      # Deployment prerequisite: IpExtractor trusts X-Forwarded-For only when the direct peer
+      # matches app.security.trusted-proxy-cidrs, which is empty by default. Behind an
+      # unconfigured reverse proxy every caller presents the proxy's address and shares one
+      # bucket, which turns this rule into a global cap of three per hour.
+      "[/api/v1/support/public/tickets]":
+        max-attempts: 3
+        window-seconds: 3600
+      # The appeal link. Generous, because a legitimate appellant may fumble the form more than
+      # once and the token itself is single-use, so the token is the real control here.
+      "[/api/v1/support/appeal]":
+        max-attempts: 10
+        window-seconds: 3600
+      "[/api/v1/support/public/confirm]":
+        max-attempts: 20
+        window-seconds: 3600
+      # Followed from a mail client, sometimes twice by a prefetcher, so this is bounded rather
+      # than tight.
+      "[/api/v1/support/unsubscribe]":
+        max-attempts: 20
+        window-seconds: 3600
       "[/api/v1/auth/login]":
         max-attempts: 10
         window-seconds: 900

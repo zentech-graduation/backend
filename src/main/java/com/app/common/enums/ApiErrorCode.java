@@ -149,7 +149,37 @@ public enum ApiErrorCode {
     // constant here maps to 403, and one that did not would make the naming stop predicting the
     // status. The status is right as it is - the caller has the authority, the transition is the
     // problem - so the name moved rather than the code.
-    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT);
+    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT),
+
+    // Support
+    SUPPORT_TICKET_NOT_FOUND("SUPPORT_TICKET_NOT_FOUND", "Support ticket not found", HttpStatus.NOT_FOUND),
+    SUPPORT_TICKET_ALREADY_OPEN("SUPPORT_TICKET_ALREADY_OPEN", "You already have an open support ticket", HttpStatus.CONFLICT),
+    SUPPORT_TICKET_INVALID_TRANSITION("SUPPORT_TICKET_INVALID_TRANSITION", "The ticket cannot move to the requested state", HttpStatus.CONFLICT),
+    SUPPORT_TICKET_ALREADY_CLAIMED("SUPPORT_TICKET_ALREADY_CLAIMED", "Another staff member has already claimed this ticket", HttpStatus.CONFLICT),
+    SUPPORT_TICKET_NOT_CLAIMED("SUPPORT_TICKET_NOT_CLAIMED", "Claim this ticket before acting on it", HttpStatus.CONFLICT),
+    // A moderator may read an appeal and may escalate it, but may not answer or close one. Unban,
+    // unsuspend, revoke_warning and revoke_strike are all administrator-only, so a moderator
+    // closing an appeal would be issuing a verdict they have no capability to carry out.
+    SUPPORT_APPEAL_REQUIRES_ADMIN("SUPPORT_APPEAL_REQUIRES_ADMIN", "Only an administrator can decide an appeal", HttpStatus.FORBIDDEN),
+    // Distinct from a plain 403 so the client can explain the refusal rather than showing a generic
+    // permission error for something the staff member could otherwise do.
+    SUPPORT_CONFLICT_OF_INTEREST("SUPPORT_CONFLICT_OF_INTEREST", "You cannot act on a ticket appealing a decision you made", HttpStatus.FORBIDDEN),
+    SUPPORT_CATEGORY_NOT_PUBLIC("SUPPORT_CATEGORY_NOT_PUBLIC", "This category cannot be used on the public form", HttpStatus.BAD_REQUEST),
+    SUPPORT_TOKEN_INVALID("SUPPORT_TOKEN_INVALID", "This link is invalid or has already been used", HttpStatus.BAD_REQUEST),
+    SUPPORT_CAPTCHA_FAILED("SUPPORT_CAPTCHA_FAILED", "The verification challenge was not accepted", HttpStatus.BAD_REQUEST),
+    SUPPORT_DAILY_LIMIT_REACHED("SUPPORT_DAILY_LIMIT_REACHED", "Too many support requests from this address today", HttpStatus.TOO_MANY_REQUESTS),
+
+    // Mail campaigns
+    CAMPAIGN_NOT_FOUND("CAMPAIGN_NOT_FOUND", "Campaign not found", HttpStatus.NOT_FOUND),
+    CAMPAIGN_NOT_EDITABLE("CAMPAIGN_NOT_EDITABLE", "A campaign can only be edited while it is a draft", HttpStatus.CONFLICT),
+    CAMPAIGN_INVALID_TRANSITION("CAMPAIGN_INVALID_TRANSITION", "The campaign cannot move to the requested state", HttpStatus.CONFLICT),
+    CAMPAIGN_TOO_MANY_RECIPIENTS("CAMPAIGN_TOO_MANY_RECIPIENTS", "A campaign may not exceed ten recipients", HttpStatus.BAD_REQUEST),
+    CAMPAIGN_NO_RECIPIENTS("CAMPAIGN_NO_RECIPIENTS", "A campaign needs at least one recipient", HttpStatus.BAD_REQUEST),
+    // Names the offending token so the author can fix it, and is raised at save time rather than at
+    // send time: a campaign that saved must never fail later for an unknown variable.
+    CAMPAIGN_UNKNOWN_VARIABLE("CAMPAIGN_UNKNOWN_VARIABLE", "The campaign body uses an unknown variable", HttpStatus.BAD_REQUEST),
+    CAMPAIGN_TEMPLATE_NOT_FOUND("CAMPAIGN_TEMPLATE_NOT_FOUND", "Mail template not found", HttpStatus.NOT_FOUND),
+    UNSUBSCRIBE_TOKEN_INVALID("UNSUBSCRIBE_TOKEN_INVALID", "This unsubscribe link is not valid", HttpStatus.BAD_REQUEST);
 
     // spotless:on
 

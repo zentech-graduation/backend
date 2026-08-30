@@ -211,7 +211,14 @@ public class NotificationServiceImpl implements NotificationService {
             // WARNING has no toggle either, and deliberately never gets one. An account that could
             // switch off moderation warnings would be disciplined without being told, and the
             // strike that follows three of them would arrive unexplained.
-            case WARNING, POST_REMOVED, REPORT_POST_REMOVED, POST_RESTORED, REPORT_DISMISSED ->
+            // SUPPORT_TICKET_UPDATE joins them for the same reason: an account that could switch
+            // it off would ask a question and never be told it had been answered.
+            case WARNING,
+                            POST_REMOVED,
+                            REPORT_POST_REMOVED,
+                            POST_RESTORED,
+                            REPORT_DISMISSED,
+                            SUPPORT_TICKET_UPDATE ->
                     true;
         };
     }

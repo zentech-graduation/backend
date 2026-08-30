@@ -162,6 +162,23 @@ public final class ApiConstants {
         public static final String STATUS = "/{reportId}/status";
     }
 
+    public static final class Support {
+        private Support() {}
+
+        public static final String ROOT = API_V1 + "/support";
+        public static final String TICKETS = "/tickets";
+        public static final String TICKET_BY_ID = "/tickets/{ticketId}";
+        // Anonymous. Redeems the single-use token from a moderation notice and creates exactly one
+        // ticket; it mints no session, so it sits outside the authenticated tree entirely.
+        public static final String APPEAL = "/appeal";
+        // Anonymous, Turnstile-gated and IP rate-limited.
+        public static final String PUBLIC_TICKET = "/public/tickets";
+        // Anonymous. Confirms the address a public submission was made from.
+        public static final String CONFIRM = "/public/confirm";
+        // Anonymous. Campaign mail opt-out, followed from a mail client with no session.
+        public static final String UNSUBSCRIBE = "/unsubscribe";
+    }
+
     public static final class Admin {
         private Admin() {}
 
@@ -224,6 +241,19 @@ public final class ApiConstants {
         // "/api/v1/admin/**" matcher applies and admits a moderator. These endpoints are
         // administrator-only, which method-level @PreAuthorize on the controller enforces, the same
         // way the administrator-only warning and strike revocations do.
+        // Support centre, staff side.
+        public static final String SUPPORT_TICKETS = "/support/tickets";
+        public static final String SUPPORT_TICKET_BY_ID = "/support/tickets/{ticketId}";
+        public static final String SUPPORT_TICKET_CLAIM = "/support/tickets/{ticketId}/claim";
+        public static final String SUPPORT_TICKET_RESPOND = "/support/tickets/{ticketId}/respond";
+        public static final String SUPPORT_TICKET_ESCALATE = "/support/tickets/{ticketId}/escalate";
+        // Mail campaigns, administrator only.
+        public static final String MAIL_TEMPLATES = "/mail/templates";
+        public static final String CAMPAIGNS = "/mail/campaigns";
+        public static final String CAMPAIGN_BY_ID = "/mail/campaigns/{campaignId}";
+        public static final String CAMPAIGN_PREVIEW = "/mail/campaigns/preview";
+        public static final String CAMPAIGN_SCHEDULE = "/mail/campaigns/{campaignId}/schedule";
+
         public static final String HASHTAGS = "/hashtags";
         // Declared before HASHTAG_BY_ID for readability only. The literal segment wins over the
         // "/hashtags/{hashtagId}" template in Spring MVC's pattern comparator regardless of

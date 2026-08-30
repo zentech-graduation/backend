@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+<!-- p1 -->
+### Added
+- A public support form gated by Cloudflare Turnstile and an email confirmation step, so a submission reaches staff only after the submitter proves control of the address.
+- An appeal opened from a moderation notice redeems a single-use link that authorises exactly one ticket and mints no session.
+- A support centre with three entry paths, so a banned or suspended account - which cannot reach any authenticated endpoint - now has a route to contest a decision, which it previously did not.
+
 ### Fixed
 - A stalled mail provider can no longer hold a consumer thread indefinitely; each send is bounded by a configurable call timeout, which is the only HTTP bound the Resend SDK permits from outside it.
 - Every read path that reaches comments or stories through native SQL now hides administratively removed rows, including the report target lookup, the platform statistics gauges and the development seed pipeline.
@@ -239,6 +245,8 @@ A write into an uncovered month never failed; it was absorbed silently and made 
 - The error code for a missing report resolution note, which no path had been able to raise since the requirement moved behind a mandatory field. An error code nothing can produce is a promise the API cannot keep.
 
 ### Security
+- A staff member cannot act on a ticket appealing a decision they made themselves.
+- Only an administrator can decide an appeal; a moderator may read and escalate one but cannot record a verdict they have no capability to execute.
 - The eleven administrator-only endpoints now enforce the administrator role in the service layer as well as in their endpoint annotations, so removing an annotation no longer opens an endpoint.
 - The administrative surface now enforces a per-caller request budget. None of its thirty-three operations carried one, so two hundred requests a second from a single token were accepted; the four most expensive reads carry tighter budgets than the rest.
 - Every administrative read now rejects a query parameter it does not understand instead of ignoring it. A misspelled filter previously returned a full unfiltered page, which a client then displayed as though the filter had been applied.
@@ -254,6 +262,7 @@ Sessions already open when this ships stay valid; an ordinary logout still ends 
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Tests
+- Added coverage for the support authorization matrix, the conflict-of-interest rule and the claim race.
 - Added coverage for the new service-layer administrator gate, including the warning and strike revocations that previously read no actor role at all.
 - Every administrative controller now asserts that its endpoints refuse a request carrying no token at all. The suite previously checked only that a revoked token was refused.
 - The permitted-operations payload is checked by agreeing with the component that enforces the rules, for every combination of actor role and target role, rather than by restating the rules a third time.

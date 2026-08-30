@@ -25,7 +25,9 @@ public enum ModerationMailTemplate {
     POST_REMOVED            ("mail/moderation/content-removed-post",     "Your post was removed",                     true),
     COMMENT_REMOVED         ("mail/moderation/content-removed-comment",  "Your comment was removed",                  true),
     STORY_REMOVED           ("mail/moderation/content-removed-story",    "Your story was removed",                    true),
-    MESSAGE_REMOVED         ("mail/moderation/content-removed-message",  "Your message was removed",                  true);
+    MESSAGE_REMOVED         ("mail/moderation/content-removed-message",  "Your message was removed",                  true),
+    SUPPORT_TICKET_ANSWERED ("mail/moderation/support-ticket-answered",  "We have replied to your support request",   false),
+    SUPPORT_TICKET_REJECTED ("mail/moderation/support-ticket-rejected",  "An update on your support request",         false);
     // spotless:on
 
     private final String templatePath;

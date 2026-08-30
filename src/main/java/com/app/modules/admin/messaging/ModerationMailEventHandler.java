@@ -151,6 +151,11 @@ public class ModerationMailEventHandler {
         variables.put("occurredAt", NOTICE_DATE_FORMAT.format(event.occurredAt()));
         variables.put("showStandardsLine", template.isShowsStandardsLine());
         variables.put("suspendedUntil", formattedSuspendedUntil(event));
+        // Present only for the two support ticket notices. The ticket's internal note is never in
+        // the payload at all, so no template can render it even by mistake.
+        Object supportResponse = event.data() == null ? null : event.data().get("supportResponse");
+        variables.put(
+                "supportResponse", supportResponse == null ? null : supportResponse.toString());
         return variables;
     }
 

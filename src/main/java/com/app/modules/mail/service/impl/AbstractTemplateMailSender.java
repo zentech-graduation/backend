@@ -6,6 +6,7 @@ import java.util.Map;
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.enums.MailTemplate;
 import com.app.modules.mail.enums.ModerationMailTemplate;
+import com.app.modules.mail.enums.SupportMailTemplate;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.mail.util.MailTemplateRenderer;
 
@@ -102,6 +103,20 @@ public abstract class AbstractTemplateMailSender implements MailSender {
     private void render(MailTemplate template, Map<String, Object> variables, String toEmail) {
         String html = mailTemplateRenderer.render(template, variables);
         deliver(toEmail, template.getDefaultSubject(), html);
+    }
+
+    /**
+     * Renders and delivers the public-form confirmation link.
+     *
+     * @param variables Thymeleaf variables for the confirmation template
+     * @param toEmail the unproven address the submitter gave
+     * @return the provider's identifier for the accepted message, or null
+     */
+    public String sendSupportConfirmation(Map<String, Object> variables, String toEmail) {
+        String html =
+                mailTemplateRenderer.render(SupportMailTemplate.CONFIRM_SUPPORT_REQUEST, variables);
+        return deliver(
+                toEmail, SupportMailTemplate.CONFIRM_SUPPORT_REQUEST.getDefaultSubject(), html);
     }
 
     /**

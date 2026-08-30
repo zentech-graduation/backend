@@ -48,6 +48,17 @@ app:
       enabled: true
     live:
       enabled: true
+  support:
+    campaign:
+      sender:
+        enabled: true
+    turnstile:
+      # Cloudflare's published always-passes test key, defaulted the same way
+      # app.security.cookie-signing-secret is: TURNSTILE_SECRET_KEY still outranks it, so a real key
+      # configured in the environment wins, while a checkout with no .env boots and the test suite
+      # makes no outbound call. It verifies every token it is given, so it must never reach
+      # production, which is why the base profile defaults it to empty instead.
+      secret-key: ${TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA}
   admin:
     consumer:
       enabled: true
@@ -92,18 +103,35 @@ app:
     # it as authoritative in every profile, while the fallback keeps a checkout with no .env
     # bootable, which is what continuous integration relies on.
     cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET:dev-insecure-cookie-signing-secret-change-me}
-    # Cloudflare's published always-passes test key, defaulted the same way the signing secret
-    # above is: TURNSTILE_SECRET_KEY still outranks it, so a real key configured in the environment
-    # wins, while a checkout with no .env boots and the test suite makes no outbound call.
-    # It verifies every token it is given, so it must never reach production.
-    turnstile:
-      secret-key: ${TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA}
-      verify-url: ${TURNSTILE_VERIFY_URL:https://challenges.cloudflare.com/turnstile/v0/siteverify}
     refresh-cookie:
       # Local development serves the API over plain HTTP, where a Secure cookie is never stored.
       secure: false
   rate-limit:
     endpoint-rules:
+      # The public support form. Three per hour keyed on the caller's IP, which is the hourly half
+      # of the bound; the daily half of ten is enforced in SupportTicketServiceImpl on the same
+      # Redis primitive, keyed on the submitted address, because a rule here carries one window.
+      #
+      # Deployment prerequisite: IpExtractor trusts X-Forwarded-For only when the direct peer
+      # matches app.security.trusted-proxy-cidrs, which is empty by default. Behind an
+      # unconfigured reverse proxy every caller presents the proxy's address and shares one
+      # bucket, which turns this rule into a global cap of three per hour.
+      "[/api/v1/support/public/tickets]":
+        max-attempts: 3
+        window-seconds: 3600
+      # The appeal link. Generous, because a legitimate appellant may fumble the form more than
+      # once and the token itself is single-use, so the token is the real control here.
+      "[/api/v1/support/appeal]":
+        max-attempts: 10
+        window-seconds: 3600
+      "[/api/v1/support/public/confirm]":
+        max-attempts: 20
+        window-seconds: 3600
+      # Followed from a mail client, sometimes twice by a prefetcher, so this is bounded rather
+      # than tight.
+      "[/api/v1/support/unsubscribe]":
+        max-attempts: 20
+        window-seconds: 3600
       "[/api/v1/auth/login]":
         max-attempts: 10
         window-seconds: 60

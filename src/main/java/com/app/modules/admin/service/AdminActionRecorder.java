@@ -37,6 +37,14 @@ public class AdminActionRecorder {
     /** Metadata key carrying the end of a fixed-term suspension, read into the notice payload. */
     public static final String SUSPENDED_UNTIL_KEY = "suspendedUntil";
 
+    /**
+     * Metadata key carrying the staff response text a support ticket notice renders.
+     *
+     * <p>The support ticket's internal note is deliberately never placed under this or any other
+     * key. The note never enters the metadata map, so no template can render it even by accident.
+     */
+    public static final String SUPPORT_RESPONSE_KEY = "supportResponse";
+
     private final AdminActionRepository adminActionRepository;
     private final AdminActionMapper adminActionMapper;
     private final OutboxService outboxService;
@@ -108,6 +116,10 @@ public class AdminActionRecorder {
         Object suspendedUntil = metadata == null ? null : metadata.get(SUSPENDED_UNTIL_KEY);
         if (suspendedUntil != null) {
             data.put(SUSPENDED_UNTIL_KEY, suspendedUntil.toString());
+        }
+        Object supportResponse = metadata == null ? null : metadata.get(SUPPORT_RESPONSE_KEY);
+        if (supportResponse != null) {
+            data.put(SUPPORT_RESPONSE_KEY, supportResponse.toString());
         }
         outboxService.enqueue(
                 AdminEventTypes.MODERATION_NOTICE_REQUESTED_V1,
