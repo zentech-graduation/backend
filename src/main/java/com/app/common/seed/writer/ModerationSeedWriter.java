@@ -192,10 +192,10 @@ public class ModerationSeedWriter {
     private static final String UPDATE_POST_RESTORE_SQL =
             "UPDATE posts SET status = COALESCE(status_before_moderation, 'published'::post_status),"
                     + " status_before_moderation = NULL, deleted_at = NULL WHERE id = ?";
-    private static final String UPDATE_COMMENT_DELETED_AT_SQL =
-            "UPDATE comments SET deleted_at = ? WHERE id = ?";
-    private static final String UPDATE_STORY_DELETED_AT_SQL =
-            "UPDATE stories SET deleted_at = ? WHERE id = ?";
+    private static final String UPDATE_COMMENT_ADMIN_REMOVED_AT_SQL =
+            "UPDATE comments SET admin_removed_at = ? WHERE id = ?";
+    private static final String UPDATE_STORY_ADMIN_REMOVED_AT_SQL =
+            "UPDATE stories SET admin_removed_at = ? WHERE id = ?";
     private static final String UPDATE_MESSAGE_ADMIN_REMOVED_AT_SQL =
             "UPDATE messages SET admin_removed_at = ? WHERE id = ?";
     private static final String UPDATE_HASHTAG_STATUS_SQL =
@@ -838,7 +838,8 @@ public class ModerationSeedWriter {
     private List<BackgroundTarget> loadBackgroundComments() {
         List<BackgroundTarget> pool = new ArrayList<>();
         jdbc.query(
-                "SELECT id, user_id, created_at FROM comments WHERE deleted_at IS NULL AND"
+                "SELECT id, user_id, created_at FROM comments WHERE deleted_at IS NULL"
+                        + " AND admin_removed_at IS NULL AND"
                         + " moderation_status = 'approved'",
                 rs -> {
                     pool.add(
@@ -1052,22 +1053,24 @@ public class ModerationSeedWriter {
             }
             case REMOVE_COMMENT_ACTION -> {
                 if (target != null) {
-                    jdbc.update(UPDATE_COMMENT_DELETED_AT_SQL, at, target.entityId());
+                    jdbc.update(UPDATE_COMMENT_ADMIN_REMOVED_AT_SQL, at, target.entityId());
                 }
             }
             case RESTORE_COMMENT_ACTION -> {
                 if (target != null) {
-                    jdbc.update(UPDATE_COMMENT_DELETED_AT_SQL, (Object) null, target.entityId());
+                    jdbc.update(
+                            UPDATE_COMMENT_ADMIN_REMOVED_AT_SQL, (Object) null, target.entityId());
                 }
             }
             case REMOVE_STORY_ACTION -> {
                 if (target != null) {
-                    jdbc.update(UPDATE_STORY_DELETED_AT_SQL, at, target.entityId());
+                    jdbc.update(UPDATE_STORY_ADMIN_REMOVED_AT_SQL, at, target.entityId());
                 }
             }
             case RESTORE_STORY_ACTION -> {
                 if (target != null) {
-                    jdbc.update(UPDATE_STORY_DELETED_AT_SQL, (Object) null, target.entityId());
+                    jdbc.update(
+                            UPDATE_STORY_ADMIN_REMOVED_AT_SQL, (Object) null, target.entityId());
                 }
             }
             case REMOVE_MESSAGE_ACTION -> {

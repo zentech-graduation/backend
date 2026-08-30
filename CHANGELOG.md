@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- p1 -->
 ### Fixed
+- Every read path that reaches comments or stories through native SQL now hides administratively removed rows, including the report target lookup, the platform statistics gauges and the development seed pipeline.
 - Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
 
 ### Added

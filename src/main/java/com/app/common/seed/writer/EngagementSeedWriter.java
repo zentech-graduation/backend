@@ -204,7 +204,8 @@ public class EngagementSeedWriter {
     private Map<UUID, Instant> fetchNonDeletedCommentCreatedAt(List<UUID> commentIds) {
         Map<UUID, Instant> createdAtById = new HashMap<>();
         jdbc.query(
-                "SELECT id, created_at FROM comments WHERE deleted_at IS NULL",
+                "SELECT id, created_at FROM comments WHERE deleted_at IS NULL"
+                        + " AND admin_removed_at IS NULL",
                 rs -> {
                     UUID id = (UUID) rs.getObject("id");
                     Instant createdAt = rs.getTimestamp("created_at").toInstant();
