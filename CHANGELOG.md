@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
 
 ### Changed
+- The pull request lint allowlist now accepts the support scope, ahead of the support ticket module.
 - Content administratively removed before this release keeps its existing deletion timestamp and now reads as an owner deletion, so it stays hidden but can no longer be restored by an administrator; there is no way to tell those rows apart retrospectively and no backfill was attempted.
 - Personalized recommendations no longer resurface already-seen posts until the unread catalogue is genuinely exhausted, and only at the tail, replacing the previous score-based replacement mechanism.
 - Personalized recommendations are now ranked by a factorization machine over a merged candidate list combining collaborative filtering, post-to-post and viewer-to-viewer neighbours, and trending, rather than by collaborative filtering alone.
