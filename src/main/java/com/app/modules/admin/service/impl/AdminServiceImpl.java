@@ -434,12 +434,14 @@ public class AdminServiceImpl implements AdminService {
                 commentRepository
                         .findOwnerIdIncludingDeleted(commentId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
-        boolean deleted =
+        // Reads admin_removed_at and not deleted_at, so a comment its author deleted is not
+        // mistaken for one a moderator removed and a restore cannot undo the author's deletion.
+        boolean removed =
                 commentRepository
-                        .isDeletedIncludingDeleted(commentId)
+                        .isAdminRemoved(commentId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
         boolean restore = actionType == AdminActionType.RESTORE_COMMENT;
-        if (restore != deleted) {
+        if (restore != removed) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
         Report linkedReport =
@@ -470,12 +472,13 @@ public class AdminServiceImpl implements AdminService {
                 storyRepository
                         .findOwnerIdIncludingDeleted(storyId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.STORY_NOT_FOUND));
-        boolean deleted =
+        // Reads admin_removed_at and not deleted_at, for the same reason moderateComment does.
+        boolean removed =
                 storyRepository
-                        .isDeletedIncludingDeleted(storyId)
+                        .isAdminRemoved(storyId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.STORY_NOT_FOUND));
         boolean restore = actionType == AdminActionType.RESTORE_STORY;
-        if (restore != deleted) {
+        if (restore != removed) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
         Report linkedReport =

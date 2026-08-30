@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
 
 ### Added
+- Comments and stories now carry an administrative removal tombstone independent of the owner's own deletion, so restoring administratively removed content no longer undoes a deletion its author performed.
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
 - A batched post-impression endpoint that records what a viewer actually saw, how long it stayed visible, and which surface it appeared on; resubmitting a batch after a network failure records nothing twice, and the call never affects a post's public view count.
@@ -23,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
 
 ### Changed
+- Content administratively removed before this release keeps its existing deletion timestamp and now reads as an owner deletion, so it stays hidden but can no longer be restored by an administrator; there is no way to tell those rows apart retrospectively and no backfill was attempted.
 - Personalized recommendations no longer resurface already-seen posts until the unread catalogue is genuinely exhausted, and only at the tail, replacing the previous score-based replacement mechanism.
 - Personalized recommendations are now ranked by a factorization machine over a merged candidate list combining collaborative filtering, post-to-post and viewer-to-viewer neighbours, and trending, rather than by collaborative filtering alone.
 - Posts a viewer has already seen now return to their recommendations at reduced weight instead of being excluded permanently, which on a catalogue of this size would otherwise empty every recommendation surface within a few sessions.
