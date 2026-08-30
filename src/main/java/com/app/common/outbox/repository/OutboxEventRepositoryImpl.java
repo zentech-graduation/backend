@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -41,6 +42,50 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
 				:attemptCount,
 				:nextRetryAt
 			)
+			RETURNING
+				id,
+				event_id,
+				aggregate_type,
+				aggregate_id,
+				event_type,
+				routing_key,
+				payload,
+				status,
+				attempt_count,
+				next_retry_at,
+				claim_id,
+				claimed_at,
+				claimed_until,
+				last_error,
+				created_at,
+				published_at
+			""";
+
+    private static final String INSERT_PENDING_IGNORE_DUPLICATE_SQL =
+            """
+			INSERT INTO outbox_events (
+				event_id,
+				aggregate_type,
+				aggregate_id,
+				event_type,
+				routing_key,
+				payload,
+				status,
+				attempt_count,
+				next_retry_at
+			)
+			VALUES (
+				:eventId,
+				:aggregateType,
+				:aggregateId,
+				:eventType,
+				:routingKey,
+				CAST(:payload AS jsonb),
+				:status,
+				:attemptCount,
+				:nextRetryAt
+			)
+			ON CONFLICT (event_id) DO NOTHING
 			RETURNING
 				id,
 				event_id,
@@ -165,6 +210,28 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
                         .addValue("nextRetryAt", event.getNextRetryAt());
 
         return jdbcTemplate.queryForObject(INSERT_PENDING_SQL, params, this::mapEvent);
+    }
+
+    @Override
+    public Optional<OutboxEvent> insertPendingIgnoreDuplicate(OutboxEvent event) {
+        MapSqlParameterSource params =
+                new MapSqlParameterSource()
+                        .addValue("eventId", event.getEventId())
+                        .addValue("aggregateType", event.getAggregateType())
+                        .addValue("aggregateId", event.getAggregateId())
+                        .addValue("eventType", event.getEventType())
+                        .addValue("routingKey", event.getRoutingKey())
+                        .addValue("payload", DomainEventEnvelopeJson.write(event.getPayload()))
+                        .addValue("status", event.getStatus().name())
+                        .addValue("attemptCount", event.getAttemptCount())
+                        .addValue("nextRetryAt", event.getNextRetryAt());
+
+        // DO NOTHING returns no row for a duplicate event_id, which is the signal the caller
+        // already enqueued this exact event and the resubmission must not be counted again.
+        return jdbcTemplate
+                .query(INSERT_PENDING_IGNORE_DUPLICATE_SQL, params, this::mapEvent)
+                .stream()
+                .findFirst();
     }
 
     @Override

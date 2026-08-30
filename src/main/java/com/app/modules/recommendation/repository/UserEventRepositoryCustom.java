@@ -34,4 +34,29 @@ public interface UserEventRepositoryCustom {
             OffsetDateTime cursorCreatedAt,
             UUID cursorId,
             int limit);
+
+    /**
+     * Reads up to {@code limit} of a user's most recent {@code entity_id} values for one event type
+     * inside a bounded window, newest first.
+     *
+     * <p>The window is mandatory for the same reason it is on {@link #findPage} - {@code
+     * user_events} is partitioned on {@code created_at}, and an unbounded read touches every
+     * partition ever declared. Unlike {@link #findPage}, this projects only the entity id: it
+     * exists to build an in-memory read-set for the recommendation topup, not to render events, so
+     * loading full rows would be wasted work. The result may repeat an id (a post viewed more than
+     * once inside the window produces one row per view); the caller collects into a {@code Set}.
+     *
+     * @param userId account whose events are read
+     * @param eventType restrict to one event type, e.g. {@link UserEventType#POST_VIEW}
+     * @param from inclusive lower bound of the window
+     * @param to exclusive upper bound of the window
+     * @param limit maximum rows to read
+     * @return entity ids newest first, possibly containing duplicates, capped at {@code limit}
+     */
+    List<UUID> findRecentEntityIds(
+            UUID userId,
+            UserEventType eventType,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            int limit);
 }

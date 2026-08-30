@@ -139,6 +139,7 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/recommendations";
         public static final String FEED = "/feed";
+        public static final String IMPRESSIONS = "/impressions";
     }
 
     public static final class Media {

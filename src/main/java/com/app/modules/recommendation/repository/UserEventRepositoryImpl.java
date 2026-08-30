@@ -59,4 +59,26 @@ public class UserEventRepositoryImpl implements UserEventRepositoryCustom {
                 .orderBy(builder.desc(event.get("createdAt")), builder.desc(event.get("id")));
         return entityManager.createQuery(query).setMaxResults(limit).getResultList();
     }
+
+    @Override
+    public List<UUID> findRecentEntityIds(
+            UUID userId,
+            UserEventType eventType,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            int limit) {
+        CriteriaBuilder builder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<UUID> query = builder.createQuery(UUID.class);
+        Root<UserEvent> event = query.from(UserEvent.class);
+        // Predicate order mirrors findPage: user_id equality plus the created_at range is exactly
+        // what idx_user_events_user (user_id, created_at DESC) serves, so no new index is needed.
+        query.select(event.get("entityId"))
+                .where(
+                        builder.equal(event.get("userId"), userId),
+                        builder.equal(event.get("eventType"), eventType),
+                        builder.greaterThanOrEqualTo(event.get("createdAt"), from),
+                        builder.lessThan(event.get("createdAt"), to))
+                .orderBy(builder.desc(event.get("createdAt")));
+        return entityManager.createQuery(query).setMaxResults(limit).getResultList();
+    }
 }

@@ -260,6 +260,9 @@ app:
   recommendation:
     consumer:
       enabled: ${RECOMMENDATION_CONSUMER_ENABLED:false}
+    read-set-window: ${RECOMMENDATION_READ_SET_WINDOW:P90D}
+    read-set-max-rows: ${RECOMMENDATION_READ_SET_MAX_ROWS:2000}
+    top-up-overfetch-multiplier: ${RECOMMENDATION_TOPUP_OVERFETCH_MULTIPLIER:3}
   websocket:
     revocation:
       interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
@@ -302,6 +305,18 @@ app:
         max-attempts: 30
         window-seconds: 60
       "[/ws/**]":
+        max-attempts: 30
+        window-seconds: 60
+      # The recommendation surface, which previously carried no per-caller rule at all. The
+      # highTraffic Resilience4j rate limiter already on these controllers is a JVM-wide overload
+      # backstop sized in the thousands; it is not a per-caller budget.
+      "[/api/v1/recommendations/**]":
+        max-attempts: 60
+        window-seconds: 60
+      # Tighter than the sub-tree rule: impressions are high-volume by design (one flush per
+      # client-side batch of up to 100 events) and the one path a misbehaving client can flood.
+      # A literal path resolves before the sub-tree pattern above, same shape as the admin rules.
+      "[/api/v1/recommendations/impressions]":
         max-attempts: 30
         window-seconds: 60
       # The administrative surface, which carried no per-caller rule at all until now. The

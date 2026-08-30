@@ -105,4 +105,15 @@ public interface HashtagService {
      * @return hashtag ids grouped by post id; an empty map for empty input
      */
     Map<UUID, List<UUID>> getHashtagIdsForPosts(Collection<UUID> postIds);
+
+    /**
+     * Returns the hashtag names associated with the given post, ordered by name.
+     *
+     * <p>Names rather than ids, because the recommender computes tag similarity on the label
+     * strings themselves.
+     *
+     * @param postId the post to look up
+     * @return hashtag names for the post; empty when it carries none
+     */
+    List<String> getHashtagNamesForPost(UUID postId);
 }

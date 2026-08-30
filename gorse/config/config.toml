@@ -1,7 +1,10 @@
 # Gorse v0.5.11 configuration for the Luvax recommendation module.
-# Derived from the sample config shipped with the v0.5.11 tag; keys not listed here keep
-# their built-in defaults. Connection strings and secrets are injected via GORSE_* env vars
-# in gorse/docker-compose.gorse.yml and must never be committed to this file.
+# Key names and accepted values are verified against the v0.5.11 binary's own struct tags and
+# config validator, not against public documentation: the image ships no config template, and
+# several keys moved between the 0.4.x and 0.5.x lines. See
+# .workspace/reports/rec_onboarding/gorse_0511_config_reference.md for the extraction method.
+# Connection strings and secrets are injected via GORSE_* env vars in docker-compose.yaml and
+# must never be committed to this file.
 
 [database]
 # cache_store / data_store are provided by GORSE_CACHE_STORE / GORSE_DATA_STORE env vars
@@ -26,21 +29,63 @@ cache_expire = "10s"
 
 [recommend]
 cache_size = 200
-cache_expire = "1h"
+# Matches [master] fit_period below: caching a personalized result past the point where the
+# model that produced it is already stale buys nothing, and this feature's whole premise is
+# that a fresh read (via the impression pipeline) is reflected on the viewer's next visit
+# within one sitting, not up to an hour later. The prior 1h default sat far behind the 5m fit
+# cadence and made freshly-recorded reads invisible to /api/recommend for most of that hour.
+cache_expire = "5m"
 
 [recommend.data_source]
-positive_feedback_types = ["like", "save", "comment"]
+# share is a positive example: it costs the user more effort than a like and is a deliberate
+# endorsement to a specific person, not a passive signal. A comment like is deliberately absent
+# here - it is mapped onto the like type at reduced weight rather than given its own type.
+positive_feedback_types = ["like", "save", "comment", "share"]
 read_feedback_types = ["read"]
 positive_feedback_ttl = 0
 item_ttl = 0
 
-# Popularity over all positive feedback; queried through the non-personalized API as a
-# cold-start and circuit-breaker fallback source
+# All three keys are read from this section, not from [recommend]. Verified by falsification
+# against the running binary: an out-of-range decay here aborts startup with a validator error,
+# while the same key under [recommend] is silently ignored and the feature stays off with no
+# warning of any kind.
+# enable_replacement was true for one measurement cycle (see
+# .workspace/reports/rec_onboarding/prompt1_verification.md, section G5). Measured against the
+# seeded dataset: replacement reintroduces read items immediately rather than on exhaustion (65 of
+# the top 200 were already-read for a user with 244 of 773 posts read) and ranks them slightly
+# ahead of unread items (mean rank 92.2 vs 103.0), the opposite of the intended behaviour.
+# Exhaustion is now handled in the application (RecommendationSource topup) instead: gorse
+# excludes read items outright, and the application backfills from trending, unread first, only
+# once gorse's own list runs short. positive_replacement_decay and read_replacement_decay stay at
+# their measured defaults, inert while replacement is off, so the record that this was evaluated
+# is not lost.
+[recommend.replacement]
+enable_replacement = false
+positive_replacement_decay = 0.8
+read_replacement_decay = 0.6
+
+# Popularity over all positive feedback; the circuit-breaker fallback target in
+# RecommendationSource.
+# The score is len(feedback), not count(feedback): v0.5.11's Expr count() expects a boolean
+# predicate as its second argument, so count(feedback) fails at evaluation with "interface {}
+# is data.Feedback, not bool" on every dataset load and this recommender returned an empty list
+# for its entire life. The error is logged, never fatal, which is why it went unnoticed.
 [[recommend.non-personalized]]
 name = "popular"
-score = "count(feedback)"
+score = "len(feedback)"
 
-# Topic labels on seeded items make tag-based neighbors align with persona topics
+# Positive feedback count divided by item age in seconds raised to a fractional power, so a
+# post's score decays continuously instead of accumulating forever. The additive 120 keeps a
+# brand-new item from dividing by ~0 and damps single-feedback spikes. The 0.6 exponent puts the
+# effective window at a few days: measured on two probe items, an item 88 days old with 5 likes
+# scored 0.00037 while one 1 day old with 2 likes scored 0.00166, so recency reorders popularity
+# rather than merely tie-breaking it.
+# An all-time count was rejected because the seeded viral band carries 15,000 to 120,000 views
+# and would pin the same handful of posts to the top of every cold-start session permanently.
+[[recommend.non-personalized]]
+name = "trending"
+score = "len(feedback) / ((now() - item.Timestamp).Seconds() + 120) ** 0.6"
+
 [[recommend.item-to-item]]
 name = "neighbors"
 type = "tags"
@@ -52,16 +97,30 @@ type = "items"
 
 [recommend.collaborative]
 type = "mf"
-# Demo-friendly cadence so live feedback visibly shifts the feed; raise to 60m outside demos
-fit_period = "2m"
+# Raised from the 2m demo cadence on measurement. The factorization machine itself is cheap to
+# fit - the AFM click model converges in about 3.4s over 50 epochs - but the per-user ranking pass
+# it feeds is not: measured at 57.2s, 61.7s and 61.7s across three consecutive cycles on the
+# seeded dataset (106 users, 792 items, ~44,000 feedback rows). Against the old 2m period that is
+# a 52% duty cycle, leaving the master almost continuously busy and one slow cycle away from
+# overlapping fits. At 5m the same pass is roughly 21%, which leaves headroom as the dataset
+# grows while still refreshing often enough to demo. Re-measure before lowering it.
+fit_period = "5m"
 fit_epoch = 100
 
+# Factorization machine over a merged candidate list. This is what puts the item-to-item and
+# user-to-user neighbor recommenders into personalized results for the first time; under
+# type = "none" the list was capped at a single entry and only collaborative filtering reached
+# the output. The FM trains on read feedback as its negative examples, which is why the
+# impression path and the seeded view emission exist.
 [recommend.ranker]
-# No FM ranker: synthetic data has no read-but-not-positive signal to train it on.
-# v0.5.11 constraint: with type = "none" the recommenders list must hold exactly one entry;
-# cold-start users fall through to [recommend.fallback] instead of a merged candidate list.
-type = "none"
-recommenders = ["collaborative"]
+type = "fm"
+recommenders = [
+    "collaborative",
+    "item-to-item/neighbors",
+    "user-to-user/neighbors",
+    "non-personalized/trending",
+]
 
+# Cold-start users get time-decayed trending rather than a chronological list.
 [recommend.fallback]
-recommenders = ["latest"]
+recommenders = ["non-personalized/trending"]

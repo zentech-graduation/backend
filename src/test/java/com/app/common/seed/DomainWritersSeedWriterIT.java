@@ -313,13 +313,16 @@ class DomainWritersSeedWriterIT {
     }
 
     // Reproduces SeedRunner.assertEnumCoverage()'s requirement for user_events.event_type: every
-    // one of the 20 event_type enum values (V01) must have at least 5 rows once a full seed run
-    // completes. AnalyticsSeedWriter is the only writer that populates user_events, so this is a
-    // direct proof that WEIGHTED_EVENT_TYPES and resolveEntityRef cover every value.
+    // event_type enum value (V01) must have at least 5 rows once a full seed run completes.
+    // AnalyticsSeedWriter is the only writer that populates user_events synchronously, so this is
+    // a direct proof that WEIGHTED_EVENT_TYPES and resolveEntityRef cover every value it owns.
+    // post_view is deliberately absent from that list and from this assertion: it is produced by
+    // the recommendation consumer draining post.viewed.v1, which happens asynchronously and does
+    // not run in this writers-only test. SeedRunner.assertEnumCoverage skips it for the same
+    // reason, and the drained system is where its coverage is asserted instead.
     private void assertUserEventsCoverEveryEventTypeValue() {
         List<String> allEventTypeValues =
                 List.of(
-                        "post_view",
                         "post_like",
                         "post_unlike",
                         "post_save",

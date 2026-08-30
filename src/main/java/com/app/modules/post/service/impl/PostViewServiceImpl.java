@@ -51,6 +51,10 @@ public class PostViewServiceImpl implements PostViewService {
         if (viewerId.equals(post.getUserId())) {
             return new PostViewResponse(postId, false);
         }
+        // Deliberately distinct from the batched impression endpoint under the recommendations
+        // root and must not be merged with it: this records one deliberate open of a single post,
+        // that one ingests batched passive viewport impressions carrying dwell. Neither writes
+        // posts.view_count, which a background job maintains and application code never touches.
         outboxService.enqueue(
                 PostEventTypes.POST_VIEWED_V1,
                 PostEventTypes.POST_VIEWED_V1,

@@ -75,6 +75,51 @@ public class OutboxServiceImpl implements OutboxService {
         return outboxEventRepository.insertPending(event);
     }
 
+    @Override
+    // Enqueue must join the business transaction so DB writes and event intent commit together.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean enqueueOnce(
+            UUID eventId,
+            String eventType,
+            String routingKey,
+            String aggregateType,
+            UUID aggregateId,
+            UUID actorId,
+            Map<String, Object> data) {
+        Assert.notNull(eventId, "eventId must not be null");
+        Assert.hasText(eventType, "eventType must not be blank");
+        Assert.hasText(routingKey, "routingKey must not be blank");
+        Assert.hasText(aggregateType, "aggregateType must not be blank");
+        Assert.notNull(aggregateId, "aggregateId must not be null");
+
+        OffsetDateTime occurredAt = OffsetDateTime.now(ZoneOffset.UTC);
+        Map<String, Object> eventData = data == null ? Map.of() : Map.copyOf(data);
+        validateNoSensitiveDataKeys(eventData);
+        DomainEventEnvelope envelope =
+                new DomainEventEnvelope(
+                        eventId,
+                        eventType,
+                        occurredAt,
+                        actorId,
+                        aggregateType,
+                        aggregateId,
+                        eventData);
+
+        OutboxEvent event =
+                OutboxEvent.builder()
+                        .eventId(eventId)
+                        .aggregateType(aggregateType)
+                        .aggregateId(aggregateId)
+                        .eventType(eventType)
+                        .routingKey(routingKey)
+                        .payload(envelope)
+                        .status(OutboxEventStatus.PENDING)
+                        .attemptCount(0)
+                        .nextRetryAt(occurredAt)
+                        .build();
+        return outboxEventRepository.insertPendingIgnoreDuplicate(event).isPresent();
+    }
+
     private void validateNoSensitiveDataKeys(Map<String, Object> data) {
         for (Map.Entry<String, Object> entry : data.entrySet()) {
             String key = entry.getKey().toLowerCase(Locale.ROOT);
