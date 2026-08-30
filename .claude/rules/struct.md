@@ -33,7 +33,7 @@ app/
 ├── docs/
 │   └── modules/
 │       ├── GLOBAL_RULES.md         # Cross-module data rules (enum/config table contracts)
-│       └── {module}/DATA_RULES.md  # Per-module data access and write rules (13 modules)
+│       └── {module}/DATA_RULES.md  # Per-module data access and write rules (14 modules)
 ├── src/
 │   ├── main/
 │   │   ├── java/com/app/
@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01-V82 SQL migrations
+│   │       ├── db/migration/       # Flyway V01-V91 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -49,7 +49,8 @@ app/
 │   │       │   ├── ratelimiter/    # resilience4j-dev.yml, resilience4j-prod.yml
 │   │       │   └── retry/          # resilience4j-dev.yml, resilience4j-prod.yml
 │   │       ├── templates/mail/     # email-verification.html, oauth-account-no-password.html,
-│   │       │                       # password-changed.html, password-reset.html, welcome.html
+│   │       │                       # password-changed.html, password-reset.html, welcome.html,
+│   │       │                       # moderation/ (layout.html + 9 notice variants)
 │   │       ├── application.yaml    # Core config (active profile: dev)
 │   │       ├── application-dev.yml # Dev: JPA show-sql, Swagger at /api-docs, relaxed rate limits
 │   │       ├── application-prod.yml# Prod: show-sql off, Swagger disabled
@@ -159,7 +160,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | Module | Status | Sub-packages |
 |--------|--------|--------------|
 | `auth` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, exception, mapper, messaging, oauth2, repository, service/impl, validation |
-| `mail` | **Implemented** | config, config/resend, config/noop, enums, service/impl, util |
+| `mail` | **Implemented** | config, config/resend, config/noop, converter, entity, enums, repository, service/impl, util |
 | `users` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `social` | **Implemented** | api, controller, converter, dto/response, entity, enums, mapper, messaging, repository, service/impl |
 | `media` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl, storage, validation |
@@ -175,7 +176,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 
 **Module responsibilities:**
 - **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
-- **`mail`**: Transactional email via Resend SDK; Thymeleaf templates; `MailTemplate` enum drives template selection; `MailSender` interface abstracts transport. Resend is the sole transport in every profile; a non-network `noop` transport exists only for the test phase (Surefire-pinned) and can be selected locally via `APP_MAIL_TRANSPORT=noop` in `.env`, but `MailTransportGuard` refuses it outside the `dev` profile.
+- **`mail`**: Transactional email via Resend SDK; Thymeleaf templates; `MailTemplate` and `ModerationMailTemplate` enums drive template selection; `MailSender` interface abstracts transport. `email_deliveries` (V91) records every send attempt with the provider message id, and `ModerationMailThrottleImpl` bounds moderation mail to five per recipient per hour. See `docs/modules/mail/DATA_RULES.md`. Resend is the sole transport in every profile; a non-network `noop` transport exists only for the test phase (Surefire-pinned) and can be selected locally via `APP_MAIL_TRANSPORT=noop` in `.env`, but `MailTransportGuard` refuses it outside the `dev` profile.
 - **`users`**: Public and private user profiles, user settings, role/status management.
 - **`social`**: Follow graph (public/private accounts with pending follow), block list, follow-event publishing via outbox.
 - **`media`**: Pre-signed Cloudflare R2 upload URLs, media asset lifecycle, MIME/metadata/path validation.
@@ -208,7 +209,7 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
-Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 237 test
+Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 247 test
 classes total. The table below is the script's output verified against the filesystem, not a
 hand-maintained roster.
 
@@ -321,7 +322,7 @@ hand-maintained roster.
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 82 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71, V72, V73, V74, V81 and V82 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`. V75 through V80 add no index and run in the ordinary transactional mode:
+- Migration: **Flyway** (`out-of-order: false`); 91 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71, V72, V73, V74, V81 and V82 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`; those ten sidecars are the only ones in the tree. V75 through V80 and V83 through V91 add no index and run in the ordinary transactional mode:
 
 | Migration | Description |
 |-----------|-------------|
@@ -427,6 +428,15 @@ hand-maintained roster.
 | V80 | add_moderation_action_configs_revoke_session |
 | V81 | add_reports_escalated_by_index |
 | V82 | add_admin_actions_target_created_index |
+| V83 | add_notification_type_post_removed |
+| V84 | add_notification_message_and_post_removed_config |
+| V85 | add_report_post_removed_notification_type |
+| V86 | add_report_post_removed_notification_config |
+| V87 | add_post_restored_notification_type |
+| V88 | add_post_restored_notification_config |
+| V89 | make_report_duplicate_guard_active_only |
+| V90 | add_comments_stories_admin_removed_at |
+| V91 | create_email_deliveries |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -468,6 +478,7 @@ PostgreSQL enum types:
 | `auth:token:password-reset:{sha256}` | 15m | `TokenServiceImpl` |
 | `auth:token:password-reset:user:{userId}` | 15m (reverse index) | `TokenServiceImpl` |
 | `auth:oauth2:exchange:{code}` | 120s | `OAuth2ExchangeCodeServiceImpl` |
+| `auth:ratelimit:mail:moderation:{sha256(email)}` | 1h sliding | `ModerationMailThrottleImpl` |
 
 ### Message Broker — RabbitMQ
 
@@ -489,6 +500,7 @@ PostgreSQL enum types:
 | Queue | Dead-letter queue | DLQ routing key to `social.events.dlx` |
 |-------|------------------|----------------------------------------|
 | `mail.queue` | `mail.dlq` | `mail.dead-letter` |
+| `moderation.mail.queue` | `moderation.mail.dlq` | `moderation.mail.dead-letter` |
 | `notification.queue` | `notification.dlq` | `notification.dead-letter` |
 | `hashtag.index.sync` | `hashtag.index.sync.dlq` | `hashtag.index.dead-letter` |
 | `post.index.sync` | `post.index.sync.dlq` | `post.index.dead-letter` |
@@ -516,6 +528,7 @@ PostgreSQL enum types:
 | `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
 | `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
 | `admin.notification.queue` | `user.warned.v1` | `AdminRabbitBindingConfig` |
+| `moderation.mail.queue` | `admin.moderation-notice.requested.v1` | `AdminRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `post.live.events` (exchange) | `post.live.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
@@ -639,7 +652,8 @@ Implemented in `common/security/` and `modules/auth/`:
 - **`user_events` reads**: always bounded by `created_at`. A read bounded only by `user_id` prunes nothing and touches every partition ever declared, which is why the activity log makes the time window mandatory. Measured: a window inside one month scans one partition, a window crossing a boundary scans exactly two, and a window reaching past the last declared partition scans the catch-all as well.
 - **`platform_stats`**: written only by `StatsCollectionJob` and `StatsRollupJob`, never from a Controller or Service on a request path. Gauges are absolute snapshots bounded by the bucket end; flows are direct counts over the bucket window and are never derived by subtracting consecutive gauges. The roll-up sums flows and takes the last bucket for gauges — summing gauges multiplies a total by the number of buckets in the day. There is no backfill: a bucket never collected can never be collected later, and the bucket a process starts inside is deliberately skipped. A single application instance is assumed; there is no distributed scheduler lock, and the composite primary key with `ON CONFLICT DO UPDATE` is what keeps a double run harmless rather than duplicative.
 - **Message tombstones**: `messages` carries two independent ones. The sender-owned pair `is_deleted`/`deleted_at` is set together and clears `content`, which makes a sender's own deletion irreversible. `admin_removed_at` (V77) is the moderation tombstone; it preserves every payload so a restore can return the message, and clearing it never undoes a sender deletion. A message is hidden when either is set, and the read path withholds text, media and shares for an administrative removal.
-- **Story moderation and expiry**: administrative removal writes `deleted_at` only. Expiry keeps deciding visibility, so a story that expired while removed does not return to a feed when restored, and the cleanup job hard-deletes rows that are both removed and expired, after which a restore answers not-found.
+- **Comment and story tombstones**: both tables carry two independent ones since V90. `deleted_at` is the owner's own deletion; `admin_removed_at` is the moderation tombstone. A row is hidden when either is set, an administrative restore clears only `admin_removed_at` and never undoes an owner deletion, and the entity `@SQLRestriction` on both covers every JPQL and derived read, so only native SQL restates the predicate. `posts` solved the same problem with `status_before_moderation` (V59) and `messages` with `admin_removed_at` (V77). Rows an administrator removed before V90 keep only their `deleted_at`, so they stay hidden but now read as owner deletions and can no longer be administratively restored; there was no way to tell them apart and no backfill was attempted.
+- **Story moderation and expiry**: expiry keeps deciding visibility independently of both tombstones, so a story that expired while removed does not return to a feed when restored, and the cleanup job hard-deletes rows that are expired and carry either tombstone, after which a restore answers not-found.
 - **`user_settings`**: every account has exactly one row from creation. Four writers create it - password registration, first OAuth2 sign-in, `UserSeedWriter` (the dev-database seed pipeline's user writer) and the shell seed script - and V78 backfilled the rest. The read is deliberately strict, so a 404 from it means the invariant is broken rather than that the account simply has no preferences yet.
 - **Removed group-conversation columns**: V50 moved `is_group`, `group_name`, and `group_avatar_url` off `conversations` into a new `archived_group_conversations` table, and moved the group's participant and message rows into `archived_group_participants` and `archived_group_messages`. `conversations` today carries `id`, `created_by`, `last_message_at`, `created_at`, `updated_at`, `direct_pair_key`. See `docs/modules/message/DATA_RULES.md`.
 - **Comment depth cap**: `CHECK (depth BETWEEN 0 AND 10)`; adjacency list uses `root_id` for subtree queries.
