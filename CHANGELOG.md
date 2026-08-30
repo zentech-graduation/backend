@@ -8,10 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- p1 -->
 ### Fixed
+- A stalled mail provider can no longer hold a consumer thread indefinitely; each send is bounded by a configurable call timeout, which is the only HTTP bound the Resend SDK permits from outside it.
 - Every read path that reaches comments or stories through native SQL now hides administratively removed rows, including the report target lookup, the platform statistics gauges and the development seed pipeline.
 - Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
 
 ### Added
+- Every outbound email is now recorded with its recipient, template, status and the provider's message identifier, which was previously discarded at the point of the call.
 - Nine moderation notice email templates covering account bans, reinstatements, suspensions, warnings and the four content removals, each stating the action, the date and, for a fixed-term suspension, when it ends.
 - Comments and stories now carry an administrative removal tombstone independent of the owner's own deletion, so restoring administratively removed content no longer undoes a deletion its author performed.
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.

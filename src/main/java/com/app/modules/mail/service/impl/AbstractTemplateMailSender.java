@@ -5,6 +5,7 @@ import java.util.Map;
 
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.enums.MailTemplate;
+import com.app.modules.mail.enums.ModerationMailTemplate;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.mail.util.MailTemplateRenderer;
 
@@ -39,8 +40,10 @@ public abstract class AbstractTemplateMailSender implements MailSender {
      * @param toEmail recipient email address
      * @param subject message subject line
      * @param htmlBody rendered HTML body
+     * @return the provider's identifier for the accepted message, or null when the transport has
+     *     none; the send log stores it so a delivery can be traced at the provider afterwards
      */
-    protected abstract void deliver(String toEmail, String subject, String htmlBody);
+    protected abstract String deliver(String toEmail, String subject, String htmlBody);
 
     /**
      * Builds the {@code From} header value shared by every transport.
@@ -99,5 +102,20 @@ public abstract class AbstractTemplateMailSender implements MailSender {
     private void render(MailTemplate template, Map<String, Object> variables, String toEmail) {
         String html = mailTemplateRenderer.render(template, variables);
         deliver(toEmail, template.getDefaultSubject(), html);
+    }
+
+    /**
+     * Renders and delivers one moderation notice, returning the provider identifier.
+     *
+     * @param template the moderation template to render
+     * @param variables Thymeleaf variables for that template
+     * @param toEmail recipient email address
+     * @return the provider's identifier for the accepted message, or null when the transport has
+     *     none
+     */
+    public String sendModerationNotice(
+            ModerationMailTemplate template, Map<String, Object> variables, String toEmail) {
+        String html = mailTemplateRenderer.render(template, variables);
+        return deliver(toEmail, template.getDefaultSubject(), html);
     }
 }
