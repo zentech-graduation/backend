@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A support centre with three entry paths, so a banned or suspended account - which cannot reach any authenticated endpoint - now has a route to contest a decision, which it previously did not.
 
 ### Fixed
+- The unsubscribe token column is now varchar rather than char, which is what the entity maps to; as char it failed schema validation and the application did not start at all.
 - Campaign personalisation tokens are now substituted correctly; the sanitizer rewrites double braces as a template-injection defence, which would otherwise have left every placeholder visible to recipients.
 - A stalled mail provider can no longer hold a consumer thread indefinitely; each send is bounded by a configurable call timeout, which is the only HTTP bound the Resend SDK permits from outside it.
 - Every read path that reaches comments or stories through native SQL now hides administratively removed rows, including the report target lookup, the platform statistics gauges and the development seed pipeline.

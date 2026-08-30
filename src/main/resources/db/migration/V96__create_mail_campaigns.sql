@@ -22,8 +22,11 @@ COMMENT ON COLUMN user_settings.email_opt_out IS
 -- invalidate every unsubscribe link already in someone's inbox. A stored secret can be rotated per
 -- user, is revoked by regenerating one row, and needs no session to verify - which is the actual
 -- requirement, because the recipient clicking it is logged out and may well be banned.
+-- VARCHAR, not CHAR. A SHA-256 hex is always 64 characters, which makes CHAR(64) look right, but
+-- CHAR pads on comparison and Hibernate maps a String attribute to varchar, so a CHAR column fails
+-- schema validation at startup and the application does not boot at all.
 ALTER TABLE user_settings
-    ADD COLUMN unsubscribe_token CHAR(64);
+    ADD COLUMN unsubscribe_token VARCHAR(64);
 
 COMMENT ON COLUMN user_settings.unsubscribe_token IS
     'SHA-256 hex of the per-user unsubscribe secret. Null until first needed; the send path generates one lazily. Verified without a session, because the recipient following the link from a mail client has none.';
