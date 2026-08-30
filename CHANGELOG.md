@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
 
 ### Added
+- Each of the nine moderation actions that affect a person now raises its notice inside the same transaction as the moderation write, so an action cannot commit without its notice enqueued nor send one for a change that rolled back.
 - A per-recipient hourly budget now bounds moderation mail, the first send throttle of any kind on this path.
 - Moderation notices now reach banned, suspended and deactivated accounts, which the existing mail path refused by design and which were therefore the only population never told what had happened to them.
 - Every outbound email is now recorded with its recipient, template, status and the provider's message identifier, which was previously discarded at the point of the call.

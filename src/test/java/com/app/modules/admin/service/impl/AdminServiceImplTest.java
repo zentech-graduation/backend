@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
@@ -58,6 +59,7 @@ class AdminServiceImplTest {
 
     @Mock private AdminActionRepository adminActionRepository;
     @Mock private UserRepository userRepository;
+    @Mock private OutboxService outboxService;
     @Mock private PostRepository postRepository;
     @Mock private PostService postService;
     @Mock private CommentRepository commentRepository;
@@ -82,7 +84,8 @@ class AdminServiceImplTest {
                         messageRepository,
                         reportRepository,
                         adminActionMapper,
-                        new AdminActionRecorder(adminActionRepository, adminActionMapper),
+                        new AdminActionRecorder(
+                                adminActionRepository, adminActionMapper, outboxService),
                         new AdminAuthorizationServiceImpl(userRepository),
                         notificationService);
     }

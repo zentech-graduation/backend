@@ -350,8 +350,16 @@ public class AdminServiceImpl implements AdminService {
         // administrator has already handled.
         user.setSuspendedUntil(targetStatus == UserStatus.SUSPENDED ? suspendedUntil : null);
         userRepository.save(user);
+        // The suspension end date is a server-derived fact, so it belongs on the audit row, and the
+        // suspension notice is the one template that has to state a date. Passing it through the
+        // metadata map is what lets the recorder build the notice payload without this method
+        // knowing that a notice exists.
+        Map<String, Object> metadata =
+                targetStatus == UserStatus.SUSPENDED && suspendedUntil != null
+                        ? Map.of(AdminActionRecorder.SUSPENDED_UNTIL_KEY, suspendedUntil.toString())
+                        : null;
         return adminActionRecorder.record(
-                actorId, actionType, userId, "user", userId, null, reason, null);
+                actorId, actionType, userId, "user", userId, null, reason, metadata);
     }
 
     // The mutation itself is deliberately not performed here. PostService owns every side effect
