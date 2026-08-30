@@ -107,7 +107,7 @@ fixtures - every other account is generated content and should not be relied on 
 | `admin` | Full administrator (role `admin`). |
 | `mod1` | Moderator (role `moderator`). |
 | `user_public` | Ordinary active public account with content. |
-| `user_new_empty` | Created 2 days ago, zero posts, zero followers. |
+| `user_new_empty` | Created 2 days ago, zero posts, zero followers, zero following. |
 | `user_power` | High-volume account: 20 posts, high follower count, high engagement. |
 | `user_private` | Private account with pending follow requests inbound. |
 | `user_suspended` | Suspended with an active suspension expiry in the future. Tied to `moderation_cases.json` case 1 (spam escalation). |
