@@ -96,6 +96,22 @@ public interface HashtagRepository extends JpaRepository<Hashtag, UUID>, Hashtag
     List<String> findBannedNames(@Param("names") Collection<String> names);
 
     /**
+     * Returns the hashtag names associated with the given post, ordered by name.
+     *
+     * <p>Read from the source-of-truth rows rather than carried in an event payload, because a
+     * hashtag name is user-authored text and a rename would leave any name already queued stale.
+     *
+     * @param postId the post whose hashtag names are returned
+     * @return hashtag names for the post; empty when it carries none
+     */
+    @Query(
+            value =
+                    "SELECT h.name FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id = h.id"
+                            + " WHERE ph.post_id = :postId ORDER BY h.name",
+            nativeQuery = true)
+    List<String> findNamesByPostId(@Param("postId") UUID postId);
+
+    /**
      * Returns scalar index projections for the given hashtag ids.
      *
      * <p>Selects columns directly rather than loading managed entities so the trigger-updated

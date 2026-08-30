@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.app.modules.comment.messaging.CommentEventTypes;
+import com.app.modules.message.messaging.MessageEventTypes;
 import com.app.modules.post.messaging.PostEventTypes;
 
 /** Binds engagement events consumed as recommender feedback to the recommendation queue. */
@@ -36,6 +37,22 @@ public class RecommendationRabbitBindingConfig {
         return BindingBuilder.bind(recommendationFeedbackQueue)
                 .to(socialEventsExchange)
                 .with(CommentEventTypes.COMMENT_CREATED_V1);
+    }
+
+    @Bean
+    Binding recommendationPostSharedBinding(
+            Queue recommendationFeedbackQueue, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(recommendationFeedbackQueue)
+                .to(socialEventsExchange)
+                .with(MessageEventTypes.POST_SHARED_V1);
+    }
+
+    @Bean
+    Binding recommendationCommentLikedBinding(
+            Queue recommendationFeedbackQueue, TopicExchange socialEventsExchange) {
+        return BindingBuilder.bind(recommendationFeedbackQueue)
+                .to(socialEventsExchange)
+                .with(CommentEventTypes.COMMENT_LIKED_V1);
     }
 
     @Bean

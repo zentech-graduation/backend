@@ -7,11 +7,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
+- Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
+- A batched post-impression endpoint that records what a viewer actually saw, how long it stayed visible, and which surface it appeared on; resubmitting a batch after a network failure records nothing twice, and the call never affects a post's public view count.
+- A time-decayed trending ranking now serves cold-start users in place of a chronological list, so a post's standing falls off as it ages instead of accumulating forever.
+- Sharing a post in a conversation and liking a comment now feed the recommender, the latter attributed to the comment's parent post at reduced weight because the recommender ranks posts rather than comments.
+- Posts now carry their hashtags into the recommender as topic labels, which is what lets it relate posts by subject rather than by audience overlap alone.
+- Recommender feedback now carries a numeric strength alongside its type, so a future configuration can treat a long dwell as a stronger signal without a code change.
 - The development seed dataset now gives the `admin` review account a realistic 25-conversation inbox, spanning every seeded persona and exercising image, video, shared-post, shared-story, administrator-removed, sender-deleted, manually-unread, and private-nickname messaging states.
 - The development seed dataset's image, video, shared-post, and shared-story messages now resolve to real, visible media assets, posts, and stories instead of decorative placeholders.
 - A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
 
 ### Changed
+- Personalized recommendations no longer resurface already-seen posts until the unread catalogue is genuinely exhausted, and only at the tail, replacing the previous score-based replacement mechanism.
+- Personalized recommendations are now ranked by a factorization machine over a merged candidate list combining collaborative filtering, post-to-post and viewer-to-viewer neighbours, and trending, rather than by collaborative filtering alone.
+- Posts a viewer has already seen now return to their recommendations at reduced weight instead of being excluded permanently, which on a catalogue of this size would otherwise empty every recommendation surface within a few sessions.
+- Seeded post shares now reach the recommender, so the share signal is no longer an empty category behind a configured positive-feedback type.
+- Seeded view activity now flows through the durable event path so the recommender has the negative examples its ranker trains on; views are distributed in proportion to each post's engagement band and to viewers whose interests match the post's topics, rather than uniformly at random.
 - Resend is now the mail transport in every environment, including local development; a valid Resend API key is required to run the application at all, and mail-sending flows must only be triggered against real mailboxes you control, since every outbound message now reaches the real provider.
 
 ### Removed
@@ -24,6 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - The personalized recommender's cached results now refresh every 5 minutes instead of every hour, matching how often its underlying model retrains; a freshly read post could previously keep reappearing in a viewer's personalized feed for up to an hour after being read.
+- Exhausted recommendation replacement previously reintroduced read posts immediately and ranked them ahead of unread ones, contrary to the intended behaviour; exhaustion is now handled by an application-level backfill instead.
+- The recommender's popularity ranking returned an empty list in every environment because its scoring expression was rejected at evaluation time on the pinned recommender version; the fallback that degraded ranked feeds to popularity therefore had nothing to serve.
+- Draft, archived, removed, and deleted posts were live, visible recommender items and could be recommended, because the recommender created them from engagement signals alone and nothing ever marked them hidden.
+- Running the seeder's integration tests truncated the developer's real local recommender database instead of the disposable test one.
+- The recommender training cadence was raised after measurement, so a training pass no longer occupies half of every cycle.
 - Every account in the development seed dataset now has a real, resolvable avatar image; previously every seeded user rendered with none.
 - A development seed run now emits notifications for post removal, post restoration, and report dismissal, matching the platform's current notification types; a seed run previously failed outright because these types had no seeded coverage.
 - A development seed run now purges every broker queue, resets the search indexes, and truncates the recommender's own data store before writing, and refuses to start unless the seed profile is active alongside dev; without this, a second seed run against an already-seeded stack could dead-letter on stale messages and leave search and recommendation state accumulating across runs instead of reflecting only the latest run.

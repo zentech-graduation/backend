@@ -74,9 +74,6 @@ public class SeedResetService {
     private final List<Queue> declaredQueues;
     private final ElasticsearchOperations elasticsearchOperations;
 
-    @Value("${spring.datasource.url}")
-    private String applicationDatasourceUrl;
-
     @Value("${spring.datasource.username}")
     private String datasourceUsername;
 
@@ -248,9 +245,23 @@ public class SeedResetService {
     // reaches its tables, on a plain one-shot JDBC connection since no DataSource bean for a
     // second database is configured.
     private void purgeGorse() {
+        // Derived from the live connection's own URL, never from the spring.datasource.url
+        // property. Testcontainers' @ServiceConnection contributes a ConnectionDetails bean and
+        // does not override that property, so in an integration-test context the property still
+        // names the developer's real local database while the actual connection points at the
+        // container. Reading the property here truncated the developer's real Gorse store every
+        // time the seed integration tests ran.
+        String applicationUrl;
+        try (Connection appConnection = jdbc.getDataSource().getConnection()) {
+            applicationUrl = appConnection.getMetaData().getURL();
+        } catch (SQLException | NullPointerException e) {
+            log.warn(
+                    "[seed] reset: could not resolve the live datasource URL, skipping Gorse purge");
+            return;
+        }
         String gorseUrl =
                 JDBC_URL_DATABASE_NAME
-                        .matcher(applicationDatasourceUrl)
+                        .matcher(applicationUrl)
                         .replaceFirst("/" + GORSE_DATABASE_NAME);
         try (Connection connection =
                         DriverManager.getConnection(

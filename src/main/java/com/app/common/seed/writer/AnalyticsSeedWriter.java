@@ -104,6 +104,11 @@ public class AnalyticsSeedWriter {
                     "follows_created", new int[] {5, 60},
                     "likes_created", new int[] {40, 400});
 
+    // post_view is deliberately absent: SeedOutboxEmitter now emits post.viewed.v1 through the
+    // real outbox, and the recommendation consumer writes the resulting user_events rows. Drawing
+    // post_view here as well would put two rows in the table for one logical view, and the random
+    // pairs this writer produces carry none of the band weighting or persona structure the
+    // recommender trains on.
     private static final List<String> WEIGHTED_EVENT_TYPES =
             List.of(
                     "session_start",
@@ -111,9 +116,6 @@ public class AnalyticsSeedWriter {
                     "session_end",
                     "app_open",
                     "app_open",
-                    "post_view",
-                    "post_view",
-                    "post_view",
                     "profile_view",
                     "search",
                     "hashtag_click",
@@ -464,8 +466,7 @@ public class AnalyticsSeedWriter {
             UUID actingUserId,
             Random random) {
         return switch (eventType) {
-            case "post_view",
-                            "post_like",
+            case "post_like",
                             "post_unlike",
                             "post_save",
                             "post_unsave",

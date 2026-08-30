@@ -87,10 +87,29 @@ class GorseClientImplTest {
     }
 
     @Test
+    void trending_callsNonPersonalizedTrendingEndpoint() {
+        server.expect(requestTo("http://gorse.test/api/non-personalized/trending?n=15&offset=5"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(
+                        withSuccess(
+                                "[{\"Id\":\"item-4\",\"Score\":42.0}]",
+                                MediaType.APPLICATION_JSON));
+
+        List<GorseScore> scores = client.trending(15, 5);
+
+        assertThat(scores).containsExactly(new GorseScore("item-4", 42.0));
+        server.verify();
+    }
+
+    @Test
     void insertFeedback_postsFeedbackBatchWithAuthHeader() {
         GorseFeedback feedback =
                 new GorseFeedback(
-                        "like", "user-1", "item-1", OffsetDateTime.parse("2026-07-26T00:00:00Z"));
+                        "like",
+                        "user-1",
+                        "item-1",
+                        OffsetDateTime.parse("2026-07-26T00:00:00Z"),
+                        1.0);
         server.expect(requestTo("http://gorse.test/api/feedback"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-API-Key", API_KEY))

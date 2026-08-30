@@ -294,6 +294,25 @@ class AuthRateLimitFilterTest {
                 .isEqualTo(broad);
     }
 
+    @Test
+    void resolveRule_recommendationsSubTree_coversFeedAndIsOverriddenByImpressionsLiteral() {
+        // The recommendation surface carried no per-caller rule at all until now. One sub-tree
+        // pattern covers /feed; the literal impressions path resolves ahead of it via the same
+        // exact-match-first, most-specific-pattern-next resolution the admin rules use.
+        Rule subTreeRule = new Rule(60, 60);
+        Rule impressionsRule = new Rule(30, 60);
+        Map<String, Rule> rules = new java.util.LinkedHashMap<>();
+        rules.put("/api/v1/recommendations/**", subTreeRule);
+        rules.put("/api/v1/recommendations/impressions", impressionsRule);
+        AuthRateLimitFilter recommendationsFilter = filterWith(new RateLimitProperties(rules));
+
+        assertThat(recommendationsFilter.resolveRule("/api/v1/recommendations/feed", "GET"))
+                .isEqualTo(subTreeRule);
+        assertThat(recommendationsFilter.resolveRule("/api/v1/recommendations/impressions", "POST"))
+                .isEqualTo(impressionsRule);
+        assertThat(recommendationsFilter.resolveRule("/api/v1/posts", "GET")).isNull();
+    }
+
     private AuthRateLimitFilter filterWith(RateLimitProperties rules) {
         return new AuthRateLimitFilter(
                 rateLimiterService,

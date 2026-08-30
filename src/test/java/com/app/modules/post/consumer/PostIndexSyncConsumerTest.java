@@ -23,6 +23,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.AmqpException;
@@ -41,12 +42,15 @@ import com.app.common.messaging.DomainEventMessageParser;
 import com.app.common.messaging.config.ConsumerRetryProperties;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.common.outbox.model.DomainEventEnvelopeJson;
+import com.app.modules.hashtag.service.HashtagService;
 import com.app.modules.post.entity.Post;
 import com.app.modules.post.enums.PostStatus;
 import com.app.modules.post.event.PostIndexUpsertEvent;
 import com.app.modules.post.messaging.PostEventTypes;
 import com.app.modules.post.repository.PostRepository;
 import com.app.modules.post.search.PostSearchRepository;
+import com.app.modules.recommendation.client.GorseClient;
+import com.app.modules.recommendation.client.dto.GorseItem;
 import com.rabbitmq.client.Channel;
 
 import tools.jackson.databind.ObjectMapper;
@@ -63,6 +67,8 @@ class PostIndexSyncConsumerTest {
     @Mock private PostSearchRepository postSearchRepository;
     @Mock private PostRepository postRepository;
     @Mock private ObjectMapper objectMapper;
+    @Mock private HashtagService hashtagService;
+    @Mock private GorseClient gorseClient;
     @Mock private Channel channel;
 
     private ConsumerRetryProperties retryProperties;
@@ -83,6 +89,8 @@ class PostIndexSyncConsumerTest {
                         retryProperties,
                         postSearchRepository,
                         postRepository,
+                        hashtagService,
+                        gorseClient,
                         objectMapper,
                         sleptMillis::add);
     }
@@ -183,6 +191,14 @@ class PostIndexSyncConsumerTest {
         consumer.consume(message, channel);
 
         verify(postSearchRepository, never()).save(any());
+        // A post that is gone or soft-deleted must be hidden in the recommender, not merely
+        // skipped: auto_insert_item would otherwise recreate it unhidden from feedback alone.
+        // Hidden by upsert, not by hideItem, because hideItem stores nothing for an id Gorse has
+        // not seen yet while still reporting success.
+        ArgumentCaptor<List<GorseItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).upsertItems(captor.capture());
+        assertThat(captor.getValue().get(0).hidden()).isTrue();
+        verify(gorseClient, never()).hideItem(any());
         verify(channel).basicAck(1L, false);
     }
 
@@ -203,6 +219,39 @@ class PostIndexSyncConsumerTest {
         consumer.consume(message, channel);
 
         verify(postSearchRepository, never()).save(any());
+        ArgumentCaptor<List<GorseItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).upsertItems(captor.capture());
+        assertThat(captor.getValue().get(0).hidden()).isTrue();
+        verify(channel).basicAck(1L, false);
+    }
+
+    @Test
+    void consume_upsertPublishedPost_upsertsRecommenderItemWithHashtagNames() throws Exception {
+        Message message = message(envelope(PostEventTypes.POST_INDEX_UPSERT_V1));
+        when(processedMessageService.processOnce(any(), any(), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            inv.getArgument(3, Runnable.class).run();
+                            return ProcessedMessageResult.PROCESSED;
+                        });
+        when(objectMapper.convertValue(any(), eq(PostIndexUpsertEvent.class)))
+                .thenReturn(upsertEvent());
+        OffsetDateTime createdAt = OffsetDateTime.parse("2026-07-26T00:00:00Z");
+        Post publishedPost =
+                Post.builder().status(PostStatus.PUBLISHED).createdAt(createdAt).build();
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(publishedPost));
+        when(hashtagService.getHashtagNamesForPost(POST_ID))
+                .thenReturn(List.of("sunset", "travel"));
+
+        consumer.consume(message, channel);
+
+        ArgumentCaptor<List<GorseItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(gorseClient).upsertItems(captor.capture());
+        GorseItem item = captor.getValue().get(0);
+        assertThat(item.itemId()).isEqualTo(POST_ID.toString());
+        assertThat(item.labels()).containsExactly("sunset", "travel");
+        assertThat(item.hidden()).isFalse();
+        assertThat(item.timestamp()).isEqualTo(createdAt);
         verify(channel).basicAck(1L, false);
     }
 
