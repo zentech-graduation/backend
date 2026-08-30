@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- p1 -->
 ### Added
+- Support ticket categories are now published through the shared vocabulary endpoint alongside report reasons, notification types and moderation actions, so a client no longer has to hardcode the list.
 - An email opt-out that suppresses campaign mail only; account and security mail ignore it, and the send path records who was skipped and why.
 - Campaign bodies are rendered by one server-side pipeline and filtered against an allowlist, so a body carrying a script tag, an event handler or a javascript link is neutralised before it reaches anyone.
 - Administrators can compose and schedule custom mail campaigns from read-only Markdown samples, with a server-rendered preview that cannot diverge from the mail that is actually sent.
