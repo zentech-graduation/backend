@@ -230,6 +230,7 @@ A write into an uncovered month never failed; it was absorbed silently and made 
 - The error code for a missing report resolution note, which no path had been able to raise since the requirement moved behind a mandatory field. An error code nothing can produce is a promise the API cannot keep.
 
 ### Security
+- The eleven administrator-only endpoints now enforce the administrator role in the service layer as well as in their endpoint annotations, so removing an annotation no longer opens an endpoint.
 - The administrative surface now enforces a per-caller request budget. None of its thirty-three operations carried one, so two hundred requests a second from a single token were accepted; the four most expensive reads carry tighter budgets than the rest.
 - Every administrative read now rejects a query parameter it does not understand instead of ignoring it. A misspelled filter previously returned a full unfiltered page, which a client then displayed as though the filter had been applied.
 - A pagination cursor whose identifier has been truncated is now rejected. Removing characters from it previously produced a different, valid position, so the caller silently received the wrong page instead of an error.
@@ -244,6 +245,7 @@ Sessions already open when this ships stay valid; an ordinary logout still ends 
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Tests
+- Added coverage for the new service-layer administrator gate, including the warning and strike revocations that previously read no actor role at all.
 - Every administrative controller now asserts that its endpoints refuse a request carrying no token at all. The suite previously checked only that a revoked token was refused.
 - The permitted-operations payload is checked by agreeing with the component that enforces the rules, for every combination of actor role and target role, rather than by restating the rules a third time.
 - The report queue's plan is asserted directly, so neither adding a status to the queue without extending the index nor removing the apparently redundant cursor bound can silently return it to a full scan.

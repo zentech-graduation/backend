@@ -236,7 +236,8 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public EscalatedReportCountResponse countEscalatedReports() {
+    public EscalatedReportCountResponse countEscalatedReports(UUID actorId) {
+        adminAuthorizationService.assertActorIsAdministrator(actorId);
         return new EscalatedReportCountResponse(
                 reportRepository.countByStatus(ReportStatus.ESCALATED));
     }

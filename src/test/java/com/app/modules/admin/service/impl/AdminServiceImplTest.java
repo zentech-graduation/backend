@@ -83,7 +83,7 @@ class AdminServiceImplTest {
                         reportRepository,
                         adminActionMapper,
                         new AdminActionRecorder(adminActionRepository, adminActionMapper),
-                        new AdminAuthorizationServiceImpl(),
+                        new AdminAuthorizationServiceImpl(userRepository),
                         notificationService);
     }
 

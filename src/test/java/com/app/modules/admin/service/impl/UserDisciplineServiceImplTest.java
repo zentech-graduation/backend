@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.outbox.service.OutboxService;
+import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminWarnUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.entity.UserStrike;
@@ -38,6 +40,7 @@ import com.app.modules.admin.repository.ReportReasonConfigReader;
 import com.app.modules.admin.repository.UserStrikeRepository;
 import com.app.modules.admin.repository.UserWarningRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
+import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -59,6 +62,7 @@ class UserDisciplineServiceImplTest {
     @Mock private AdminActionRecorder adminActionRecorder;
     @Mock private UserDisciplineMapper userDisciplineMapper;
     @Mock private OutboxService outboxService;
+    @Mock private AdminAuthorizationService adminAuthorizationService;
 
     private UserDisciplineServiceImpl service;
 
@@ -73,7 +77,8 @@ class UserDisciplineServiceImplTest {
                         reportReasonConfigReader,
                         adminActionRecorder,
                         userDisciplineMapper,
-                        outboxService);
+                        outboxService,
+                        adminAuthorizationService);
         lenient()
                 .when(reportReasonConfigReader.findEnabledByReasonKey("spam"))
                 .thenReturn(Optional.of(true));
@@ -438,5 +443,47 @@ class UserDisciplineServiceImplTest {
                 "reason",
                 Map.of(),
                 OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    // Both revocations previously read no actor role at all: their only gate was the per-method
+    // annotation narrowing the controller's wider moderator-and-administrator class annotation.
+    @Test
+    void revokeWarning_actorNotAdministrator_refusedBeforeAnyRead() {
+        UUID warningId = UUID.randomUUID();
+        doThrow(new AppException(ApiErrorCode.FORBIDDEN))
+                .when(adminAuthorizationService)
+                .assertActorIsAdministrator(ACTOR_ID);
+
+        assertThatThrownBy(
+                        () ->
+                                service.revokeWarning(
+                                        ACTOR_ID, warningId, new AdminActionRequest("note", null)))
+                .isInstanceOf(AppException.class)
+                .satisfies(
+                        e ->
+                                assertThat(((AppException) e).getErrorCode())
+                                        .isEqualTo(ApiErrorCode.FORBIDDEN));
+
+        verify(userWarningRepository, never()).findById(any());
+    }
+
+    @Test
+    void revokeStrike_actorNotAdministrator_refusedBeforeAnyRead() {
+        UUID strikeId = UUID.randomUUID();
+        doThrow(new AppException(ApiErrorCode.FORBIDDEN))
+                .when(adminAuthorizationService)
+                .assertActorIsAdministrator(ACTOR_ID);
+
+        assertThatThrownBy(
+                        () ->
+                                service.revokeStrike(
+                                        ACTOR_ID, strikeId, new AdminActionRequest("note", null)))
+                .isInstanceOf(AppException.class)
+                .satisfies(
+                        e ->
+                                assertThat(((AppException) e).getErrorCode())
+                                        .isEqualTo(ApiErrorCode.FORBIDDEN));
+
+        verify(userStrikeRepository, never()).findById(any());
     }
 }
