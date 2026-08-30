@@ -35,6 +35,7 @@ import com.app.modules.mail.enums.ModerationMailTemplate;
 import com.app.modules.mail.repository.EmailDeliveryRepository;
 import com.app.modules.mail.service.ModerationMailThrottle;
 import com.app.modules.mail.service.impl.AbstractTemplateMailSender;
+import com.app.modules.support.service.SupportTokenService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserStatus;
 import com.app.modules.users.repository.UserRepository;
@@ -53,6 +54,7 @@ class ModerationMailEventHandlerTest {
     @Mock private AbstractTemplateMailSender mailSender;
     @Mock private ModerationMailThrottle throttle;
     @Mock private EmailDeliveryRepository emailDeliveryRepository;
+    @Mock private SupportTokenService supportTokenService;
 
     private ModerationMailEventHandler handler;
 
@@ -60,6 +62,7 @@ class ModerationMailEventHandlerTest {
     void setUp() {
         MailProperties mailProperties = new MailProperties();
         mailProperties.setAppName("Luvax");
+        mailProperties.setFrontendBaseUrl("https://app.example.com");
         handler =
                 new ModerationMailEventHandler(
                         userRepository,
@@ -67,7 +70,8 @@ class ModerationMailEventHandlerTest {
                         mailSender,
                         throttle,
                         emailDeliveryRepository,
-                        mailProperties);
+                        mailProperties,
+                        supportTokenService);
         lenient()
                 .when(emailDeliveryRepository.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -257,6 +261,52 @@ class ModerationMailEventHandlerTest {
 
         assertThatThrownBy(() -> handler.handle(event))
                 .isInstanceOf(PermanentMessageException.class);
+    }
+
+    // The six punitive actions carry a single-use appeal link. Minted at send time, so a notice
+    // that
+    // is throttled or skipped never leaves a live token behind.
+    @Test
+    void handle_banNotice_carriesAnAppealLink() {
+        stubEligibleUser(UserStatus.BANNED);
+        when(supportTokenService.createAppealToken(any(), any(), any())).thenReturn("tok-123");
+
+        handler.handle(event(AdminActionType.BAN_USER, null));
+
+        assertThat(capturedVariables())
+                .containsEntry("appealUrl", "https://app.example.com/support/appeal?token=tok-123");
+    }
+
+    // A reinstatement has nothing to contest, so no token is minted for one.
+    @Test
+    void handle_reinstatement_carriesNoAppealLinkAndMintsNoToken() {
+        stubEligibleUser(UserStatus.ACTIVE);
+
+        handler.handle(event(AdminActionType.UNBAN_USER, null));
+
+        assertThat(capturedVariables()).containsEntry("appealUrl", null);
+        verify(supportTokenService, never()).createAppealToken(any(), any(), any());
+    }
+
+    // Otherwise a rejected appeal could be appealed again without bound.
+    @Test
+    void handle_supportTicketReply_carriesNoAppealLink() {
+        stubEligibleUser(UserStatus.BANNED);
+
+        handler.handle(event(AdminActionType.RESPOND_SUPPORT_TICKET, null));
+
+        assertThat(capturedVariables()).containsEntry("appealUrl", null);
+        verify(supportTokenService, never()).createAppealToken(any(), any(), any());
+    }
+
+    // internal_note is never placed in the event payload, so it cannot reach a template at all.
+    @Test
+    void handle_supportTicketReply_carriesTheResponseAndNothingElse() {
+        stubEligibleUser(UserStatus.BANNED);
+
+        handler.handle(event(AdminActionType.RESPOND_SUPPORT_TICKET, null));
+
+        assertThat(capturedVariables()).doesNotContainKeys("internalNote", "internal_note");
     }
 
     private void stubEligibleUser(UserStatus status) {

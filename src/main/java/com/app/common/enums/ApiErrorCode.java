@@ -167,19 +167,7 @@ public enum ApiErrorCode {
     SUPPORT_CATEGORY_NOT_PUBLIC("SUPPORT_CATEGORY_NOT_PUBLIC", "This category cannot be used on the public form", HttpStatus.BAD_REQUEST),
     SUPPORT_TOKEN_INVALID("SUPPORT_TOKEN_INVALID", "This link is invalid or has already been used", HttpStatus.BAD_REQUEST),
     SUPPORT_CAPTCHA_FAILED("SUPPORT_CAPTCHA_FAILED", "The verification challenge was not accepted", HttpStatus.BAD_REQUEST),
-    SUPPORT_DAILY_LIMIT_REACHED("SUPPORT_DAILY_LIMIT_REACHED", "Too many support requests from this address today", HttpStatus.TOO_MANY_REQUESTS),
-
-    // Mail campaigns
-    CAMPAIGN_NOT_FOUND("CAMPAIGN_NOT_FOUND", "Campaign not found", HttpStatus.NOT_FOUND),
-    CAMPAIGN_NOT_EDITABLE("CAMPAIGN_NOT_EDITABLE", "A campaign can only be edited while it is a draft", HttpStatus.CONFLICT),
-    CAMPAIGN_INVALID_TRANSITION("CAMPAIGN_INVALID_TRANSITION", "The campaign cannot move to the requested state", HttpStatus.CONFLICT),
-    CAMPAIGN_TOO_MANY_RECIPIENTS("CAMPAIGN_TOO_MANY_RECIPIENTS", "A campaign may not exceed ten recipients", HttpStatus.BAD_REQUEST),
-    CAMPAIGN_NO_RECIPIENTS("CAMPAIGN_NO_RECIPIENTS", "A campaign needs at least one recipient", HttpStatus.BAD_REQUEST),
-    // Names the offending token so the author can fix it, and is raised at save time rather than at
-    // send time: a campaign that saved must never fail later for an unknown variable.
-    CAMPAIGN_UNKNOWN_VARIABLE("CAMPAIGN_UNKNOWN_VARIABLE", "The campaign body uses an unknown variable", HttpStatus.BAD_REQUEST),
-    CAMPAIGN_TEMPLATE_NOT_FOUND("CAMPAIGN_TEMPLATE_NOT_FOUND", "Mail template not found", HttpStatus.NOT_FOUND),
-    UNSUBSCRIBE_TOKEN_INVALID("UNSUBSCRIBE_TOKEN_INVALID", "This unsubscribe link is not valid", HttpStatus.BAD_REQUEST);
+    SUPPORT_DAILY_LIMIT_REACHED("SUPPORT_DAILY_LIMIT_REACHED", "Too many support requests from this address today", HttpStatus.TOO_MANY_REQUESTS);
 
     // spotless:on
 

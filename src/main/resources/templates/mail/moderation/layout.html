@@ -21,8 +21,13 @@
          never reaches a recipient, so every variant says exactly this and nothing more specific. -->
     <p style="font-size: 15px; color: #4B4B4B; line-height: 1.6; margin: 0;" th:if="${showStandardsLine}">This decision was made because the account or content did not meet our community standards.</p>
 
-    <!-- Appeal link goes here. Adding it is an edit to this block alone: every variant renders
-         through this layout, so no content template changes when the link arrives. -->
+    <!-- The appeal link. Present only for the six punitive actions; a reinstatement and a support
+         ticket reply carry none. Every variant renders through this layout, so adding it here was
+         an edit to this block alone and no content template changed. -->
+    <p style="margin: 24px 0 0;" th:if="${appealUrl}">
+        <a th:href="${appealUrl}" style="display: inline-block; padding: 12px 20px; background-color: #0F0F0F; color: #FFFFFF; text-decoration: none; border-radius: 6px; font-size: 15px;">Contest this decision</a>
+    </p>
+    <p style="font-size: 13px; color: #8C8C8C; line-height: 1.6; margin: 12px 0 0;" th:if="${appealUrl}">This link works once and expires in 30 days. You do not need to sign in to use it.</p>
 
     <hr style="border: none; border-top: 1px solid #E8E8E8; margin: 36px 0;">
 

@@ -49,9 +49,6 @@ app:
     live:
       enabled: true
   support:
-    campaign:
-      sender:
-        enabled: true
     turnstile:
       # Cloudflare's published always-passes test key, defaulted the same way
       # app.security.cookie-signing-secret is: TURNSTILE_SECRET_KEY still outranks it, so a real key
@@ -125,11 +122,6 @@ app:
         max-attempts: 10
         window-seconds: 3600
       "[/api/v1/support/public/confirm]":
-        max-attempts: 20
-        window-seconds: 3600
-      # Followed from a mail client, sometimes twice by a prefetcher, so this is bounded rather
-      # than tight.
-      "[/api/v1/support/unsubscribe]":
         max-attempts: 20
         window-seconds: 3600
       "[/api/v1/auth/login]":

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- p1 -->
 ### Added
+- Every punitive moderation notice now carries a single-use appeal link that works without signing in, which is what makes the notice actionable for an account that cannot authenticate.
 - A public support form gated by Cloudflare Turnstile and an email confirmation step, so a submission reaches staff only after the submitter proves control of the address.
 - An appeal opened from a moderation notice redeems a single-use link that authorises exactly one ticket and mints no session.
 - A support centre with three entry paths, so a banned or suspended account - which cannot reach any authenticated endpoint - now has a route to contest a decision, which it previously did not.
@@ -426,6 +427,7 @@ A conversation that already has messages in it is kept, because unfollowing some
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
 ### Documentation
+- Added the support module data rules and brought the reference schema up to the migrations it describes.
 - Added the mail module data rules, which did not exist, and corrected the project structure documents against the code they describe.
 - The mail queue now records why it carries no broker-level dead-letter argument, and which queue in the topology is the genuine outlier.
 - Recorded why a small number of harmless startup proxy warnings and one non-JSON error response for an over-long request remain as accepted, understood gaps rather than unexplained rough edges.

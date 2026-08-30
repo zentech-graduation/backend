@@ -241,12 +241,6 @@ app:
       # request thread.
       connect-timeout: ${TURNSTILE_CONNECT_TIMEOUT:3s}
       read-timeout: ${TURNSTILE_READ_TIMEOUT:5s}
-    campaign:
-      sender:
-        enabled: ${CAMPAIGN_SENDER_ENABLED:false}
-        initial-delay: ${CAMPAIGN_SENDER_INITIAL_DELAY:60s}
-        fixed-delay: ${CAMPAIGN_SENDER_FIXED_DELAY:60s}
-        batch-size: ${CAMPAIGN_SENDER_BATCH_SIZE:20}
 
   # Platform statistics collection and roll-up.
   #
@@ -310,11 +304,6 @@ app:
         max-attempts: 10
         window-seconds: 3600
       "[/api/v1/support/public/confirm]":
-        max-attempts: 20
-        window-seconds: 3600
-      # Followed from a mail client, sometimes twice by a prefetcher, so this is bounded rather
-      # than tight.
-      "[/api/v1/support/unsubscribe]":
         max-attempts: 20
         window-seconds: 3600
       "[/api/v1/auth/login]":

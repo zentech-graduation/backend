@@ -11,11 +11,7 @@
 INSERT INTO moderation_action_configs (action_key, display_name, requires_reason, is_reversible, is_enabled) VALUES
     ('respond_support_ticket',  'Respond to Support Ticket', TRUE, FALSE, TRUE),
     ('reject_support_ticket',   'Reject Support Ticket',     TRUE, FALSE, TRUE),
-    ('escalate_support_ticket', 'Escalate Support Ticket',   TRUE, FALSE, TRUE),
-    -- Sending a campaign is not moderation, but it is an administrator action with real-world
-    -- effect on real mailboxes, and the audit log is where that belongs. requires_reason is FALSE:
-    -- the campaign row already records the subject, the body and the recipients.
-    ('send_mail_campaign',      'Send Mail Campaign',        FALSE, FALSE, TRUE)
+    ('escalate_support_ticket', 'Escalate Support Ticket',   TRUE, FALSE, TRUE)
 ON CONFLICT (action_key) DO NOTHING;
 
 -- is_user_toggleable is FALSE, for the reason V61 gives for the warning row. A support ticket

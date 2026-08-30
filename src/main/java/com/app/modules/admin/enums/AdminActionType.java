@@ -35,9 +35,6 @@ public enum AdminActionType {
     RESPOND_SUPPORT_TICKET,
     REJECT_SUPPORT_TICKET,
     ESCALATE_SUPPORT_TICKET,
-    // Not moderation, but an administrator action with real effect on real mailboxes, which is
-    // what the audit log is for.
-    SEND_MAIL_CAMPAIGN,
     CREATE_HASHTAG,
     EDIT_HASHTAG,
     BAN_HASHTAG,

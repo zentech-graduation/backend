@@ -23,6 +23,8 @@ import com.app.modules.mail.enums.ModerationMailTemplate;
 import com.app.modules.mail.repository.EmailDeliveryRepository;
 import com.app.modules.mail.service.ModerationMailThrottle;
 import com.app.modules.mail.service.impl.AbstractTemplateMailSender;
+import com.app.modules.support.enums.SupportCategory;
+import com.app.modules.support.service.SupportTokenService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.repository.UserRepository;
 
@@ -64,6 +66,7 @@ public class ModerationMailEventHandler {
     private final ModerationMailThrottle throttle;
     private final EmailDeliveryRepository emailDeliveryRepository;
     private final MailProperties mailProperties;
+    private final SupportTokenService supportTokenService;
 
     public ModerationMailEventHandler(
             UserRepository userRepository,
@@ -71,13 +74,15 @@ public class ModerationMailEventHandler {
             AbstractTemplateMailSender mailSender,
             ModerationMailThrottle throttle,
             EmailDeliveryRepository emailDeliveryRepository,
-            MailProperties mailProperties) {
+            MailProperties mailProperties,
+            SupportTokenService supportTokenService) {
         this.userRepository = userRepository;
         this.userCredentialRepository = userCredentialRepository;
         this.mailSender = mailSender;
         this.throttle = throttle;
         this.emailDeliveryRepository = emailDeliveryRepository;
         this.mailProperties = mailProperties;
+        this.supportTokenService = supportTokenService;
     }
 
     /**
@@ -117,7 +122,13 @@ public class ModerationMailEventHandler {
         try {
             String providerMessageId =
                     mailSender.sendModerationNotice(
-                            template, variables(event, user, template), user.getEmail());
+                            template,
+                            variables(
+                                    event,
+                                    user,
+                                    template,
+                                    appealUrl(actionType, userId, adminActionId)),
+                            user.getEmail());
             delivery.setStatus(EmailDeliveryStatus.SENT);
             delivery.setProviderMessageId(providerMessageId);
             delivery.setAttemptCount(delivery.getAttemptCount() + 1);
@@ -143,8 +154,34 @@ public class ModerationMailEventHandler {
                 .orElse(true);
     }
 
+    /**
+     * Mints the single-use appeal link, or returns null when the action is not appealable.
+     *
+     * <p>Minted here rather than when the action is recorded, so a notice that is never sent - a
+     * throttled or skipped one - never leaves a live token behind.
+     */
+    private String appealUrl(
+            com.app.modules.admin.enums.AdminActionType actionType,
+            UUID userId,
+            UUID adminActionId) {
+        SupportCategory category = AppealCategories.forAction(actionType);
+        if (category == null || adminActionId == null) {
+            return null;
+        }
+        String token = supportTokenService.createAppealToken(userId, adminActionId, category);
+        return org.springframework.web.util.UriComponentsBuilder.fromUriString(
+                        mailProperties.getFrontendBaseUrl())
+                .path("/support/appeal")
+                .queryParam("token", token)
+                .build()
+                .toUriString();
+    }
+
     private Map<String, Object> variables(
-            DomainEventEnvelope event, User user, ModerationMailTemplate template) {
+            DomainEventEnvelope event,
+            User user,
+            ModerationMailTemplate template,
+            String appealUrl) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("toName", displayName(user));
         variables.put("appName", mailProperties.getAppName());
@@ -156,6 +193,10 @@ public class ModerationMailEventHandler {
         Object supportResponse = event.data() == null ? null : event.data().get("supportResponse");
         variables.put(
                 "supportResponse", supportResponse == null ? null : supportResponse.toString());
+        // Null for the two reinstating actions and the two ticket replies, which the layout reads
+        // as
+        // "render no appeal block".
+        variables.put("appealUrl", appealUrl);
         return variables;
     }
 

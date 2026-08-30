@@ -55,10 +55,6 @@ app:
     moderation-mail:
       consumer:
         enabled: true
-  support:
-    campaign:
-      sender:
-        enabled: true
   story:
     consumer:
       enabled: true
@@ -108,11 +104,6 @@ app:
         max-attempts: 10
         window-seconds: 3600
       "[/api/v1/support/public/confirm]":
-        max-attempts: 20
-        window-seconds: 3600
-      # Followed from a mail client, sometimes twice by a prefetcher, so this is bounded rather
-      # than tight.
-      "[/api/v1/support/unsubscribe]":
         max-attempts: 20
         window-seconds: 3600
       "[/api/v1/auth/register]":
