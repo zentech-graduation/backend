@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- Replaying a rotated refresh token now actually terminates every session on the account. The revocation was previously discarded by the same rejection that reported it, so a stolen token stayed usable for its full lifetime while the logs recorded a remediation that never took effect.
+
 ### Added
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
