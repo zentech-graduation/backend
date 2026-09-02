@@ -8,12 +8,12 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import javax.sql.DataSource;
 
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import com.app.modules.hashtag.search.HashtagDocument;
 import com.app.modules.post.search.PostDocument;
+import com.zaxxer.hikari.HikariDataSource;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -73,12 +74,6 @@ public class SeedResetService {
     private final ObjectProvider<ConnectionFactory> connectionFactoryProvider;
     private final List<Queue> declaredQueues;
     private final ElasticsearchOperations elasticsearchOperations;
-
-    @Value("${spring.datasource.username}")
-    private String datasourceUsername;
-
-    @Value("${spring.datasource.password}")
-    private String datasourcePassword;
 
     // Verified against a live `\dt` on 2026-08-25: every name below matches the running schema
     // exactly, no renames since database/schema.sql was last regenerated.
@@ -259,13 +254,23 @@ public class SeedResetService {
                     "[seed] reset: could not resolve the live datasource URL, skipping Gorse purge");
             return;
         }
+        // Credentials come from the pool for the same reason the URL above comes from the live
+        // connection. Reading spring.datasource.username/password instead paired the container's
+        // URL with the developer's own .env credentials, and in continuous integration, where no
+        // .env exists, the ${POSTGRES_USER} placeholder behind that property could not resolve at
+        // all, which failed this bean and every dev-profile test context with it.
+        HikariDataSource pool = resolvePool();
+        if (pool == null) {
+            log.warn("[seed] reset: datasource is not a HikariDataSource, skipping Gorse purge");
+            return;
+        }
         String gorseUrl =
                 JDBC_URL_DATABASE_NAME
                         .matcher(applicationUrl)
                         .replaceFirst("/" + GORSE_DATABASE_NAME);
         try (Connection connection =
                         DriverManager.getConnection(
-                                gorseUrl, datasourceUsername, datasourcePassword);
+                                gorseUrl, pool.getUsername(), pool.getPassword());
                 Statement statement = connection.createStatement()) {
             for (String table : GORSE_TABLES) {
                 statement.execute("TRUNCATE TABLE " + table + " CASCADE");
@@ -273,6 +278,18 @@ public class SeedResetService {
             log.info("[seed] reset: {} Gorse tables truncated", GORSE_TABLES.length);
         } catch (SQLException e) {
             log.warn("[seed] reset: could not purge Gorse's database: {}", e.getMessage());
+        }
+    }
+
+    private HikariDataSource resolvePool() {
+        DataSource dataSource = jdbc.getDataSource();
+        if (dataSource instanceof HikariDataSource hikari) {
+            return hikari;
+        }
+        try {
+            return dataSource == null ? null : dataSource.unwrap(HikariDataSource.class);
+        } catch (SQLException e) {
+            return null;
         }
     }
 

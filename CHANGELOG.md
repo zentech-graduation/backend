@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The development seed reset now takes its Gorse credentials from the live connection pool instead of the datasource properties, so it no longer fails to start in any environment without a .env file. Every dev-profile integration test was failing to build its application context for this reason.
+
 ### Added
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
