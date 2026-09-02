@@ -69,6 +69,10 @@ public class RabbitMqTopologyConfig {
 
     public static final String POST_LIVE_EVENTS_EXCHANGE = "post.live.events";
 
+    // Reserved names for queues that do not exist yet. Nothing declares a Queue bean or a Binding
+    // for any of them, and that absence is the point: RabbitMqTopologyConfigTest asserts both, so
+    // wiring one up by accident fails the build rather than silently adding a queue no consumer
+    // reads. They read as dead constants and were reported as such by an audit, hence this note.
     public static final String AUDIT_LOG_QUEUE = "audit-log.queue";
     public static final String MODERATION_QUEUE = "moderation.queue";
     public static final String SEARCH_INDEX_QUEUE = "search-index.queue";
