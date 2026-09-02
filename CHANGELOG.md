@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The post live tier is now enabled under the prod profile. It was the only live tier left disabled there while its producer kept publishing, so every post like and unlike was returned unroutable by the broker and discarded after three attempts.
+
 ### Added
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.

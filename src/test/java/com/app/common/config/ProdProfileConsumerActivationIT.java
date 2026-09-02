@@ -18,6 +18,8 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.app.modules.comment.consumer.CommentNotificationConsumer;
 import com.app.modules.mail.service.MailSender;
+import com.app.modules.post.live.PostLiveFanoutConsumer;
+import com.app.modules.post.live.PostLiveServerQueueInitializer;
 import com.app.modules.story.consumer.StoryNotificationConsumer;
 
 @SpringBootTest(
@@ -91,6 +93,22 @@ class ProdProfileConsumerActivationIT {
                 .isNotEmpty();
         assertThat(applicationContext.getBeanNamesForType(StoryNotificationConsumer.class))
                 .as("StoryNotificationConsumer must be registered when spring.profiles.active=prod")
+                .isNotEmpty();
+    }
+
+    @Test
+    void prodProfile_activatesPostLiveTierBeans() {
+        // The producer side is unconditional, so these two beans are the only thing that gives the
+        // post.live.events fanout a queue. Without them the broker returns every post.live.* event
+        // as unroutable and the outbox marks the row DEAD after three attempts.
+        assertThat(applicationContext.getBeanNamesForType(PostLiveServerQueueInitializer.class))
+                .as(
+                        "PostLiveServerQueueInitializer must be registered when"
+                                + " spring.profiles.active=prod, since it is what binds a queue to"
+                                + " the post.live.events fanout")
+                .isNotEmpty();
+        assertThat(applicationContext.getBeanNamesForType(PostLiveFanoutConsumer.class))
+                .as("PostLiveFanoutConsumer must be registered when spring.profiles.active=prod")
                 .isNotEmpty();
     }
 }

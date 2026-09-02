@@ -32,6 +32,18 @@ app:
   post:
     consumer:
       enabled: true
+    # Absent until now, which made every post like a permanently undeliverable event. The producer
+    # side is unconditional: PostRabbitBindingConfig routes post.live.# from the topic bus into the
+    # post.live.events fanout regardless of this flag, while the queue bound to that fanout is
+    # created by PostLiveServerQueueInitializer only when the flag is true. With it false the fanout
+    # had no queue, so the broker returned every post.live.liked.v1 as unroutable, the outbox
+    # retried three times and marked the row DEAD. Measured at 21 of 21 events, a 100% loss rate,
+    # which also made a DEAD outbox row useless as an alert signal.
+    #
+    # Note the frontend does not open /ws/posts yet, so enabling this stops the loss and the DEAD
+    # accumulation rather than lighting up a user-visible feature.
+    live:
+      enabled: true
   comment:
     consumer:
       enabled: true
