@@ -186,6 +186,66 @@ class OutboxEventRepositoryIT {
                 .getFirst();
     }
 
+    @Test
+    void deletePublishedBefore_removesOnlyRowsPublishedBeforeTheCutoff() {
+        OutboxEvent old = claimedEvent(0);
+        OutboxEvent recent = claimedEvent(0);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        outboxEventRepository.markPublished(
+                old.getId(), old.getEventId(), old.getClaimId(), now.minusDays(40));
+        outboxEventRepository.markPublished(
+                recent.getId(), recent.getEventId(), recent.getClaimId(), now.minusDays(1));
+
+        int deleted = outboxEventRepository.deletePublishedBefore(now.minusDays(30), 500);
+        entityManager.clear();
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(outboxEventRepository.findById(old.getId())).isEmpty();
+        assertThat(outboxEventRepository.findById(recent.getId())).isPresent();
+    }
+
+    @Test
+    void deletePublishedBefore_neverRemovesPendingProcessingOrDeadRows() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OutboxEvent pending = outboxEventRepository.insertPending(newEvent(now.minusDays(90), 0));
+        OutboxEvent processing = claimedEvent(0);
+        OutboxEvent dead = claimedEvent(0);
+        outboxEventRepository.markDead(
+                dead.getId(),
+                dead.getEventId(),
+                dead.getClaimId(),
+                3,
+                now.minusDays(90),
+                "unroutable");
+
+        int deleted = outboxEventRepository.deletePublishedBefore(now, 500);
+        entityManager.clear();
+
+        // The cutoff is now, so age is not what protects these rows; status is.
+        assertThat(deleted).isZero();
+        assertThat(outboxEventRepository.findById(pending.getId())).isPresent();
+        assertThat(outboxEventRepository.findById(processing.getId())).isPresent();
+        assertThat(outboxEventRepository.findById(dead.getId())).isPresent();
+    }
+
+    @Test
+    void deletePublishedBefore_honoursBatchSize() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        for (int i = 0; i < 5; i++) {
+            OutboxEvent event = claimedEvent(0);
+            outboxEventRepository.markPublished(
+                    event.getId(), event.getEventId(), event.getClaimId(), now.minusDays(40));
+        }
+
+        int firstBatch = outboxEventRepository.deletePublishedBefore(now.minusDays(30), 2);
+        int secondBatch = outboxEventRepository.deletePublishedBefore(now.minusDays(30), 2);
+        int lastBatch = outboxEventRepository.deletePublishedBefore(now.minusDays(30), 2);
+
+        assertThat(firstBatch).isEqualTo(2);
+        assertThat(secondBatch).isEqualTo(2);
+        assertThat(lastBatch).isEqualTo(1);
+    }
+
     private OutboxEvent newEvent(OffsetDateTime nextRetryAt, int attemptCount) {
         UUID eventId = UUID.randomUUID();
         UUID aggregateId = UUID.randomUUID();

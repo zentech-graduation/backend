@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Scheduled retention for the transactional outbox and the consumer idempotency table, which previously grew without bound because nothing ever deleted from either; both windows, batch sizes and per-run ceilings are configurable, and permanently failed events are retained indefinitely as the only record that a domain event was lost.
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
 - A batched post-impression endpoint that records what a viewer actually saw, how long it stayed visible, and which surface it appeared on; resubmitting a batch after a network failure records nothing twice, and the call never affects a post's public view count.

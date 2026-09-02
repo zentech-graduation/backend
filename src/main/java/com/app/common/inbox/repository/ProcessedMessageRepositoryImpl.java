@@ -37,6 +37,21 @@ public class ProcessedMessageRepositoryImpl implements ProcessedMessageRepositor
 				processed_at
 			""";
 
+    // Bounded by a subquery, not a bare predicate, so one statement never locks the whole eligible
+    // set. Oldest first, so the rows that survive a truncated run are the ones most likely to still
+    // be needed as a redelivery guard. Served by idx_processed_messages_processed_at from V20.
+    private static final String DELETE_PROCESSED_BEFORE_SQL =
+            """
+			DELETE FROM processed_messages
+			WHERE id IN (
+				SELECT id
+				FROM processed_messages
+				WHERE processed_at < :cutoff
+				ORDER BY processed_at
+				LIMIT :batchSize
+			)
+			""";
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public ProcessedMessageRepositoryImpl(NamedParameterJdbcTemplate jdbcTemplate) {
@@ -55,6 +70,16 @@ public class ProcessedMessageRepositoryImpl implements ProcessedMessageRepositor
         List<ProcessedMessage> messages =
                 jdbcTemplate.query(INSERT_IF_ABSENT_SQL, params, this::mapMessage);
         return messages.stream().findFirst();
+    }
+
+    @Override
+    public int deleteProcessedBefore(OffsetDateTime cutoff, int batchSize) {
+        MapSqlParameterSource params =
+                new MapSqlParameterSource()
+                        .addValue("cutoff", cutoff)
+                        .addValue("batchSize", batchSize);
+
+        return jdbcTemplate.update(DELETE_PROCESSED_BEFORE_SQL, params);
     }
 
     private ProcessedMessage mapMessage(ResultSet rs, int rowNum) throws SQLException {

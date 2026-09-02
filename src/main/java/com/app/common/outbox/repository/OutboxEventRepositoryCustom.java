@@ -42,4 +42,18 @@ public interface OutboxEventRepositoryCustom {
             int attemptCount,
             OffsetDateTime deadAt,
             String lastError);
+
+    /**
+     * Deletes at most {@code batchSize} published rows whose {@code published_at} precedes the
+     * cutoff.
+     *
+     * <p>Only {@code PUBLISHED} rows are eligible. {@code PENDING} and {@code PROCESSING} rows are
+     * still in flight, and a {@code DEAD} row is the only record that a domain event was
+     * permanently lost, so none of the three is ever a deletion candidate.
+     *
+     * @param cutoff rows published strictly before this instant are eligible
+     * @param batchSize maximum rows to delete in this statement
+     * @return the number of rows actually deleted, which the caller uses to detect the last batch
+     */
+    int deletePublishedBefore(OffsetDateTime cutoff, int batchSize);
 }

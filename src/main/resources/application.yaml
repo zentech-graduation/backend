@@ -116,6 +116,29 @@ app:
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_1:PT10S}
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_2:PT30S}
         - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_3:PT60S}
+    # Deletes PUBLISHED rows past the window. DEAD rows are never eligible: each one is the only
+    # record that a domain event was permanently lost. PENDING and PROCESSING are still in flight.
+    retention:
+      enabled: ${OUTBOX_RETENTION_ENABLED:true}
+      published-retention: ${OUTBOX_RETENTION_PUBLISHED:P30D}
+      batch-size: ${OUTBOX_RETENTION_BATCH_SIZE:500}
+      max-rows-per-run: ${OUTBOX_RETENTION_MAX_ROWS_PER_RUN:50000}
+      initial-delay: ${OUTBOX_RETENTION_INITIAL_DELAY:PT10M}
+      fixed-delay: ${OUTBOX_RETENTION_FIXED_DELAY:PT6H}
+  inbox:
+    # processed-retention is a correctness boundary, not housekeeping. A row deleted while its
+    # message can still be redelivered stops guarding that event, and the redelivery re-runs the
+    # consumer's side effects. Automatic worst case is roughly five minutes: the outbox reclaims a
+    # stalled PROCESSING row after processing-timeout (PT2M) and republishes through the 10s/30s/60s
+    # ladder, while a consumer retries in-flight for 10s plus 30s before dead-lettering. The window
+    # below is sized for a hand-replayed dead letter instead, which no timeout bounds.
+    retention:
+      enabled: ${INBOX_RETENTION_ENABLED:true}
+      processed-retention: ${INBOX_RETENTION_PROCESSED:P30D}
+      batch-size: ${INBOX_RETENTION_BATCH_SIZE:500}
+      max-rows-per-run: ${INBOX_RETENTION_MAX_ROWS_PER_RUN:50000}
+      initial-delay: ${INBOX_RETENTION_INITIAL_DELAY:PT15M}
+      fixed-delay: ${INBOX_RETENTION_FIXED_DELAY:PT6H}
   messaging:
     consumer:
       max-attempts: ${RABBIT_CONSUMER_MAX_ATTEMPTS:3}

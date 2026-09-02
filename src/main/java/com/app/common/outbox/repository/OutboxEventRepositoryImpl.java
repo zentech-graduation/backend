@@ -189,6 +189,23 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
 				AND status = 'PROCESSING'
 			""";
 
+    // The subquery is what keeps the delete bounded. A predicate-only DELETE would lock every
+    // matching row in one statement, and on the table this job exists to shrink that set is
+    // arbitrarily large. Ordering by published_at makes each batch the oldest rows, so a run that
+    // stops at the per-run ceiling leaves the newest survivors behind rather than a random subset.
+    private static final String DELETE_PUBLISHED_BEFORE_SQL =
+            """
+			DELETE FROM outbox_events
+			WHERE id IN (
+				SELECT id
+				FROM outbox_events
+				WHERE status = 'PUBLISHED'
+					AND published_at < :cutoff
+				ORDER BY published_at
+				LIMIT :batchSize
+			)
+			""";
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public OutboxEventRepositoryImpl(NamedParameterJdbcTemplate jdbcTemplate) {
@@ -300,6 +317,16 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
                         .addValue("lastError", lastError);
 
         return jdbcTemplate.update(MARK_DEAD_SQL, params) == 1;
+    }
+
+    @Override
+    public int deletePublishedBefore(OffsetDateTime cutoff, int batchSize) {
+        MapSqlParameterSource params =
+                new MapSqlParameterSource()
+                        .addValue("cutoff", cutoff)
+                        .addValue("batchSize", batchSize);
+
+        return jdbcTemplate.update(DELETE_PUBLISHED_BEFORE_SQL, params);
     }
 
     private OutboxEvent mapEvent(ResultSet rs, int rowNum) throws SQLException {
