@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+- The `ci-test.yml` CI workflow, which had been unintentionally disabled and was reporting a permanent failure on every push and pull request; its coverage was already fully subsumed by `sonarcloud.yml`.
+
+### Changed
+- `sonarcloud.yml` now runs the duplicate Flyway migration version pre-check before the build, a step formerly unique to `ci-test.yml`.
+
 ### Tests
 - The post search integration test no longer depends on Elasticsearch's implicit auto-create-on-write behavior; it now explicitly ensures the index exists before writing through the real indexing path, matching the pattern already used elsewhere.
 
