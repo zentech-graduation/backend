@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+- The `ci-test.yml` CI workflow, which had been unintentionally disabled and was reporting a permanent failure on every push and pull request; its coverage was already fully subsumed by `sonarcloud.yml`.
+
+### Changed
+- `sonarcloud.yml` now runs the duplicate Flyway migration version pre-check before the build, a step formerly unique to `ci-test.yml`.
+
 ### Added
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
