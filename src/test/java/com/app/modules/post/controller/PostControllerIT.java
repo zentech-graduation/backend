@@ -574,6 +574,7 @@ class PostControllerIT {
     @Test
     @Order(10)
     void searchPosts_indexed_returnsMatches() throws java.io.IOException {
+        ensureIndexExists();
         TestUser author = registerUser("search_author");
         TestUser hidden = registerUser("search_hidden");
         TestUser viewer = registerUser("search_viewer");
@@ -614,6 +615,18 @@ class PostControllerIT {
     private void drainIndexSyncQueue() {
         while (rabbitTemplate.receive(RabbitMqTopologyConfig.POST_INDEX_SYNC_QUEUE) != null) {
             // Discard residual deliveries so the test observes only its own upsert messages.
+        }
+    }
+
+    // The per-test cleanup() deletes the index, and no earlier-ordered test in this class
+    // recreates it, so a test that writes through the real consumer path cannot rely on the index
+    // already existing - it must ensure it the same way PostIndexSyncConsumerIT and
+    // HashtagControllerIT already do, rather than depend on Elasticsearch's own implicit
+    // auto-create-on-write behavior.
+    private void ensureIndexExists() {
+        IndexOperations ops = elasticsearchOperations.indexOps(PostDocument.class);
+        if (!ops.exists()) {
+            ops.createWithMapping();
         }
     }
 
