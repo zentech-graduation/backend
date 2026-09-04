@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `ci-test.yml` CI workflow, which had been unintentionally disabled and was reporting a permanent failure on every push and pull request; its coverage was already fully subsumed by `sonarcloud.yml`.
 
 ### Changed
+- The development seed pipeline can now also run under the `prod` profile when `seed` is explicitly active alongside it, in addition to its existing `dev` activation, for staging-style deployments that require it against a disposable non-production database.
 - `sonarcloud.yml` now runs the duplicate Flyway migration version pre-check before the build, a step formerly unique to `ci-test.yml`.
 
 ### Added

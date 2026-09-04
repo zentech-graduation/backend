@@ -5,7 +5,14 @@ dataset - 90 users, 722 posts, a follow graph, comment threads, stories, direct 
 moderation history with a working discipline ladder, notifications, and 12 months of analytics -
 so a developer or QA reviewer can exercise every surface of the application, including the admin
 panel, against realistic data instead of an empty database.
-It never runs in production, and it refuses to run against anything but a local database.
+By default it refuses to run against anything but a local database, and every seed component is
+gated to the `dev` profile.
+It also runs under the `prod` profile when `seed` is explicitly active alongside it
+(`SPRING_PROFILES_ACTIVE=prod,seed`), which additionally requires
+`SEED_REQUIRE_LOCAL_DATASOURCE=false` to permit a non-local target.
+This combination is accepted only for a disposable staging/demo database - never point it at a
+database holding real user data, since `SeedResetService.reset()` truncates every seedable table
+before reseeding.
 
 | Content | Volume |
 |---------|--------|

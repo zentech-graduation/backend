@@ -25,7 +25,7 @@ import lombok.RequiredArgsConstructor;
  * fail its {@code MANDATORY} propagation check.
  */
 @Component
-@Profile("dev")
+@Profile("seed & (dev | prod)")
 @RequiredArgsConstructor
 public class SeedOutboxBatchWriter {
 
