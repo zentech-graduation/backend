@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +34,7 @@ import com.app.modules.post.service.PostService;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.recommendation.client.dto.GorseScore;
 import com.app.modules.recommendation.config.GorseProperties;
+import com.app.modules.recommendation.observability.RecommendationMetrics;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource.SourceBatch;
 import com.app.modules.social.service.SocialService;
@@ -45,6 +47,7 @@ class RecommendationFeedServiceImplTest {
     @Mock private PostVisibilityService postVisibilityService;
     @Mock private PostService postService;
     @Mock private SocialService socialService;
+    @Mock private RecommendationMetrics recommendationMetrics;
 
     private GorseProperties gorseProperties;
     private RecommendationFeedServiceImpl service;
@@ -62,7 +65,8 @@ class RecommendationFeedServiceImplTest {
                         postVisibilityService,
                         postService,
                         socialService,
-                        gorseProperties);
+                        gorseProperties,
+                        recommendationMetrics);
         // Feed assembly is a pass-through in these tests; only ranking-score attachment matters.
         // Fallback-path tests never reach the assembler, so this stub is lenient.
         lenient()
@@ -218,6 +222,37 @@ class RecommendationFeedServiceImplTest {
 
         assertThat(page).isSameAs(chronoPage);
         verify(postLookupService, never()).findActiveByIds(anyList());
+        verify(recommendationMetrics).chronologicalFallback();
+    }
+
+    @Test
+    void getRecommendedFeed_roundConsumesCandidatesAcceptsNone_recordsZeroAcceptRoundMetric() {
+        // A single round returns two real candidates, but both fail to resolve to a live post -
+        // the id-drift failure mode this metric exists to surface. The pipeline then exhausts its
+        // remaining rounds (each stubbed the same way) and falls back to chronological.
+        UUID staleId1 = UUID.randomUUID();
+        UUID staleId2 = UUID.randomUUID();
+        when(recommendationSource.fetch(eq(viewerId), eq('g'), eq(10), anyInt(), eq(0)))
+                .thenReturn(
+                        new SourceBatch(
+                                'g',
+                                List.of(
+                                        new GorseScore(staleId1.toString(), 9.0),
+                                        new GorseScore(staleId2.toString(), 8.0)),
+                                2,
+                                0));
+        when(postLookupService.findActiveByIds(anyList())).thenReturn(List.of());
+        CursorPageResponse<FeedPostResponse> chronoPage =
+                CursorPageResponse.of(List.of(), false, null, null, false);
+        when(postService.getFeed(viewerId, null, 5)).thenReturn(chronoPage);
+
+        CursorPageResponse<FeedPostResponse> page =
+                service.getRecommendedFeed(viewerId, null, 5, false);
+
+        assertThat(page).isSameAs(chronoPage);
+        // MAX_SOURCE_ROUNDS = 5, and every round in this test accepts nothing.
+        verify(recommendationMetrics, times(5)).zeroAcceptRound();
+        verify(recommendationMetrics).chronologicalFallback();
     }
 
     @Test
@@ -383,6 +418,10 @@ class RecommendationFeedServiceImplTest {
 
         assertThat(page.getContent()).isEmpty();
         verify(postService, never()).getFeed(any(), any(), anyInt());
+        // The chronological fallback is a distinct, real feed being served in place of the ranked
+        // one; an honest empty Explore page under excludeFollowed is a different outcome and must
+        // not be counted the same way.
+        verify(recommendationMetrics, never()).chronologicalFallback();
     }
 
     @Test
