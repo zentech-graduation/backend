@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Seeded avatars are now sourced from an external portrait-photo service instead of the object storage bucket; cover photos are unaffected and remain hosted there.
 
 ### Fixed
+- The CORS configuration rejected the `Idempotency-Key` header on cross-origin requests, blocking message sends from a browser entirely with a CORS error even though the request otherwise succeeded.
 - The `user_new_empty` development seed account now genuinely follows nobody, matching its documented "zero following" cold-start fixture; previously it only guaranteed nobody followed it, while it still followed a normal-sized batch of other accounts.
 - The personalized recommender's cached results now refresh every 5 minutes instead of every hour, matching how often its underlying model retrains; a freshly read post could previously keep reappearing in a viewer's personalized feed for up to an hour after being read.
 - Exhausted recommendation replacement previously reintroduced read posts immediately and ranked them ahead of unread ones, contrary to the intended behaviour; exhaustion is now handled by an application-level backfill instead.
