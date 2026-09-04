@@ -328,7 +328,8 @@ public class SecurityConfig {
                         "Accept",
                         "Accept-Language",
                         "X-Requested-With",
-                        "X-Device-ID"));
+                        "X-Device-ID",
+                        "Idempotency-Key"));
         configuration.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER, "X-Total-Count"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
