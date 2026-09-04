@@ -100,6 +100,29 @@ class HashtagSearchServiceImplTest {
     }
 
     @Test
+    void searchFallback_uncategorizedElasticsearchException_usesPostgresTrgm() {
+        // Spring Data Elasticsearch's catch-all for a server-side failure it cannot classify more
+        // specifically: auth rejection, index error, version mismatch. None of these are a
+        // connectivity problem, but the search index is still a rebuildable tier that must degrade
+        // to the pg_trgm fallback rather than surface as a 500.
+        UUID id = UUID.randomUUID();
+        Hashtag hashtag = Hashtag.builder().id(id).name("java").build();
+        when(hashtagRepository.searchByNameTrgm("java", 21, 0)).thenReturn(List.of(hashtag));
+        HashtagResponse mapped = new HashtagResponse(id, "java", 5, null);
+        when(hashtagMapper.toResponse(hashtag)).thenReturn(mapped);
+
+        org.springframework.data.elasticsearch.UncategorizedElasticsearchException esError =
+                new org.springframework.data.elasticsearch.UncategorizedElasticsearchException(
+                        "es rejected the request");
+
+        CursorPageResponse<HashtagResponse> result =
+                service.searchFallback("java", null, 20, esError);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).name()).isEqualTo("java");
+    }
+
+    @Test
     void searchFallback_exactlyFullPage_hasNextPageIsFalse() {
         List<Hashtag> hashtags =
                 java.util.stream.IntStream.range(0, 20)
