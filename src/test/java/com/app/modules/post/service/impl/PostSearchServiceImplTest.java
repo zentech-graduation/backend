@@ -182,6 +182,23 @@ class PostSearchServiceImplTest {
     }
 
     @Test
+    void searchFallback_uncategorizedElasticsearchException_returnsEmptyPage() {
+        // Spring Data Elasticsearch's catch-all for a server-side failure it cannot classify more
+        // specifically: auth rejection, index error, version mismatch. None of these are a
+        // connectivity problem, but the search index is still a rebuildable tier that must degrade
+        // rather than surface as a 500.
+        org.springframework.data.elasticsearch.UncategorizedElasticsearchException esError =
+                new org.springframework.data.elasticsearch.UncategorizedElasticsearchException(
+                        "es rejected the request");
+
+        CursorPageResponse<PostResponse> page =
+                service.searchFallback(UUID.randomUUID(), "cats", null, 20, esError);
+
+        assertThat(page.getContent()).isEmpty();
+        assertThat(page.isDegraded()).isTrue();
+    }
+
+    @Test
     void searchFallback_nonAvailabilityRuntimeException_rethrows() {
         IllegalArgumentException programmingError = new IllegalArgumentException("bad query");
 
