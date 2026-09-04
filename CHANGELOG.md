@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The recommendation feed pipeline now logs a warning and records a counter metric when a batch of recommender candidates resolves to no visible posts, and when a request falls all the way back to the chronological feed; previously this degraded silently behind a normal `200` response.
+
 ### Removed
 - The `ci-test.yml` CI workflow, which had been unintentionally disabled and was reporting a permanent failure on every push and pull request; its coverage was already fully subsumed by `sonarcloud.yml`.
 

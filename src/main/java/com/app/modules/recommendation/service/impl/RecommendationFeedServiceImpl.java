@@ -22,11 +22,15 @@ import com.app.modules.post.service.PostService;
 import com.app.modules.post.service.PostVisibilityService;
 import com.app.modules.recommendation.client.dto.GorseScore;
 import com.app.modules.recommendation.config.GorseProperties;
+import com.app.modules.recommendation.observability.RecommendationMetrics;
 import com.app.modules.recommendation.service.RecommendationFeedService;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource;
 import com.app.modules.recommendation.service.impl.feed.RecommendationSource.SourceBatch;
 import com.app.modules.social.service.SocialService;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class RecommendationFeedServiceImpl implements RecommendationFeedService {
 
@@ -44,6 +48,7 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
     private final PostService postService;
     private final SocialService socialService;
     private final GorseProperties gorseProperties;
+    private final RecommendationMetrics recommendationMetrics;
 
     public RecommendationFeedServiceImpl(
             RecommendationSource recommendationSource,
@@ -51,13 +56,15 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             PostVisibilityService postVisibilityService,
             PostService postService,
             SocialService socialService,
-            GorseProperties gorseProperties) {
+            GorseProperties gorseProperties,
+            RecommendationMetrics recommendationMetrics) {
         this.recommendationSource = recommendationSource;
         this.postLookupService = postLookupService;
         this.postVisibilityService = postVisibilityService;
         this.postService = postService;
         this.socialService = socialService;
         this.gorseProperties = gorseProperties;
+        this.recommendationMetrics = recommendationMetrics;
     }
 
     @Override
@@ -90,7 +97,9 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
                         ? new HashSet<>(socialService.getAcceptedFollowingExcludingBlocks(viewerId))
                         : Set.of();
 
+        int roundsRun = 0;
         for (int round = 0; round < MAX_SOURCE_ROUNDS && content.size() < pageSize; round++) {
+            roundsRun++;
             SourceBatch batch =
                     recommendationSource.fetch(
                             viewerId, source, fetchSize, gorseOffset, trendingOffset);
@@ -100,9 +109,27 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
             if (scores.isEmpty()) {
                 break;
             }
+            int contentSizeBeforeRound = content.size();
             int consumed =
                     appendVisible(
                             viewerId, scores, content, seenPostIds, pageSize, excludedOwnerIds);
+            // A round that consumed real candidates but accepted none of them is worth flagging:
+            // usually every id Gorse returned failed to resolve to a live, visible post (the
+            // id-drift failure mode), and occasionally a duplicate already accepted earlier in
+            // this request. Neither is a recommender outage (that degrades earlier, in
+            // RecommendationSource) or a cold-start empty response (that is scores.isEmpty()
+            // above), and nothing else on this path logs it, even though the response still comes
+            // back 200.
+            if (content.size() == contentSizeBeforeRound) {
+                log.warn(
+                        "Recommendation source round added zero posts from {} candidates for"
+                                + " viewer {} (round {}, source '{}')",
+                        scores.size(),
+                        viewerId,
+                        round,
+                        source);
+                recommendationMetrics.zeroAcceptRound();
+            }
             // The batch does not report a ready-made next offset: appendVisible may stop before
             // reaching the end of scores once the page fills, and only that consumed count says
             // how far into each underlying list this round actually looked. Advancing gorseOffset
@@ -118,10 +145,21 @@ public class RecommendationFeedServiceImpl implements RecommendationFeedService 
 
         if (content.isEmpty() && decoded.isFirstPage()) {
             if (excludeFollowed) {
+                log.warn(
+                        "Recommendation pipeline produced no candidates for viewer {} after {}"
+                                + " round(s); serving an empty Explore page (excludeFollowed=true)",
+                        viewerId,
+                        roundsRun);
                 return emptyPage();
             }
             // Both ranked sources empty or unavailable: serve the chronological following feed
             // (its own cursor scheme takes over on subsequent pages).
+            log.warn(
+                    "Recommendation pipeline produced no candidates for viewer {} after {}"
+                            + " round(s); falling back to the chronological following feed",
+                    viewerId,
+                    roundsRun);
+            recommendationMetrics.chronologicalFallback();
             return postService.getFeed(viewerId, null, pageSize);
         }
         String startCursor =
