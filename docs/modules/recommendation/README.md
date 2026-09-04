@@ -198,13 +198,16 @@ The two demo accounts are `demo_an` (football, travel) and `demo_binh` (cooking,
 ### Rebuild Gorse from PostgreSQL
 
 Gorse holds only derived state.
-If its database is lost or its dataset drifts, re-push from the canonical source:
+If its database is lost or its dataset drifts from the real `posts`/`users` tables, there is no single existing command that re-syncs it from the live application database.
 
-```bash
-python gorse/seed/seed.py push --api-key "$GORSE_API_KEY"
-```
+`python gorse/seed/seed.py push --api-key "$GORSE_API_KEY"` does **not** do this, despite the name.
+It pushes that script's own synthetic 8-topic demo dataset (built entirely in memory by `build_dataset()`), unrelated to whatever is actually in the application's PostgreSQL database.
+Running it again is safe and idempotent for that demo dataset, but it will not repair a drifted catalogue - verified in `.workspace/reports/recommendation/for_you_diagnosis.md` and `FIX_NOTES.md`, where this distinction was the difference between a rebuild that worked and one that silently did nothing.
 
-Feedback insertion in Gorse is an upsert, so re-pushing is safe and idempotent.
+Two ways to actually resync from the canonical source:
+
+1. **A full `SeedRunner` reseed** (`SPRING_PROFILES_ACTIVE=dev,seed SEED_DATA=true`, see `src/main/resources/seed/README.md`). `SeedResetService.reset()` truncates Gorse's sibling Postgres database first, then `SeedOutboxEmitter.emitFullVolume()` replays `post.index.upsert.v1` for every post through the real outbox and `PostIndexSyncConsumer`, so Gorse ends up holding exactly what the freshly-reseeded `posts` table holds, with real item timestamps. This also regenerates every other seedable table - it is a full reset, not a Gorse-only repair.
+2. **A one-off push of the current tables**, when the rest of the database must not be touched: truncate Gorse's `items`/`users`/`feedback`/`documents`/`values`/`time_series_points`/`message` tables (the same list `SeedResetService.purgeGorse()` truncates), then POST the current `posts` (as items, `IsHidden` = status != published, `Labels` = hashtag names, `Timestamp` = real `created_at`), `users`, and `post_likes`/`post_saves`/non-deleted `comments`/`post_view` `user_events` rows (as feedback) to Gorse's REST API, mirroring the exact wire shapes `GorseClientImpl` and `PostIndexSyncConsumer` already use. No such script is checked into the repository; it was written as a disposable one-off for this repair (`.workspace/scripts/` on the machine it ran on) rather than committed, because it is not something the application, a scheduled job, or ordinary developer workflow should ever need to run again if `PostIndexSyncConsumer` stays enabled and every future `posts` reset goes through `SeedRunner`.
 
 ---
 
@@ -234,7 +237,7 @@ These are accepted trade-offs, not defects.
 - **Pagination is not snapshotted.** A training run between two page requests can reorder items, so a post may repeat or be skipped across pages.
 - **Deduplication is per-request only.** Items already shown on an earlier page can reappear later.
 - **A mid-pagination fallback reuses the offset.** If Gorse fails while the reader is deep in the list, the same numeric offset is applied to the popularity list, skipping its head. Only reachable when the recommender fails mid-scroll.
-- **Item synchronization relies on Gorse `auto_insert_item`.** A dedicated `post.index.#` consumer was scoped out; hidden or deleted posts are removed by the filter stage rather than by hiding the item in Gorse.
+- **Recommendations can lag behind an out-of-band data reset.** Gorse's item/user/feedback store is derived state kept in sync by `PostIndexSyncConsumer` (`post.index.upsert.v1` / `post.index.delete.v1`, the same events that drive the Elasticsearch sync) as posts are created, updated, hidden on removal, and restored. That consumer relies on the outbox, so it only sees writes that go through the application. If PostgreSQL's `posts` table is ever reset or reseeded by a path that does not replay through the outbox, Gorse keeps whatever items it already had - which can drift entirely out of overlap with the current `posts` table without any error, because every Gorse call still succeeds; the candidates just fail to resolve to a live post. See §7 "Rebuild Gorse from PostgreSQL" - `gorse/seed/seed.py push` is **not** that rebuild tool, despite its name; it pushes that script's own synthetic demo dataset, not real application data. A real resync currently requires either a full `SeedRunner` reseed (which replays `post.index.upsert.v1` for every post) or an equivalent one-off push of the current `posts`/`users`/engagement tables through Gorse's REST API.
 - **No negative feedback.** There is no "not interested" signal, and unlike/unsave do not retract prior positive feedback.
 
 ---
