@@ -181,14 +181,23 @@ public class PostSearchServiceImpl implements PostSearchService {
 
     // Spring Data Elasticsearch translates transport/connection failures to
     // DataAccessResourceFailureException; raw client failures surface as IOException in the cause
-    // chain. CallNotPermittedException means the circuit is already open.
+    // chain. CallNotPermittedException means the circuit is already open. Any exception type from
+    // Spring Data Elasticsearch's own package (UncategorizedElasticsearchException,
+    // NoSuchIndexException, RestStatusException, etc.) is the server rejecting or failing a request
+    // — auth, index state, version mismatch — not a connectivity problem, but the search index is
+    // still a rebuildable tier per GLOBAL_RULES.md and must degrade the same way. Repository calls
+    // against PostgreSQL in this same method throw JPA/Hibernate exceptions, not this package, so a
+    // genuine data-layer bug there still surfaces as a real failure.
     private static boolean isAvailabilityFailure(Throwable t) {
         if (t instanceof CallNotPermittedException) {
             return true;
         }
         for (Throwable cause = t; cause != null; cause = cause.getCause()) {
             if (cause instanceof DataAccessResourceFailureException
-                    || cause instanceof IOException) {
+                    || cause instanceof IOException
+                    || cause.getClass()
+                            .getName()
+                            .startsWith("org.springframework.data.elasticsearch.")) {
                 return true;
             }
         }

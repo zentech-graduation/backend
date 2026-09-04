@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Seeded avatars are now sourced from an external portrait-photo service instead of the object storage bucket; cover photos are unaffected and remain hosted there.
 
 ### Fixed
+- Post and hashtag search returned a raw server error for any Elasticsearch-side failure that was not a plain connectivity problem (an authentication rejection, an index-state error, a version mismatch), instead of degrading gracefully like a genuine outage does; the search index is a rebuildable tier and no failure reaching it should surface as a hard error.
 - The CORS configuration rejected the `Idempotency-Key` header on cross-origin requests, blocking message sends from a browser entirely with a CORS error even though the request otherwise succeeded.
 - The `user_new_empty` development seed account now genuinely follows nobody, matching its documented "zero following" cold-start fixture; previously it only guaranteed nobody followed it, while it still followed a normal-sized batch of other accounts.
 - The personalized recommender's cached results now refresh every 5 minutes instead of every hour, matching how often its underlying model retrains; a freshly read post could previously keep reappearing in a viewer's personalized feed for up to an hour after being read.
