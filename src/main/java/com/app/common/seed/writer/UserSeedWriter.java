@@ -31,7 +31,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Service
-@Profile("dev")
+@Profile("seed & (dev | prod)")
 @RequiredArgsConstructor
 public class UserSeedWriter {
 

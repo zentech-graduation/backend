@@ -39,7 +39,7 @@ import com.app.modules.mail.service.MailService;
  */
 @SpringBootTest(
         properties = {
-            "spring.profiles.active=dev",
+            "spring.profiles.active=dev,seed",
             "spring.docker.compose.enabled=false",
             "spring.autoconfigure.exclude="
                     + "org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration"

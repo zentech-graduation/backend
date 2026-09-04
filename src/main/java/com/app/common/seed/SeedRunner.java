@@ -39,18 +39,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Dev-only entry point that orchestrates the full seed pipeline on application startup: wipes every
- * seedable table, runs every domain writer from Tasks 5-7 in FK-safe order, emits the full seed
- * event volume through the real transactional outbox, then asserts every enum-typed column this
- * pipeline is supposed to exercise actually reaches a minimum row count per value.
+ * Entry point that orchestrates the full seed pipeline on application startup: wipes every seedable
+ * table, runs every domain writer from Tasks 5-7 in FK-safe order, emits the full seed event volume
+ * through the real transactional outbox, then asserts every enum-typed column this pipeline is
+ * supposed to exercise actually reaches a minimum row count per value.
  *
- * <p>Gated the same way the deleted {@code DevDataSeeder} was gated: only active under the {@code
- * dev} profile, and only when {@code SEED_DATA=true} is set. Work runs on a daemon thread off
+ * <p>Active under {@code dev} with {@code seed}, exactly as originally gated, and now also under
+ * {@code prod} with {@code seed} - accepted for this project's staging-style deployment model,
+ * where the {@code prod}-profiled environment is a disposable demo target rather than a system
+ * serving real users. {@code SEED_DATA=true} must also be set. Work runs on a daemon thread off
  * {@link ApplicationReadyEvent} so it never blocks the application from reporting ready.
  */
 @Slf4j
 @Component
-@Profile("dev")
+@Profile("seed & (dev | prod)")
 @ConditionalOnProperty(name = "SEED_DATA", havingValue = "true")
 @EnableConfigurationProperties(SeedProperties.class)
 @RequiredArgsConstructor

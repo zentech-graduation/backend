@@ -35,7 +35,7 @@ import com.app.modules.post.search.PostDocument;
  */
 @SpringBootTest(
         properties = {
-            "spring.profiles.active=dev",
+            "spring.profiles.active=dev,seed",
             "spring.docker.compose.enabled=false",
             "app.mail.consumer.enabled=false",
             "app.notification.consumer.enabled=false",
