@@ -38,9 +38,6 @@ CREATE TABLE oauth_accounts (
     provider            oauth_provider  NOT NULL,
     provider_id         VARCHAR(255)    NOT NULL,
     provider_email      VARCHAR(255),
-    access_token        TEXT,
-    refresh_token       TEXT,
-    token_expires_at    TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     UNIQUE (provider, provider_id)

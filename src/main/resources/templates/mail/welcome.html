@@ -4,18 +4,23 @@
     <meta charset="UTF-8">
     <title>Welcome</title>
 </head>
-<body style="font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; line-height: 1.5;">
-<div style="max-width: 560px; margin: 0 auto; padding: 24px;">
-    <h1 style="font-size: 20px; margin: 0 0 16px;" th:text="${appName}">Social</h1>
-    <h2 style="font-size: 16px; margin: 0 0 16px;">Welcome to <span th:text="${appName}">Social</span></h2>
-    <p>Hello <span th:text="${toName}">there</span>,</p>
-    <p>Your account has been created successfully. We are glad to have you with us.</p>
-    <p>You can now start exploring profiles, sharing posts, and connecting with other members of the community.</p>
-    <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 32px 0;">
-    <p style="font-size: 12px; color: #6b6b6b;">
-        You received this email because you have an account on <span th:text="${appName}">Social</span>.
-        If this was not you, please ignore this email.
-    </p>
+<body style="margin: 0; padding: 0; background-color: #FFFFFF; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #0F0F0F; line-height: 1.6;">
+<div style="max-width: 560px; margin: 0 auto; padding: 48px 24px;">
+
+    <span th:text="${appName}" style="display: block; font-size: 16px; font-weight: 700; color: #0F0F0F; margin-bottom: 40px;">Luvax</span>
+
+    <h2 style="font-size: 22px; font-weight: 600; color: #0F0F0F; margin: 0 0 16px;">Welcome to <span th:text="${appName}">Luvax</span></h2>
+
+    <p style="font-size: 15px; color: #4B4B4B; line-height: 1.6; margin: 0 0 16px;">Hello <span th:text="${toName}">User</span>,</p>
+
+    <p style="font-size: 15px; color: #4B4B4B; line-height: 1.6; margin: 0 0 16px;">Your account has been created successfully. We are glad to have you with us.</p>
+
+    <p style="font-size: 15px; color: #4B4B4B; line-height: 1.6; margin: 0;">You can now start exploring profiles, sharing posts, and connecting with other members of the community.</p>
+
+    <hr style="border: none; border-top: 1px solid #E8E8E8; margin: 36px 0;">
+
+    <p style="font-size: 12px; color: #8C8C8C; line-height: 1.6; margin: 0;">You received this email because you have an account on <span th:text="${appName}">Luvax</span>. If this was not you, please ignore this email.</p>
+
 </div>
 </body>
 </html>

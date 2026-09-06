@@ -5,8 +5,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import com.app.modules.auth.validation.ValidPassword;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
+// AUTH-022: reject payloads with unrecognised fields to prevent mass-assignment attacks
+@JsonIgnoreProperties(ignoreUnknown = false)
 @Schema(description = "Payload for creating a new user account")
 public record RegisterRequest(
         @Schema(
@@ -28,11 +33,15 @@ public record RegisterRequest(
                 @Email
                 String email,
         @Schema(
-                        description = "Account password; 8–128 characters",
+                        description =
+                                "Account password; 8 to 64 characters and at most 72 bytes when"
+                                        + " encoded as UTF-8. Must contain at least one uppercase"
+                                        + " letter, at least one digit or special character, and no"
+                                        + " whitespace or invisible characters.",
                         example = "S3cur3P@ssword",
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 @NotBlank
-                @Size(min = 8, max = 128)
+                @ValidPassword
                 String password,
         @Schema(
                         description = "Human-readable display name shown on the profile (optional)",

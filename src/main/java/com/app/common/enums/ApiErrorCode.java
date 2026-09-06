@@ -9,34 +9,149 @@ import lombok.Getter;
 public enum ApiErrorCode {
     // spotless:off
 
-	// Common
-	VALIDATION_ERROR("VALIDATION_ERROR", "Request validation failed", HttpStatus.BAD_REQUEST),
-	BAD_REQUEST("BAD_REQUEST", "Invalid request", HttpStatus.BAD_REQUEST),
-	NOT_FOUND("NOT_FOUND", "Requested resource was not found", HttpStatus.NOT_FOUND),
-	FORBIDDEN("FORBIDDEN", "Access to this resource is forbidden", HttpStatus.FORBIDDEN),
-	UNAUTHORIZED("UNAUTHORIZED", "Authentication is required", HttpStatus.UNAUTHORIZED),
-	INTERNAL_ERROR("INTERNAL_ERROR", "An unexpected error occurred", HttpStatus.INTERNAL_SERVER_ERROR),
-	TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "The system is busy. Please try again in a few minutes.", HttpStatus.TOO_MANY_REQUESTS),
-	SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", "External service temporarily unavailable. Please try again later.", HttpStatus.SERVICE_UNAVAILABLE),
+    // Common
+    VALIDATION_ERROR("VALIDATION_ERROR", "Request validation failed", HttpStatus.BAD_REQUEST),
+    BAD_REQUEST("BAD_REQUEST", "Invalid request", HttpStatus.BAD_REQUEST),
+    INVALID_CURSOR("INVALID_CURSOR", "Malformed pagination cursor", HttpStatus.BAD_REQUEST),
+    MALFORMED_REQUEST_BODY("MALFORMED_REQUEST_BODY", "Request body could not be read", HttpStatus.BAD_REQUEST),
+    MISSING_REQUIRED_PARAMETER("MISSING_REQUIRED_PARAMETER", "A required request parameter is missing", HttpStatus.BAD_REQUEST),
+    UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", "Content-Type is not supported", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
+    NOT_ACCEPTABLE("NOT_ACCEPTABLE", "None of the Accept header's media types are supported", HttpStatus.NOT_ACCEPTABLE),
+    NOT_FOUND("NOT_FOUND", "Requested resource was not found", HttpStatus.NOT_FOUND),
+    FORBIDDEN("FORBIDDEN", "Access to this resource is forbidden", HttpStatus.FORBIDDEN),
+    UNAUTHORIZED("UNAUTHORIZED", "Authentication is required", HttpStatus.UNAUTHORIZED),
+    INTERNAL_ERROR("INTERNAL_ERROR", "An unexpected error occurred", HttpStatus.INTERNAL_SERVER_ERROR),
+    // Raised only when the caller exceeds their own per-endpoint quota, never for server load,
+    // so the message must not attribute it to the system being busy.
+    TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "Too many requests. Please wait before trying again.", HttpStatus.TOO_MANY_REQUESTS),
+    SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", "External service temporarily unavailable. Please try again later.", HttpStatus.SERVICE_UNAVAILABLE),
 
-	// Auth
-	AUTH_INVALID_CREDENTIALS("AUTH_INVALID_CREDENTIALS", "Invalid email or password", HttpStatus.UNAUTHORIZED),
-	AUTH_TOKEN_EXPIRED("AUTH_TOKEN_EXPIRED", "Access token has expired", HttpStatus.UNAUTHORIZED),
-	AUTH_TOKEN_INVALID("AUTH_TOKEN_INVALID", "Invalid access token", HttpStatus.UNAUTHORIZED),
-	AUTH_REFRESH_TOKEN_EXPIRED("AUTH_REFRESH_TOKEN_EXPIRED", "Refresh token has expired", HttpStatus.UNAUTHORIZED),
-	AUTH_REFRESH_TOKEN_INVALID("AUTH_REFRESH_TOKEN_INVALID", "Invalid or revoked refresh token", HttpStatus.UNAUTHORIZED),
-	AUTH_ACCOUNT_LOCKED("AUTH_ACCOUNT_LOCKED", "Account is temporarily locked due to too many failed attempts", HttpStatus.FORBIDDEN),
-	AUTH_ACCOUNT_INACTIVE("AUTH_ACCOUNT_INACTIVE", "Account is inactive", HttpStatus.FORBIDDEN),
-	AUTH_PASSWORD_MISMATCH("AUTH_PASSWORD_MISMATCH", "Current password is incorrect", HttpStatus.BAD_REQUEST),
-	AUTH_RESET_TOKEN_INVALID("AUTH_RESET_TOKEN_INVALID", "Invalid or expired reset token", HttpStatus.BAD_REQUEST),
-	AUTH_RESET_TOKEN_EXPIRED("AUTH_RESET_TOKEN_EXPIRED", "Reset token has expired", HttpStatus.GONE),
-	AUTH_RESET_TOKEN_USED("AUTH_RESET_TOKEN_USED", "Reset token has already been used", HttpStatus.CONFLICT),
+    // Auth
+    AUTH_INVALID_CREDENTIALS("AUTH_INVALID_CREDENTIALS", "Invalid email or password", HttpStatus.UNAUTHORIZED),
+    AUTH_TOKEN_EXPIRED("AUTH_TOKEN_EXPIRED", "Access token has expired", HttpStatus.UNAUTHORIZED),
+    AUTH_TOKEN_INVALID("AUTH_TOKEN_INVALID", "Invalid access token", HttpStatus.UNAUTHORIZED),
+    AUTH_REFRESH_TOKEN_EXPIRED("AUTH_REFRESH_TOKEN_EXPIRED", "Refresh token has expired", HttpStatus.UNAUTHORIZED),
+    AUTH_REFRESH_TOKEN_INVALID("AUTH_REFRESH_TOKEN_INVALID", "Invalid or revoked refresh token", HttpStatus.UNAUTHORIZED),
+    // The three account states below are the only conditions that produce a 403 from
+    // UserStateValidator, and each message names the state that produced it. AUTH_ACCOUNT_LOCKED
+    // previously read "temporarily locked due to too many failed attempts", which was false on
+    // every count: it is raised only for a permanent ban, and no failed-attempt lockout exists.
+    AUTH_ACCOUNT_LOCKED("AUTH_ACCOUNT_LOCKED", "This account has been banned", HttpStatus.FORBIDDEN),
+    AUTH_ACCOUNT_INACTIVE("AUTH_ACCOUNT_INACTIVE", "This account is suspended or deactivated", HttpStatus.FORBIDDEN),
+    AUTH_EMAIL_NOT_VERIFIED("AUTH_EMAIL_NOT_VERIFIED", "This account's email address has not been verified", HttpStatus.FORBIDDEN),
+    AUTH_PASSWORD_MISMATCH("AUTH_PASSWORD_MISMATCH", "Current password is incorrect", HttpStatus.BAD_REQUEST),
+    AUTH_RESET_TOKEN_INVALID("AUTH_RESET_TOKEN_INVALID", "Invalid or expired reset token", HttpStatus.BAD_REQUEST),
+    AUTH_RESET_TOKEN_EXPIRED("AUTH_RESET_TOKEN_EXPIRED", "Reset token has expired", HttpStatus.GONE),
+    AUTH_RESET_TOKEN_USED("AUTH_RESET_TOKEN_USED", "Reset token has already been used", HttpStatus.CONFLICT),
+    AUTH_VERIFY_TOKEN_INVALID("AUTH_VERIFY_TOKEN_INVALID", "Email verification token is invalid or has expired", HttpStatus.BAD_REQUEST),
+    AUTH_OAUTH2_EXCHANGE_CODE_INVALID("AUTH_OAUTH2_EXCHANGE_CODE_INVALID", "OAuth2 exchange code is invalid or has expired", HttpStatus.BAD_REQUEST),
 
-	// Users
-	USER_EMAIL_ALREADY_EXISTS("USER_EMAIL_ALREADY_EXISTS", "An account with this email already exists", HttpStatus.CONFLICT),
-	USER_USERNAME_ALREADY_EXISTS("USER_USERNAME_ALREADY_EXISTS", "Username is already taken", HttpStatus.CONFLICT);
+    // Users
+    USER_ALREADY_EXISTS("USER_ALREADY_EXISTS", "An account with these details already exists", HttpStatus.CONFLICT),
+    USER_EMAIL_ALREADY_EXISTS("USER_EMAIL_ALREADY_EXISTS", "An account with this email already exists", HttpStatus.CONFLICT),
+    USER_USERNAME_ALREADY_EXISTS("USER_USERNAME_ALREADY_EXISTS", "Username is already taken", HttpStatus.CONFLICT),
+    USER_NOT_FOUND("USER_NOT_FOUND", "User not found", HttpStatus.NOT_FOUND),
 
-	// spotless:on
+    // Social
+    SOCIAL_SELF_FOLLOW("SOCIAL_SELF_FOLLOW", "You cannot follow yourself", HttpStatus.BAD_REQUEST),
+    SOCIAL_ALREADY_FOLLOWING("SOCIAL_ALREADY_FOLLOWING", "You are already following this user", HttpStatus.CONFLICT),
+    SOCIAL_ALREADY_REQUESTED("SOCIAL_ALREADY_REQUESTED", "Follow request already sent", HttpStatus.CONFLICT),
+    SOCIAL_REQUEST_NOT_FOUND("SOCIAL_REQUEST_NOT_FOUND", "Follow request not found", HttpStatus.NOT_FOUND),
+    SOCIAL_SELF_BLOCK("SOCIAL_SELF_BLOCK", "You cannot block yourself", HttpStatus.BAD_REQUEST),
+    SOCIAL_ALREADY_BLOCKED("SOCIAL_ALREADY_BLOCKED", "User already blocked", HttpStatus.CONFLICT),
+
+    // Media
+    MEDIA_INVALID_METADATA("MEDIA_INVALID_METADATA", "Media metadata is invalid", HttpStatus.BAD_REQUEST),
+    MEDIA_STORAGE_KEY_ALREADY_EXISTS("MEDIA_STORAGE_KEY_ALREADY_EXISTS", "Media storage key already exists", HttpStatus.CONFLICT),
+    MEDIA_CDN_NOT_CONFIGURED("MEDIA_CDN_NOT_CONFIGURED", "Media CDN is not configured", HttpStatus.SERVICE_UNAVAILABLE),
+    MEDIA_STORAGE_NOT_CONFIGURED("MEDIA_STORAGE_NOT_CONFIGURED", "Media object storage is not configured", HttpStatus.SERVICE_UNAVAILABLE),
+    MEDIA_UPLOAD_URL_FAILED("MEDIA_UPLOAD_URL_FAILED", "Media upload URL could not be generated", HttpStatus.SERVICE_UNAVAILABLE),
+    MEDIA_OBJECT_NOT_UPLOADED("MEDIA_OBJECT_NOT_UPLOADED", "No uploaded object exists for this storage key", HttpStatus.UNPROCESSABLE_ENTITY),
+    MEDIA_OBJECT_METADATA_MISMATCH("MEDIA_OBJECT_METADATA_MISMATCH", "Submitted metadata does not match the uploaded object", HttpStatus.UNPROCESSABLE_ENTITY),
+    MEDIA_STORAGE_UNAVAILABLE("MEDIA_STORAGE_UNAVAILABLE", "Media object storage is temporarily unavailable. Please try again later.", HttpStatus.SERVICE_UNAVAILABLE),
+
+    // Hashtag
+    HASHTAG_NOT_FOUND("HASHTAG_NOT_FOUND", "Hashtag not found", HttpStatus.NOT_FOUND),
+    HASHTAG_ALREADY_EXISTS("HASHTAG_ALREADY_EXISTS", "Hashtag already exists", HttpStatus.CONFLICT),
+
+    // Post
+    POST_NOT_FOUND("POST_NOT_FOUND", "Post not found", HttpStatus.NOT_FOUND),
+    POST_FORBIDDEN("POST_FORBIDDEN", "You do not have access to this post", HttpStatus.FORBIDDEN),
+    POST_ALREADY_LIKED("POST_ALREADY_LIKED", "Post already liked", HttpStatus.CONFLICT),
+    POST_ALREADY_SAVED("POST_ALREADY_SAVED", "Post already saved", HttpStatus.CONFLICT),
+    // 422 rather than 400: the caption is syntactically fine and the request is well formed, but a
+    // tag it names is one an administrator has taken out of circulation. The response body carries
+    // the offending names under data.bannedTags, in normalized form, so a client can highlight them
+    // in the caption instead of making the author guess which tag was refused.
+    POST_BANNED_HASHTAG("POST_BANNED_HASHTAG", "Caption contains banned hashtags", HttpStatus.UNPROCESSABLE_ENTITY),
+
+    // Comment
+    COMMENT_NOT_FOUND("COMMENT_NOT_FOUND", "Comment not found", HttpStatus.NOT_FOUND),
+    COMMENT_FORBIDDEN("COMMENT_FORBIDDEN", "You do not have permission to perform this action on the comment", HttpStatus.FORBIDDEN),
+    COMMENT_MODERATION_REJECTED("COMMENT_MODERATION_REJECTED", "Comment content was rejected by moderation", HttpStatus.UNPROCESSABLE_ENTITY),
+    COMMENT_DEPTH_EXCEEDED("COMMENT_DEPTH_EXCEEDED", "Maximum comment nesting depth exceeded", HttpStatus.BAD_REQUEST),
+    COMMENT_ALREADY_LIKED("COMMENT_ALREADY_LIKED", "Comment already liked", HttpStatus.CONFLICT),
+    COMMENT_NOT_LIKED("COMMENT_NOT_LIKED", "Comment has not been liked", HttpStatus.CONFLICT),
+    COMMENT_SLOW_MODE_ACTIVE("COMMENT_SLOW_MODE_ACTIVE", "Slow mode is active. Please wait before commenting again.", HttpStatus.TOO_MANY_REQUESTS),
+    COMMENT_IDEMPOTENCY_CONFLICT("COMMENT_IDEMPOTENCY_CONFLICT", "Idempotency key reused with different request payload", HttpStatus.CONFLICT),
+    POST_COMMENTING_RESTRICTED("POST_COMMENTING_RESTRICTED", "You do not have access to comment on this post", HttpStatus.FORBIDDEN),
+
+    // Story
+    STORY_NOT_FOUND("STORY_NOT_FOUND", "Story not found", HttpStatus.NOT_FOUND),
+    STORY_FORBIDDEN("STORY_FORBIDDEN", "You do not have access to this story", HttpStatus.FORBIDDEN),
+    STORY_ALREADY_LIKED("STORY_ALREADY_LIKED", "Story already liked", HttpStatus.CONFLICT),
+
+    // Message
+    CONVERSATION_NOT_FOUND("CONVERSATION_NOT_FOUND", "Conversation not found", HttpStatus.NOT_FOUND),
+    CONVERSATION_FORBIDDEN("CONVERSATION_FORBIDDEN", "You are not a participant of this conversation", HttpStatus.FORBIDDEN),
+    CONVERSATION_INVALID_PARTICIPANTS("CONVERSATION_INVALID_PARTICIPANTS", "Invalid participant list", HttpStatus.BAD_REQUEST),
+    PARTICIPANT_NOT_FOUND("PARTICIPANT_NOT_FOUND", "Participant not found in this conversation", HttpStatus.NOT_FOUND),
+    MESSAGE_REQUEST_NOT_ALLOWED("MESSAGE_REQUEST_NOT_ALLOWED", "This user is not accepting message requests", HttpStatus.FORBIDDEN),
+    MESSAGE_NOT_FOUND("MESSAGE_NOT_FOUND", "Message not found", HttpStatus.NOT_FOUND),
+    MESSAGE_FORBIDDEN("MESSAGE_FORBIDDEN", "You do not have access to this message", HttpStatus.FORBIDDEN),
+    MESSAGE_INVALID_PAYLOAD("MESSAGE_INVALID_PAYLOAD", "Message payload does not match its type", HttpStatus.BAD_REQUEST),
+    MESSAGE_IDEMPOTENCY_CONFLICT("MESSAGE_IDEMPOTENCY_CONFLICT", "Idempotency key reused with a different payload", HttpStatus.CONFLICT),
+
+    // Report
+    REPORT_NOT_FOUND("REPORT_NOT_FOUND", "Report not found", HttpStatus.NOT_FOUND),
+    REPORT_TARGET_NOT_FOUND("REPORT_TARGET_NOT_FOUND", "Reported entity not found", HttpStatus.NOT_FOUND),
+    REPORT_DUPLICATE("REPORT_DUPLICATE", "You have already reported this entity", HttpStatus.CONFLICT),
+    REPORT_SELF_NOT_ALLOWED("REPORT_SELF_NOT_ALLOWED", "You cannot report your own content", HttpStatus.BAD_REQUEST),
+    REPORT_INVALID_TRANSITION("REPORT_INVALID_TRANSITION", "Invalid report status transition", HttpStatus.CONFLICT),
+    // Distinct from REPORT_TARGET_NOT_FOUND, which is raised when a user submits a report
+    // against something that never existed. This one means the report is real and the
+    // entity it points at has since been hard-deleted: entity_id carries no foreign key, so
+    // that leaves the report pointing at nothing.
+    REPORT_TARGET_GONE("REPORT_TARGET_GONE", "The reported entity no longer exists", HttpStatus.GONE),
+
+    // Admin
+    ADMIN_ACTION_NOT_FOUND("ADMIN_ACTION_NOT_FOUND", "Admin action not found", HttpStatus.NOT_FOUND),
+    ADMIN_INVALID_ACTION("ADMIN_INVALID_ACTION", "Action is not valid for this target", HttpStatus.BAD_REQUEST),
+    ADMIN_INVALID_TRANSITION("ADMIN_INVALID_TRANSITION", "Target is already in the requested moderation state", HttpStatus.CONFLICT),
+    ADMIN_SELF_ACTION_NOT_ALLOWED("ADMIN_SELF_ACTION_NOT_ALLOWED", "You cannot apply a moderation action to your own account", HttpStatus.CONFLICT),
+    // Only an ordinary account can be warned. Three warnings produce a strike and a strike changes
+    // users.status, so a warnable moderator or administrator would hand any moderator a route to
+    // an administrator's account status, which no endpoint grants directly.
+    ADMIN_TARGET_NOT_WARNABLE("ADMIN_TARGET_NOT_WARNABLE", "Only an ordinary account can be warned", HttpStatus.FORBIDDEN),
+    WARNING_NOT_FOUND("WARNING_NOT_FOUND", "Warning not found", HttpStatus.NOT_FOUND),
+    STRIKE_NOT_FOUND("STRIKE_NOT_FOUND", "Strike not found", HttpStatus.NOT_FOUND),
+    // Covers an unknown reason key and a disabled one alike. Splitting them would let a caller
+    // enumerate which reasons exist but are currently switched off.
+    WARNING_REASON_DISABLED("WARNING_REASON_DISABLED", "That reason is not available", HttpStatus.UNPROCESSABLE_ENTITY),
+    // No API caller may change an administrator's account status. Removing a rogue administrator is
+    // deliberately a database-level operation: an in-application lockout of the whole administrator
+    // tier has no recovery path, whereas an escalation requiring database access does.
+    ADMIN_TARGET_PROTECTED("ADMIN_TARGET_PROTECTED", "This account is protected and cannot be changed through the API", HttpStatus.FORBIDDEN),
+    // Covers every rejected role transition: a skip-level promotion, an administrator target, and a
+    // no-op. The three are one class of error to the caller - the requested transition is not one
+    // the policy permits - and splitting them would let a caller map out the matrix by probing.
+    // Named NOT_ALLOWED rather than FORBIDDEN because it answers 409: every other *_FORBIDDEN
+    // constant here maps to 403, and one that did not would make the naming stop predicting the
+    // status. The status is right as it is - the caller has the authority, the transition is the
+    // problem - so the name moved rather than the code.
+    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT);
+
+    // spotless:on
 
     private final String code;
     private final String defaultMessage;

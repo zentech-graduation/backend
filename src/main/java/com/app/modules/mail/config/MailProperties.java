@@ -23,4 +23,6 @@ public class MailProperties {
     private String fromName;
     private String appName;
     private String frontendBaseUrl;
+    private String resetPasswordPath = "/reset-password";
+    private String verifyEmailPath = "/verify-email";
 }

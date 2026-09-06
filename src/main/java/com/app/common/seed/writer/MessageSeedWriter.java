@@ -1,0 +1,496 @@
+package com.app.common.seed.writer;
+
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import com.app.common.seed.loader.SeedContent;
+import com.app.common.seed.model.ConversationSeed;
+import com.app.common.seed.model.MessageSeed;
+import com.app.common.seed.time.SeedTimeline;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Seeds {@code conversations} (strictly 2-participant, one row per {@code conversations.json}
+ * entry), {@code conversation_participants} and {@code messages} from {@code conversations.json}.
+ *
+ * <p><b>Column set</b>: the running schema (V50) removed {@code is_group}/{@code group_name}/{@code
+ * group_avatar_url} from {@code conversations} - group conversations were a product decision that
+ * was reversed, and every group-shaped row now lives in {@code archived_group_conversations}
+ * instead. This writer never references those three columns; every conversation it inserts is the
+ * live 2-participant shape, matching {@code direct_pair_key}'s uniqueness constraint.
+ *
+ * <p><b>{@code last_message_at}</b>: computed only after every one of a conversation's messages has
+ * been inserted (the newest {@code created_at} among its non-deleted messages, {@code null} if
+ * every message in the conversation is sender-deleted or the conversation has none), never guessed
+ * up front, matching the invariant this table's derived-data contract states.
+ *
+ * <p><b>Two independent tombstones</b> (see {@code message/DATA_RULES.md} Section 1 and the
+ * Domain-Specific Invariants in {@code STRUCT.md}): a sender's own deletion sets {@code is_deleted
+ * = TRUE} and {@code deleted_at}, and clears {@code content}, which is irreversible by design. An
+ * administrative removal sets {@code admin_removed_at} alone and preserves {@code content} so a
+ * restore can return the message. The two are independent - this writer applies whichever one (or
+ * neither, or in principle both) {@code conversations.json}'s per-message {@code is_deleted} /
+ * {@code admin_removed_at_offset_minutes} fields encode.
+ */
+@Slf4j
+@Service
+@Profile("seed & (dev | prod)")
+@RequiredArgsConstructor
+public class MessageSeedWriter {
+
+    private static final String INSERT_CONVERSATION_SQL =
+            "INSERT INTO conversations (id, direct_pair_key, created_by, created_at, updated_at)"
+                    + " VALUES (?, ?, ?, ?, ?)";
+    private static final String INSERT_PARTICIPANT_SQL =
+            "INSERT INTO conversation_participants (conversation_id, user_id, joined_at,"
+                    + " is_manually_unread, nickname) VALUES (?, ?, ?, ?, ?)";
+    private static final String INSERT_MESSAGE_SQL =
+            "INSERT INTO messages (id, conversation_id, sender_id, message_type, content,"
+                    + " media_asset_id, shared_post_id, shared_story_id, is_deleted, deleted_at,"
+                    + " admin_removed_at, created_at) VALUES (?, ?, ?, ?::message_type, ?, ?, ?, ?,"
+                    + " ?, ?, ?, ?)";
+    private static final String UPDATE_LAST_MESSAGE_AT_SQL =
+            "UPDATE conversations SET last_message_at = ? WHERE id = ?";
+    private static final String UPDATE_LAST_READ_AT_SQL =
+            "UPDATE conversation_participants SET last_read_at = ?"
+                    + " WHERE conversation_id = ? AND user_id = ?";
+
+    private final JdbcTemplate jdbc;
+
+    /**
+     * Inserts every conversation from {@code conversations.json} with its participants and
+     * messages, then back-fills each conversation's {@code last_message_at} and each read
+     * participant's {@code last_read_at} once every message is known.
+     *
+     * @param usersByUsername username-to-id map produced by {@link UserSeedWriter#write}
+     * @param mediaByCompositeKey composite-key map produced by {@link MediaSeedWriter#write},
+     *     resolving an image/video message's {@code media_ref} (owned by its sender) to a real
+     *     {@code media_assets.id}
+     * @param postIdBySeedId seed-id-to-generated-id map produced by {@link PostSeedWriter#write},
+     *     resolving a {@code post_share} message's {@code shared_post_seed_id}
+     */
+    public void write(
+            SeedContent content,
+            Map<String, UUID> usersByUsername,
+            Map<String, UUID> mediaByCompositeKey,
+            Map<String, UUID> postIdBySeedId,
+            SeedTimeline timeline) {
+        Map<UUID, Instant> createdAtByUserId = fetchCreatedAtByUserId();
+        Map<String, UUID> liveStoryIdByOwnerUsername =
+                fetchLiveStoryIdByOwnerUsername(timeline.referenceNow());
+
+        List<Object[]> conversationRows = new ArrayList<>();
+        List<Object[]> participantRows = new ArrayList<>();
+        List<Object[]> messageRows = new ArrayList<>();
+        List<PendingConversation> pending = new ArrayList<>();
+
+        for (ConversationSeed conversation : content.conversations()) {
+            List<String> participants = conversation.participants();
+            if (participants.size() != 2) {
+                throw new IllegalStateException(
+                        "MessageSeedWriter: conversation '"
+                                + conversation.id()
+                                + "' has "
+                                + participants.size()
+                                + " participants - only strictly 2-participant conversations are"
+                                + " supported");
+            }
+            String usernameA = participants.get(0);
+            String usernameB = participants.get(1);
+            UUID userIdA = requireUser(usersByUsername, usernameA, conversation.id());
+            UUID userIdB = requireUser(usersByUsername, usernameB, conversation.id());
+
+            Instant conversationCreatedAt =
+                    timeline.conversationCreatedAt(
+                            createdAtByUserId.get(userIdA), createdAtByUserId.get(userIdB));
+            UUID conversationId = UUID.randomUUID();
+            String directPairKey = directPairKey(userIdA, userIdB);
+
+            conversationRows.add(
+                    new Object[] {
+                        conversationId,
+                        directPairKey,
+                        userIdA,
+                        Timestamp.from(conversationCreatedAt),
+                        Timestamp.from(conversationCreatedAt)
+                    });
+
+            boolean unreadA = conversation.unreadFor().contains(usernameA);
+            boolean unreadB = conversation.unreadFor().contains(usernameB);
+            // manuallyUnreadFor is independent of unreadFor and never touches last_read_at below,
+            // matching MessageServiceImpl.markUnread - it is the purely visual V53 toggle, not a
+            // second way to express "this conversation genuinely has unread messages".
+            List<String> manuallyUnreadFor = nullToEmpty(conversation.manuallyUnreadFor());
+            boolean manuallyUnreadA = unreadA || manuallyUnreadFor.contains(usernameA);
+            boolean manuallyUnreadB = unreadB || manuallyUnreadFor.contains(usernameB);
+            Map<String, String> nicknames =
+                    conversation.nicknames() == null ? Map.of() : conversation.nicknames();
+            participantRows.add(
+                    new Object[] {
+                        conversationId,
+                        userIdA,
+                        Timestamp.from(conversationCreatedAt),
+                        manuallyUnreadA,
+                        nicknames.get(usernameA)
+                    });
+            participantRows.add(
+                    new Object[] {
+                        conversationId,
+                        userIdB,
+                        Timestamp.from(conversationCreatedAt),
+                        manuallyUnreadB,
+                        nicknames.get(usernameB)
+                    });
+
+            Instant latestNonDeleted = null;
+            for (MessageSeed message : conversation.messages()) {
+                UUID senderId = requireUser(usersByUsername, message.sender(), conversation.id());
+                Instant messageCreatedAt =
+                        timeline.messageCreatedAt(message, conversationCreatedAt);
+
+                boolean isDeleted = message.isDeleted();
+                // The sender tombstone (is_deleted + deleted_at) is set together and clears
+                // content;
+                // a fixed 1-second offset is enough realism for "deleted shortly after sending" and
+                // needs no dedicated randomness generator since no invariant in this task depends
+                // on
+                // its exact spacing, only on it never preceding the message's own created_at.
+                Instant deletedAt = isDeleted ? messageCreatedAt.plusSeconds(1) : null;
+                Instant adminRemovedAt =
+                        message.adminRemovedAtOffsetMinutes() == null
+                                ? null
+                                : messageCreatedAt.plusSeconds(
+                                        message.adminRemovedAtOffsetMinutes() * 60L);
+
+                // A sender's own deletion (MessageServiceImpl.deleteMessage) clears content only -
+                // media_asset_id/shared_post_id/shared_story_id are left exactly as sent, and the
+                // read path (MessageMapper) withholds them only when admin_removed_at is set. This
+                // writer mirrors that: the three reference columns are resolved and written
+                // regardless of isDeleted, matching what the real write path would leave behind.
+                UUID mediaAssetId =
+                        message.mediaRef() == null
+                                ? null
+                                : requireMediaAsset(
+                                        mediaByCompositeKey,
+                                        message.mediaRef(),
+                                        senderId,
+                                        conversation.id());
+                UUID sharedPostId =
+                        message.sharedPostSeedId() == null
+                                ? null
+                                : requireSharedPost(
+                                        postIdBySeedId,
+                                        message.sharedPostSeedId(),
+                                        conversation.id());
+                UUID sharedStoryId =
+                        message.sharedStoryOwner() == null
+                                ? null
+                                : requireLiveStory(
+                                        liveStoryIdByOwnerUsername,
+                                        message.sharedStoryOwner(),
+                                        conversation.id());
+
+                messageRows.add(
+                        new Object[] {
+                            UUID.randomUUID(),
+                            conversationId,
+                            senderId,
+                            message.messageType(),
+                            isDeleted ? null : message.text(),
+                            mediaAssetId,
+                            sharedPostId,
+                            sharedStoryId,
+                            isDeleted,
+                            deletedAt == null ? null : Timestamp.from(deletedAt),
+                            adminRemovedAt == null ? null : Timestamp.from(adminRemovedAt),
+                            Timestamp.from(messageCreatedAt)
+                        });
+
+                if (!isDeleted
+                        && (latestNonDeleted == null
+                                || messageCreatedAt.isAfter(latestNonDeleted))) {
+                    latestNonDeleted = messageCreatedAt;
+                }
+            }
+
+            pending.add(
+                    new PendingConversation(
+                            conversationId, userIdA, unreadA, userIdB, unreadB, latestNonDeleted));
+        }
+
+        jdbc.batchUpdate(
+                INSERT_CONVERSATION_SQL,
+                conversationRows,
+                conversationRows.size(),
+                this::bindConversationRow);
+        jdbc.batchUpdate(
+                INSERT_PARTICIPANT_SQL,
+                participantRows,
+                participantRows.size(),
+                this::bindParticipantRow);
+        jdbc.batchUpdate(INSERT_MESSAGE_SQL, messageRows, messageRows.size(), this::bindMessageRow);
+        log.info(
+                "[seed] conversations: {} rows written, messages: {} rows written",
+                conversationRows.size(),
+                messageRows.size());
+
+        backfillLastMessageAtAndReadState(pending);
+    }
+
+    // Runs only after every message row above is committed to the batch, so "the newest created_at
+    // among a conversation's non-deleted messages" reflects every message that conversation will
+    // ever have in this seed run, never a partial view computed before the last one was known.
+    private void backfillLastMessageAtAndReadState(List<PendingConversation> pending) {
+        List<Object[]> lastMessageAtRows = new ArrayList<>();
+        List<Object[]> lastReadAtRows = new ArrayList<>();
+        for (PendingConversation conversation : pending) {
+            if (conversation.latestNonDeletedMessageAt() != null) {
+                lastMessageAtRows.add(
+                        new Object[] {
+                            Timestamp.from(conversation.latestNonDeletedMessageAt()),
+                            conversation.conversationId()
+                        });
+                // A participant not named in unread_for has read up to the newest message; one
+                // named in unread_for keeps last_read_at unset (never read) per the JSON's own
+                // is_manually_unread flag set at insert time.
+                if (!conversation.unreadA()) {
+                    lastReadAtRows.add(
+                            new Object[] {
+                                Timestamp.from(conversation.latestNonDeletedMessageAt()),
+                                conversation.conversationId(),
+                                conversation.userIdA()
+                            });
+                }
+                if (!conversation.unreadB()) {
+                    lastReadAtRows.add(
+                            new Object[] {
+                                Timestamp.from(conversation.latestNonDeletedMessageAt()),
+                                conversation.conversationId(),
+                                conversation.userIdB()
+                            });
+                }
+            }
+        }
+        jdbc.batchUpdate(
+                UPDATE_LAST_MESSAGE_AT_SQL,
+                lastMessageAtRows,
+                lastMessageAtRows.size(),
+                this::bindLastMessageAtRow);
+        jdbc.batchUpdate(
+                UPDATE_LAST_READ_AT_SQL,
+                lastReadAtRows,
+                lastReadAtRows.size(),
+                this::bindLastReadAtRow);
+    }
+
+    private UUID requireUser(
+            Map<String, UUID> usersByUsername, String username, String conversationId) {
+        UUID userId = usersByUsername.get(username);
+        if (userId == null) {
+            throw new IllegalStateException(
+                    "MessageSeedWriter: conversation '"
+                            + conversationId
+                            + "' has participant '"
+                            + username
+                            + "' which does not exist in users.json");
+        }
+        return userId;
+    }
+
+    private UUID requireMediaAsset(
+            Map<String, UUID> mediaByCompositeKey,
+            String mediaRef,
+            UUID senderId,
+            String conversationId) {
+        UUID mediaAssetId =
+                mediaByCompositeKey.get(MediaSeedWriter.compositeKey(mediaRef, senderId));
+        if (mediaAssetId == null) {
+            throw new IllegalStateException(
+                    "MessageSeedWriter: conversation '"
+                            + conversationId
+                            + "' has a message with media_ref '"
+                            + mediaRef
+                            + "' with no media_assets row for sender "
+                            + senderId
+                            + " - MediaSeedWriter must run before MessageSeedWriter");
+        }
+        return mediaAssetId;
+    }
+
+    private UUID requireSharedPost(
+            Map<String, UUID> postIdBySeedId, String sharedPostSeedId, String conversationId) {
+        UUID postId = postIdBySeedId.get(sharedPostSeedId);
+        if (postId == null) {
+            throw new IllegalStateException(
+                    "MessageSeedWriter: conversation '"
+                            + conversationId
+                            + "' has a post_share message referencing shared_post_seed_id '"
+                            + sharedPostSeedId
+                            + "' which does not exist in posts.json");
+        }
+        return postId;
+    }
+
+    // Resolved from the DB rather than from conversations.json, since a story owner's liveness is
+    // a runtime property StorySeedWriter decides (see its own Javadoc on GUARANTEED_STORY_OWNERS
+    // for the same technique). Fails loudly rather than silently degrading a story_share into no
+    // share at all, so an author picking a partner with no live story finds out at seed time.
+    private UUID requireLiveStory(
+            Map<String, UUID> liveStoryIdByOwnerUsername,
+            String sharedStoryOwner,
+            String conversationId) {
+        UUID storyId = liveStoryIdByOwnerUsername.get(sharedStoryOwner);
+        if (storyId == null) {
+            throw new IllegalStateException(
+                    "MessageSeedWriter: conversation '"
+                            + conversationId
+                            + "' has a story_share message referencing shared_story_owner '"
+                            + sharedStoryOwner
+                            + "' which owns no live, non-removed story - StorySeedWriter must run"
+                            + " before MessageSeedWriter");
+        }
+        return storyId;
+    }
+
+    private List<String> nullToEmpty(List<String> list) {
+        return list == null ? List.of() : list;
+    }
+
+    private Map<UUID, Instant> fetchCreatedAtByUserId() {
+        Map<UUID, Instant> createdAtByUserId = new HashMap<>();
+        jdbc.query(
+                "SELECT id, created_at FROM users",
+                rs -> {
+                    UUID id = (UUID) rs.getObject("id");
+                    Instant createdAt = rs.getTimestamp("created_at").toInstant();
+                    createdAtByUserId.put(id, createdAt);
+                });
+        return createdAtByUserId;
+    }
+
+    // One row per owner: the most recently created story that is live (not yet expired) as of the
+    // seed run's own referenceNow - not SQL NOW(), since a test harness may anchor referenceNow to
+    // a fixed instant in the past for determinism (see DomainWritersSeedWriterIT), and
+    // StorySeedWriter computed every "live" story's expires_at relative to that same referenceNow,
+    // not to the wall clock. Not administratively removed either. Read back after StorySeedWriter
+    // has already run in this same seed pass, the same technique ModerationSeedWriter's
+    // loadStoryOwners uses for "any story this username owns" - this query additionally requires
+    // the story to still be visible.
+    private Map<String, UUID> fetchLiveStoryIdByOwnerUsername(Instant referenceNow) {
+        Map<String, UUID> byOwner = new HashMap<>();
+        jdbc.query(
+                "SELECT DISTINCT ON (u.username) u.username, s.id FROM stories s JOIN users u ON"
+                        + " u.id = s.user_id WHERE s.deleted_at IS NULL AND s.expires_at > ?"
+                        + " ORDER BY u.username, s.created_at DESC",
+                rs -> {
+                    String username = rs.getString("username");
+                    UUID storyId = (UUID) rs.getObject("id");
+                    byOwner.put(username, storyId);
+                },
+                Timestamp.from(referenceNow));
+        return byOwner;
+    }
+
+    /**
+     * Builds the two-participant pair key {@code direct_pair_key} is stored and looked up by: the
+     * smaller UUID (by {@link UUID#compareTo}) then the larger, joined with {@code "_"}, so the key
+     * is identical regardless of which participant is passed first.
+     *
+     * <p>Package-private so {@link ModerationSeedWriter} can rebuild the same key from a {@code
+     * conversations.json} entry's participant usernames to resolve a moderation timeline's {@code
+     * target_conversation_id} back to the real generated conversation.
+     */
+    static String directPairKey(UUID userIdA, UUID userIdB) {
+        return userIdA.compareTo(userIdB) <= 0 ? userIdA + "_" + userIdB : userIdB + "_" + userIdA;
+    }
+
+    private void bindConversationRow(PreparedStatement ps, Object[] row) throws SQLException {
+        ps.setObject(1, row[0]);
+        ps.setString(2, (String) row[1]);
+        ps.setObject(3, row[2]);
+        ps.setTimestamp(4, (Timestamp) row[3]);
+        ps.setTimestamp(5, (Timestamp) row[4]);
+    }
+
+    private void bindParticipantRow(PreparedStatement ps, Object[] row) throws SQLException {
+        ps.setObject(1, row[0]);
+        ps.setObject(2, row[1]);
+        ps.setTimestamp(3, (Timestamp) row[2]);
+        ps.setBoolean(4, (Boolean) row[3]);
+        if (row[4] == null) {
+            ps.setNull(5, Types.VARCHAR);
+        } else {
+            ps.setString(5, (String) row[4]);
+        }
+    }
+
+    private void bindMessageRow(PreparedStatement ps, Object[] row) throws SQLException {
+        ps.setObject(1, row[0]);
+        ps.setObject(2, row[1]);
+        ps.setObject(3, row[2]);
+        ps.setString(4, (String) row[3]);
+        if (row[4] == null) {
+            ps.setNull(5, Types.VARCHAR);
+        } else {
+            ps.setString(5, (String) row[4]);
+        }
+        bindNullableUuid(ps, 6, (UUID) row[5]);
+        bindNullableUuid(ps, 7, (UUID) row[6]);
+        bindNullableUuid(ps, 8, (UUID) row[7]);
+        ps.setBoolean(9, (Boolean) row[8]);
+        if (row[9] == null) {
+            ps.setNull(10, Types.TIMESTAMP_WITH_TIMEZONE);
+        } else {
+            ps.setTimestamp(10, (Timestamp) row[9]);
+        }
+        if (row[10] == null) {
+            ps.setNull(11, Types.TIMESTAMP_WITH_TIMEZONE);
+        } else {
+            ps.setTimestamp(11, (Timestamp) row[10]);
+        }
+        ps.setTimestamp(12, (Timestamp) row[11]);
+    }
+
+    private void bindNullableUuid(PreparedStatement ps, int index, UUID value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.OTHER);
+        } else {
+            ps.setObject(index, value);
+        }
+    }
+
+    private void bindLastMessageAtRow(PreparedStatement ps, Object[] row) throws SQLException {
+        ps.setTimestamp(1, (Timestamp) row[0]);
+        ps.setObject(2, row[1]);
+    }
+
+    private void bindLastReadAtRow(PreparedStatement ps, Object[] row) throws SQLException {
+        ps.setTimestamp(1, (Timestamp) row[0]);
+        ps.setObject(2, row[1]);
+        ps.setObject(3, row[2]);
+    }
+
+    // Carries just enough about each conversation to run the last_message_at / last_read_at
+    // back-fill after every message row is known.
+    private record PendingConversation(
+            UUID conversationId,
+            UUID userIdA,
+            boolean unreadA,
+            UUID userIdB,
+            boolean unreadB,
+            Instant latestNonDeletedMessageAt) {}
+}

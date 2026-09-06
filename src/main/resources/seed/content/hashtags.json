@@ -1,0 +1,1417 @@
+{
+  "hashtags": [
+    {
+      "name": "reactjs",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "nodejs",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "remotejobsusa",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "hiring",
+      "status": "active",
+      "topic_tags": [
+        "job-market"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "itjobs",
+      "status": "active",
+      "topic_tags": [
+        "job-market",
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "frontend",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "backend",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "coderlife",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "devlife",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "learnjava",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "python",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "golang",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "computerscience",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "freelancer",
+      "status": "active",
+      "topic_tags": [
+        "freelance-work"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "remotework",
+      "status": "active",
+      "topic_tags": [
+        "freelance-work",
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "techjob",
+      "status": "active",
+      "topic_tags": [
+        "job-market",
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "startuplife",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "uiux",
+      "status": "active",
+      "topic_tags": [
+        "design"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "figma",
+      "status": "active",
+      "topic_tags": [
+        "design",
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "productdesign",
+      "status": "active",
+      "topic_tags": [
+        "design"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "goldprice",
+      "status": "active",
+      "topic_tags": [
+        "gold-price",
+        "personal-finance"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "interestrates",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "stockmarket",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "savings",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "investing",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "realestatenews",
+      "status": "active",
+      "topic_tags": [
+        "property-price"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "realestate",
+      "status": "active",
+      "topic_tags": [
+        "property-price"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "propertyprices",
+      "status": "active",
+      "topic_tags": [
+        "property-price"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "personalfinance",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "monthlysalary",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance",
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "rentalroom",
+      "status": "active",
+      "topic_tags": [
+        "rental",
+        "cost-of-living"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "rentinghome",
+      "status": "active",
+      "topic_tags": [
+        "rental",
+        "cost-of-living"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "roomforrent",
+      "status": "active",
+      "topic_tags": [
+        "rental"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "studentlife",
+      "status": "active",
+      "topic_tags": [
+        "studying-abroad",
+        "cost-of-living"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "costofliving",
+      "status": "active",
+      "topic_tags": [
+        "cost-of-living"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "rentcost",
+      "status": "active",
+      "topic_tags": [
+        "rental"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "jobhunting",
+      "status": "active",
+      "topic_tags": [
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "resumeupdate",
+      "status": "active",
+      "topic_tags": [
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "layoff",
+      "status": "active",
+      "topic_tags": [
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "jobapplication",
+      "status": "active",
+      "topic_tags": [
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "jobinterview",
+      "status": "active",
+      "topic_tags": [
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "studyabroad",
+      "status": "active",
+      "topic_tags": [
+        "studying-abroad"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "scholarship",
+      "status": "active",
+      "topic_tags": [
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "ielts",
+      "status": "active",
+      "topic_tags": [
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "immigration",
+      "status": "active",
+      "topic_tags": [
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "austincafe",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "goodeats",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "streetfood",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "austinfoodreview",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "banhmi",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "bubbletea",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "cafechain",
+      "status": "active",
+      "topic_tags": [
+        "fnb",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "fnblife",
+      "status": "active",
+      "topic_tags": [
+        "fnb",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "fnbstartup",
+      "status": "active",
+      "topic_tags": [
+        "fnb",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "gymlife",
+      "status": "active",
+      "topic_tags": [
+        "gym"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "running",
+      "status": "active",
+      "topic_tags": [
+        "running"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "gymtraining",
+      "status": "active",
+      "topic_tags": [
+        "gym"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "marathon",
+      "status": "active",
+      "topic_tags": [
+        "running"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "5k",
+      "status": "active",
+      "topic_tags": [
+        "running"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "sub20",
+      "status": "active",
+      "topic_tags": [
+        "running"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "calories",
+      "status": "active",
+      "topic_tags": [
+        "gym"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "proteindiet",
+      "status": "active",
+      "topic_tags": [
+        "gym"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "photography",
+      "status": "active",
+      "topic_tags": [
+        "photography"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "weddingphoto",
+      "status": "active",
+      "topic_tags": [
+        "photography"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "35mm",
+      "status": "active",
+      "topic_tags": [
+        "photography"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "filmphotography",
+      "status": "active",
+      "topic_tags": [
+        "photography"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "productphotography",
+      "status": "active",
+      "topic_tags": [
+        "photography",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "eventphotography",
+      "status": "active",
+      "topic_tags": [
+        "photography"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "motorbike",
+      "status": "active",
+      "topic_tags": [
+        "motorbike"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "winner",
+      "status": "active",
+      "topic_tags": [
+        "motorbike"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "exciter",
+      "status": "active",
+      "topic_tags": [
+        "motorbike"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "cars",
+      "status": "active",
+      "topic_tags": [
+        "motorbike"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "vehiclemaintenance",
+      "status": "active",
+      "topic_tags": [
+        "motorbike"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "daytrip",
+      "status": "active",
+      "topic_tags": [
+        "motorbike",
+        "travel-work"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "shoponline",
+      "status": "active",
+      "topic_tags": [
+        "online-shop",
+        "small-business"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "wholesale",
+      "status": "active",
+      "topic_tags": [
+        "online-shop",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "onlinebusiness",
+      "status": "active",
+      "topic_tags": [
+        "online-shop",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "saleoff",
+      "status": "active",
+      "topic_tags": [
+        "online-shop"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "codshipping",
+      "status": "active",
+      "topic_tags": [
+        "online-shop"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "parentingcosts",
+      "status": "active",
+      "topic_tags": [
+        "parenting"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "tuitionfees",
+      "status": "active",
+      "topic_tags": [
+        "parenting",
+        "personal-finance"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "momlife",
+      "status": "active",
+      "topic_tags": [
+        "parenting"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "apartment",
+      "status": "active",
+      "topic_tags": [
+        "property-price",
+        "rental"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "apartmentbuilding",
+      "status": "active",
+      "topic_tags": [
+        "property-price"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "buyingproperty",
+      "status": "active",
+      "topic_tags": [
+        "property-price"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "weekendvibes",
+      "status": "active",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "mondayvibe",
+      "status": "active",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "worklife",
+      "status": "active",
+      "topic_tags": [
+        "lifestyle",
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "newday",
+      "status": "active",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "javascript",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "typescript",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "docker",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "kubernetes",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "aws",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "microservices",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "cicd",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "opensource",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "ai",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "tech-general"
+      ],
+      "is_trending": true,
+      "intended_post_count_band": "high"
+    },
+    {
+      "name": "machinelearning",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "tech-general"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "dataengineer",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "job-market"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "springboot",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "postgresql",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "redis",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "graphql",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "mobiledev",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "uxwriting",
+      "status": "active",
+      "topic_tags": [
+        "design"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "designsystem",
+      "status": "active",
+      "topic_tags": [
+        "design"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "remotejob",
+      "status": "active",
+      "topic_tags": [
+        "job-market",
+        "freelance-work"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "techinterview",
+      "status": "active",
+      "topic_tags": [
+        "job-market",
+        "software-engineering"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "minimumwage",
+      "status": "active",
+      "topic_tags": [
+        "job-market",
+        "personal-finance"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "ministudio",
+      "status": "active",
+      "topic_tags": [
+        "rental",
+        "cost-of-living"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "roomhunting",
+      "status": "active",
+      "topic_tags": [
+        "rental"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "cafereview",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "aestheticcafe",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "streetsnacks",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "foodanddrink",
+      "status": "active",
+      "topic_tags": [
+        "fnb"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "budgettravel",
+      "status": "active",
+      "topic_tags": [
+        "travel-work"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "domestictravel",
+      "status": "active",
+      "topic_tags": [
+        "travel-work"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "productreview",
+      "status": "active",
+      "topic_tags": [
+        "online-shop"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "clothingshop",
+      "status": "active",
+      "topic_tags": [
+        "online-shop",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "affordablefashion",
+      "status": "active",
+      "topic_tags": [
+        "online-shop"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "newarrivals",
+      "status": "active",
+      "topic_tags": [
+        "online-shop",
+        "small-business"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "freelancedesign",
+      "status": "active",
+      "topic_tags": [
+        "design",
+        "freelance-work"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "designerlife",
+      "status": "active",
+      "topic_tags": [
+        "design"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "learndesign",
+      "status": "active",
+      "topic_tags": [
+        "design",
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "photoinspo",
+      "status": "active",
+      "topic_tags": [
+        "photography"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "photoconcept",
+      "status": "active",
+      "topic_tags": [
+        "photography"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "gymgirl",
+      "status": "active",
+      "topic_tags": [
+        "gym"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "gymboy",
+      "status": "active",
+      "topic_tags": [
+        "gym"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "nightrun",
+      "status": "active",
+      "topic_tags": [
+        "running"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "budgetadjustment",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "moneysaving",
+      "status": "active",
+      "topic_tags": [
+        "personal-finance"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "buyinggold",
+      "status": "active",
+      "topic_tags": [
+        "gold-price"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "goldbars",
+      "status": "active",
+      "topic_tags": [
+        "gold-price"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "cheapapartment",
+      "status": "active",
+      "topic_tags": [
+        "property-price",
+        "rental"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "moving",
+      "status": "active",
+      "topic_tags": [
+        "rental",
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "portlandlife",
+      "status": "active",
+      "topic_tags": [
+        "lifestyle",
+        "cost-of-living"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "austinlife",
+      "status": "active",
+      "topic_tags": [
+        "lifestyle",
+        "cost-of-living"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "medium"
+    },
+    {
+      "name": "parttimejob",
+      "status": "active",
+      "topic_tags": [
+        "job-market",
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "studentjobs",
+      "status": "active",
+      "topic_tags": [
+        "job-market",
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "learntocode",
+      "status": "active",
+      "topic_tags": [
+        "software-engineering",
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "examseason",
+      "status": "active",
+      "topic_tags": [
+        "studying-abroad"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "highreturninvestment",
+      "status": "banned",
+      "topic_tags": [
+        "fake-investment"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "quickloans247",
+      "status": "banned",
+      "topic_tags": [
+        "fake-investment"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "luxurydupe",
+      "status": "banned",
+      "topic_tags": [
+        "fake-investment",
+        "online-shop"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "quickcash",
+      "status": "banned",
+      "topic_tags": [
+        "fake-investment"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "binaryoptions",
+      "status": "banned",
+      "topic_tags": [
+        "fake-investment"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "covid19update",
+      "status": "deleted",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "lunarnewyear2024",
+      "status": "deleted",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "archivedevent2023",
+      "status": "deleted",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "promo2024ended",
+      "status": "deleted",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    },
+    {
+      "name": "oldchallenge23",
+      "status": "deleted",
+      "topic_tags": [
+        "lifestyle"
+      ],
+      "is_trending": false,
+      "intended_post_count_band": "low"
+    }
+  ]
+}

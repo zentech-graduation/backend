@@ -4,6 +4,8 @@ import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
@@ -14,25 +16,27 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.security.util.IpExtractor;
 import com.app.modules.auth.entity.OAuthAccount;
-import com.app.modules.auth.entity.User;
 import com.app.modules.auth.entity.UserCredential;
-import com.app.modules.auth.entity.UserSettings;
 import com.app.modules.auth.enums.OAuthProvider;
-import com.app.modules.auth.enums.UserRole;
-import com.app.modules.auth.enums.UserStatus;
 import com.app.modules.auth.repository.OAuthAccountRepository;
 import com.app.modules.auth.repository.UserCredentialRepository;
-import com.app.modules.auth.repository.UserRepository;
-import com.app.modules.auth.repository.UserSettingsRepository;
+import com.app.modules.auth.validation.UserStateValidator;
+import com.app.modules.users.entity.User;
+import com.app.modules.users.entity.UserSettings;
+import com.app.modules.users.enums.UserRole;
+import com.app.modules.users.enums.UserStatus;
+import com.app.modules.users.repository.UserRepository;
+import com.app.modules.users.repository.UserSettingsRepository;
 
 /**
- * OIDC user service that resolves a Google sign-in to a local {@link User}.
+ * OIDC user service that resolves an OAuth2 sign-in to a local {@link User}.
  *
  * <p>OAuth2 login resolution:
  *
  * <ol>
- *   <li>Google redirects the user to {@code /api/v1/auth/oauth2/callback/google}.
+ *   <li>The provider redirects the user to {@code /api/v1/auth/oauth2/callback/{registrationId}}.
  *   <li>Spring Security exchanges the auth code for tokens, then invokes {@link
  *       #loadUser(OidcUserRequest)}.
  *   <li>If an {@code oauth_accounts} row exists for the provider id, the linked user is loaded.
@@ -41,6 +45,12 @@ import com.app.modules.auth.repository.UserSettingsRepository;
  *   <li>Otherwise a new local user is created with {@code email_verified=true} and no password.
  *   <li>{@code OAuth2AuthenticationSuccessHandler} then issues a JWT access + refresh pair.
  * </ol>
+ *
+ * <p>Boot logs three CGLIB proxy warnings for this class: it extends {@link OidcUserService}, which
+ * declares {@code final} setters, and {@code @EnableMethodSecurity(proxyTargetClass = true)}
+ * requires a class proxy rather than an interface proxy. Nothing in this codebase calls those
+ * setters after Spring constructs the bean, so the warnings are harmless; excluding this one class
+ * from class-proxying is not worth the configuration surface it would add.
  */
 @Service
 public class CustomOidcUserService extends OidcUserService {
@@ -51,16 +61,28 @@ public class CustomOidcUserService extends OidcUserService {
     private final UserRepository userRepository;
     private final UserCredentialRepository userCredentialRepository;
     private final UserSettingsRepository userSettingsRepository;
+    private final UserStateValidator userStateValidator;
+    private final IpExtractor ipExtractor;
+
+    // Request-scoped proxy injected into this singleton. Every call reaches loadUser during the
+    // provider callback request, so there is always a current request to read the origin from.
+    private final HttpServletRequest httpRequest;
 
     public CustomOidcUserService(
             OAuthAccountRepository oauthAccountRepository,
             UserRepository userRepository,
             UserCredentialRepository userCredentialRepository,
-            UserSettingsRepository userSettingsRepository) {
+            UserSettingsRepository userSettingsRepository,
+            UserStateValidator userStateValidator,
+            IpExtractor ipExtractor,
+            HttpServletRequest httpRequest) {
         this.oauthAccountRepository = oauthAccountRepository;
         this.userRepository = userRepository;
         this.userCredentialRepository = userCredentialRepository;
         this.userSettingsRepository = userSettingsRepository;
+        this.userStateValidator = userStateValidator;
+        this.ipExtractor = ipExtractor;
+        this.httpRequest = httpRequest;
     }
 
     @Override
@@ -75,15 +97,16 @@ public class CustomOidcUserService extends OidcUserService {
         }
     }
 
-    private OidcUser processOidcUser(OidcUserRequest request, OidcUser oidcUser) {
+    // VisibleForTesting
+    OidcUser processOidcUser(OidcUserRequest request, OidcUser oidcUser) {
+        OAuthProvider provider = resolveProvider(request);
         String email = oidcUser.getEmail();
         String providerId = oidcUser.getSubject();
         String displayName = oidcUser.getFullName();
         String avatarUrl = oidcUser.getPicture();
 
         Optional<OAuthAccount> existing =
-                oauthAccountRepository.findByProviderAndProviderId(
-                        OAuthProvider.GOOGLE, providerId);
+                oauthAccountRepository.findByProviderAndProviderId(provider, providerId);
 
         User user;
         if (existing.isPresent()) {
@@ -91,37 +114,60 @@ public class CustomOidcUserService extends OidcUserService {
                     userRepository
                             .findByIdAndDeletedAtIsNull(existing.get().getUserId())
                             .orElseThrow(() -> new AppException(ApiErrorCode.NOT_FOUND));
-            enforceStatus(user);
+            userStateValidator.enforceActive(user);
         } else {
-            Optional<User> existingByEmail = userRepository.findByEmailAndDeletedAtIsNull(email);
+            // Trust the IdP-asserted email only when the IdP confirms it is verified. Without
+            // this gate a hostile or misconfigured IdP could take over an existing local account
+            // by email, or squat a new local account on an address the principal does not
+            // control. Checked before the email lookup so every branch, including new-user
+            // creation and any future provider, inherits it.
+            if (!Boolean.TRUE.equals(oidcUser.getEmailVerified())) {
+                throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+            }
+
+            Optional<User> existingByEmail = userRepository.findByEmailIgnoreCase(email);
 
             if (existingByEmail.isPresent()) {
-                // Refuse to link an OAuth identity to a pre-existing local account unless the
-                // IdP confirms the email is verified. Without this gate, a hostile or
-                // misconfigured IdP could be used to take over any account by email.
-                if (!Boolean.TRUE.equals(oidcUser.getEmailVerified())) {
-                    throw new AppException(ApiErrorCode.AUTH_INVALID_CREDENTIALS);
+                User found = existingByEmail.get();
+                // A soft-deleted account retains its email (DB UNIQUE constraint is table-wide).
+                // Silently creating a new account would hit the constraint; surface a clear error.
+                if (found.getDeletedAt() != null) {
+                    throw new AppException(ApiErrorCode.USER_EMAIL_ALREADY_EXISTS);
                 }
-                user = existingByEmail.get();
-                enforceStatus(user);
+                user = found;
+                userStateValidator.enforceActive(user);
             } else {
                 user = createNewOAuthUser(email, displayName, avatarUrl);
             }
 
-            // Access token from the IdP is not consumed by any downstream call. Retaining it
-            // would only widen the database-compromise blast radius.
             OAuthAccount oauthAccount =
                     OAuthAccount.builder()
                             .userId(user.getId())
-                            .provider(OAuthProvider.GOOGLE)
+                            .provider(provider)
                             .providerId(providerId)
                             .providerEmail(email)
-                            .accessToken(null)
                             .build();
             oauthAccountRepository.save(oauthAccount);
         }
 
         return new CustomOidcUser(oidcUser, user);
+    }
+
+    /**
+     * Maps OAuth2 registration IDs to the application's OAuthProvider enum. Add cases here when
+     * wiring new providers; each new provider requires dedicated validation before being enabled.
+     */
+    // VisibleForTesting
+    OAuthProvider resolveProvider(OidcUserRequest userRequest) {
+        String registrationId = userRequest.getClientRegistration().getRegistrationId();
+        return switch (registrationId.toLowerCase()) {
+            case "google" -> OAuthProvider.GOOGLE;
+            // Additional providers can be added here as they are wired.
+            default ->
+                    throw new OAuth2AuthenticationException(
+                            new OAuth2Error("unsupported_provider"),
+                            "OAuth2 provider '" + registrationId + "' is not supported");
+        };
     }
 
     private User createNewOAuthUser(String email, String displayName, String avatarUrl) {
@@ -142,6 +188,11 @@ public class CustomOidcUserService extends OidcUserService {
                         .status(UserStatus.ACTIVE)
                         .isPrivate(false)
                         .isVerified(false)
+                        // Written here as well as on local registration. Recording it on only one
+                        // of the two creation paths would leave the column silently meaning
+                        // "created by local signup", which reads as missing data rather than as an
+                        // unrecorded origin.
+                        .registrationIp(ipExtractor.extract(httpRequest))
                         .build();
         user = userRepository.save(user);
 
@@ -159,30 +210,21 @@ public class CustomOidcUserService extends OidcUserService {
     }
 
     private String resolveUniqueUsername(String base) {
-        if (!userRepository.existsByUsernameAndDeletedAtIsNull(base)) {
+        if (!userRepository.existsByUsername(base)) {
             return base;
         }
         for (int i = 2; i <= MAX_USERNAME_ATTEMPTS; i++) {
             String candidate = base + "_" + i;
-            if (!userRepository.existsByUsernameAndDeletedAtIsNull(candidate)) {
+            if (!userRepository.existsByUsername(candidate)) {
                 return candidate;
             }
         }
         for (int i = 0; i < 5; i++) {
             String candidate = base + "_" + (1000 + ThreadLocalRandom.current().nextInt(9000));
-            if (!userRepository.existsByUsernameAndDeletedAtIsNull(candidate)) {
+            if (!userRepository.existsByUsername(candidate)) {
                 return candidate;
             }
         }
         throw new AppException(ApiErrorCode.INTERNAL_ERROR);
-    }
-
-    private void enforceStatus(User user) {
-        switch (user.getStatus()) {
-            case BANNED -> throw new AppException(ApiErrorCode.AUTH_ACCOUNT_LOCKED);
-            case SUSPENDED, DEACTIVATED ->
-                    throw new AppException(ApiErrorCode.AUTH_ACCOUNT_INACTIVE);
-            default -> {}
-        }
     }
 }

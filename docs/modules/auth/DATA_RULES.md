@@ -8,7 +8,7 @@
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `users` | `id`, `username`, `email`, `role`, `status`, `is_private`, `is_verified` | Core user identity. Canonical for all user-referencing modules. Soft-deleted via `deleted_at`. |
+| `users` | `id`, `username`, `email`, `role`, `status`, `is_private`, `is_verified`, `registration_ip`, `last_login_ip`, `last_login_at` | Core user identity. Canonical for all user-referencing modules. Soft-deleted via `deleted_at`. `registration_ip` is written once, in the same transaction as the row insert, on both the local and the OAuth creation path. `last_login_ip` and `last_login_at` advance on session issuance only and are deliberately not advanced by a token refresh, so `last_login_at` stays a sign-in signal rather than an activity signal. All three come from `IpExtractor`, which honours `X-Forwarded-For` only from a configured trusted proxy. |
 | `user_credentials` | `user_id` (PK/FK), `password_hash`, `email_verified`, `email_verified_at` | Local auth credentials. `password_hash` is nullable — OAuth-only users have no local password. |
 | `oauth_accounts` | `id`, `user_id`, `provider`, `provider_id` | Canonical record that a user authenticated via an external OAuth provider. One row per (provider, provider_id) pair. |
 | `refresh_tokens` | `id`, `user_id`, `token_hash`, `expires_at`, `revoked_at` | Durable record of issued refresh tokens. Token itself is never stored — only its bcrypt hash. |
@@ -29,6 +29,7 @@ These tables cannot be rebuilt from any other source if lost.
 | Password reset token | Redis | Cannot rebuild — must re-send | TTL-based expiry in Redis |
 | Token blacklist entries | Redis | Cannot rebuild — revoke all active tokens as failsafe | TTL tied to JWT access token lifetime |
 | Rate-limit counters | Redis | Rebuild by resetting (no data loss consequence) | Request arrival |
+| OAuth2 exchange code | Redis (`auth:oauth2:exchange:{code}`) | Cannot rebuild — must re-initiate OAuth2 flow | TTL 120 s |
 
 ---
 
@@ -53,14 +54,20 @@ These tables cannot be rebuilt from any other source if lost.
 
 | Rule | Service / Component |
 |------|---------------------|
+| Registration returns a single generic conflict code (`USER_ALREADY_EXISTS`) for both email and username collisions to prevent account enumeration | `AuthServiceImpl` |
 | Passwords are bcrypt-hashed before storage; plaintext is never stored | `AuthServiceImpl` |
 | JWT access tokens are stateless (not stored in DB); only refresh token hash is stored | `TokenServiceImpl` |
 | Revoked refresh tokens have `revoked_at` set to `NOW()` — they are not deleted | `TokenServiceImpl.revokeRefreshToken()` |
-| Email verification flow: generate token → store in Redis with TTL → send email link → verify on click | `TokenServiceImpl`, `AuthServiceImpl` |
-| Password reset flow: generate token → store in Redis with TTL → send email link → verify → update `password_hash` | `TokenServiceImpl`, `AuthServiceImpl` |
+| Email verification flow: record outbox event in the auth transaction → mail consumer generates token → store in Redis with TTL → send email link → verify on click | `AuthServiceImpl`, `AuthMailEventServiceImpl`, `TokenServiceImpl` |
+| Password reset flow: record outbox event after account lookup → mail consumer generates token → store in Redis with TTL → send email link → verify → update `password_hash` | `AuthServiceImpl`, `AuthMailEventServiceImpl`, `TokenServiceImpl` |
+| Auth mail event consumption is at-least-once: consumer validates the event envelope, deduplicates via `processed_messages`, generates Redis tokens only inside the consumer, sends mail synchronously, then acknowledges the RabbitMQ message | `AuthMailEventConsumer`, `AuthMailEventHandler`, `ProcessedMessageServiceImpl` |
+| Invalid auth mail event payloads are treated as permanent failures and routed to `mail.dlq`; temporary mail/Redis/DB failures use bounded retry before DLQ | `AuthMailEventConsumer` |
 | OAuth flow: look up `oauth_accounts` by `(provider, provider_id)`; create `users` + `user_credentials` + `oauth_account` row on first login | `CustomOidcUserService`, `OAuth2AuthenticationSuccessHandler` |
+| OAuth2 exchange flow: on success, generate a 32-byte hex exchange code, store it in Redis (`auth:oauth2:exchange:{code}`, TTL 120 s, value = userId), redirect browser to `{frontendBaseUrl}/oauth2/callback?code={code}`; the exchange endpoint atomically consumes the code (GET-then-DEL Lua script) and issues a token pair | `OAuth2AuthenticationSuccessHandler`, `OAuth2ExchangeCodeServiceImpl`, `AuthServiceImpl.exchangeOAuth2Code` |
+| OAuth2 exchange codes are one-time use; the atomic Lua consume script prevents concurrent redemption from succeeding twice | `OAuth2ExchangeCodeServiceImpl` |
 | Revoked / expired access tokens are blacklisted in Redis for the remainder of their TTL | `TokenBlacklistServiceImpl` |
 | All auth endpoints are rate-limited via Redis sliding-window counters | `AuthRateLimitFilter`, `RateLimiterServiceImpl` |
+| Forgot-password response timing uses a configurable minimum duration after durable event recording to reduce account enumeration signal | `AuthServiceImpl`, `ForgotPasswordTimingEqualizer` |
 | A suspended or banned (`status != 'active'`) user is rejected at authentication | `AuthServiceImpl` |
 | Soft-deleted users (`deleted_at IS NOT NULL`) cannot authenticate | `AuthServiceImpl` |
 
@@ -83,5 +90,11 @@ These tables cannot be rebuilt from any other source if lost.
 | Dependency | Direction | Nature |
 |------------|-----------|--------|
 | `users` (self) | inbound | All other modules reference `users.id`; auth module owns the `users` table |
-| `mail` | outbound | Auth calls `MailService` to send verification and password-reset emails |
+| `mail` | outbound async | Auth records transactional outbox events; the mail consumer owns token generation for outbound verification/reset links |
 | `social` | none | Social graph is a separate module; auth has no direct dependency |
+
+---
+
+## Known Security Gaps
+
+_No open gaps in this module._

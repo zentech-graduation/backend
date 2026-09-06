@@ -4,17 +4,23 @@ spring:
       - classpath:resilience/circuitbreaker/resilience4j-dev.yml
       - classpath:resilience/ratelimiter/resilience4j-dev.yml
       - classpath:resilience/retry/resilience4j-dev.yml
-
-jpa:
-  hibernate:
-    ddl-auto: validate
-  show-sql: true
-  properties:
+  flyway:
+    locations: classpath:db/migration
+  jpa:
     hibernate:
-      format_sql: true
-      use_sql_comments: true
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        use_sql_comments: false
 
 springdoc:
+  # Success responses declare no explicit @Content, so springdoc resolves the schema from the
+  # method return type. Without this it keys those responses under */* instead of
+  # application/json, which some client generators ignore.
+  default-produces-media-type: application/json
   api-docs:
     path: /api-docs
     enabled: true
@@ -24,6 +30,137 @@ springdoc:
     disable-swagger-default-url: true
 
 app:
+  notification:
+    consumer:
+      enabled: true
+    live:
+      enabled: true
+  hashtag:
+    consumer:
+      enabled: true
+  post:
+    consumer:
+      enabled: true
+    live:
+      enabled: true
+  comment:
+    consumer:
+      enabled: true
+    live:
+      enabled: true
+  admin:
+    consumer:
+      enabled: true
+  story:
+    consumer:
+      enabled: true
+  recommendation:
+    consumer:
+      enabled: true
+  message:
+    consumer:
+      enabled: true
+    live:
+      enabled: true
   mail:
+    consumer:
+      enabled: true
+    # Local development sends real mail through Resend by default: there is no local sink.
+    # Every send consumes Resend quota, and a fabricated or seeded recipient produces a bounce
+    # that raises the sending domain's bounce rate, which can get the domain suspended. Only
+    # trigger mail flows (register, forgot-password, and so on) against real mailboxes you
+    # control. To run the application without sending real mail, set APP_MAIL_TRANSPORT=noop in
+    # .env and restart; noop is refused outside this profile by MailTransportGuard. See
+    # .env.example and CONTRIBUTING.md for the full warning.
+    transport: ${APP_MAIL_TRANSPORT:resend}
     app-name: ${MAIL_APP_NAME}
-    frontend-base-url: ${MAIL_FRONTEND_BASE_URL}
+    frontend-base-url: ${FRONTEND_BASE_URL}
+  security:
+    trusted-proxy-cidrs:
+      - "127.0.0.1"
+      # A request over loopback arrives as the IPv6 form on most local setups; without this
+      # entry the IPv4 entry above never actually matches during local testing.
+      - "::1"
+    max-login-body-bytes: 2048
+    # Written as a defaulted placeholder, not a bare literal. Profile config outranks the base
+    # application.yaml, so a literal here silently made APP_COOKIE_SIGNING_SECRET inert: the
+    # OAuth2 state cookie was HMAC-signed with a value published in this repository and the
+    # configured secret was never consulted. Resolving the environment variable first restores
+    # it as authoritative in every profile, while the fallback keeps a checkout with no .env
+    # bootable, which is what continuous integration relies on.
+    cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET:dev-insecure-cookie-signing-secret-change-me}
+    refresh-cookie:
+      # Local development serves the API over plain HTTP, where a Secure cookie is never stored.
+      secure: false
+  rate-limit:
+    endpoint-rules:
+      "[/api/v1/auth/login]":
+        max-attempts: 10
+        window-seconds: 60
+      "[/api/v1/auth/register]":
+        max-attempts: 100
+        window-seconds: 60
+      "[/api/v1/auth/refresh]":
+        max-attempts: 100
+        window-seconds: 60
+      "[/api/v1/auth/forgot-password]":
+        max-attempts: 3
+        window-seconds: 300
+      "[/api/v1/auth/reset-password]":
+        max-attempts: 50
+        window-seconds: 300
+      "[/api/v1/auth/verify-email]":
+        max-attempts: 50
+        window-seconds: 60
+      "[/api/v1/auth/verify-email/resend]":
+        max-attempts: 50
+        window-seconds: 300
+      "[/api/v1/auth/oauth2/exchange]":
+        max-attempts: 10
+        window-seconds: 60
+      "[/api/v1/auth/ws-ticket]":
+        # One per realtime connection and one per reconnect, so the bucket has to tolerate a
+        # reconnect burst while staying bounded.
+        max-attempts: 200
+        window-seconds: 60
+      "[/api/v1/posts]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/api/v1/stories]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/api/v1/stories/feed]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/api/v1/conversations]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/ws/**]":
+        max-attempts: 200
+        window-seconds: 60
+      # Deliberately looser than prod so local work is not throttled, but still a real ceiling: an
+      # administrative panel does not issue 150 calls a minute by hand, and a runaway poll should
+      # be visible in development rather than only in production.
+      "[/api/v1/admin/**]":
+        max-attempts: 150
+        window-seconds: 60
+      "[/api/v1/admin/stats/timeseries]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/user-events]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/users/search]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/search]":
+        max-attempts: 60
+        window-seconds: 60
+      # Deliberately looser than prod so local scroll/impression testing is not throttled, but
+      # still a real ceiling.
+      "[/api/v1/recommendations/**]":
+        max-attempts: 200
+        window-seconds: 60
+      "[/api/v1/recommendations/impressions]":
+        max-attempts: 120
+        window-seconds: 60

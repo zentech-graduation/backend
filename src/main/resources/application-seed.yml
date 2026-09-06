@@ -1,0 +1,44 @@
+# Activated alongside `dev` for a seed run only: SPRING_PROFILES_ACTIVE=dev,seed.
+# Holds off notification, comment, admin, and story consumers so their notifications rows are not
+# stamped with NOW() during replay of historical seed events; NotificationSeedWriter writes
+# those rows directly with historically correct timestamps instead. hashtag/post/recommendation
+# consumers stay enabled (inherited from application-dev.yml) because their side effects
+# (Elasticsearch sync, Gorse feedback, Gorse item labels) are safe to run during a seed.
+# The recommendation consumer now carries substantially more traffic than it used to:
+# SeedOutboxEmitter emits one post.viewed.v1 per seeded view, measured at 21,967 additional events
+# on top of the like/save/comment volume (45,393 outbox rows in total for a full run), because the
+# factorization machine ranker needs read feedback as its negative training examples. The view
+# count exceeds the emitter's own VIEW_EVENT_TARGET because the read set is the union of that
+# band-weighted draw with every like and save pair, and those alone number over seventeen thousand. It stays enabled regardless - it is the only writer of those
+# user_events rows now that AnalyticsSeedWriter no longer draws post_view, so disabling it would
+# silently produce a seeded database with no read signal at all. Expect the outbox publisher to
+# take minutes rather than seconds to drain a seed run at its default 100-rows-per-second rate,
+# and note that user_events post_view coverage is therefore only true after that drain completes,
+# not when the seed run returns.
+# message stays enabled too: MessageRabbitBindingConfig binds MessageNotificationConsumer only to
+# message.sent.v1, and SeedOutboxEmitter never emits that routing key, so there is no NOW()-stamped
+# notification for it to produce today. If a future change makes the emitter publish message
+# events, this consumer must be added to the disabled list below.
+# mail is disabled for a different reason entirely: it writes no notifications row, so the
+# NOW()-stamping argument above does not apply to it. AuthMailEventConsumer dispatches through
+# whatever transport app.mail.transport resolves to - Resend in every environment now that the
+# local Mailpit sink is gone - so a seed replay that reached it would send real provider mail to
+# the seeded dataset's fabricated addresses, consuming send quota and risking a bounce-driven
+# suspension of the sending domain. There is no local sink to absorb that traffic any more, so
+# this line is the only thing standing between a seed run and exactly that outcome.
+app:
+  notification:
+    consumer:
+      enabled: false
+  comment:
+    consumer:
+      enabled: false
+  admin:
+    consumer:
+      enabled: false
+  story:
+    consumer:
+      enabled: false
+  mail:
+    consumer:
+      enabled: false

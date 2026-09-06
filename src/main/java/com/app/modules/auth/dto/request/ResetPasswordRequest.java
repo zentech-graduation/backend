@@ -1,10 +1,14 @@
 package com.app.modules.auth.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+
+import com.app.modules.auth.validation.ValidPassword;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+// AUTH-022: reject payloads with unrecognised fields to prevent mass-assignment attacks
+@JsonIgnoreProperties(ignoreUnknown = false)
 @Schema(description = "Payload to complete a password reset using the one-time token")
 public record ResetPasswordRequest(
         @Schema(
@@ -14,9 +18,13 @@ public record ResetPasswordRequest(
                 @NotBlank
                 String token,
         @Schema(
-                        description = "New password to set; 8–128 characters",
+                        description =
+                                "New password to set; 8 to 64 characters and at most 72 bytes when"
+                                        + " encoded as UTF-8. Must contain at least one uppercase"
+                                        + " letter, at least one digit or special character, and no"
+                                        + " whitespace or invisible characters.",
                         example = "N3wS3cur3P@ss",
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 @NotBlank
-                @Size(min = 8, max = 128)
+                @ValidPassword
                 String newPassword) {}

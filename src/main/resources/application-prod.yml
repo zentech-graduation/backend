@@ -4,11 +4,15 @@ spring:
       - classpath:resilience/circuitbreaker/resilience4j-prod.yml
       - classpath:resilience/ratelimiter/resilience4j-prod.yml
       - classpath:resilience/retry/resilience4j-prod.yml
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
 
-jpa:
-  hibernate:
-    ddl-auto: validate
-  show-sql: false
+logging:
+  file:
+    path: /var/log/luvax
 
 springdoc:
   api-docs:
@@ -17,6 +21,128 @@ springdoc:
     enabled: false
 
 app:
+  notification:
+    consumer:
+      enabled: true
+    live:
+      enabled: true
+  hashtag:
+    consumer:
+      enabled: true
+  post:
+    consumer:
+      enabled: true
+  comment:
+    consumer:
+      enabled: true
+    # The frontend opens exactly one socket, /ws/comments, and CommentWebSocketConfig registers
+    # that endpoint only under this flag. With it false the endpoint did not exist in production,
+    # the handshake failed, and the client swallowed the failure by design, so live comment and
+    # like updates were silently dead with no signal on either side.
+    live:
+      enabled: true
+  admin:
+    consumer:
+      enabled: true
+  story:
+    consumer:
+      enabled: true
+  recommendation:
+    consumer:
+      enabled: true
+  # Absent until now, so both flags fell back to the false defaults in application.yaml and direct
+  # messaging had no real-time delivery in production. This tier has not carried production traffic
+  # before, so its behaviour under load is unproven.
+  message:
+    consumer:
+      enabled: true
+    live:
+      enabled: true
   mail:
+    consumer:
+      enabled: true
+    transport: resend
     app-name: ${MAIL_APP_NAME}
-    frontend-base-url: ${MAIL_FRONTEND_BASE_URL}
+    frontend-base-url: ${FRONTEND_BASE_URL}
+  security:
+    # Populate with your ingress proxy CIDR(s) before deploying behind a reverse proxy.
+    # IpExtractor only trusts XFF when the direct peer matches a configured CIDR.
+    # Example: ["10.0.0.0/8", "172.16.0.0/12"]
+    trusted-proxy-cidrs: []
+    max-login-body-bytes: 2048
+    # refresh-cookie secure and same-site are intentionally not set here. They are the operator's
+    # deployment-time knobs, bound from REFRESH_COOKIE_SECURE and REFRESH_COOKIE_SAME_SITE in
+    # application.yaml, which already defaults them fail-closed to true and Lax. Restating them
+    # at profile level would silently outrank the environment and make both variables inert.
+  rate-limit:
+    endpoint-rules:
+      "[/api/v1/auth/register]":
+        max-attempts: 5
+        window-seconds: 60
+      "[/api/v1/auth/login]":
+        max-attempts: 10
+        window-seconds: 60
+      "[/api/v1/auth/refresh]":
+        max-attempts: 30
+        window-seconds: 60
+      "[/api/v1/auth/forgot-password]":
+        max-attempts: 3
+        window-seconds: 300
+      "[/api/v1/auth/reset-password]":
+        max-attempts: 5
+        window-seconds: 300
+      "[/api/v1/auth/verify-email]":
+        max-attempts: 10
+        window-seconds: 60
+      "[/api/v1/auth/verify-email/resend]":
+        max-attempts: 3
+        window-seconds: 300
+      "[/api/v1/auth/oauth2/exchange]":
+        max-attempts: 10
+        window-seconds: 60
+      "[/api/v1/auth/ws-ticket]":
+        # One per realtime connection and one per reconnect, so the bucket has to tolerate a
+        # reconnect burst while staying bounded.
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/posts]":
+        max-attempts: 30
+        window-seconds: 60
+      "[/ws/**]":
+        # Measured against a real SockJS xhr-polling session (.workspace/reports/p8/ws_rate_limit_measurement.md):
+        # one session costs ~7 requests in its first 60s (info + connect burst + 2 heartbeat
+        # polls at the SockJS default 25s interval); a reconnect costs ~5 more each time. 60
+        # covers one session's connect burst plus roughly 11 reconnect attempts inside the same
+        # window - generous headroom for real network flakiness while staying bounded.
+        max-attempts: 60
+        window-seconds: 60
+      # The administrative surface. Tighter than the shared default: an administrator's panel is
+      # driven by a human, and a compromised administrator token is the highest-value credential in
+      # the system, so the ceiling is set to what a person can actually generate.
+      "[/api/v1/admin/**]":
+        max-attempts: 120
+        window-seconds: 60
+      "[/api/v1/admin/stats/timeseries]":
+        max-attempts: 20
+        window-seconds: 60
+      "[/api/v1/admin/user-events]":
+        max-attempts: 20
+        window-seconds: 60
+      "[/api/v1/admin/users/search]":
+        max-attempts: 40
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/search]":
+        max-attempts: 40
+        window-seconds: 60
+      "[/api/v1/recommendations/**]":
+        max-attempts: 60
+        window-seconds: 60
+      # Provisional, pending the client batching interval prompt 4 implements. Derived from what
+      # exists today: ImpressionBatchRequest caps a flush at 100 impressions. Assuming an active
+      # scroller flushes at most once every 5 seconds (conservative - faster than most viewport
+      # dwell plus debounce designs), that is up to 12 flushes per minute; doubled for reconnect
+      # and multi-tab headroom gives 24, rounded up to 30. Re-derive this once the real batching
+      # interval lands instead of trusting this arithmetic indefinitely.
+      "[/api/v1/recommendations/impressions]":
+        max-attempts: 30
+        window-seconds: 60

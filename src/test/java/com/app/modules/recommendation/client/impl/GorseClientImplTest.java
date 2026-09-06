@@ -1,0 +1,165 @@
+package com.app.modules.recommendation.client.impl;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+
+import com.app.modules.recommendation.client.dto.GorseFeedback;
+import com.app.modules.recommendation.client.dto.GorseItem;
+import com.app.modules.recommendation.client.dto.GorseScore;
+import com.app.modules.recommendation.client.dto.GorseUser;
+
+class GorseClientImplTest {
+
+    private static final String API_KEY = "test-api-key";
+
+    private MockRestServiceServer server;
+    private GorseClientImpl client;
+
+    @BeforeEach
+    void setUp() {
+        // Mirrors GorseClientConfig: the X-API-Key and X-API-Version default headers are set on
+        // the RestClient, not by GorseClientImpl itself, so the test wires them the same way.
+        RestClient.Builder builder =
+                RestClient.builder()
+                        .baseUrl("http://gorse.test")
+                        .defaultHeader("X-API-Key", API_KEY)
+                        .defaultHeader("X-API-Version", "2");
+        server = MockRestServiceServer.bindTo(builder).build();
+        client = new GorseClientImpl(builder.build());
+    }
+
+    @Test
+    void recommend_parsesScoredResponseAndSendsAuthHeaders() {
+        UUID userId = UUID.randomUUID();
+        server.expect(requestTo("http://gorse.test/api/recommend/" + userId + "?n=10&offset=0"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-API-Key", API_KEY))
+                .andExpect(header("X-API-Version", "2"))
+                .andRespond(
+                        withSuccess(
+                                "[{\"Id\":\"item-1\",\"Score\":5.5},{\"Id\":\"item-2\",\"Score\":3.1}]",
+                                MediaType.APPLICATION_JSON));
+
+        List<GorseScore> scores = client.recommend(userId, 10, 0);
+
+        assertThat(scores)
+                .containsExactly(new GorseScore("item-1", 5.5), new GorseScore("item-2", 3.1));
+        server.verify();
+    }
+
+    @Test
+    void recommend_emptyBody_returnsEmptyList() {
+        UUID userId = UUID.randomUUID();
+        server.expect(requestTo("http://gorse.test/api/recommend/" + userId + "?n=5&offset=2"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        List<GorseScore> scores = client.recommend(userId, 5, 2);
+
+        assertThat(scores).isEmpty();
+    }
+
+    @Test
+    void popular_callsNonPersonalizedPopularEndpoint() {
+        server.expect(requestTo("http://gorse.test/api/non-personalized/popular?n=20&offset=0"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(
+                        withSuccess(
+                                "[{\"Id\":\"item-3\",\"Score\":100.0}]",
+                                MediaType.APPLICATION_JSON));
+
+        List<GorseScore> scores = client.popular(20, 0);
+
+        assertThat(scores).containsExactly(new GorseScore("item-3", 100.0));
+    }
+
+    @Test
+    void trending_callsNonPersonalizedTrendingEndpoint() {
+        server.expect(requestTo("http://gorse.test/api/non-personalized/trending?n=15&offset=5"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(
+                        withSuccess(
+                                "[{\"Id\":\"item-4\",\"Score\":42.0}]",
+                                MediaType.APPLICATION_JSON));
+
+        List<GorseScore> scores = client.trending(15, 5);
+
+        assertThat(scores).containsExactly(new GorseScore("item-4", 42.0));
+        server.verify();
+    }
+
+    @Test
+    void insertFeedback_postsFeedbackBatchWithAuthHeader() {
+        GorseFeedback feedback =
+                new GorseFeedback(
+                        "like",
+                        "user-1",
+                        "item-1",
+                        OffsetDateTime.parse("2026-07-26T00:00:00Z"),
+                        1.0);
+        server.expect(requestTo("http://gorse.test/api/feedback"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-API-Key", API_KEY))
+                .andRespond(withSuccess("{\"RowAffected\":1}", MediaType.APPLICATION_JSON));
+
+        client.insertFeedback(List.of(feedback));
+
+        server.verify();
+    }
+
+    @Test
+    void upsertItems_postsItemBatch() {
+        GorseItem item =
+                new GorseItem(
+                        "item-1",
+                        false,
+                        List.of(),
+                        List.of("topic"),
+                        OffsetDateTime.parse("2026-07-26T00:00:00Z"),
+                        "");
+        server.expect(requestTo("http://gorse.test/api/items"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"RowAffected\":1}", MediaType.APPLICATION_JSON));
+
+        client.upsertItems(List.of(item));
+
+        server.verify();
+    }
+
+    @Test
+    void upsertUsers_postsUserBatch() {
+        GorseUser user = new GorseUser("user-1", List.of("topic"), "comment");
+        server.expect(requestTo("http://gorse.test/api/users"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"RowAffected\":1}", MediaType.APPLICATION_JSON));
+
+        client.upsertUsers(List.of(user));
+
+        server.verify();
+    }
+
+    @Test
+    void hideItem_sendsPatchWithAuthHeader() {
+        server.expect(requestTo("http://gorse.test/api/item/item-1"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(header("X-API-Key", API_KEY))
+                .andRespond(withSuccess("{\"RowAffected\":1}", MediaType.APPLICATION_JSON));
+
+        client.hideItem("item-1");
+
+        server.verify();
+    }
+}

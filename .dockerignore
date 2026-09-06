@@ -1,0 +1,10 @@
+.git
+.github
+.agents
+.claude
+.workspace
+target
+*.log
+.env
+.env.*
+!.env.example

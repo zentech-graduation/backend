@@ -4,7 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import com.app.modules.auth.dto.request.ForgotPasswordRequest;
 import com.app.modules.auth.dto.request.LoginRequest;
-import com.app.modules.auth.dto.request.RefreshRequest;
+import com.app.modules.auth.dto.request.OAuth2ExchangeRequest;
 import com.app.modules.auth.dto.request.RegisterRequest;
 import com.app.modules.auth.dto.request.ResetPasswordRequest;
 import com.app.modules.auth.dto.response.AuthResponse;
@@ -16,17 +16,17 @@ import com.app.modules.auth.dto.response.AuthResponse;
 public interface AuthService {
 
     /**
-     * Registers a new user, dispatches the verification and welcome emails asynchronously, and
-     * issues the first session pair.
+     * Registers a new user and records mail side-effect events for verification and welcome
+     * messages. No session is issued - the user must verify their email before logging in.
      *
      * @param request validated registration payload
-     * @param httpRequest underlying servlet request, used to capture device metadata
-     * @return access + refresh tokens with the persisted user summary
+     * @param httpRequest source request, used to record the origin the account was created from
      */
-    AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest);
+    void register(RegisterRequest request, HttpServletRequest httpRequest);
 
     /**
-     * Authenticates an existing user by email and password and issues a fresh session pair.
+     * Authenticates an existing user by email or username and password and issues a fresh session
+     * pair.
      *
      * @param request validated login payload
      * @param httpRequest underlying servlet request, used to capture device metadata
@@ -37,37 +37,42 @@ public interface AuthService {
     /**
      * Rotates the supplied refresh token, mints a new access token, and returns both.
      *
-     * @param request payload containing the raw refresh token
+     * @param rawRefreshToken raw refresh token already resolved from the request body or cookie; an
+     *     empty value is rejected as an invalid token rather than treated specially
      * @param httpRequest underlying servlet request, used to capture the new IP
      * @return new access + refresh tokens with the user summary
      */
-    AuthResponse refresh(RefreshRequest request, HttpServletRequest httpRequest);
+    AuthResponse refresh(String rawRefreshToken, HttpServletRequest httpRequest);
 
     /**
-     * Revokes the supplied refresh token. The operation is idempotent.
+     * Revokes the supplied refresh token. The operation is idempotent, including when no token is
+     * supplied at all.
      *
-     * @param request payload containing the raw refresh token
+     * @param rawRefreshToken raw refresh token already resolved from the request body or cookie
      */
-    void logout(RefreshRequest request);
+    void logout(String rawRefreshToken);
 
     /**
-     * Consumes the email-verification token and marks the corresponding credential as verified.
+     * Consumes the email-verification token, marks the credential as verified, and issues the first
+     * session pair so the user is logged in immediately.
      *
      * @param rawToken raw verification token from the link the user followed
+     * @param httpRequest underlying servlet request, used to capture device metadata
+     * @return access + refresh tokens with the verified user summary
      */
-    void verifyEmail(String rawToken);
+    AuthResponse verifyEmail(String rawToken, HttpServletRequest httpRequest);
 
     /**
-     * Re-sends a fresh verification email if an account with the supplied email exists. Behaviour
-     * is silent when the address is unknown to avoid account enumeration.
+     * Records a fresh verification-mail request if an account with the supplied email exists.
+     * Behaviour is silent when the address is unknown to avoid account enumeration.
      *
      * @param email candidate email address
      */
     void resendVerification(String email);
 
     /**
-     * Triggers a password-reset flow if an account with the supplied email exists. Behaviour is
-     * silent when the address is unknown.
+     * Records a password-reset mail request if an account with the supplied email exists. Behaviour
+     * is silent when the address is unknown.
      *
      * @param request payload containing the email address
      */
@@ -75,9 +80,25 @@ public interface AuthService {
 
     /**
      * Consumes a password-reset token, replaces the password hash, revokes every active session for
-     * that user, and dispatches a security notification.
+     * that user, and records a security-notification mail event.
      *
      * @param request payload containing the raw token and the new password
      */
     void resetPassword(ResetPasswordRequest request);
+
+    /**
+     * Consumes a short-lived OAuth2 exchange code and issues an access/refresh token pair for the
+     * resolved user.
+     *
+     * <p>The exchange code is deleted atomically on first use so it cannot be redeemed twice. The
+     * returned token pair is identical in structure to the one returned by the login endpoint.
+     *
+     * @param request payload containing the raw exchange code
+     * @param httpRequest underlying servlet request, used to capture device metadata
+     * @return access + refresh tokens with the authenticated user summary
+     * @throws com.app.common.exception.AppException with {@link
+     *     com.app.common.enums.ApiErrorCode#AUTH_OAUTH2_EXCHANGE_CODE_INVALID} when the code is
+     *     absent or expired
+     */
+    AuthResponse exchangeOAuth2Code(OAuth2ExchangeRequest request, HttpServletRequest httpRequest);
 }

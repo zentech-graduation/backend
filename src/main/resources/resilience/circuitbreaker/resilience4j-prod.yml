@@ -9,3 +9,25 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 5
         eventConsumerBufferSize: 20
         registerHealthIndicator: true
+      elasticsearchSearch:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        slowCallDurationThreshold: 5s
+        slowCallRateThreshold: 80
+      gorse:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        slowCallDurationThreshold: 5s
+        slowCallRateThreshold: 80

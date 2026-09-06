@@ -1,29 +1,78 @@
 spring:
   application:
-    name: app
+    name: luvax
   profiles:
     active: dev
+    #active: dev,seed
   config:
     import:
       - optional:file:.env[.properties]
   threads:
     virtual:
       enabled: true
+  jackson:
+    # Every OffsetDateTime is rendered in the same UTC offset regardless of the zone it was
+    # constructed with, so the same field on the same resource does not render differently
+    # depending on whether the value just came from application code (local zone) or was read
+    # back from Postgres (UTC).
+    time-zone: UTC
+    datatype:
+      datetime:
+        write-dates-with-context-time-zone: true
+    deserialization:
+      fail-on-unknown-properties: true
   datasource:
     url: ${POSTGRES_URL}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     hikari:
+      # Explicit pool bounds. Tune DB_POOL_MAX against PostgreSQL max_connections.
+      # Default: 20 connections (safe for a max_connections=100 PostgreSQL with headroom).
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:3000}
       data-source-properties:
         stringtype: unspecified
   flyway:
     enabled: true
-    out-of-order: true
+    # The migration set is a contiguous V01-V57 sequence with no gaps; out-of-order would only
+    # suppress Flyway's own check against an out-of-order apply, which has no branch-merge
+    # workflow here to justify disabling.
+    out-of-order: false
+    locations: classpath:db/migration
+    postgresql:
+      # Required for V57, which builds indexes with CREATE INDEX CONCURRENTLY.
+      #
+      # With the default (true), Flyway holds its schema-history lock inside an open transaction on
+      # a second connection for the whole migration run. CREATE INDEX CONCURRENTLY waits for every
+      # transaction that could see the table to finish, so it waits on that connection, which will
+      # not commit until the migration it is guarding completes. Observed directly: the migration
+      # hung indefinitely with the builder backend on wait_event virtualxid and Flyway's own lock
+      # connection reported "idle in transaction" with a live backend_xmin.
+      #
+      # With false, Flyway takes a session-level advisory lock instead. Concurrent Flyway runs are
+      # still mutually excluded; the lock simply no longer pins a transaction snapshot open.
+      transactional-lock: false
   data:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
-      # password: ${REDIS_PASSWORD}
+      password: ${REDIS_PASSWORD:}
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:/}
+    publisher-confirm-type: ${SPRING_RABBITMQ_PUBLISHER_CONFIRM_TYPE:correlated}
+    publisher-returns: ${SPRING_RABBITMQ_PUBLISHER_RETURNS:true}
+    template:
+      mandatory: ${SPRING_RABBITMQ_TEMPLATE_MANDATORY:true}
+    listener:
+      simple:
+        acknowledge-mode: manual
+      direct:
+        acknowledge-mode: manual
   security:
     oauth2:
       client:
@@ -39,26 +88,285 @@ spring:
 
 app:
   base-url: ${APP_BASE_URL}
+  auth:
+    forgot-password:
+      min-response-time: ${AUTH_FORGOT_PASSWORD_MIN_RESPONSE_TIME:200ms}
+      max-jitter: ${AUTH_FORGOT_PASSWORD_MAX_JITTER:50ms}
+
+    # Purge job deletes expired + revoked refresh_tokens rows.
+    refresh-token-purge:
+      expired-grace: ${RT_PURGE_EXPIRED_GRACE:PT1H}
+      revoked-retention: ${RT_PURGE_REVOKED_RETENTION:P7D}
+      initial-delay: ${RT_PURGE_INITIAL_DELAY:PT5M}
+      fixed-delay: ${RT_PURGE_FIXED_DELAY:PT6H}
+  seed:
+    # SeedRunner's own @ConditionalOnProperty(name = "SEED_DATA") is what decides whether the seed
+    # pipeline runs at all; this only guards what it does once running.
+    require-local-datasource: ${SEED_REQUIRE_LOCAL_DATASOURCE:true}
+  outbox:
+    publisher:
+      enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
+      batch-size: ${OUTBOX_PUBLISHER_BATCH_SIZE:100}
+      max-attempts: ${OUTBOX_PUBLISHER_MAX_ATTEMPTS:3}
+      confirm-timeout: ${OUTBOX_PUBLISHER_CONFIRM_TIMEOUT:PT10S}
+      processing-timeout: ${OUTBOX_PUBLISHER_PROCESSING_TIMEOUT:PT2M}
+      initial-delay: ${OUTBOX_PUBLISHER_INITIAL_DELAY:PT10S}
+      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:PT1S}
+      retry-backoffs:
+        - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_1:PT10S}
+        - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_2:PT30S}
+        - ${OUTBOX_PUBLISHER_RETRY_BACKOFF_3:PT60S}
+  messaging:
+    consumer:
+      max-attempts: ${RABBIT_CONSUMER_MAX_ATTEMPTS:3}
+      retry-backoffs:
+        - ${RABBIT_CONSUMER_RETRY_BACKOFF_1:PT10S}
+        - ${RABBIT_CONSUMER_RETRY_BACKOFF_2:PT30S}
+        - ${RABBIT_CONSUMER_RETRY_BACKOFF_3:PT60S}
+  security:
+    cookie-signing-secret: ${APP_COOKIE_SIGNING_SECRET}
+    refresh-cookie:
+      name: ${REFRESH_COOKIE_NAME:luvax_refresh}
+      path: ${REFRESH_COOKIE_PATH:/api/v1/auth}
+      secure: ${REFRESH_COOKIE_SECURE:true}
+      same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
+      # Must be true before same-site None is accepted. Startup fails otherwise, because None
+      # removes the only CSRF control on the refresh endpoint and the request still succeeds,
+      # so the mistake would otherwise be invisible.
+      allow-cross-site: ${REFRESH_COOKIE_ALLOW_CROSS_SITE:false}
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}
+    audience: ${JWT_AUDIENCE}
     access-token-ttl: ${ACCESS_TOKEN_TTL}
     refresh-token-ttl: ${REFRESH_TOKEN_TTL}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   mail:
+    consumer:
+      enabled: ${MAIL_CONSUMER_ENABLED:false}
+    # Deliberately literal, not an environment placeholder. An APP_MAIL_TRANSPORT environment
+    # variable still outranks this, and MailTransportGuard is what refuses to boot if that
+    # override selected the non-network noop transport outside the dev profile.
+    # The dev profile resolves this from APP_MAIL_TRANSPORT instead (application-dev.yml); this
+    # base literal is what prod inherits unmodified.
+    transport: resend
+    resend:
+      # Defaulted to empty so a developer running the noop transport needs no Resend credential.
+      # ResendMailConfig rejects a blank key, so selecting resend without one still fails at startup.
+      api-key: ${RESEND_API_KEY:}
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
+    app-name: ${MAIL_APP_NAME}
+    reset-password-path: ${MAIL_RESET_PASSWORD_PATH:/reset-password}
+    verify-email-path: ${MAIL_VERIFY_EMAIL_PATH:/verify-email}
+    frontend-base-url: ${FRONTEND_BASE_URL}
+  notification:
+    consumer:
+      enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
+    live:
+      enabled: ${NOTIFICATION_LIVE_ENABLED:false}
+  media:
+    cdn-base-url: ${MEDIA_CDN_BASE_URL:}
+    r2:
+      endpoint: ${R2_ENDPOINT:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+      bucket: ${R2_BUCKET:}
+      region: ${R2_REGION:auto}
+      upload-url-ttl: ${R2_UPLOAD_URL_TTL:PT10M}
+      connect-timeout: ${R2_CONNECT_TIMEOUT:PT2S}
+      read-timeout: ${R2_READ_TIMEOUT:PT5S}
+      api-call-timeout: ${R2_API_CALL_TIMEOUT:PT10S}
+    allowed-image-mime-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+      - image/gif
+    allowed-video-mime-types:
+      - video/mp4
+      - video/webm
+      - video/quicktime
+    max-video-duration-seconds: ${MEDIA_MAX_VIDEO_DURATION_SECONDS:180}
+    storage-key-pattern: ${MEDIA_STORAGE_KEY_PATTERN:^[a-zA-Z0-9][a-zA-Z0-9/_.-]{1,511}$}
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
+    connection-timeout: ${ELASTICSEARCH_CONNECTION_TIMEOUT:PT5S}
+    socket-timeout: ${ELASTICSEARCH_SOCKET_TIMEOUT:PT30S}
+  hashtag:
+    consumer:
+      enabled: ${HASHTAG_CONSUMER_ENABLED:false}
+    trending:
+      window: ${HASHTAG_TRENDING_WINDOW:PT24H}
+      job-delay: ${HASHTAG_TRENDING_JOB_DELAY:PT1H}
+      job-initial-delay: ${HASHTAG_TRENDING_JOB_INITIAL_DELAY:PT5M}
+    seed:
+      enabled: ${HASHTAG_SEED_ENABLED:true}
+  post:
+    consumer:
+      enabled: ${POST_CONSUMER_ENABLED:false}
+    seed:
+      enabled: ${POST_SEED_ENABLED:true}
+    live:
+      enabled: ${POST_LIVE_ENABLED:false}
+  comment:
+    slow-mode-seconds: ${COMMENT_SLOW_MODE_SECONDS:0}
+    idempotency-ttl-hours: ${COMMENT_IDEMPOTENCY_TTL_HOURS:24}
+    blocked-words: []
+    consumer:
+      enabled: ${COMMENT_CONSUMER_ENABLED:false}
+    live:
+      enabled: ${COMMENT_LIVE_ENABLED:false}
+  admin:
+    consumer:
+      enabled: ${ADMIN_CONSUMER_ENABLED:false}
+
+  # Platform statistics collection and roll-up.
+  #
+  # A single application instance is assumed. There is no distributed scheduler lock in this
+  # codebase, so two instances would each run both jobs; the composite primary key on
+  # platform_stats with ON CONFLICT DO UPDATE keeps that harmless rather than duplicative, but it
+  # is an assumption to revisit before scaling out.
+  #
+  # There is no backfill. A bucket that was never collected can never be collected later, and a
+  # daily row deleted by retention is gone, so fine-retention and daily-retention are the real
+  # limits of what can ever be charted.
+  stats:
+    enabled: ${STATS_ENABLED:true}
+    interval: ${STATS_INTERVAL:PT30M}
+    fine-retention: ${STATS_FINE_RETENTION:P30D}
+    daily-retention: ${STATS_DAILY_RETENTION:P365D}
+    rollup-cron: ${STATS_ROLLUP_CRON:0 20 3 * * *}
+  story:
+    consumer:
+      enabled: ${STORY_CONSUMER_ENABLED:false}
+    cleanup:
+      initial-delay: ${STORY_CLEANUP_INITIAL_DELAY:PT10M}
+      fixed-delay: ${STORY_CLEANUP_FIXED_DELAY:PT1H}
+  message:
+    idempotency-ttl-hours: ${MESSAGE_IDEMPOTENCY_TTL_HOURS:24}
+    consumer:
+      enabled: ${MESSAGE_CONSUMER_ENABLED:false}
+    live:
+      enabled: ${MESSAGE_LIVE_ENABLED:false}
+  gorse:
+    base-url: ${APP_GORSE_BASE_URL:http://localhost:8088}
+    api-key: ${GORSE_API_KEY:}
+    connect-timeout: ${GORSE_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${GORSE_READ_TIMEOUT:PT3S}
+    recommend-multiplier: ${GORSE_RECOMMEND_MULTIPLIER:2}
+  recommendation:
+    consumer:
+      enabled: ${RECOMMENDATION_CONSUMER_ENABLED:false}
+    read-set-window: ${RECOMMENDATION_READ_SET_WINDOW:P90D}
+    read-set-max-rows: ${RECOMMENDATION_READ_SET_MAX_ROWS:2000}
+    top-up-overfetch-multiplier: ${RECOMMENDATION_TOPUP_OVERFETCH_MULTIPLIER:3}
+  websocket:
+    revocation:
+      interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
   rate-limit:
-    login:
-      max-attempts: 10
-      window-seconds: 900
-    forgot-password:
-      max-attempts: 3
-      window-seconds: 3600
-    resend-verification:
-      max-attempts: 3
-      window-seconds: 3600
+    endpoint-rules:
+      "[/api/v1/auth/login]":
+        max-attempts: 10
+        window-seconds: 900
+      "[/api/v1/auth/register]":
+        max-attempts: 5
+        window-seconds: 3600
+      "[/api/v1/auth/refresh]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/auth/ws-ticket]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/auth/forgot-password]":
+        max-attempts: 3
+        window-seconds: 3600
+      "[/api/v1/auth/reset-password]":
+        max-attempts: 3
+        window-seconds: 3600
+      "[/api/v1/auth/verify-email]":
+        max-attempts: 5
+        window-seconds: 3600
+      "[/api/v1/auth/verify-email/resend]":
+        max-attempts: 3
+        window-seconds: 3600
+      "[/api/v1/posts]":
+        max-attempts: 30
+        window-seconds: 60
+      "[/api/v1/stories]":
+        max-attempts: 30
+        window-seconds: 60
+      "[/api/v1/stories/feed]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/conversations]":
+        max-attempts: 30
+        window-seconds: 60
+      "[/ws/**]":
+        max-attempts: 30
+        window-seconds: 60
+      # The recommendation surface, which previously carried no per-caller rule at all. The
+      # highTraffic Resilience4j rate limiter already on these controllers is a JVM-wide overload
+      # backstop sized in the thousands; it is not a per-caller budget.
+      "[/api/v1/recommendations/**]":
+        max-attempts: 60
+        window-seconds: 60
+      # Tighter than the sub-tree rule: impressions are high-volume by design (one flush per
+      # client-side batch of up to 100 events) and the one path a misbehaving client can flood.
+      # A literal path resolves before the sub-tree pattern above, same shape as the admin rules.
+      "[/api/v1/recommendations/impressions]":
+        max-attempts: 30
+        window-seconds: 60
+      # The administrative surface, which carried no per-caller rule at all until now. The
+      # Resilience4j instances on these controllers are JVM-wide overload backstops sized in the
+      # thousands; they are not a per-client budget and never were.
+      #
+      # One broad rule covers the sub-tree, including every path-variable route under it, because
+      # AuthRateLimitFilter falls back to Ant matching and buckets on the matched pattern. The four
+      # expensive reads carry their own tighter rules; each is a literal path, so the exact-match
+      # fast path resolves it before the sub-tree pattern is ever considered.
+      "[/api/v1/admin/**]":
+        max-attempts: 300
+        window-seconds: 60
+      # Reads a stored series and can span a year of buckets.
+      "[/api/v1/admin/stats/timeseries]":
+        max-attempts: 30
+        window-seconds: 60
+      # Scans a partitioned table; the window is mandatory precisely because the read is expensive.
+      "[/api/v1/admin/user-events]":
+        max-attempts: 30
+        window-seconds: 60
+      # Trigram searches over users and hashtags.
+      "[/api/v1/admin/users/search]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/search]":
+        max-attempts: 60
+        window-seconds: 60
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # micrometer-registry-prometheus is on the classpath but Spring Boot exposes only health
+        # over HTTP by default, so /actuator/prometheus returned 404 and nothing could scrape the
+        # application. Widened deliberately to these three; the ADMIN gate in SecurityConfig still
+        # covers every other actuator endpoint.
+        include: health,info,prometheus
+  health:
+    elasticsearch:
+      enabled: true
+  endpoint:
+    health:
+      show-details: when-authorized
+
+server:
+  # Forward-headers-strategy removed; IpExtractor + trusted-proxy-cidrs is the only model.
+  # Configure app.security.trusted-proxy-cidrs to your ingress CIDR(s) before deploying behind a proxy.
+  tomcat:
+    max-http-form-post-size: 1MB
 
 logging:
   level:

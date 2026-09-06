@@ -1,0 +1,72 @@
+name: SonarCloud Analysis
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sonarcloud:
+    name: SonarCloud static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Runs before the build because it needs no JDK, no database, and under a second. Flyway
+      # aborts at validate on a duplicate version, so this failure mode takes down every
+      # integration test at once and is worth catching before anything expensive starts.
+      - name: Check for duplicate Flyway migration versions
+        run: |
+          set -euo pipefail
+          duplicates=$(
+            ls src/main/resources/db/migration \
+              | sed -nE 's/^V([0-9]+)__.*\.sql$/\1/p' \
+              | sort -n | uniq -d
+          )
+          if [ -n "$duplicates" ]; then
+            echo "Duplicate Flyway migration version(s) found: $duplicates"
+            for v in $duplicates; do
+              ls src/main/resources/db/migration | grep -E "^V${v}__" | sed 's/^/  /'
+            done
+            exit 1
+          fi
+          echo "No duplicate migration versions."
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Build, test and analyze
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./mvnw -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar

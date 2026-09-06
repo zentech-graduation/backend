@@ -1,19 +1,22 @@
 resilience4j:
   ratelimiter:
     instances:
-      # Base
+      # These JVM-wide instances serve as coarse overload backstops only.
+      # Per-client rate limiting is handled by the Redis sliding-window limiter in
+      # AuthRateLimitFilter (configured via app.rate-limit.endpoint-rules).
+      # Sizes are set well above any per-client budget to prevent shared-bucket starvation.
       lowTraffic:
-        limitForPeriod: 60
+        limitForPeriod: 3000
         limitRefreshPeriod: 30s
         timeoutDuration: 5s
         registerHealthIndicator: true
       mediumTraffic:
-        limitForPeriod: 120
+        limitForPeriod: 6000
         limitRefreshPeriod: 30s
         timeoutDuration: 5s
         registerHealthIndicator: true
       highTraffic:
-        limitForPeriod: 120
+        limitForPeriod: 9000
         limitRefreshPeriod: 30s
         timeoutDuration: 5s
         registerHealthIndicator: true
