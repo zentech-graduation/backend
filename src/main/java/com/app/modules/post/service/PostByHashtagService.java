@@ -29,6 +29,11 @@ public interface PostByHashtagService {
      * re-checked for published status against PostgreSQL and filtered through the shared post
      * visibility chain, so a page may hold fewer items than requested.
      *
+     * <p>Pagination depth is bounded. A request whose window would exceed Elasticsearch's {@code
+     * index.max_result_window} is refused with its own error code rather than left to fail inside
+     * the search tier, where the resulting exception is indistinguishable from an outage and would
+     * be charged to a circuit breaker shared with two other search surfaces.
+     *
      * @param viewerId authenticated viewer, whose blocks and private-account access govern what is
      *     returned
      * @param hashtagId hashtag whose posts are listed
@@ -36,7 +41,9 @@ public interface PostByHashtagService {
      * @param size maximum results per page
      * @return cursor-paginated visible posts, newest first
      * @throws com.app.common.exception.AppException {@code HASHTAG_NOT_FOUND} when no row carries
-     *     the id, or {@code HASHTAG_UNAVAILABLE} when the hashtag is banned or deleted
+     *     the id, {@code HASHTAG_UNAVAILABLE} when the hashtag is banned or deleted, {@code
+     *     PAGINATION_DEPTH_EXCEEDED} when the requested window is deeper than the endpoint serves,
+     *     or {@code INVALID_CURSOR} when the cursor is malformed
      */
     CursorPageResponse<PostResponse> findPostsByHashtag(
             UUID viewerId, UUID hashtagId, String cursor, int size);

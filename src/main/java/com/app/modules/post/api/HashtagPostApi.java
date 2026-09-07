@@ -50,6 +50,15 @@ public interface HashtagPostApi {
                 responseCode = "200",
                 description = "Cursor page of visible posts carrying the hashtag"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "PAGINATION_DEPTH_EXCEEDED when offset plus limit would exceed the 10000"
+                                + " result window, or INVALID_CURSOR when the cursor is malformed",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description =
                         "HASHTAG_NOT_FOUND when no hashtag carries the id, or HASHTAG_UNAVAILABLE"

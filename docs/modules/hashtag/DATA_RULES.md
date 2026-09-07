@@ -126,6 +126,38 @@ Unlike post caption search, this read does not set `degraded`: `post_hashtags` i
 Both tiers order by `(created_at, id)` descending and page on the same `OffsetCursorCodec` cursor, so a cursor issued by one tier stays valid when the next request is served by the other.
 A keyset cursor was rejected for that reason: Elasticsearch cannot resume from a `(created_at, id)` tuple the way the PostgreSQL query can, so the two tiers would need incompatible cursor formats and a mid-pagination degradation would break the client's paging.
 
+**Pagination depth is bounded at a window of 10,000.**
+`offset + limit + 1` (the over-fetch included) may not exceed 10,000, and a request that would is refused with `PAGINATION_DEPTH_EXCEEDED` (400), distinct from `INVALID_CURSOR` (400), which means the cursor itself is malformed.
+The number is Elasticsearch's own default `index.max_result_window`, which neither settings file under `src/main/resources/elasticsearch/settings/` overrides.
+A lower bound would refuse pages Elasticsearch can serve; a higher one would hand it a window it rejects.
+The PostgreSQL fallback wants the same bound for an unrelated reason: `OFFSET 10000` on the join is a linear skip of ten thousand rows.
+
+The guard is not cosmetic.
+Left to fail naturally, an over-deep request surfaces as `UncategorizedElasticsearchException: search_phase_execution_exception`, whose class name begins with `org.springframework.data.elasticsearch.`, which is exactly what the availability classifier treats as an outage.
+The request would therefore degrade silently to a linear PostgreSQL skip **and** record a failure against the `elasticsearchSearch` circuit breaker, which is shared with `HashtagSearchServiceImpl.search` and `PostSearchServiceImpl.searchPosts` and configures no `ignoreExceptions`.
+A client paging deep could open a breaker that degrades two unrelated search surfaces.
+For the same reason the hashtag lifecycle refusal is raised **before** the breaker-wrapped call, not inside it: a banned hashtag is a caller error, not an Elasticsearch outage, and must not be charged to the breaker.
+Everything that can fail for a reason other than Elasticsearch being unwell therefore lives in `PostByHashtagServiceImpl`, and `PostByHashtagSearchReader` holds the breaker and nothing else.
+
+In practice the bound is far out of reach: the largest hashtag in the seeded dataset carries 40 posts, and at the default page size of 20 the cap is page 500.
+
+**A zero-post hashtag cannot be offered by a surface that cannot then serve it.**
+Three surfaces can name a hashtag, and none of them can name one the detail page then fails on:
+
+| Surface | Backed by | Excludes zero-post tags because |
+|---|---|---|
+| Hashtag search | Elasticsearch `hashtags` index | `HashtagIndexSyncConsumer` indexes only `active` tags carrying live posts |
+| Trending | `hashtag_trending` in PostgreSQL | the job aggregates `FROM post_hashtags ... GROUP BY hashtag_id`, so a tag with no rows produces no group; it additionally filters `h.status = 'active'` |
+| Composer suggestions and personalised trending | platform trending plus `user_hashtag_affinity` | affinity derives from `user_events` joined to `post_hashtags`, so it too requires at least one association, and banned or deleted tags are excluded at write time |
+
+Trending is **not** subject to the Elasticsearch rule at all - it reads PostgreSQL - so its exclusion is independent and structural rather than inherited.
+Verified against the seeded dataset: zero `hashtag_trending` rows reference a non-active or zero-post hashtag.
+
+The one reachable gap is benign and is a staleness window, not an unreachable tag.
+A hashtag can be trending and have its posts removed before the next job cycle, leaving a snapshot row whose tag now has `post_count = 0`.
+Clicking it resolves normally and renders the "no posts yet" state rather than failing, because `GET /hashtags/name/{name}` reads live PostgreSQL rows and answers for any `active` tag regardless of post count.
+A tag that is *banned* while trending is purged from `hashtag_trending` in the same transaction, so that case cannot produce a dead link either.
+
 **Transaction boundary.**
 The PostgreSQL fallback lives in its own bean, `PostByHashtagPostgresReader`.
 A Resilience4j fallback runs outside the `@Transactional` boundary of the method it covers, so assembling a post response there hits the lazy `Post.media` collection with no Hibernate session.

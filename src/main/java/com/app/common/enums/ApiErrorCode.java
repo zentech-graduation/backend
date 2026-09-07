@@ -13,6 +13,11 @@ public enum ApiErrorCode {
     VALIDATION_ERROR("VALIDATION_ERROR", "Request validation failed", HttpStatus.BAD_REQUEST),
     BAD_REQUEST("BAD_REQUEST", "Invalid request", HttpStatus.BAD_REQUEST),
     INVALID_CURSOR("INVALID_CURSOR", "Malformed pagination cursor", HttpStatus.BAD_REQUEST),
+    // Distinct from INVALID_CURSOR: the cursor is well formed, the requested depth is simply
+    // past what either storage tier will serve. Reported explicitly rather than left to fail as
+    // an Elasticsearch result-window error, which the availability classifier cannot tell from a
+    // genuine outage and would therefore charge to a shared circuit breaker.
+    PAGINATION_DEPTH_EXCEEDED("PAGINATION_DEPTH_EXCEEDED", "Requested pagination depth is beyond the maximum this endpoint serves", HttpStatus.BAD_REQUEST),
     MALFORMED_REQUEST_BODY("MALFORMED_REQUEST_BODY", "Request body could not be read", HttpStatus.BAD_REQUEST),
     MISSING_REQUIRED_PARAMETER("MISSING_REQUIRED_PARAMETER", "A required request parameter is missing", HttpStatus.BAD_REQUEST),
     UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", "Content-Type is not supported", HttpStatus.UNSUPPORTED_MEDIA_TYPE),

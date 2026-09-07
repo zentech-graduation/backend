@@ -9,28 +9,25 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.pagination.OffsetCursorCodec;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.hashtag.service.HashtagLookupService;
 import com.app.modules.post.dto.response.PostResponse;
-import com.app.modules.post.repository.PostRepository;
-import com.app.modules.post.service.PostVisibilityService;
-
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 
 @ExtendWith(MockitoExtension.class)
 class PostByHashtagServiceImplTest {
@@ -38,124 +35,107 @@ class PostByHashtagServiceImplTest {
     private static final UUID VIEWER_ID = UUID.randomUUID();
     private static final UUID HASHTAG_ID = UUID.randomUUID();
 
-    @Mock private ElasticsearchOperations elasticsearchOperations;
-    @Mock private PostRepository postRepository;
-    @Mock private PostVisibilityService postVisibilityService;
-    @Mock private PostResponseAssembler postResponseAssembler;
     @Mock private HashtagLookupService hashtagLookupService;
-    @Mock private PostByHashtagPostgresReader postgresReader;
+    @Mock private PostByHashtagSearchReader searchReader;
 
     private PostByHashtagServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service =
-                new PostByHashtagServiceImpl(
-                        elasticsearchOperations,
-                        postRepository,
-                        postVisibilityService,
-                        postResponseAssembler,
-                        hashtagLookupService,
-                        postgresReader);
+        service = new PostByHashtagServiceImpl(hashtagLookupService, searchReader);
     }
 
     private static CursorPageResponse<PostResponse> emptyPage() {
         return CursorPageResponse.of(List.of(), false, null, null, false);
     }
 
-    // An Elasticsearch transport failure is an availability failure, so the read degrades to the
-    // PostgreSQL join rather than surfacing an error: post_hashtags is the source of truth for
-    // hashtag membership, so the degraded answer is still complete.
     @Test
-    void fallback_transportFailure_readsFromPostgres() {
-        when(postgresReader.read(eq(VIEWER_ID), eq(HASHTAG_ID), eq(0), anyInt()))
-                .thenReturn(emptyPage());
+    void findPostsByHashtag_firstPage_delegatesWithDecodedOffsetAndClampedLimit() {
+        when(searchReader.read(VIEWER_ID, HASHTAG_ID, 0, 20)).thenReturn(emptyPage());
 
         CursorPageResponse<PostResponse> result =
-                service.findPostsByHashtagFallback(
-                        VIEWER_ID,
-                        HASHTAG_ID,
-                        null,
-                        20,
-                        new DataAccessResourceFailureException("connection refused"));
+                service.findPostsByHashtag(VIEWER_ID, HASHTAG_ID, null, 20);
 
         assertThat(result).isNotNull();
-        verify(postgresReader).read(eq(VIEWER_ID), eq(HASHTAG_ID), eq(0), anyInt());
+        verify(searchReader).read(VIEWER_ID, HASHTAG_ID, 0, 20);
     }
 
-    @Test
-    void fallback_ioFailureNestedInCause_readsFromPostgres() {
-        when(postgresReader.read(eq(VIEWER_ID), eq(HASHTAG_ID), eq(0), anyInt()))
+    @ParameterizedTest
+    @CsvSource({"0, 20", "-5, 20", "1000, 100"})
+    void findPostsByHashtag_limitOutOfRange_isClamped(int requested, int expected) {
+        when(searchReader.read(eq(VIEWER_ID), eq(HASHTAG_ID), eq(0), eq(expected)))
                 .thenReturn(emptyPage());
 
-        service.findPostsByHashtagFallback(
-                VIEWER_ID,
-                HASHTAG_ID,
-                null,
-                20,
-                new RuntimeException("wrapped", new IOException("socket closed")));
+        service.findPostsByHashtag(VIEWER_ID, HASHTAG_ID, null, requested);
 
-        verify(postgresReader).read(eq(VIEWER_ID), eq(HASHTAG_ID), eq(0), anyInt());
+        verify(searchReader).read(VIEWER_ID, HASHTAG_ID, 0, expected);
     }
 
-    // An open circuit means the primary method body never ran, so the lifecycle gate it normally
-    // applies has not been applied yet and the fallback has to apply it itself. Without this, a
-    // banned hashtag would answer 200 with posts for as long as the circuit stayed open.
+    // The lifecycle gate must run before the Elasticsearch read, not after, so a banned hashtag
+    // costs a single indexed row read rather than a search round trip.
     @Test
-    void fallback_openCircuit_appliesLifecycleGateItself() {
-        CallNotPermittedException openCircuit =
-                CallNotPermittedException.createCallNotPermittedException(
-                        CircuitBreaker.ofDefaults("elasticsearchSearch"));
-        when(postgresReader.read(eq(VIEWER_ID), eq(HASHTAG_ID), eq(0), anyInt()))
-                .thenReturn(emptyPage());
+    void findPostsByHashtag_appliesLifecycleGateBeforeReading() {
+        when(searchReader.read(VIEWER_ID, HASHTAG_ID, 0, 20)).thenReturn(emptyPage());
 
-        service.findPostsByHashtagFallback(VIEWER_ID, HASHTAG_ID, null, 20, openCircuit);
+        service.findPostsByHashtag(VIEWER_ID, HASHTAG_ID, null, 20);
 
-        verify(hashtagLookupService).getById(HASHTAG_ID);
+        InOrder inOrder = Mockito.inOrder(hashtagLookupService, searchReader);
+        inOrder.verify(hashtagLookupService).getById(HASHTAG_ID);
+        inOrder.verify(searchReader).read(VIEWER_ID, HASHTAG_ID, 0, 20);
     }
 
-    // The primary path already applied the gate before throwing, so re-applying it here would
-    // double the read on every degraded request.
+    // The refusal has to propagate rather than be swallowed into an empty page, and it must not
+    // reach the breaker-wrapped reader, because a caller error is not an Elasticsearch outage.
     @Test
-    void fallback_primaryThrew_doesNotReapplyLifecycleGate() {
-        when(postgresReader.read(eq(VIEWER_ID), eq(HASHTAG_ID), eq(0), anyInt()))
-                .thenReturn(emptyPage());
+    void findPostsByHashtag_unavailableHashtag_propagatesWithoutReading() {
+        Mockito.doThrow(new AppException(ApiErrorCode.HASHTAG_UNAVAILABLE))
+                .when(hashtagLookupService)
+                .getById(HASHTAG_ID);
 
-        service.findPostsByHashtagFallback(
-                VIEWER_ID, HASHTAG_ID, null, 20, new DataAccessResourceFailureException("down"));
+        assertThatThrownBy(() -> service.findPostsByHashtag(VIEWER_ID, HASHTAG_ID, null, 20))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ApiErrorCode.HASHTAG_UNAVAILABLE);
+
+        verify(searchReader, never()).read(any(), any(), anyInt(), anyInt());
+    }
+
+    // A window past Elasticsearch's max_result_window must be refused with its own code. Left to
+    // fail naturally it surfaces as an UncategorizedElasticsearchException, which the availability
+    // classifier cannot tell from an outage: the request would silently degrade to a linear
+    // PostgreSQL skip and, worse, charge a failure to a circuit breaker shared with two other
+    // search surfaces.
+    @Test
+    void findPostsByHashtag_windowBeyondMaxResultWindow_throwsDepthExceeded() {
+        String deepCursor = OffsetCursorCodec.encode(9_999);
+
+        assertThatThrownBy(() -> service.findPostsByHashtag(VIEWER_ID, HASHTAG_ID, deepCursor, 100))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ApiErrorCode.PAGINATION_DEPTH_EXCEEDED);
+
+        verify(searchReader, never()).read(any(), any(), anyInt(), anyInt());
+    }
+
+    // The depth guard runs before the lifecycle gate, so an out-of-range request costs no database
+    // read at all.
+    @Test
+    void findPostsByHashtag_depthExceeded_doesNotEvenResolveTheHashtag() {
+        String deepCursor = OffsetCursorCodec.encode(10_000);
+
+        assertThatThrownBy(() -> service.findPostsByHashtag(VIEWER_ID, HASHTAG_ID, deepCursor, 20))
+                .isInstanceOf(AppException.class);
 
         verify(hashtagLookupService, never()).getById(any());
     }
 
-    // The lifecycle refusal raised by the primary is not an availability failure and must reach the
-    // caller as a 404, not be masked by silently answering from PostgreSQL.
+    // The boundary itself must be servable: offset + limit + 1 exactly equal to the window is the
+    // deepest legal request, and rejecting it would refuse a page Elasticsearch can serve.
     @Test
-    void fallback_lifecycleRefusal_rethrowsRatherThanDegrading() {
-        AppException unavailable = new AppException(ApiErrorCode.HASHTAG_UNAVAILABLE);
+    void findPostsByHashtag_windowExactlyAtLimit_isServed() {
+        String cursor = OffsetCursorCodec.encode(9_979);
+        when(searchReader.read(VIEWER_ID, HASHTAG_ID, 9_979, 20)).thenReturn(emptyPage());
 
-        assertThatThrownBy(
-                        () ->
-                                service.findPostsByHashtagFallback(
-                                        VIEWER_ID, HASHTAG_ID, null, 20, unavailable))
-                .isInstanceOf(AppException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ApiErrorCode.HASHTAG_UNAVAILABLE);
+        service.findPostsByHashtag(VIEWER_ID, HASHTAG_ID, cursor, 20);
 
-        verify(postgresReader, never()).read(any(), any(), anyInt(), anyInt());
-    }
-
-    // A programming or data error must surface, not be reported as a successful degraded read.
-    @Test
-    void fallback_nonAvailabilityFailure_rethrows() {
-        assertThatThrownBy(
-                        () ->
-                                service.findPostsByHashtagFallback(
-                                        VIEWER_ID,
-                                        HASHTAG_ID,
-                                        null,
-                                        20,
-                                        new IllegalArgumentException("bug")))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        verify(postgresReader, never()).read(any(), any(), anyInt(), anyInt());
+        verify(searchReader).read(VIEWER_ID, HASHTAG_ID, 9_979, 20);
     }
 }
