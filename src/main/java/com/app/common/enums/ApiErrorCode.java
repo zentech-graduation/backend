@@ -73,6 +73,11 @@ public enum ApiErrorCode {
     // Hashtag
     HASHTAG_NOT_FOUND("HASHTAG_NOT_FOUND", "Hashtag not found", HttpStatus.NOT_FOUND),
     HASHTAG_ALREADY_EXISTS("HASHTAG_ALREADY_EXISTS", "Hashtag already exists", HttpStatus.CONFLICT),
+    // Distinct from HASHTAG_NOT_FOUND, which means no row carries the name or id at all. This one
+    // means the row exists but an administrator took the term out of circulation, so a client can
+    // word "this hashtag is not available" differently from "this hashtag has no posts yet".
+    // Returning an empty page instead would make those two states indistinguishable.
+    HASHTAG_UNAVAILABLE("HASHTAG_UNAVAILABLE", "Hashtag is no longer available", HttpStatus.NOT_FOUND),
 
     // Post
     POST_NOT_FOUND("POST_NOT_FOUND", "Post not found", HttpStatus.NOT_FOUND),

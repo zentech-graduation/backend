@@ -17,8 +17,10 @@ import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.PageResponse;
 import com.app.modules.hashtag.api.HashtagApi;
+import com.app.modules.hashtag.dto.response.HashtagDetailResponse;
 import com.app.modules.hashtag.dto.response.HashtagResponse;
 import com.app.modules.hashtag.dto.response.HashtagTrendingResponse;
+import com.app.modules.hashtag.service.HashtagLookupService;
 import com.app.modules.hashtag.service.HashtagSearchService;
 import com.app.modules.hashtag.service.HashtagTrendingService;
 
@@ -30,12 +32,15 @@ public class HashtagController extends BaseController implements HashtagApi {
 
     private final HashtagSearchService hashtagSearchService;
     private final HashtagTrendingService hashtagTrendingService;
+    private final HashtagLookupService hashtagLookupService;
 
     public HashtagController(
             HashtagSearchService hashtagSearchService,
-            HashtagTrendingService hashtagTrendingService) {
+            HashtagTrendingService hashtagTrendingService,
+            HashtagLookupService hashtagLookupService) {
         this.hashtagSearchService = hashtagSearchService;
         this.hashtagTrendingService = hashtagTrendingService;
+        this.hashtagLookupService = hashtagLookupService;
     }
 
     /** Fuzzy hashtag name search; falls back to pg_trgm when Elasticsearch is unavailable. */
@@ -45,6 +50,15 @@ public class HashtagController extends BaseController implements HashtagApi {
     public ResponseEntity<ApiResponse<CursorPageResponse<HashtagResponse>>> search(
             String q, String cursor, int limit) {
         CursorPageResponse<HashtagResponse> result = hashtagSearchService.search(q, cursor, limit);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, result));
+    }
+
+    /** Resolves a hashtag name to its record; 404s when the hashtag is out of circulation. */
+    @Override
+    @GetMapping(ApiConstants.Hashtags.BY_NAME)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<HashtagDetailResponse>> getByName(String name) {
+        HashtagDetailResponse result = hashtagLookupService.getByName(name);
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, result));
     }
 

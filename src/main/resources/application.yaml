@@ -345,6 +345,16 @@ app:
       "[/api/v1/admin/hashtags/search]":
         max-attempts: 60
         window-seconds: 60
+      # Single indexed row read behind the /tags/{name} deep link, so it is cheap, but it is the
+      # entry point a shared URL lands on and must not fall through to a broad default.
+      "[/api/v1/hashtags/name/*]":
+        max-attempts: 60
+        window-seconds: 60
+      # One Elasticsearch query per call plus a PostgreSQL hydration of the page, so it costs
+      # meaningfully more than the name lookup above and is budgeted lower.
+      "[/api/v1/hashtags/*/posts]":
+        max-attempts: 40
+        window-seconds: 60
 
 management:
   endpoints:

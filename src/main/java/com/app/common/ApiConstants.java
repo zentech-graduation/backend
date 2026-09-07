@@ -132,6 +132,10 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/hashtags";
         public static final String TRENDING = "/trending";
         public static final String SEARCH = "/search";
+        public static final String BY_NAME = "/name/{name}";
+        // Absolute rather than relative: the handler lives in the post module, which has no
+        // @RequestMapping on this root, so the path cannot be expressed as a suffix there.
+        public static final String POSTS = ROOT + "/{hashtagId}/posts";
     }
 
     public static final class Recommendations {

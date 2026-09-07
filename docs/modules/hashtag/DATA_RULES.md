@@ -72,7 +72,6 @@ These tables cannot be rebuilt from any other source if lost.
 - `hashtag_trending` is populated by a periodic batch job; trending data may be minutes or hours stale.
 - No real-time trending calculation.
 - No hashtag following (users cannot subscribe to a hashtag).
-- There is no hashtag detail endpoint and no posts-by-hashtag endpoint. `GET /hashtags/search` and `GET /hashtags/trending` are the whole public surface, so the status filter has two public readers rather than four.
 - The administrative listing with no status filter has no index. It orders by `created_at` alone, which `idx_hashtags_status_created` cannot serve because that index leads with `status`. Measured at 14 ms against 200,000 rows: a parallel sequential scan plus a top-N heapsort. `users` has the same gap for the same reason, so closing it here alone would be inconsistent.
 
 ---
@@ -101,6 +100,36 @@ An implementation that adds a status predicate to a post query is wrong however 
 The two are different decisions.
 Banning a term says the term should stop being a way to find things.
 It does not say every post that ever used it is in breach, and a moderator that wants a particular post gone has `remove_post` for exactly that.
+
+### E. The Detail Surface: Name Resolution and Posts by Hashtag
+
+Two reads back the hashtag detail page.
+`GET /api/v1/hashtags/name/{name}` resolves a name to its record, and `GET /api/v1/hashtags/{hashtagId}/posts` lists the published posts carrying it.
+
+**Read-side normalization must be the write-side function.**
+`HashtagLookupServiceImpl.getByName` calls `HashtagService.normalize`, the same function `PostServiceImpl`'s caption extraction runs before insert.
+It is delegated, never reimplemented: a second normalizer drifts from the first silently, and the failure it produces is a hashtag that is reachable on write and unreachable on read.
+`HashtagSearchServiceImpl.normalizeQuery` is a pre-existing private duplicate of that logic, differing in that it applies no length cap; it is left alone here because changing the search surface was out of scope, but it should be collapsed into `HashtagService.normalize`.
+
+**An out-of-circulation hashtag is refused, never answered empty.**
+Both reads raise `HASHTAG_UNAVAILABLE` (404) for a `banned` or `deleted` row, distinct from `HASHTAG_NOT_FOUND` (404) for a name or id that matches nothing.
+Returning `200` with an empty page would make "this hashtag is not available" indistinguishable from "this hashtag has no posts yet", and those two states have to read differently to a user.
+The second state is real and reachable: a zero-post `active` hashtag exists in the seeded dataset and is absent from the Elasticsearch index by the rule in `HashtagIndexSyncConsumer`, which indexes only hashtags carrying live posts.
+
+**The posts read carries no hashtag status predicate.**
+The lifecycle gate is applied once, to the hashtag, before the post query runs.
+It never becomes a filter on the post query itself, per section D: banning a term hides the term, not the posts that used it.
+
+**Degradation.**
+Elasticsearch is the primary path, a `post_hashtags` join the fallback, gated by the same `elasticsearchSearch` circuit breaker the search surfaces use.
+Unlike post caption search, this read does not set `degraded`: `post_hashtags` is the source of truth for hashtag membership, so the PostgreSQL answer is complete rather than empty, and only its ranking source differs.
+Both tiers order by `(created_at, id)` descending and page on the same `OffsetCursorCodec` cursor, so a cursor issued by one tier stays valid when the next request is served by the other.
+A keyset cursor was rejected for that reason: Elasticsearch cannot resume from a `(created_at, id)` tuple the way the PostgreSQL query can, so the two tiers would need incompatible cursor formats and a mid-pagination degradation would break the client's paging.
+
+**Transaction boundary.**
+The PostgreSQL fallback lives in its own bean, `PostByHashtagPostgresReader`.
+A Resilience4j fallback runs outside the `@Transactional` boundary of the method it covers, so assembling a post response there hits the lazy `Post.media` collection with no Hibernate session.
+Self-invocation would not restore the boundary either. Crossing a bean boundary is what puts the transaction interceptor back in the path.
 
 ## Section 4: Inter-Module Dependencies
 
