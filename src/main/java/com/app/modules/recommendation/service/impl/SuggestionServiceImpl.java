@@ -5,7 +5,6 @@ import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -22,15 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.response.UserListItemResponse;
 import com.app.common.response.UserSummaryResponse;
 import com.app.common.response.ViewerRelationshipResponse;
-import com.app.modules.recommendation.client.GorseClient;
-import com.app.modules.recommendation.client.dto.GorseScore;
 import com.app.modules.recommendation.repository.SuggestionDismissalRepository;
 import com.app.modules.recommendation.repository.UserSuggestionRepository;
 import com.app.modules.recommendation.service.SuggestionService;
 import com.app.modules.social.service.SocialService;
 import com.app.modules.users.service.UserSummaryService;
-
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 
 @Service
 public class SuggestionServiceImpl implements SuggestionService {
@@ -74,19 +69,19 @@ public class SuggestionServiceImpl implements SuggestionService {
 
     private final UserSuggestionRepository userSuggestionRepository;
     private final SuggestionDismissalRepository suggestionDismissalRepository;
-    private final GorseClient gorseClient;
+    private final GorseNeighbourSource gorseNeighbourSource;
     private final UserSummaryService userSummaryService;
     private final SocialService socialService;
 
     public SuggestionServiceImpl(
             UserSuggestionRepository userSuggestionRepository,
             SuggestionDismissalRepository suggestionDismissalRepository,
-            GorseClient gorseClient,
+            GorseNeighbourSource gorseNeighbourSource,
             UserSummaryService userSummaryService,
             SocialService socialService) {
         this.userSuggestionRepository = userSuggestionRepository;
         this.suggestionDismissalRepository = suggestionDismissalRepository;
-        this.gorseClient = gorseClient;
+        this.gorseNeighbourSource = gorseNeighbourSource;
         this.userSummaryService = userSummaryService;
         this.socialService = socialService;
     }
@@ -134,7 +129,7 @@ public class SuggestionServiceImpl implements SuggestionService {
         OffsetDateTime startedAt = OffsetDateTime.now(ZoneOffset.UTC);
 
         List<UUID> graph = userSuggestionRepository.findTwoHopCandidates(viewerId, SOURCE_DEPTH);
-        List<UUID> gorse = gorseNeighbours(viewerId);
+        List<UUID> gorse = gorseNeighbourSource.neighbours(viewerId, SOURCE_DEPTH);
         List<UUID> affinity =
                 userSuggestionRepository.findAffinityCandidates(viewerId, SOURCE_DEPTH);
 
@@ -180,44 +175,6 @@ public class SuggestionServiceImpl implements SuggestionService {
         return ordered.size();
     }
 
-    /**
-     * Source two, wrapped so an absent recommender contributes nothing rather than failing.
-     *
-     * <p>Production Gorse has never been inspected and may carry no {@code
-     * [[recommend.user-to-user]]} recommender at all. An unconfigured recommender answers with an
-     * empty list rather than an error, which this treats as a source with nothing to say; the blend
-     * then degrades to the follow graph and affinity overlap cleanly.
-     *
-     * <p>The breaker only sees genuine transport and server failures, which is what a breaker is
-     * for. Charging an empty list to it would open the breaker on a healthy Gorse and take the
-     * personalized feed down with it, because that breaker is shared.
-     */
-    @CircuitBreaker(name = "gorse", fallbackMethod = "gorseNeighboursFallback")
-    List<UUID> gorseNeighbours(UUID viewerId) {
-        List<GorseScore> scores = gorseClient.userNeighbors(viewerId, SOURCE_DEPTH);
-        List<UUID> ids = new ArrayList<>(scores.size());
-        for (GorseScore score : scores) {
-            try {
-                ids.add(UUID.fromString(score.id()));
-            } catch (IllegalArgumentException ex) {
-                // Gorse item ids are opaque strings. One that is not a UUID is not an account here,
-                // so it is skipped rather than failing the whole source.
-                log.debug("Skipping non-UUID Gorse neighbour id | id: {}", score.id());
-            }
-        }
-        return ids;
-    }
-
-    @SuppressWarnings("unused")
-    private List<UUID> gorseNeighboursFallback(UUID viewerId, Throwable throwable) {
-        log.warn(
-                "Gorse user-to-user neighbours unavailable, blending without them | viewer: {} |"
-                        + " cause: {}",
-                viewerId,
-                throwable.toString());
-        return List.of();
-    }
-
     private static void contribute(
             Map<UUID, Double> fused,
             Map<UUID, Set<String>> sources,
@@ -229,10 +186,5 @@ public class SuggestionServiceImpl implements SuggestionService {
             fused.merge(id, weight / (RRF_K + i + 1.0), Double::sum);
             sources.computeIfAbsent(id, key -> new LinkedHashSet<>()).add(label);
         }
-    }
-
-    @SuppressWarnings("unused")
-    private static Comparator<UUID> stableOrder() {
-        return Comparator.naturalOrder();
     }
 }

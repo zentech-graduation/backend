@@ -255,3 +255,99 @@ A public ticket that never resolved to an account gets no in-product notificatio
 | `common/security` | The Redis sliding window and `IpExtractor` |
 
 Nothing depends on this module in return.
+
+---
+
+## Section 9: Verification Requests
+
+Verification is a ticket type on this framework, not a parallel system.
+A verification request is a `support_tickets` row with `category = 'verification_request'`, and a `verification_requests` child row keyed one-to-one on the ticket carries the structured claim.
+
+Everything about the queue comes from the framework unchanged: claiming, the conflict-of-interest rule, escalation, the `admin_actions` audit trail, and the outbox mail path.
+Only three things are specific to verification.
+
+### The one-open-ticket guard is split by lane
+
+The guard V100 created was global across every category.
+Adding verification to it would mean a pending request for a badge blocks the same account from appealing a ban, which puts a discretionary request in the way of contesting an enforcement action.
+
+V107 therefore replaced `uq_support_tickets_one_open_per_user` with two partial unique indexes:
+
+| Index | Covers |
+|---|---|
+| `uq_support_tickets_one_open_support_per_user` | every category except `verification_request` |
+| `uq_support_tickets_one_open_verification_per_user` | `verification_request` only |
+
+Each lane still admits one non-terminal ticket per account.
+`SupportTicketRepository.hasOpenTicket` excludes `verification_request` to match the first index exactly, and `hasOpenVerificationRequest` is the service-layer half of the second.
+The two must agree: a service check wider than its index refuses what the database would admit, which is worse than either rule alone.
+
+### A moderator may decide a verification request
+
+`SupportCategory.VERIFICATION_REQUEST.isAppeal()` returns `false`, and that is load-bearing rather than incidental.
+The appeal-requires-admin rule in `SupportAuthorizationServiceImpl` reads that method, so returning `true` would be the one thing standing between a moderator and the queue they are meant to work.
+
+Verification is a discretionary grant rather than a verdict only an administrator can execute, so the narrowing that keeps unban and unsuspend administrator-only does not apply to it.
+
+The conflict-of-interest rule **does** extend to it, and is made to fire by populating `admin_action_id` on a resubmission with the audit row of the moderator revocation being contested.
+Without that link the rule would exist for this category and never trigger, because nothing else writes that column on a verification ticket.
+A system revocation is deliberately excluded from the link: it has no author, so it can produce no conflict.
+
+Two gates run on every decision, each owning what it is for:
+
+| Gate | Owns |
+|---|---|
+| `SupportAuthorizationService` | holding the claim, and conflict of interest |
+| `AdminAuthorizationService.assertMayDecideVerification` | not yourself, and not an administrator |
+
+The second lives in `AdminAuthorizationServiceImpl` beside every other actor-and-target rule rather than being a role check written inline.
+
+### No identity documents, deliberately
+
+**There is no file upload on the verification form, and no column for one.**
+No national ID, no passport, no scan of anything.
+
+This is a design constraint, not an unfinished feature.
+The form collects a category, the display name being claimed, and seven optional free-text or URL evidence fields, of which **at least three must be filled**.
+That rule is enforced in `VerificationServiceImpl` with its own error code `VERIFICATION_INSUFFICIENT_EVIDENCE`, and again by the `verification_requests_min_evidence` CHECK constraint, so no path can write a request below the floor.
+
+Do not "complete" this by adding document upload.
+Collecting identity documents changes what this system holds about people, and that is a decision to be taken deliberately rather than inherited from an assumption that a verification flow must have one.
+
+### The badge lifecycle
+
+`user_verifications` holds the grant, and revocation is soft: the row stays with `revoked_at` set, so a moderator reviewing a resubmission can see what was granted before and why it was withdrawn.
+
+`revocation_actor` distinguishes the two kinds of withdrawal, and the distinction is the point:
+
+| Actor | Meaning | `admin_actions.admin_id` |
+|---|---|---|
+| `moderator` | A person judged the account | the moderator |
+| `system` | An account status change swept the badge away | **null** |
+
+A null actor on the audit row is the same convention the discipline ladder's automatic strike and the suspension expiry sweep already use, so a reader does not have to learn a second rule.
+
+Status coupling, applied by `VerificationService.applyStatusChange` inside the same transaction as the status change:
+
+| Status | Badge |
+|---|---|
+| `suspended` | revoked, automatically |
+| `banned` | revoked, automatically |
+| `deactivated` | **retained** |
+| `active` | retained |
+
+Deactivation retains it because it is a voluntary act by the account holder, the account is invisible to everyone while it lasts, and withdrawing a badge there would punish something that is not an offence.
+
+**An automatic revocation never creates a support ticket.**
+It is a status-driven side effect rather than a request, and a ticket would put a row in the moderator queue that nobody asked for and nobody can act on.
+
+Reinstatement does not restore the badge.
+A badge is a claim the platform makes, and re-making it is a decision somebody has to take again rather than one that unwinds automatically.
+
+### `users.is_verified` and `users.verified_category`
+
+Both are denormalised from `user_verifications` by the `trg_user_verification_sync` trigger and are **never written by application code**, for the reason the counter policy gives.
+`verified_category` is mapped `insertable = false, updatable = false` on the entity, so a service cannot write it even by accident.
+
+They live on `users` rather than being joined at read time because `UserSummaryResponse` is the shared identity projection embedded in every response that names an account, and it is built by one JPQL constructor expression over `users` alone.
+Two columns there reach the post header, comments, replies, profile headers, profile list rows, search results, suggestions, conversation participants, story owners and notification actors without adding a join to the hottest read in the application.

@@ -68,6 +68,7 @@ class AdminServiceImplTest {
     @Mock private ReportRepository reportRepository;
     @Mock private AdminActionMapper adminActionMapper;
     @Mock private NotificationService notificationService;
+    @Mock private com.app.modules.support.service.VerificationService verificationService;
 
     private AdminServiceImpl service;
 
@@ -87,7 +88,8 @@ class AdminServiceImplTest {
                         new AdminActionRecorder(
                                 adminActionRepository, adminActionMapper, outboxService),
                         new AdminAuthorizationServiceImpl(userRepository),
-                        notificationService);
+                        notificationService,
+                        verificationService);
     }
 
     private void stubActor(UUID actorId, UserRole role) {
