@@ -44,6 +44,7 @@ import com.app.modules.report.enums.ReportStatus;
 import com.app.modules.report.enums.ReportType;
 import com.app.modules.report.repository.ReportRepository;
 import com.app.modules.story.repository.StoryRepository;
+import com.app.modules.support.service.VerificationService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -70,6 +71,7 @@ public class AdminServiceImpl implements AdminService {
     private final AdminActionRecorder adminActionRecorder;
     private final AdminAuthorizationService adminAuthorizationService;
     private final NotificationService notificationService;
+    private final VerificationService verificationService;
 
     public AdminServiceImpl(
             AdminActionRepository adminActionRepository,
@@ -83,7 +85,8 @@ public class AdminServiceImpl implements AdminService {
             AdminActionMapper adminActionMapper,
             AdminActionRecorder adminActionRecorder,
             AdminAuthorizationService adminAuthorizationService,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            VerificationService verificationService) {
         this.adminActionRepository = adminActionRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
@@ -96,6 +99,7 @@ public class AdminServiceImpl implements AdminService {
         this.adminActionRecorder = adminActionRecorder;
         this.adminAuthorizationService = adminAuthorizationService;
         this.notificationService = notificationService;
+        this.verificationService = verificationService;
     }
 
     @Override
@@ -350,6 +354,16 @@ public class AdminServiceImpl implements AdminService {
         // administrator has already handled.
         user.setSuspendedUntil(targetStatus == UserStatus.SUSPENDED ? suspendedUntil : null);
         userRepository.save(user);
+        // The badge follows the account status in the same transaction as the status change, so
+        // the two can never be observed disagreeing. Suspension and a ban withdraw it;
+        // reinstatement does not restore it, because a badge is a claim the platform makes and
+        // re-making it is a decision somebody has to take again rather than one that unwinds
+        // automatically.
+        //
+        // No support ticket is created for this. It is a status-driven side effect rather than a
+        // request, and the audit row it writes carries a null actor so the log distinguishes it
+        // from a badge a moderator chose to withdraw.
+        verificationService.applyStatusChange(userId, targetStatus);
         // The suspension end date is a server-derived fact, so it belongs on the audit row, and the
         // suspension notice is the one template that has to state a date. Passing it through the
         // metadata map is what lets the recorder build the notice payload without this method

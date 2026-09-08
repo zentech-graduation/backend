@@ -179,6 +179,15 @@ public enum ApiErrorCode {
     SUPPORT_CAPTCHA_FAILED("SUPPORT_CAPTCHA_FAILED", "The verification challenge was not accepted", HttpStatus.BAD_REQUEST),
     SUPPORT_DAILY_LIMIT_REACHED("SUPPORT_DAILY_LIMIT_REACHED", "Too many support requests from this address today", HttpStatus.TOO_MANY_REQUESTS),
 
+    // Verification
+    // Its own code rather than a generic validation failure, because the three-field rule is a
+    // policy the client has to explain before submission rather than a malformed-input error.
+    VERIFICATION_INSUFFICIENT_EVIDENCE("VERIFICATION_INSUFFICIENT_EVIDENCE", "Fill at least three evidence fields before submitting", HttpStatus.UNPROCESSABLE_ENTITY),
+    VERIFICATION_CATEGORY_NOT_FOUND("VERIFICATION_CATEGORY_NOT_FOUND", "Verification category not found", HttpStatus.NOT_FOUND),
+    VERIFICATION_ALREADY_VERIFIED("VERIFICATION_ALREADY_VERIFIED", "This account already holds a verified badge", HttpStatus.CONFLICT),
+    VERIFICATION_NOT_ACTIVE("VERIFICATION_NOT_ACTIVE", "This account holds no verified badge to revoke", HttpStatus.CONFLICT),
+    VERIFICATION_REQUEST_NOT_FOUND("VERIFICATION_REQUEST_NOT_FOUND", "Verification request not found", HttpStatus.NOT_FOUND),
+
     // Mail campaigns
     CAMPAIGN_NOT_FOUND("CAMPAIGN_NOT_FOUND", "Campaign not found", HttpStatus.NOT_FOUND),
     CAMPAIGN_NOT_EDITABLE("CAMPAIGN_NOT_EDITABLE", "A campaign can only be edited while it is a draft", HttpStatus.CONFLICT),

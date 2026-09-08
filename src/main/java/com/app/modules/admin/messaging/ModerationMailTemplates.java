@@ -8,10 +8,11 @@ import com.app.modules.mail.enums.ModerationMailTemplate;
 /**
  * The closed mapping from a moderation action to the notice its subject receives.
  *
- * <p>Eleven actions produce mail: the nine moderation decisions, plus the two that answer a support
- * ticket. The ticket notices travel this path rather than a new one precisely because it applies no
- * ACTIVE-only gate - a banned account asking to be unbanned is the case that has to work. Every
- * other action type is absent on purpose, and the absences carry as much intent as the entries:
+ * <p>Fourteen actions produce mail: the nine moderation decisions, the two that answer a support
+ * ticket, and the three verification decisions. The ticket notices travel this path rather than a
+ * new one precisely because it applies no ACTIVE-only gate - a banned account asking to be unbanned
+ * is the case that has to work. Every other action type is absent on purpose, and the absences
+ * carry as much intent as the entries:
  *
  * <ul>
  *   <li>No {@code RESTORE_*} action mails. Telling someone their content is back draws attention to
@@ -50,7 +51,16 @@ public final class ModerationMailTemplates {
                             ModerationMailTemplate.SUPPORT_TICKET_ANSWERED),
                     Map.entry(
                             AdminActionType.REJECT_SUPPORT_TICKET,
-                            ModerationMailTemplate.SUPPORT_TICKET_REJECTED));
+                            ModerationMailTemplate.SUPPORT_TICKET_REJECTED),
+                    Map.entry(
+                            AdminActionType.GRANT_VERIFICATION,
+                            ModerationMailTemplate.VERIFICATION_GRANTED),
+                    Map.entry(
+                            AdminActionType.REJECT_VERIFICATION,
+                            ModerationMailTemplate.VERIFICATION_REJECTED),
+                    Map.entry(
+                            AdminActionType.REVOKE_VERIFICATION,
+                            ModerationMailTemplate.VERIFICATION_REVOKED));
 
     private ModerationMailTemplates() {}
 

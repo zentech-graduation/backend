@@ -123,6 +123,39 @@ public interface AdminAuthorizationService {
     void assertMayChangeUserStatus(UUID actorId, UserRole actorRole, User target);
 
     /**
+     * Classifies a verification decision without throwing.
+     *
+     * <p>The same actor-and-target skeleton the status rules use, with one difference: a moderator
+     * is admitted alongside an administrator. Verification is a discretionary grant rather than an
+     * enforcement action, so the narrowing that keeps unban and unsuspend administrator-only does
+     * not apply to it; a moderator granting a badge is not recording a verdict they cannot execute.
+     *
+     * <p>The other two guards do apply and are the reason this routes here rather than checking a
+     * role inline. Granting yourself a badge and revoking an administrator's are exactly the abuses
+     * {@code SELF_TARGET} and {@code TARGET_IS_ADMIN} exist to stop.
+     *
+     * @param actorId the staff member deciding
+     * @param actorRole the actor's role as read from the source of truth, never from a token claim
+     * @param targetId the account whose badge would change
+     * @param targetRole the target's current role
+     * @return the outcome; {@link Outcome#ALLOWED} when the actor may decide
+     */
+    Outcome evaluateVerificationDecision(
+            UUID actorId, UserRole actorRole, UUID targetId, UserRole targetRole);
+
+    /**
+     * Asserts that the actor may grant, reject or revoke verification for the target account.
+     *
+     * @param actorId the staff member deciding
+     * @param actorRole the role resolved for {@code actorId} from the source of truth
+     * @param target the target account, already loaded inside the caller's transaction
+     * @throws AppException {@code FORBIDDEN} when the actor is neither moderator nor administrator,
+     *     {@code ADMIN_SELF_ACTION_NOT_ALLOWED} when actor and target are the same account, and
+     *     {@code ADMIN_TARGET_PROTECTED} when the target is an administrator
+     */
+    void assertMayDecideVerification(UUID actorId, UserRole actorRole, User target);
+
+    /**
      * Classifies a requested role transition without throwing.
      *
      * <p>Permitted, and nothing else:

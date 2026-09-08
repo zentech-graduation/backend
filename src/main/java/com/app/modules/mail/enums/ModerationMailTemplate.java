@@ -27,7 +27,13 @@ public enum ModerationMailTemplate {
     STORY_REMOVED           ("mail/moderation/content-removed-story",    "Your story was removed",                    true),
     MESSAGE_REMOVED         ("mail/moderation/content-removed-message",  "Your message was removed",                  true),
     SUPPORT_TICKET_ANSWERED ("mail/moderation/support-ticket-answered",  "We have replied to your support request",   false),
-    SUPPORT_TICKET_REJECTED ("mail/moderation/support-ticket-rejected",  "An update on your support request",         false);
+    SUPPORT_TICKET_REJECTED ("mail/moderation/support-ticket-rejected",  "An update on your support request",         false),
+    VERIFICATION_GRANTED    ("mail/moderation/verification-granted",     "Your account is now verified",              false),
+    VERIFICATION_REJECTED   ("mail/moderation/verification-rejected",    "An update on your verification request",     false),
+    // The one verification notice that shows the standards line. Losing a badge to a moderator's
+    // decision is the only one of the three that follows from conduct, and it is the case where the
+    // recipient needs to know which standards the decision was measured against.
+    VERIFICATION_REVOKED    ("mail/moderation/verification-revoked",     "Your verified badge has been removed",      true);
     // spotless:on
 
     private final String templatePath;

@@ -145,6 +145,9 @@ public final class ApiConstants {
         public static final String ROOT = API_V1 + "/recommendations";
         public static final String FEED = "/feed";
         public static final String IMPRESSIONS = "/impressions";
+        // People you may know, and the per-viewer permanent removal of one row from it.
+        public static final String SUGGESTIONS = "/suggestions";
+        public static final String SUGGESTION_DISMISS = "/suggestions/{userId}/dismiss";
     }
 
     public static final class Media {
@@ -182,6 +185,15 @@ public final class ApiConstants {
         public static final String CONFIRM = "/public/confirm";
         // Anonymous. Campaign mail opt-out, followed from a mail client with no session.
         public static final String UNSUBSCRIBE = "/unsubscribe";
+        // The eight verification categories, with the icon key a client maps to a glyph.
+        public static final String VERIFICATION_CATEGORIES = "/verification/categories";
+        // Submits a verification request. Creates a verification_request ticket and its
+        // structured child row in one transaction.
+        public static final String VERIFICATION_REQUESTS = "/verification/requests";
+        // The caller's own current verification state: the active grant, the open request, or
+        // neither. One call so a client can render the form, the submitted state or the decided
+        // state without guessing which it is in.
+        public static final String VERIFICATION_ME = "/verification/me";
     }
 
     public static final class Admin {
@@ -252,6 +264,15 @@ public final class ApiConstants {
         public static final String SUPPORT_TICKET_CLAIM = "/support/tickets/{ticketId}/claim";
         public static final String SUPPORT_TICKET_RESPOND = "/support/tickets/{ticketId}/respond";
         public static final String SUPPORT_TICKET_ESCALATE = "/support/tickets/{ticketId}/escalate";
+        // The verification review queue and its two decisions. Separate from the general support
+        // queue routes because the queue rows carry the structured request and the account's
+        // previous grants, which a general ticket has no equivalent of.
+        public static final String VERIFICATION_QUEUE = "/verification/requests";
+        public static final String VERIFICATION_REQUEST_BY_ID = "/verification/requests/{ticketId}";
+        public static final String VERIFICATION_APPROVE =
+                "/verification/requests/{ticketId}/approve";
+        public static final String VERIFICATION_REJECT = "/verification/requests/{ticketId}/reject";
+        public static final String VERIFICATION_REVOKE = "/verification/users/{userId}/revoke";
         // Mail campaigns, administrator only.
         public static final String MAIL_TEMPLATES = "/mail/templates";
         public static final String CAMPAIGNS = "/mail/campaigns";

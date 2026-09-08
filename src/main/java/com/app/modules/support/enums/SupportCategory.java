@@ -17,7 +17,16 @@ public enum SupportCategory {
     ACCOUNT_DATA,
     BUG_REPORT,
     SAFETY_CONCERN,
-    OTHER;
+    OTHER,
+    /**
+     * A request for a verified badge.
+     *
+     * <p>Deliberately not an appeal. {@link #isAppeal()} returning false here is what admits a
+     * moderator to the verification queue: the appeal-requires-admin rule reads that method, and
+     * verification is a discretionary grant rather than a verdict only an administrator can
+     * execute.
+     */
+    VERIFICATION_REQUEST;
 
     /**
      * Whether this category is an appeal against a moderation decision.

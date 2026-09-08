@@ -81,6 +81,32 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
     }
 
     @Override
+    public Outcome evaluateVerificationDecision(
+            UUID actorId, UserRole actorRole, UUID targetId, UserRole targetRole) {
+        if (actorRole != UserRole.MODERATOR && actorRole != UserRole.ADMIN) {
+            return Outcome.ACTOR_NOT_ADMIN;
+        }
+        if (actorId.equals(targetId)) {
+            return Outcome.SELF_TARGET;
+        }
+        if (targetRole == UserRole.ADMIN) {
+            return Outcome.TARGET_IS_ADMIN;
+        }
+        return Outcome.ALLOWED;
+    }
+
+    @Override
+    public void assertMayDecideVerification(UUID actorId, UserRole actorRole, User target) {
+        switch (evaluateVerificationDecision(
+                actorId, actorRole, target.getId(), target.getRole())) {
+            case ALLOWED -> {}
+            case ACTOR_NOT_ADMIN -> throw new AppException(ApiErrorCode.FORBIDDEN);
+            case SELF_TARGET -> throw new AppException(ApiErrorCode.ADMIN_SELF_ACTION_NOT_ALLOWED);
+            default -> throw new AppException(ApiErrorCode.ADMIN_TARGET_PROTECTED);
+        }
+    }
+
+    @Override
     public Outcome evaluateRoleTransition(
             UUID actorId,
             UserRole actorRole,

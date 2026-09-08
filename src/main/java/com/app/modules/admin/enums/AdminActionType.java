@@ -41,7 +41,10 @@ public enum AdminActionType {
     UNBAN_HASHTAG,
     DELETE_HASHTAG,
     PIN_HASHTAG,
-    UNPIN_HASHTAG;
+    UNPIN_HASHTAG,
+    GRANT_VERIFICATION,
+    REJECT_VERIFICATION,
+    REVOKE_VERIFICATION;
 
     @JsonCreator
     public static AdminActionType fromJson(String value) {

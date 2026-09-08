@@ -18,23 +18,30 @@ import com.app.modules.support.entity.SupportTicket;
 public interface SupportTicketRepository extends JpaRepository<SupportTicket, UUID> {
 
     /**
-     * Whether the account already holds a ticket that is not terminal.
+     * Whether the account already holds an ordinary support ticket that is not terminal.
      *
      * <p>The service-layer half of the one-open-ticket rule. The other half is the partial unique
-     * index {@code uq_support_tickets_one_open_per_user}, which is what actually holds under a
-     * concurrent double submit; this check exists so the ordinary case returns a named error code
-     * instead of surfacing a constraint violation.
+     * index {@code uq_support_tickets_one_open_support_per_user}, which is what actually holds
+     * under a concurrent double submit; this check exists so the ordinary case returns a named
+     * error code instead of surfacing a constraint violation.
+     *
+     * <p>{@code verification_request} is excluded, matching that index exactly. The guard is per
+     * lane rather than global from V107 onward: a pending verification request must not stand in
+     * the way of contesting a ban, which is the priority inversion a single global guard produced.
+     * Leaving it here while the index excluded it would put the refusal back in the service layer
+     * and make the database and the code disagree about the same rule.
      *
      * <p>{@code pending_confirmation} is excluded here exactly as it is excluded from the index. An
      * unconfirmed public submission is not yet a real ticket and must not block the account's
      * genuine one.
      *
      * @param userId the account to check
-     * @return true when a non-terminal, confirmed ticket already exists for that account
+     * @return true when a non-terminal, confirmed, non-verification ticket exists for that account
      */
     @Query(
             value =
                     "SELECT EXISTS (SELECT 1 FROM support_tickets WHERE user_id = :userId"
+                            + " AND category <> 'verification_request'"
                             + " AND status IN ('open', 'in_progress', 'escalated'))",
             nativeQuery = true)
     boolean hasOpenTicket(@Param("userId") UUID userId);
@@ -106,6 +113,65 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, UU
                     + " AND (:status IS NULL OR t.status = :status)"
                     + " ORDER BY t.createdAt DESC, t.id DESC")
     List<SupportTicket> findStaffQueue(
+            @Param("status") com.app.modules.support.enums.SupportTicketStatus status,
+            Pageable pageable);
+
+    /**
+     * Whether the account already holds an outstanding verification request.
+     *
+     * <p>The verification half of the split guard. {@code
+     * uq_support_tickets_one_open_support_per_user} and {@code
+     * uq_support_tickets_one_open_verification_per_user} (V107) hold one lane each, so a pending
+     * verification request no longer blocks a ban appeal and an open appeal no longer blocks a
+     * verification request. This check exists so the ordinary case answers a named error code
+     * instead of surfacing a constraint violation.
+     *
+     * @param userId the account to check
+     * @return true when a non-terminal verification request already exists for that account
+     */
+    @Query(
+            value =
+                    "SELECT EXISTS (SELECT 1 FROM support_tickets WHERE user_id = :userId"
+                            + " AND category = 'verification_request'"
+                            + " AND status IN ('open', 'in_progress', 'escalated'))",
+            nativeQuery = true)
+    boolean hasOpenVerificationRequest(@Param("userId") UUID userId);
+
+    /**
+     * One account's verification requests, newest first.
+     *
+     * @param userId the account
+     * @param pageable page size carrier
+     * @return verification tickets newest first
+     */
+    @Query(
+            "SELECT t FROM SupportTicket t WHERE t.userId = :userId"
+                    + " AND t.category = com.app.modules.support.enums.SupportCategory"
+                    + ".VERIFICATION_REQUEST"
+                    + " ORDER BY t.createdAt DESC, t.id DESC")
+    List<SupportTicket> findVerificationTickets(@Param("userId") UUID userId, Pageable pageable);
+
+    /**
+     * The verification review queue.
+     *
+     * <p>Separate from {@code findStaffQueue} so a moderator working verification is not reading
+     * past ban appeals, and so the general queue is not diluted by requests that need a different
+     * surface to review. {@code pending_confirmation} cannot occur here, because a verification
+     * request is only ever created by an authenticated caller, but the predicate is kept for
+     * symmetry with the general queue.
+     *
+     * @param status status to match, or null for every staff-visible status
+     * @param pageable page size carrier
+     * @return verification tickets newest first
+     */
+    @Query(
+            "SELECT t FROM SupportTicket t WHERE t.category = com.app.modules.support.enums"
+                    + ".SupportCategory.VERIFICATION_REQUEST"
+                    + " AND t.status <> com.app.modules.support.enums.SupportTicketStatus"
+                    + ".PENDING_CONFIRMATION"
+                    + " AND (:status IS NULL OR t.status = :status)"
+                    + " ORDER BY t.createdAt DESC, t.id DESC")
+    List<SupportTicket> findVerificationQueue(
             @Param("status") com.app.modules.support.enums.SupportTicketStatus status,
             Pageable pageable);
 
