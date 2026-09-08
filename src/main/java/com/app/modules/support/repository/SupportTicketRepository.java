@@ -110,9 +110,29 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, UU
     @Query(
             "SELECT t FROM SupportTicket t WHERE t.status <> com.app.modules.support.enums"
                     + ".SupportTicketStatus.PENDING_CONFIRMATION"
-                    + " AND (:status IS NULL OR t.status = :status)"
                     + " ORDER BY t.createdAt DESC, t.id DESC")
-    List<SupportTicket> findStaffQueue(
+    List<SupportTicket> findStaffQueue(Pageable pageable);
+
+    /**
+     * The staff queue narrowed to one status.
+     *
+     * <p>A separate method rather than a nullable parameter on the one above, and the reason is a
+     * real failure rather than a preference. {@code (:status IS NULL OR t.status = :status)}
+     * against a PostgreSQL enum column leaves the driver unable to infer a type for the bare
+     * parameter in {@code ? IS NULL}, and PostgreSQL answers {@code could not determine data type
+     * of parameter $1}. Every call to the combined form failed with a 500 at runtime; only a mocked
+     * repository made it look sound.
+     *
+     * @param status the status to match
+     * @param pageable page size carrier
+     * @return matching tickets, newest first
+     */
+    @Query(
+            "SELECT t FROM SupportTicket t WHERE t.status = :status"
+                    + " AND t.status <> com.app.modules.support.enums.SupportTicketStatus"
+                    + ".PENDING_CONFIRMATION"
+                    + " ORDER BY t.createdAt DESC, t.id DESC")
+    List<SupportTicket> findStaffQueueByStatus(
             @Param("status") com.app.modules.support.enums.SupportTicketStatus status,
             Pageable pageable);
 
@@ -169,9 +189,28 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, UU
                     + ".SupportCategory.VERIFICATION_REQUEST"
                     + " AND t.status <> com.app.modules.support.enums.SupportTicketStatus"
                     + ".PENDING_CONFIRMATION"
-                    + " AND (:status IS NULL OR t.status = :status)"
                     + " ORDER BY t.createdAt DESC, t.id DESC")
-    List<SupportTicket> findVerificationQueue(
+    List<SupportTicket> findVerificationQueue(Pageable pageable);
+
+    /**
+     * The verification queue narrowed to one status.
+     *
+     * <p>Split from the unfiltered form for the same typing reason as {@code
+     * findStaffQueueByStatus}: a nullable enum parameter inside {@code ? IS NULL} cannot be typed
+     * by PostgreSQL and fails at runtime.
+     *
+     * @param status the status to match
+     * @param pageable page size carrier
+     * @return matching verification tickets, newest first
+     */
+    @Query(
+            "SELECT t FROM SupportTicket t WHERE t.category = com.app.modules.support.enums"
+                    + ".SupportCategory.VERIFICATION_REQUEST"
+                    + " AND t.status = :status"
+                    + " AND t.status <> com.app.modules.support.enums.SupportTicketStatus"
+                    + ".PENDING_CONFIRMATION"
+                    + " ORDER BY t.createdAt DESC, t.id DESC")
+    List<SupportTicket> findVerificationQueueByStatus(
             @Param("status") com.app.modules.support.enums.SupportTicketStatus status,
             Pageable pageable);
 

@@ -215,11 +215,11 @@ public class SupportTicketServiceImpl implements SupportTicketService {
     public List<SupportTicketStaffResponse> listForStaff(
             UUID actorId, SupportTicketStatus status, int limit) {
         requireStaff(actorId);
-        return supportTicketRepository
-                .findStaffQueue(status, PageRequest.of(0, pageSize(limit)))
-                .stream()
-                .map(supportTicketMapper::toStaffResponse)
-                .toList();
+        PageRequest page = PageRequest.of(0, pageSize(limit));
+        return (status == null
+                        ? supportTicketRepository.findStaffQueue(page)
+                        : supportTicketRepository.findStaffQueueByStatus(status, page))
+                .stream().map(supportTicketMapper::toStaffResponse).toList();
     }
 
     @Override

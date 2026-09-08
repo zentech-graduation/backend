@@ -244,11 +244,11 @@ public class VerificationServiceImpl implements VerificationService {
     public List<VerificationQueueItemResponse> queue(
             UUID actorId, SupportTicketStatus status, int limit) {
         requireStaff(actorId);
-        return supportTicketRepository
-                .findVerificationQueue(status, PageRequest.of(0, pageSize(limit)))
-                .stream()
-                .map(this::toQueueItem)
-                .toList();
+        PageRequest page = PageRequest.of(0, pageSize(limit));
+        return (status == null
+                        ? supportTicketRepository.findVerificationQueue(page)
+                        : supportTicketRepository.findVerificationQueueByStatus(status, page))
+                .stream().map(this::toQueueItem).toList();
     }
 
     @Override
