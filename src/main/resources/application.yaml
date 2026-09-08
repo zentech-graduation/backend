@@ -368,6 +368,14 @@ app:
       "[/api/v1/hashtags/*/posts]":
         max-attempts: 40
         window-seconds: 60
+      # Cached in Redis for ten minutes per caller and page, so the budget covers cache misses
+      # and tab switching rather than the fusion cost itself.
+      "[/api/v1/hashtags/trending/for-you]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/*/pin]":
+        max-attempts: 30
+        window-seconds: 60
 
 management:
   endpoints:

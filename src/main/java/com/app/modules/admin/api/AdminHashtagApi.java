@@ -24,6 +24,7 @@ import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.modules.admin.dto.request.AdminCreateHashtagRequest;
 import com.app.modules.admin.dto.request.AdminDeleteHashtagRequest;
+import com.app.modules.admin.dto.request.AdminHashtagPinRequest;
 import com.app.modules.admin.dto.request.AdminUpdateHashtagRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.hashtag.dto.response.HashtagAdminResponse;
@@ -301,4 +302,27 @@ public interface AdminHashtagApi {
     ResponseEntity<ApiResponse<AdminActionResponse>> deleteHashtag(
             @PathVariable("hashtagId") UUID hashtagId,
             @Valid @RequestBody AdminDeleteHashtagRequest request);
+
+    @Operation(
+            summary = "Pin a hashtag",
+            description =
+                    "Pins a hashtag platform-wide so it leads the trending list. Rejected with 404"
+                            + " HASHTAG_UNAVAILABLE when the hashtag is banned or deleted, because a"
+                            + " pin promotes a term and a term out of circulation must not be"
+                            + " promoted. Rejected with ADMIN_INVALID_TRANSITION when it is already"
+                            + " pinned. Banning a pinned hashtag clears the pin.")
+    @PostMapping(ApiConstants.Admin.HASHTAG_PIN)
+    ResponseEntity<ApiResponse<AdminActionResponse>> pinHashtag(
+            @PathVariable("hashtagId") UUID hashtagId,
+            @Valid @RequestBody AdminHashtagPinRequest request);
+
+    @Operation(
+            summary = "Unpin a hashtag",
+            description =
+                    "Removes a platform-wide pin. Rejected with ADMIN_INVALID_TRANSITION when the"
+                            + " hashtag is not pinned.")
+    @DeleteMapping(ApiConstants.Admin.HASHTAG_PIN)
+    ResponseEntity<ApiResponse<AdminActionResponse>> unpinHashtag(
+            @PathVariable("hashtagId") UUID hashtagId,
+            @Valid @RequestBody AdminHashtagPinRequest request);
 }

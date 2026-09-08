@@ -182,4 +182,44 @@ public interface UserHashtagAffinityRepository
             value = "SELECT count(*) FROM user_hashtag_affinity WHERE user_id = :userId",
             nativeQuery = true)
     long countForUser(@Param("userId") UUID userId);
+
+    /**
+     * Hashtags adjacent to the user's interests but not among them.
+     *
+     * <p>Candidates co-occur on posts with hashtags the user already engages with, while the user
+     * holds no affinity row for them. This is the novelty source for personalised trending: a list
+     * built only from what a user already reads is a filter bubble and is less useful than the
+     * platform list it replaced.
+     *
+     * <p>Adjacency is measured by co-occurrence rather than by raw popularity on purpose.
+     * Popularity would surface the same handful of platform-wide hashtags to every user, which the
+     * platform tab already shows; co-occurrence surfaces something the user has a reason to care
+     * about.
+     *
+     * <p>Banned and deleted hashtags are excluded, so a suggestion can never name a term the post
+     * write path would refuse.
+     *
+     * @param userId user whose adjacency is computed
+     * @param limit maximum candidates returned
+     * @return hashtag ids ordered by co-occurrence strength, strongest first
+     */
+    @Query(
+            value =
+                    """
+					SELECT ph2.hashtag_id
+					FROM user_hashtag_affinity a
+					JOIN post_hashtags ph1 ON ph1.hashtag_id = a.hashtag_id
+					JOIN post_hashtags ph2 ON ph2.post_id = ph1.post_id
+											AND ph2.hashtag_id <> a.hashtag_id
+					JOIN hashtags h ON h.id = ph2.hashtag_id AND h.status = 'active'
+					WHERE a.user_id = :userId
+					AND NOT EXISTS (
+							SELECT 1 FROM user_hashtag_affinity x
+							WHERE x.user_id = :userId AND x.hashtag_id = ph2.hashtag_id)
+					GROUP BY ph2.hashtag_id
+					ORDER BY count(*) DESC, ph2.hashtag_id DESC
+					LIMIT :limit
+					""",
+            nativeQuery = true)
+    List<UUID> findAdjacentHashtagIds(@Param("userId") UUID userId, @Param("limit") int limit);
 }

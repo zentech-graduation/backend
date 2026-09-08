@@ -28,6 +28,7 @@ import com.app.common.web.StrictQueryParameters;
 import com.app.modules.admin.api.AdminHashtagApi;
 import com.app.modules.admin.dto.request.AdminCreateHashtagRequest;
 import com.app.modules.admin.dto.request.AdminDeleteHashtagRequest;
+import com.app.modules.admin.dto.request.AdminHashtagPinRequest;
 import com.app.modules.admin.dto.request.AdminUpdateHashtagRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
 import com.app.modules.admin.service.AdminHashtagService;
@@ -115,6 +116,30 @@ public class AdminHashtagController extends BaseController implements AdminHasht
         return action(
                 adminHashtagService.deleteHashtag(
                         SecurityUtils.getCurrentUserId(), hashtagId, request));
+    }
+
+    /** Pins a hashtag platform-wide so it leads the trending list. */
+    @Override
+    @PostMapping(ApiConstants.Admin.HASHTAG_PIN)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> pinHashtag(
+            @PathVariable("hashtagId") UUID hashtagId,
+            @Valid @RequestBody AdminHashtagPinRequest request) {
+        return action(
+                adminHashtagService.pinHashtag(
+                        SecurityUtils.getCurrentUserId(), hashtagId, request.note()));
+    }
+
+    /** Removes a hashtag's platform-wide pin. */
+    @Override
+    @DeleteMapping(ApiConstants.Admin.HASHTAG_PIN)
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AdminActionResponse>> unpinHashtag(
+            @PathVariable("hashtagId") UUID hashtagId,
+            @Valid @RequestBody AdminHashtagPinRequest request) {
+        return action(
+                adminHashtagService.unpinHashtag(
+                        SecurityUtils.getCurrentUserId(), hashtagId, request.note()));
     }
 
     private ResponseEntity<ApiResponse<AdminActionResponse>> action(AdminActionResponse response) {

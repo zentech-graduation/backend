@@ -3,6 +3,8 @@ package com.app.modules.hashtag.dto.response;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.app.modules.hashtag.enums.TrendingSource;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /** A hashtag's ranking within a single trending snapshot window. */
@@ -24,4 +26,12 @@ public record HashtagTrendingResponse(
                         example = "2024-01-15T00:00:00Z")
                 OffsetDateTime periodStart,
         @Schema(description = "End of the trending window (UTC)", example = "2024-01-16T00:00:00Z")
-                OffsetDateTime periodEnd) {}
+                OffsetDateTime periodEnd,
+        @Schema(description = "Whether an administrator has pinned this hashtag platform-wide")
+                boolean pinned,
+        @Schema(
+                        description =
+                                "Why this hashtag is in the list: platform for the platform-wide"
+                                        + " snapshot, affinity for the caller's own interests, novel"
+                                        + " for a hashtag adjacent to them but not among them")
+                TrendingSource source) {}

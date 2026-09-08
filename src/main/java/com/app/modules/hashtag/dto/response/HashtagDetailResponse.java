@@ -34,4 +34,6 @@ public record HashtagDetailResponse(
         @Schema(
                         description = "UTC timestamp when the hashtag was first used",
                         example = "2024-01-15T10:30:00Z")
-                OffsetDateTime createdAt) {}
+                OffsetDateTime createdAt,
+        @Schema(description = "Whether an administrator has pinned this hashtag platform-wide")
+                boolean pinned) {}

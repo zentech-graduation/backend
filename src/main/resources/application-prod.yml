@@ -144,6 +144,14 @@ app:
       "[/api/v1/hashtags/*/posts]":
         max-attempts: 40
         window-seconds: 60
+      # Cached per caller and page, so a miss is the only call that reaches the fusion.
+      "[/api/v1/hashtags/trending/for-you]":
+        max-attempts: 60
+        window-seconds: 60
+      # Administrative write, sized like the other moderation actions on this surface.
+      "[/api/v1/admin/hashtags/*/pin]":
+        max-attempts: 20
+        window-seconds: 60
       "[/api/v1/recommendations/**]":
         max-attempts: 60
         window-seconds: 60

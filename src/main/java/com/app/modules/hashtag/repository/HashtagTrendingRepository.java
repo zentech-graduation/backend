@@ -46,4 +46,28 @@ public interface HashtagTrendingRepository
     @Modifying
     @Query("DELETE FROM HashtagTrending t WHERE t.id.hashtagId = :hashtagId")
     int deleteAllByHashtagId(@Param("hashtagId") UUID hashtagId);
+
+    /**
+     * One page of a trending snapshot, pinned hashtags first and then by rank.
+     *
+     * <p>A platform-wide pin has to lead the whole list, not the page it happens to fall on, so the
+     * ordering is applied in the database rather than to an already-paged result.
+     *
+     * @param periodStart the snapshot window to read
+     * @param limit page size
+     * @param offset rows to skip
+     * @return trending rows for the window, pinned first then by ascending rank
+     */
+    @Query(
+            value =
+                    "SELECT t.* FROM hashtag_trending t"
+                            + " JOIN hashtags h ON h.id = t.hashtag_id"
+                            + " WHERE t.period_start = :periodStart"
+                            + " ORDER BY (h.pinned_at IS NULL), t.rank ASC, t.hashtag_id DESC"
+                            + " LIMIT :limit OFFSET :offset",
+            nativeQuery = true)
+    List<HashtagTrending> findByPeriodPinnedFirst(
+            @Param("periodStart") OffsetDateTime periodStart,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
 }

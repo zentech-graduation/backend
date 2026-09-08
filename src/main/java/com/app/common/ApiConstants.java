@@ -131,6 +131,7 @@ public final class ApiConstants {
 
         public static final String ROOT = API_V1 + "/hashtags";
         public static final String TRENDING = "/trending";
+        public static final String TRENDING_FOR_YOU = "/trending/for-you";
         public static final String SEARCH = "/search";
         public static final String BY_NAME = "/name/{name}";
         // Absolute rather than relative: the handler lives in the post module, which has no
@@ -234,6 +235,7 @@ public final class ApiConstants {
         // declaration order, and the two carry different HTTP methods in any case.
         public static final String HASHTAG_SEARCH = "/hashtags/search";
         public static final String HASHTAG_BY_ID = "/hashtags/{hashtagId}";
+        public static final String HASHTAG_PIN = "/hashtags/{hashtagId}/pin";
         // The content-inspection surface. Under /api/v1/admin/ and outside the /users/** sub-tree
         // for the same structural reason ACTIONS_FOR_USER is: that sub-tree is reserved for the
         // ADMIN-only matcher, and investigating an account's content is moderator work. Putting

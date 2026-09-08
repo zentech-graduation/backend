@@ -87,4 +87,27 @@ public interface AdminHashtagService {
      */
     AdminActionResponse deleteHashtag(
             UUID actorId, UUID hashtagId, AdminDeleteHashtagRequest request);
+
+    /**
+     * Pins a hashtag platform-wide and records the moderation action.
+     *
+     * <p>Writes the {@code admin_actions} row and mutates the hashtag in the same transaction, as
+     * every other action on this surface does.
+     *
+     * @param actorId administrator taking the action
+     * @param hashtagId hashtag to pin
+     * @param note optional free-text note stored on the audit row
+     * @return the recorded moderation action
+     */
+    AdminActionResponse pinHashtag(UUID actorId, UUID hashtagId, String note);
+
+    /**
+     * Removes a platform-wide pin and records the moderation action.
+     *
+     * @param actorId administrator taking the action
+     * @param hashtagId hashtag to unpin
+     * @param note optional free-text note stored on the audit row
+     * @return the recorded moderation action
+     */
+    AdminActionResponse unpinHashtag(UUID actorId, UUID hashtagId, String note);
 }

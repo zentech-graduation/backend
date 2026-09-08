@@ -251,6 +251,14 @@ The three older months are index scans; the current month is a sequential scan b
 | `post_unlike` | -2.0 | exact negation of `post_like` |
 | `hashtag_click` | 3.0 | direct navigational intent, joined on the hashtag itself rather than through a post |
 
+**`post_view = 0.25` was calibrated against a seeding artefact and must be re-measured against real traffic.**
+Do not read it as a considered production constant.
+At the time it was chosen, all 21,548 `post_view` rows in the seeded database carried a single date (2026-09-07) while every other event type spanned the full 90 days.
+That is an artefact of how the seed replays events: `SeedOutboxEmitter` emits `post.viewed.v1` and the consumer stamps the row at replay time, so every view looks like it happened at once, and looks like it happened now.
+The combination made views simultaneously the most numerous signal and, after time decay, the most recent one, which is why the weight sits an order of magnitude below a like rather than merely below it.
+Under real traffic, views will spread across the window like every other event and the same 0.25 will suppress them further than intended.
+Re-measure it against a production event distribution before treating the ranking as tuned.
+
 Reversals negate their own action exactly, so a user who liked and then unliked a post contributes nothing from that pair.
 A hashtag whose contributions sum to zero or below is dropped rather than stored at zero.
 

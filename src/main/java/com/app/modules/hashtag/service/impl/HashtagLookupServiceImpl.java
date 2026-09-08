@@ -57,6 +57,7 @@ public class HashtagLookupServiceImpl implements HashtagLookupService {
                 hashtag.getName(),
                 hashtag.getPostCount(),
                 hashtag.getStatus(),
-                hashtag.getCreatedAt());
+                hashtag.getCreatedAt(),
+                hashtag.getPinnedAt() != null);
     }
 }

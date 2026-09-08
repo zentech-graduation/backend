@@ -163,6 +163,64 @@ The PostgreSQL fallback lives in its own bean, `PostByHashtagPostgresReader`.
 A Resilience4j fallback runs outside the `@Transactional` boundary of the method it covers, so assembling a post response there hits the lazy `Post.media` collection with no Hibernate session.
 Self-invocation would not restore the boundary either. Crossing a bean boundary is what puts the transaction interceptor back in the path.
 
+### F. Trending: Platform and Personalised
+
+Two surfaces, one response shape, so the client renders both with one component.
+
+`GET /api/v1/hashtags/trending` is the platform snapshot, unchanged except that it now carries `pinned` and `source`, and orders pinned hashtags first.
+`GET /api/v1/hashtags/trending/for-you` is the personalised list.
+
+**A pin leads the whole list, not the page it lands on.**
+The ordering is applied in the database (`ORDER BY (h.pinned_at IS NULL), t.rank ASC, t.hashtag_id DESC`), because sorting an already-paged result would only float a pinned hashtag to the top of whichever page it already fell on.
+
+**The blend is on rank, never on the two scores directly.**
+This is the load-bearing rule of the personalised surface.
+An affinity score is a share of one user's own decayed total, so a user with three hashtags scores about 0.33 on each while a user with 134 scores about 0.007 on each.
+A trending score is a post count over a window.
+Those are not the same unit, and combining them numerically would rank by how broad a user's interests happen to be rather than by what those interests are.
+
+Reciprocal rank fusion is used instead: each hashtag scores `w / (60 + rank)` in each list it appears in, summed across lists.
+The constant 60 flattens the gap between adjacent top positions; without it rank 1 would score twice rank 2 and whichever list ranked a hashtag first would dominate outright.
+Platform weight is 1.0 and affinity weight 1.5, so the caller's own interests lead without erasing the platform signal.
+Ties break on hashtag id, giving a total order, so the list cannot reshuffle between two calls.
+
+**Novelty is reserved, not incidental.**
+Three slots in ten are held for hashtags adjacent to the caller's interests but not among them.
+Adjacency is co-occurrence: hashtags appearing on the same posts as hashtags the caller engages with, excluding any the caller already has an affinity row for.
+Co-occurrence rather than raw popularity, because popularity would surface the same handful of platform-wide hashtags to every caller, which is exactly what the platform tab already shows.
+Reserved slots are backfilled from the blend when the adjacency pool is thin, so reserving them can never shorten a page.
+
+**The personalised tab is never empty.**
+A caller with no affinity rows silently receives the platform list.
+That is the normal cold-start state, not an error.
+
+**Caching.**
+Redis, key `hashtag:trending:personalised:{userId}:{page}:{size}`, TTL 10 minutes.
+Both inputs move on scheduled job cycles rather than on requests, so a shorter TTL would re-run the fusion over data that cannot have changed.
+Cache failure is swallowed and the list is computed from PostgreSQL: Redis is a cache tier here, and failing the request would turn an optional accelerator into a hard dependency.
+
+**Caller errors never reach a circuit breaker.**
+Neither trending surface is behind one, and neither introduces one.
+Where a breaker does gate a hashtag read - the posts-by-hashtag Elasticsearch path - the lifecycle refusal and the depth guard are applied before the breaker-wrapped call, for the reason given in section 3E.
+
+### G. Administrative Pin
+
+`pinned_at` and `pinned_by` on `hashtags`, added by V92; `pinned_at` doubles as the flag, matching the tombstone columns elsewhere in this schema, so there is no way to hold one without the other.
+
+| Rule | Where |
+|---|---|
+| Pinning a `banned` or `deleted` hashtag is refused with `HASHTAG_UNAVAILABLE` | `HashtagLifecycleServiceImpl.pin` |
+| Pinning an already-pinned hashtag is refused with `ADMIN_INVALID_TRANSITION` | `HashtagLifecycleServiceImpl.pin` |
+| Unpinning a hashtag that is not pinned is refused with `ADMIN_INVALID_TRANSITION` | `HashtagLifecycleServiceImpl.unpin` |
+| Taking a hashtag out of circulation clears any pin | `HashtagLifecycleServiceImpl.changeStatus` |
+
+The pin is cleared inside `changeStatus` rather than in the admin layer, so no future caller of that method can forget it.
+Leaving a pin on a banned hashtag would keep promoting the exact term an administrator acted to suppress.
+
+`admin_action_type` gains `pin_hashtag` and `unpin_hashtag` (V93) with their `moderation_action_configs` rows (V94), added as a pair because an enum value without a config row breaks the vocabulary surface.
+Two values rather than one reversible action, matching `ban_hashtag`/`unban_hashtag`: an audit row has to say which direction the state moved.
+Neither requires a reason - pinning grants prominence rather than taking a capability away, which is the line V18 drew - and both are reversible.
+
 ## Section 4: Inter-Module Dependencies
 
 | Dependency | Direction | Nature |

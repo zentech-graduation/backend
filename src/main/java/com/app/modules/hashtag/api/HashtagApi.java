@@ -160,4 +160,39 @@ public interface HashtagApi {
                     @Min(1)
                     @Max(100)
                     int size);
+
+    @Operation(
+            summary = "List trending hashtags ranked for the caller",
+            description =
+                    "Blends the platform trending snapshot with the caller's own hashtag affinity"
+                            + " on rank, never on the two scores directly, because an affinity score is"
+                            + " a share of one user's own total and a trending score is a post count"
+                            + " over a window. A share of the page is reserved for hashtags adjacent to"
+                            + " the caller's interests but not among them. A caller with no computed"
+                            + " affinity silently receives the platform list, so this tab is never"
+                            + " empty. Same response shape as the platform surface.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Trending hashtags ranked for the caller, pinned first"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "429",
+                description = "Rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @AuthenticationRequiredResponse
+    @GetMapping(ApiConstants.Hashtags.TRENDING_FOR_YOU)
+    ResponseEntity<ApiResponse<PageResponse<HashtagTrendingResponse>>> trendingForYou(
+            @Parameter(description = "Zero-based page index")
+                    @RequestParam(defaultValue = "0")
+                    @Min(0)
+                    int page,
+            @Parameter(description = "Page size; maximum 100")
+                    @RequestParam(defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
+                    int size);
 }

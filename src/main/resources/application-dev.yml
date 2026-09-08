@@ -165,6 +165,12 @@ app:
       "[/api/v1/hashtags/*/posts]":
         max-attempts: 300
         window-seconds: 60
+      "[/api/v1/hashtags/trending/for-you]":
+        max-attempts: 300
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/*/pin]":
+        max-attempts: 300
+        window-seconds: 60
       # Deliberately looser than prod so local scroll/impression testing is not throttled, but
       # still a real ceiling.
       "[/api/v1/recommendations/**]":
