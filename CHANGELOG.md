@@ -6,7 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Posts carrying a hashtag are now readable through a dedicated cursor-paginated endpoint, served from Elasticsearch and degrading to a PostgreSQL join when the search tier is unavailable.
+- A hashtag can be resolved by name, so a shared or deep-linked hashtag address reaches the same record the post write path created.
+- A per-user hashtag affinity model, recomputed on a twelve-hour cycle from bounded reads of the behavioural event log, weighted by intent and decayed over its window.
+- Trending hashtags ranked for the caller, blending the platform snapshot with the caller's own affinity and reserving a share of the list for hashtags adjacent to their interests.
+- Administrators can pin a hashtag platform-wide so it leads the trending list, and unpin it again; both actions are recorded in the moderation audit log.
+
+### Changed
+- The trending response now reports whether a hashtag is pinned and why it appears in the list, and orders pinned hashtags first.
+- Banning or deleting a hashtag now clears any pin it holds.
+
 ### Fixed
+- A request for a banned or deleted hashtag now answers `404` with its own error code rather than an empty page, so a client can distinguish an unavailable hashtag from one with no posts yet.
+- Pagination depth on the posts-by-hashtag read is now bounded with its own error code; previously an over-deep request degraded silently and charged a failure to a circuit breaker shared with two other search surfaces.
 - The recommendation feed pipeline now logs a warning and records a counter metric when a batch of recommender candidates resolves to no visible posts, and when a request falls all the way back to the chronological feed; previously this degraded silently behind a normal `200` response.
 
 ### Removed
