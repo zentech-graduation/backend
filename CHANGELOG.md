@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- The support and moderation mail schema changes now apply after the hashtag interest work rather than colliding with it; the full migration set applies cleanly to an empty database and the application starts against it under schema validation.
+
 <!-- p1 -->
 ### Added
 - Support ticket categories are now published through the shared vocabulary endpoint alongside report reasons, notification types and moderation actions, so a client no longer has to hardcode the list.
