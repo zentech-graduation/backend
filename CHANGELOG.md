@@ -6,7 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Accounts can request a verified badge in one of eight categories, choosing a category and the name they claim and supplying at least three pieces of evidence; the request is refused with its own error code below that floor. No identity documents are collected and the form has no file upload, deliberately.
+- Moderators as well as administrators can approve, reject and revoke verification. Every decision writes a moderation audit row, mails the requester through the outbox, and commits with the badge change in one transaction.
+- A verified badge is withdrawn automatically when an account is suspended or banned, and retained when it is deactivated. An automatic withdrawal is recorded as a system action so the audit log distinguishes it from a decision a moderator made, and it never creates a support ticket.
+- People you may know, blending the follow graph, the recommender's user-to-user neighbours and hashtag interest overlap on rank rather than on scores. An account with no follows and no history is served verified accounts instead of an empty list.
+- Suggestions can be dismissed permanently, which changes no other surface, and an account can opt out of being suggested to other people.
+
 ### Changed
+- A pending verification request no longer blocks an account from opening a support ticket, and an open support ticket no longer blocks a verification request; the one-open-ticket guard now holds one ticket per lane instead of one across both.
+- The public identity summary embedded in every response that names an account now carries the account's verification category, so a client can render which category a badge is for.
 - The support and moderation mail schema changes now apply after the hashtag interest work rather than colliding with it; the full migration set applies cleanly to an empty database and the application starts against it under schema validation.
 
 <!-- p1 -->
