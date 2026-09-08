@@ -84,7 +84,16 @@ public class PersonalisedTrendingServiceImpl implements PersonalisedTrendingServ
     private final HashtagAffinityService hashtagAffinityService;
     private final UserHashtagAffinityRepository affinityRepository;
     private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper;
+
+    /**
+     * Private to this cache, not the application's shared mapper.
+     *
+     * <p>The cached payload is an internal representation, so it must not shift because a global
+     * Jackson setting changed elsewhere; a stored entry has to stay readable by the code that wrote
+     * it for the whole of its ten-minute life. {@code findAndRegisterModules} picks up the JSR-310
+     * module the {@code OffsetDateTime} fields need.
+     */
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Override
     @Transactional(readOnly = true)

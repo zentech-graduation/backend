@@ -29,7 +29,6 @@ import com.app.modules.recommendation.entity.UserHashtagAffinity;
 import com.app.modules.recommendation.entity.UserHashtagAffinityId;
 import com.app.modules.recommendation.repository.UserHashtagAffinityRepository;
 import com.app.modules.recommendation.service.HashtagAffinityService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class PersonalisedTrendingServiceImplTest {
@@ -55,8 +54,7 @@ class PersonalisedTrendingServiceImplTest {
                         hashtagTrendingService,
                         hashtagAffinityService,
                         affinityRepository,
-                        redisTemplate,
-                        new ObjectMapper());
+                        redisTemplate);
     }
 
     private static HashtagTrendingResponse platformEntry(UUID id, String name, int rank) {
