@@ -245,6 +245,14 @@ public class SecurityConfig {
                         ApiConstants.Support.ROOT + ApiConstants.Support.UNSUBSCRIBE)
                 .permitAll();
 
+        // The public form's category list, read before the form can be filled in. GET only, and it
+        // answers strictly less than the authenticated config vocabulary: enabled, public-form
+        // support categories, which is display metadata and no account data.
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.PUBLIC_CATEGORIES)
+                .permitAll();
+
         auth.requestMatchers(PUBLIC_INFRA_PATHS).permitAll();
         auth.requestMatchers("/actuator/**").hasRole("ADMIN");
     }

@@ -16,4 +16,17 @@ public interface VocabularyService {
      *     metadata and its enabled flag
      */
     VocabularyResponse getVocabularies();
+
+    /**
+     * The support categories an anonymous submitter may choose from.
+     *
+     * <p>Narrower than {@link #getVocabularies()} in both directions: only support categories, and
+     * only the rows that are enabled and permitted on the public form. Appeal categories are
+     * excluded by that flag, which is correct - an appeal needs an audit row to appeal against,
+     * which only a signed link supplies.
+     *
+     * @return enabled, public-form support categories in display order
+     */
+    java.util.List<com.app.common.vocabulary.dto.response.SupportCategoryVocabularyResponse>
+            getPublicSupportCategories();
 }

@@ -28,4 +28,12 @@ public class VocabularyServiceImpl implements VocabularyService {
                 vocabularyRepository.findModerationActions(),
                 vocabularyRepository.findSupportCategories());
     }
+
+    @Override
+    public java.util.List<com.app.common.vocabulary.dto.response.SupportCategoryVocabularyResponse>
+            getPublicSupportCategories() {
+        return vocabularyRepository.findSupportCategories().stream()
+                .filter(row -> row.isEnabled() && row.allowsPublicForm())
+                .toList();
+    }
 }

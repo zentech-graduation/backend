@@ -183,6 +183,10 @@ public final class ApiConstants {
         public static final String PUBLIC_TICKET = "/public/tickets";
         // Anonymous. Confirms the address a public submission was made from.
         public static final String CONFIRM = "/public/confirm";
+        // Anonymous. The categories the public form may offer, so a signed-out submitter gets a
+        // selector driven by the same table the authenticated one reads rather than a client-side
+        // copy of it. Strictly narrower than the config vocabulary: enabled, public-form rows only.
+        public static final String PUBLIC_CATEGORIES = "/public/categories";
         // Anonymous. Campaign mail opt-out, followed from a mail client with no session.
         public static final String UNSUBSCRIBE = "/unsubscribe";
         // The eight verification categories, with the icon key a client maps to a glyph.

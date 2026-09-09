@@ -24,6 +24,8 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.security.util.IpExtractor;
 import com.app.common.security.util.SecurityUtils;
+import com.app.common.vocabulary.dto.response.SupportCategoryVocabularyResponse;
+import com.app.common.vocabulary.service.VocabularyService;
 import com.app.common.web.StrictQueryParameters;
 import com.app.modules.support.dto.request.CreateSupportTicketRequest;
 import com.app.modules.support.dto.request.PublicSupportTicketRequest;
@@ -49,10 +51,15 @@ public class SupportController extends BaseController {
 
     private final SupportTicketService supportTicketService;
     private final IpExtractor ipExtractor;
+    private final VocabularyService vocabularyService;
 
-    public SupportController(SupportTicketService supportTicketService, IpExtractor ipExtractor) {
+    public SupportController(
+            SupportTicketService supportTicketService,
+            IpExtractor ipExtractor,
+            VocabularyService vocabularyService) {
         this.supportTicketService = supportTicketService;
         this.ipExtractor = ipExtractor;
+        this.vocabularyService = vocabularyService;
     }
 
     /** Opens a support ticket for the authenticated account. */
@@ -126,6 +133,26 @@ public class SupportController extends BaseController {
     }
 
     /** Confirms a public submission and moves it into the staff queue. */
+    /**
+     * Lists the categories the public form may offer, without a session.
+     *
+     * <p>The config vocabulary requires authentication, and the submitter here has none - that is
+     * the whole premise of this path. Without this the anonymous form would need a client-side copy
+     * of the category table, which drifts the moment a category is added or disabled.
+     *
+     * <p>Returns strictly less than the authenticated vocabulary: support categories only, and only
+     * those flagged enabled and public-form. It exposes display metadata and no account data.
+     */
+    @GetMapping(ApiConstants.Support.ROOT + ApiConstants.Support.PUBLIC_CATEGORIES)
+    @StrictQueryParameters
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<List<SupportCategoryVocabularyResponse>>>
+            listPublicCategories() {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK, vocabularyService.getPublicSupportCategories()));
+    }
+
     @PostMapping(ApiConstants.Support.ROOT + ApiConstants.Support.CONFIRM)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> confirmPublicTicket(
