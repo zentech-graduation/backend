@@ -65,6 +65,7 @@ public class UserSettings {
      * otherwise keep offering an account that opted out this morning until tonight.
      */
     @Column(name = "suggestible", nullable = false)
+    @Builder.Default
     private boolean suggestible = true;
 
     @Column(name = "allow_message_requests", nullable = false)
