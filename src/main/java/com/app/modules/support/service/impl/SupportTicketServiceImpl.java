@@ -28,6 +28,7 @@ import com.app.modules.support.dto.request.SignedAppealRequest;
 import com.app.modules.support.dto.response.SupportTicketResponse;
 import com.app.modules.support.dto.response.SupportTicketStaffResponse;
 import com.app.modules.support.entity.SupportTicket;
+import com.app.modules.support.enums.SupportCategory;
 import com.app.modules.support.enums.SupportSource;
 import com.app.modules.support.enums.SupportTicketStatus;
 import com.app.modules.support.mapper.SupportTicketMapper;
@@ -145,6 +146,14 @@ public class SupportTicketServiceImpl implements SupportTicketService {
         // Appeals need an audit row to appeal against, which only a signed link supplies. Allowing
         // one here would let anybody open an appeal about an account they do not hold.
         if (request.category().isAppeal()) {
+            throw new AppException(ApiErrorCode.SUPPORT_CATEGORY_NOT_PUBLIC);
+        }
+        // Verification is not an appeal, so isAppeal() does not exclude it and it has to be named.
+        // A verification request carries structured evidence and a public-figure category in a
+        // verification_requests row that only the authenticated submit path writes; created here it
+        // would be a verification ticket with no request behind it, which the moderator console
+        // cannot render and no decision path can act on.
+        if (request.category() == SupportCategory.VERIFICATION_REQUEST) {
             throw new AppException(ApiErrorCode.SUPPORT_CATEGORY_NOT_PUBLIC);
         }
         // Verified before anything is written, so a failed challenge leaves no row behind.

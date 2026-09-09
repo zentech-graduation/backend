@@ -603,9 +603,12 @@ public class VerificationServiceImpl implements VerificationService {
     }
 
     private SupportTicket requireVerificationTicket(UUID ticketId) {
+        // findStaffVisible, not findById: every other staff-facing query excludes
+        // PENDING_CONFIRMATION, and reading one here would let an unconfirmed ticket be decided
+        // through the verification routes while the queue that lists tickets never showed it.
         SupportTicket ticket =
                 supportTicketRepository
-                        .findById(ticketId)
+                        .findStaffVisible(ticketId)
                         .orElseThrow(
                                 () ->
                                         new AppException(

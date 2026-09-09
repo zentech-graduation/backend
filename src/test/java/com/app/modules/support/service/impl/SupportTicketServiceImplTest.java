@@ -255,6 +255,27 @@ class SupportTicketServiceImplTest {
         verify(rateLimiterService).isAllowed(anyString(), eq(10), eq(86400L));
     }
 
+    // VERIFICATION_REQUEST is deliberately not an appeal, so isAppeal() does not exclude it and it
+    // has to be named separately. Admitted here it would create a verification ticket with no
+    // verification_requests row behind it: no evidence, no public-figure category, nothing the
+    // moderator console can render or any decision path can act on. It would also be the first
+    // verification ticket in PENDING_CONFIRMATION, which every staff-facing query hides.
+    @Test
+    void createPublic_verificationRequest_isRefused() {
+        assertThatThrownBy(
+                        () ->
+                                service.createPublic(
+                                        publicRequest(SupportCategory.VERIFICATION_REQUEST),
+                                        "1.2.3.4"))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.SUPPORT_CATEGORY_NOT_PUBLIC);
+
+        verify(supportTicketRepository, never()).save(any());
+        // Refused before the challenge is spent, like the appeal guard above it.
+        verify(turnstileVerifier, never()).verify(any(), any());
+    }
+
     @Test
     void confirmPublic_replayedToken_isRefused() {
         when(supportTokenService.consumeConfirmationToken("tok")).thenReturn(ACTION_ID);

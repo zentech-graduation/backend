@@ -332,7 +332,7 @@ class VerificationServiceImplTest {
         stubUser(actorId, actorRole, UserStatus.ACTIVE);
         stubUser(REQUESTER, UserRole.USER, UserStatus.ACTIVE);
         SupportTicket ticket = ticket();
-        when(supportTicketRepository.findById(TICKET)).thenReturn(Optional.of(ticket));
+        when(supportTicketRepository.findStaffVisible(TICKET)).thenReturn(Optional.of(ticket));
         when(supportTicketRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(verificationRequestRepository.findById(TICKET))
                 .thenReturn(Optional.of(verificationRequest()));
