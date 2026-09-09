@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -69,13 +70,53 @@ class SuggestionServiceImplTest {
         when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
                 .thenReturn(List.of(AFFINITY_ONE));
 
+        when(userSuggestionRepository.countFreshFor(eq(VIEWER), any())).thenReturn(3);
+
         int written = service.rebuildFor(VIEWER);
 
         assertThat(written).isEqualTo(3);
         ArgumentCaptor<String> sources = ArgumentCaptor.forClass(String.class);
         verify(userSuggestionRepository, times(3))
-                .upsertSuggestion(eq(VIEWER), any(), anyShort(), any(), sources.capture());
+                .upsertSuggestion(eq(VIEWER), any(), anyShort(), any(), sources.capture(), any());
         assertThat(sources.getAllValues()).noneMatch(value -> value.contains("gorse"));
+    }
+
+    @Test
+    void rebuildFor_stampsEveryRowWithTheSameValueTheSweepIsBoundedBy() {
+        // The regression this pins: the insert used to stamp computed_at from the database clock
+        // while the sweep was bounded by a JVM timestamp. Whenever the database clock trailed the
+        // JVM, every row the run had just written satisfied "computed_at < keptFrom" and the run
+        // deleted its own generation, while still logging a healthy row count. Binding both sides
+        // to one value makes that arithmetically impossible rather than merely unlikely.
+        when(gorseNeighbourSource.neighbours(eq(VIEWER), anyInt())).thenReturn(List.of());
+        when(userSuggestionRepository.findTwoHopCandidates(eq(VIEWER), anyInt()))
+                .thenReturn(List.of(GRAPH_ONE, GRAPH_TWO));
+        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
+                .thenReturn(List.of());
+
+        service.rebuildFor(VIEWER);
+
+        ArgumentCaptor<OffsetDateTime> stamped = ArgumentCaptor.forClass(OffsetDateTime.class);
+        ArgumentCaptor<OffsetDateTime> sweptFrom = ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(userSuggestionRepository, times(2))
+                .upsertSuggestion(eq(VIEWER), any(), anyShort(), any(), any(), stamped.capture());
+        verify(userSuggestionRepository).deleteStaleFor(eq(VIEWER), sweptFrom.capture());
+
+        assertThat(stamped.getAllValues()).containsOnly(sweptFrom.getValue());
+    }
+
+    @Test
+    void rebuildFor_reportsTheRowsThatSurvivedTheSweepRatherThanTheRowsItWrote() {
+        // Reporting ordered.size() is what made the wipe invisible in the log. The count now comes
+        // from the table after the sweep, so a run that deletes its own rows reports zero.
+        when(gorseNeighbourSource.neighbours(eq(VIEWER), anyInt())).thenReturn(List.of());
+        when(userSuggestionRepository.findTwoHopCandidates(eq(VIEWER), anyInt()))
+                .thenReturn(List.of(GRAPH_ONE, GRAPH_TWO));
+        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
+                .thenReturn(List.of());
+        when(userSuggestionRepository.countFreshFor(eq(VIEWER), any())).thenReturn(0);
+
+        assertThat(service.rebuildFor(VIEWER)).isZero();
     }
 
     @Test
@@ -88,7 +129,7 @@ class SuggestionServiceImplTest {
 
         assertThat(service.rebuildFor(VIEWER)).isZero();
         verify(userSuggestionRepository, never())
-                .upsertSuggestion(any(), any(), anyShort(), any(), anyString());
+                .upsertSuggestion(any(), any(), anyShort(), any(), anyString(), any());
         verify(userSuggestionRepository).deleteStaleFor(eq(VIEWER), any());
     }
 
@@ -108,7 +149,12 @@ class SuggestionServiceImplTest {
         ArgumentCaptor<Short> ranks = ArgumentCaptor.forClass(Short.class);
         verify(userSuggestionRepository, times(2))
                 .upsertSuggestion(
-                        eq(VIEWER), ids.capture(), ranks.capture(), any(BigDecimal.class), any());
+                        eq(VIEWER),
+                        ids.capture(),
+                        ranks.capture(),
+                        any(BigDecimal.class),
+                        any(),
+                        any());
         int indexOfShared = ids.getAllValues().indexOf(GRAPH_TWO);
         assertThat(ranks.getAllValues().get(indexOfShared)).isEqualTo((short) 1);
     }

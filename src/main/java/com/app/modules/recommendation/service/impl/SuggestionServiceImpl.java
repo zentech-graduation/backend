@@ -126,6 +126,11 @@ public class SuggestionServiceImpl implements SuggestionService {
     @Override
     @Transactional
     public int rebuildFor(UUID viewerId) {
+        // One clock domain for the whole run. This value stamps every row the run writes and
+        // bounds the sweep that follows, so the sweep cannot delete the generation it just wrote.
+        // Reading it from the JVM while the insert used the database's NOW() is what previously
+        // wiped the table whenever the database clock trailed the JVM by more than the statement
+        // round trip.
         OffsetDateTime startedAt = OffsetDateTime.now(ZoneOffset.UTC);
 
         List<UUID> graph = userSuggestionRepository.findTwoHopCandidates(viewerId, SOURCE_DEPTH);
@@ -167,12 +172,15 @@ public class SuggestionServiceImpl implements SuggestionService {
                     candidate,
                     rank,
                     BigDecimal.valueOf(fused.get(candidate)).setScale(8, RoundingMode.HALF_UP),
-                    String.join(",", new TreeSet<>(sources.get(candidate))));
+                    String.join(",", new TreeSet<>(sources.get(candidate))),
+                    startedAt);
             rank++;
         }
         // Rows this run did not rewrite are the previous generation and no longer qualify.
         userSuggestionRepository.deleteStaleFor(viewerId, startedAt);
-        return ordered.size();
+        // Counted after the sweep, not before: reporting ordered.size() here is what let a sweep
+        // that deleted its own generation still log a healthy row count.
+        return userSuggestionRepository.countFreshFor(viewerId, startedAt);
     }
 
     private static void contribute(

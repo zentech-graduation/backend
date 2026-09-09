@@ -1,5 +1,6 @@
 package com.app.modules.recommendation.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -182,13 +183,15 @@ public interface UserSuggestionRepository extends JpaRepository<UserSuggestion, 
      * @param rank position in the blended list, 1-based
      * @param score the fused reciprocal-rank score
      * @param sources comma-separated contributing sources
+     * @param computedAt stamp of the current run, supplied by the caller
      */
     @Modifying
     @Query(
             value =
                     "INSERT INTO user_suggestions"
                             + " (user_id, suggested_id, rank, score, sources, computed_at)"
-                            + " VALUES (:viewerId, :suggestedId, :rank, :score, :sources, NOW())"
+                            + " VALUES (:viewerId, :suggestedId, :rank, :score, :sources,"
+                            + " :computedAt)"
                             + " ON CONFLICT (user_id, suggested_id) DO UPDATE SET"
                             + " rank = EXCLUDED.rank, score = EXCLUDED.score,"
                             + " sources = EXCLUDED.sources, computed_at = EXCLUDED.computed_at",
@@ -198,7 +201,8 @@ public interface UserSuggestionRepository extends JpaRepository<UserSuggestion, 
             @Param("suggestedId") UUID suggestedId,
             @Param("rank") short rank,
             @Param("score") java.math.BigDecimal score,
-            @Param("sources") String sources);
+            @Param("sources") String sources,
+            @Param("computedAt") OffsetDateTime computedAt);
 
     /**
      * Removes the rows a run did not rewrite.
@@ -207,8 +211,13 @@ public interface UserSuggestionRepository extends JpaRepository<UserSuggestion, 
      * the upsert only ever writes rows that are still candidates. Bounded by {@code computed_at} so
      * it deletes exactly the previous generation for this viewer.
      *
+     * <p>{@code keptFrom} must be the same value the run passed as {@code computedAt} on {@link
+     * #upsertSuggestion}. Both sides are then in one clock domain, so a row this run wrote can
+     * never satisfy {@code computed_at < :keptFrom} and be swept by the run that created it.
+     *
      * @param viewerId the account whose stale rows should go
-     * @param keptFrom the timestamp the current run started writing at
+     * @param keptFrom the timestamp the current run stamped its own rows with
+     * @return number of previous-generation rows removed
      */
     @Modifying
     @Query(
@@ -216,8 +225,27 @@ public interface UserSuggestionRepository extends JpaRepository<UserSuggestion, 
                     "DELETE FROM user_suggestions WHERE user_id = :viewerId"
                             + " AND computed_at < :keptFrom",
             nativeQuery = true)
-    void deleteStaleFor(
-            @Param("viewerId") UUID viewerId, @Param("keptFrom") java.time.OffsetDateTime keptFrom);
+    int deleteStaleFor(
+            @Param("viewerId") UUID viewerId, @Param("keptFrom") OffsetDateTime keptFrom);
+
+    /**
+     * Rows for one viewer that carry the current run's stamp.
+     *
+     * <p>Counted after the sweep so the job reports what actually survived rather than what it
+     * intended to write. A run that writes rows and then deletes them reports zero here, which is
+     * the signal that was missing when the sweep last wiped its own generation.
+     *
+     * @param viewerId the account whose rows should be counted
+     * @param computedAt stamp of the current run
+     * @return number of rows this run left behind
+     */
+    @Query(
+            value =
+                    "SELECT count(*) FROM user_suggestions WHERE user_id = :viewerId"
+                            + " AND computed_at = :computedAt",
+            nativeQuery = true)
+    int countFreshFor(
+            @Param("viewerId") UUID viewerId, @Param("computedAt") OffsetDateTime computedAt);
 
     /**
      * The accounts a precompute run should build lists for.

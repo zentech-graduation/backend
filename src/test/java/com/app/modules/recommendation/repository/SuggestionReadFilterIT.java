@@ -3,6 +3,8 @@ package com.app.modules.recommendation.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -310,7 +312,12 @@ class SuggestionReadFilterIT {
 
     private void suggest(UUID viewer, UUID candidate, int rank) {
         userSuggestionRepository.upsertSuggestion(
-                viewer, candidate, (short) rank, new BigDecimal("0.01000000"), "graph");
+                viewer,
+                candidate,
+                (short) rank,
+                new BigDecimal("0.01000000"),
+                "graph",
+                OffsetDateTime.now(ZoneOffset.UTC));
     }
 
     private void follow(UUID follower, UUID following, String status) {
