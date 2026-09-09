@@ -101,12 +101,13 @@ public class PersonalisedTrendingServiceImpl implements PersonalisedTrendingServ
             UUID viewerId, Pageable pageable) {
         String key =
                 CACHE_KEY.formatted(viewerId, pageable.getPageNumber(), pageable.getPageSize());
-        List<HashtagTrendingResponse> cached = readCache(key);
+        CachedPage cached = readCache(key);
         if (cached != null) {
-            return PageResponse.from(new PageImpl<>(cached, pageable, cached.size()));
+            return PageResponse.from(
+                    new PageImpl<>(cached.content(), pageable, cached.totalElements()));
         }
         PageResponse<HashtagTrendingResponse> computed = compute(viewerId, pageable);
-        writeCache(key, computed.getContent());
+        writeCache(key, computed);
         return computed;
     }
 
@@ -156,33 +157,41 @@ public class PersonalisedTrendingServiceImpl implements PersonalisedTrendingServ
                         .map(Map.Entry::getKey)
                         .toList();
 
-        int pageSize = pageable.getPageSize();
-        int noveltySlots = (int) Math.round(pageSize * NOVELTY_SHARE);
-        int blendedSlots = Math.max(0, pageSize - noveltySlots);
-
-        LinkedHashSet<UUID> selected = new LinkedHashSet<>();
-        for (UUID id : blendedOrder) {
-            if (selected.size() >= blendedSlots) {
-                break;
-            }
-            selected.add(id);
-        }
-
         List<UUID> adjacent = affinityRepository.findAdjacentHashtagIds(viewerId, CANDIDATE_DEPTH);
-        for (UUID id : adjacent) {
-            if (selected.size() >= pageSize) {
-                break;
+
+        // The whole candidate list is built here and sliced into a page below. Selecting only a
+        // page's worth and returning it for whatever page was asked for made every page of this
+        // branch carry identical rows, while the total - the page's own length - reported it as the
+        // only page, so a client paging on "last" never saw the duplication.
+        //
+        // Novelty is interleaved by running ratio rather than reserved as a block at the end. A
+        // block would put every novel entry past the first page, which is the one page most callers
+        // ever read: the share has to hold within each page-sized window, not merely across the
+        // whole list. Drawing novel whenever the novel count has fallen behind its share of the
+        // positions filled so far keeps every prefix of the list at roughly NOVELTY_SHARE, so each
+        // page gets its share wherever the reader stops.
+        LinkedHashSet<UUID> selected = new LinkedHashSet<>();
+        int blendedCursor = 0;
+        int adjacentCursor = 0;
+        int novelTaken = 0;
+        while (selected.size() < CANDIDATE_DEPTH
+                && (blendedCursor < blendedOrder.size() || adjacentCursor < adjacent.size())) {
+            boolean novelIsBehind = novelTaken < Math.round((selected.size() + 1) * NOVELTY_SHARE);
+            boolean takeNovel =
+                    adjacentCursor < adjacent.size()
+                            && (novelIsBehind || blendedCursor >= blendedOrder.size());
+            if (takeNovel) {
+                // Backfill is implicit: when one pool empties the other simply supplies the rest,
+                // so reserving novelty can never shorten the list. A caller who engages with nearly
+                // every hashtag has almost no adjacency pool, and a full list is still correct.
+                if (selected.add(adjacent.get(adjacentCursor))) {
+                    novelTaken++;
+                }
+                adjacentCursor++;
+            } else {
+                selected.add(blendedOrder.get(blendedCursor));
+                blendedCursor++;
             }
-            selected.add(id);
-        }
-        // Backfill from the blend when adjacency is thin, so reserving novelty slots can never
-        // shorten the page. A user who engages with nearly every hashtag on the platform has almost
-        // no adjacency pool, and the correct outcome there is a full page, not a short one.
-        for (UUID id : blendedOrder) {
-            if (selected.size() >= pageSize) {
-                break;
-            }
-            selected.add(id);
         }
 
         java.util.Set<UUID> affinityIds = new java.util.HashSet<>();
@@ -222,35 +231,49 @@ public class PersonalisedTrendingServiceImpl implements PersonalisedTrendingServ
         }
         // Pinned hashtags lead the personalised list too: a platform-wide pin is platform-wide.
         content.sort((a, b) -> Boolean.compare(b.pinned(), a.pinned()));
-        return PageResponse.from(new PageImpl<>(content, pageable, content.size()));
+        return page(content, pageable);
     }
 
     // Redis is a cache tier here, so its being unavailable degrades latency and nothing else. A
     // failure to read or write the cache is swallowed and the list is computed from PostgreSQL,
     // because failing the request would turn an optional accelerator into a hard dependency.
-    private List<HashtagTrendingResponse> readCache(String key) {
+    private CachedPage readCache(String key) {
         try {
             String raw = redisTemplate.opsForValue().get(key);
             if (raw == null) {
                 return null;
             }
-            return objectMapper.readValue(
-                    raw, new TypeReference<List<HashtagTrendingResponse>>() {});
+            return objectMapper.readValue(raw, new TypeReference<CachedPage>() {});
         } catch (RuntimeException | JsonProcessingException ex) {
             log.warn("Personalised trending cache read failed for {}, computing directly", key, ex);
             return null;
         }
     }
 
-    private void writeCache(String key, List<HashtagTrendingResponse> content) {
+    private void writeCache(String key, PageResponse<HashtagTrendingResponse> computed) {
         try {
+            CachedPage payload = new CachedPage(computed.getContent(), computed.getTotalElements());
             redisTemplate
                     .opsForValue()
-                    .set(key, objectMapper.writeValueAsString(content), CACHE_TTL);
+                    .set(key, objectMapper.writeValueAsString(payload), CACHE_TTL);
         } catch (RuntimeException | JsonProcessingException ex) {
             log.warn("Personalised trending cache write failed for {}", key, ex);
         }
     }
+
+    /**
+     * What one cache entry holds.
+     *
+     * <p>The total is stored with the content because it cannot be recovered from it. Rebuilding
+     * the page as {@code new PageImpl<>(cached, pageable, cached.size())} asserted that the total
+     * equalled this page's own length, so the same request answered a different totalElements,
+     * totalPages and last depending on whether it was served from cache - the one property a cache
+     * must not have. A client paging on "last" stopped after the first page on any cached read.
+     *
+     * @param content the page's rows, in order
+     * @param totalElements the size of the full result the page was cut from
+     */
+    private record CachedPage(List<HashtagTrendingResponse> content, long totalElements) {}
 
     private PageResponse<HashtagTrendingResponse> page(
             List<HashtagTrendingResponse> source, Pageable pageable) {

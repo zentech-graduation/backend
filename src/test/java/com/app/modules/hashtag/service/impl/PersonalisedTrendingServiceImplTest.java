@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -14,6 +15,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
@@ -92,6 +94,66 @@ class PersonalisedTrendingServiceImplTest {
         assertThat(result.getContent().get(0).name()).isEqualTo("goldprice");
         // No adjacency query is issued for a user with nothing to be adjacent to.
         verifyNoInteractions(affinityRepository);
+    }
+
+    // A cache must answer the same question the same way. The entry used to store only the page's
+    // rows, so the total was rebuilt as the page's own length and the same request reported a
+    // different totalElements, totalPages and last depending on cache state. A client paging on
+    // "last" stopped after the first page on any cached read while further pages still had rows.
+    @Test
+    void getPersonalisedTrending_servedFromCache_reportsTheSameTotalAsTheComputedCall() {
+        List<HashtagTrendingResponse> entries =
+                List.of(
+                        platformEntry(UUID.randomUUID(), "goldprice", 1),
+                        platformEntry(UUID.randomUUID(), "shoponline", 2));
+        platform(entries);
+        when(hashtagAffinityService.findTopForUser(VIEWER_ID, 50)).thenReturn(List.of());
+
+        ArgumentCaptor<String> written = ArgumentCaptor.forClass(String.class);
+        PageResponse<HashtagTrendingResponse> miss =
+                service.getPersonalisedTrending(VIEWER_ID, PageRequest.of(0, 1));
+        verify(valueOps).set(anyString(), written.capture(), any(java.time.Duration.class));
+
+        // Replay exactly what was written, so this covers the real serialized shape rather than an
+        // in-memory stand-in for it.
+        when(valueOps.get(anyString())).thenReturn(written.getValue());
+        PageResponse<HashtagTrendingResponse> hit =
+                service.getPersonalisedTrending(VIEWER_ID, PageRequest.of(0, 1));
+
+        assertThat(miss.getTotalElements()).isEqualTo(2);
+        assertThat(hit.getTotalElements()).isEqualTo(miss.getTotalElements());
+        assertThat(hit.getTotalPages()).isEqualTo(miss.getTotalPages());
+        assertThat(hit.isLast()).isEqualTo(miss.isLast());
+        assertThat(hit.isLast()).isFalse();
+        assertThat(hit.getContent()).hasSize(1);
+    }
+
+    // The affinity branch selected one page's worth of candidates and returned them for whatever
+    // page was asked for, so every page carried identical rows while reporting itself the only one.
+    @Test
+    void getPersonalisedTrending_affinityBranch_pagesThroughDistinctRows() {
+        List<HashtagTrendingResponse> entries = new java.util.ArrayList<>();
+        for (int i = 1; i <= 6; i++) {
+            entries.add(platformEntry(UUID.randomUUID(), "tag" + i, i));
+        }
+        platform(entries);
+        when(hashtagAffinityService.findTopForUser(VIEWER_ID, 50))
+                .thenReturn(List.of(affinity(entries.get(0).hashtagId())));
+        when(affinityRepository.findAdjacentHashtagIds(VIEWER_ID, 50)).thenReturn(List.of());
+
+        PageResponse<HashtagTrendingResponse> page0 =
+                service.getPersonalisedTrending(VIEWER_ID, PageRequest.of(0, 2));
+        when(valueOps.get(anyString())).thenReturn(null);
+        PageResponse<HashtagTrendingResponse> page1 =
+                service.getPersonalisedTrending(VIEWER_ID, PageRequest.of(1, 2));
+
+        assertThat(page0.getContent()).hasSize(2);
+        assertThat(page1.getContent()).isNotEmpty();
+        assertThat(page0.getContent().stream().map(HashtagTrendingResponse::name))
+                .doesNotContainAnyElementsOf(
+                        page1.getContent().stream().map(HashtagTrendingResponse::name).toList());
+        assertThat(page0.getTotalElements()).isGreaterThan(2);
+        assertThat(page0.isLast()).isFalse();
     }
 
     // The point of fusing on rank: a hashtag the caller cares about climbs above a platform-popular
