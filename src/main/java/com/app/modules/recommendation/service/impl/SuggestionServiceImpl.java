@@ -62,6 +62,15 @@ public class SuggestionServiceImpl implements SuggestionService {
     /** How deep into each source list the fusion looks. */
     private static final int SOURCE_DEPTH = 60;
 
+    /**
+     * How many of the viewer's hashtags the affinity source matches on.
+     *
+     * <p>Bounds the self-join's fan-out. The affinity profile's tail is near-zero scores that
+     * contribute almost nothing to the overlap sum while carrying most of the join width, so
+     * cutting it costs little ranking signal and removes an O(viewers x table size) shape.
+     */
+    private static final int AFFINITY_PROFILE_DEPTH = 32;
+
     /** How many rows one account's precomputed list holds. */
     private static final int STORED_LIST_SIZE = 50;
 
@@ -136,7 +145,8 @@ public class SuggestionServiceImpl implements SuggestionService {
         List<UUID> graph = userSuggestionRepository.findTwoHopCandidates(viewerId, SOURCE_DEPTH);
         List<UUID> gorse = gorseNeighbourSource.neighbours(viewerId, SOURCE_DEPTH);
         List<UUID> affinity =
-                userSuggestionRepository.findAffinityCandidates(viewerId, SOURCE_DEPTH);
+                userSuggestionRepository.findAffinityCandidates(
+                        viewerId, AFFINITY_PROFILE_DEPTH, SOURCE_DEPTH);
 
         Map<UUID, Double> fused = new HashMap<>();
         Map<UUID, Set<String>> sources = new HashMap<>();

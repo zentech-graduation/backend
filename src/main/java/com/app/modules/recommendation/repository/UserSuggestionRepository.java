@@ -118,23 +118,42 @@ public interface UserSuggestionRepository extends JpaRepository<UserSuggestion, 
      * engages near-uniformly across roughly 134 hashtags. That is a property of the seed data, not
      * of the query, and it is why verification of this source needs a deliberately skewed account.
      *
+     * <p>The viewer side is bounded to their strongest {@code profileDepth} hashtags rather than
+     * their whole profile. Without that bound the shape is O(viewers x table size): a viewer
+     * holding most of the hashtag corpus joins most of the table, which no index can make
+     * selective, because the query genuinely reads the rows. Measured on the seeded data, one
+     * viewer held 142 of the 147 distinct hashtags and the join produced 8,987 of 12,117 rows. The
+     * bound is what removes that shape; the hashtag_id index makes what remains index-only.
+     *
+     * <p>Ordering the profile by score means the bound keeps the signal that actually discriminates
+     * and drops the long tail of near-zero affinities, which contribute almost nothing to
+     * LEAST(a1.score, a2.score) but carry most of the fan-out.
+     *
      * @param viewerId the account to build candidates for
+     * @param profileDepth how many of the viewer's strongest hashtags to match on
      * @param limit maximum candidates
      * @return candidate ids ordered by profile overlap descending
      */
     @Query(
             value =
-                    "SELECT a2.user_id FROM user_hashtag_affinity a1"
+                    "WITH profile AS ("
+                            + " SELECT hashtag_id, score FROM user_hashtag_affinity"
+                            + " WHERE user_id = :viewerId"
+                            + " ORDER BY score DESC, hashtag_id DESC"
+                            + " LIMIT :profileDepth)"
+                            + " SELECT a2.user_id FROM profile a1"
                             + " JOIN user_hashtag_affinity a2"
-                            + " ON a2.hashtag_id = a1.hashtag_id AND a2.user_id <> a1.user_id"
-                            + " WHERE a1.user_id = :viewerId"
-                            + " AND NOT EXISTS (SELECT 1 FROM follows fx"
+                            + " ON a2.hashtag_id = a1.hashtag_id AND a2.user_id <> :viewerId"
+                            + " WHERE NOT EXISTS (SELECT 1 FROM follows fx"
                             + " WHERE fx.follower_id = :viewerId AND fx.following_id = a2.user_id)"
                             + " GROUP BY a2.user_id"
                             + " ORDER BY SUM(LEAST(a1.score, a2.score)) DESC, a2.user_id ASC"
                             + " LIMIT :limit",
             nativeQuery = true)
-    List<UUID> findAffinityCandidates(@Param("viewerId") UUID viewerId, @Param("limit") int limit);
+    List<UUID> findAffinityCandidates(
+            @Param("viewerId") UUID viewerId,
+            @Param("profileDepth") int profileDepth,
+            @Param("limit") int limit);
 
     /**
      * The cold-start list: verified accounts, most-followed first.

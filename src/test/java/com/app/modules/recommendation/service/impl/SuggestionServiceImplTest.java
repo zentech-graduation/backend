@@ -67,7 +67,7 @@ class SuggestionServiceImplTest {
         when(gorseNeighbourSource.neighbours(eq(VIEWER), anyInt())).thenReturn(List.of());
         when(userSuggestionRepository.findTwoHopCandidates(eq(VIEWER), anyInt()))
                 .thenReturn(List.of(GRAPH_ONE, GRAPH_TWO));
-        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
+        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt(), anyInt()))
                 .thenReturn(List.of(AFFINITY_ONE));
 
         when(userSuggestionRepository.countFreshFor(eq(VIEWER), any())).thenReturn(3);
@@ -91,7 +91,7 @@ class SuggestionServiceImplTest {
         when(gorseNeighbourSource.neighbours(eq(VIEWER), anyInt())).thenReturn(List.of());
         when(userSuggestionRepository.findTwoHopCandidates(eq(VIEWER), anyInt()))
                 .thenReturn(List.of(GRAPH_ONE, GRAPH_TWO));
-        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
+        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt(), anyInt()))
                 .thenReturn(List.of());
 
         service.rebuildFor(VIEWER);
@@ -112,7 +112,7 @@ class SuggestionServiceImplTest {
         when(gorseNeighbourSource.neighbours(eq(VIEWER), anyInt())).thenReturn(List.of());
         when(userSuggestionRepository.findTwoHopCandidates(eq(VIEWER), anyInt()))
                 .thenReturn(List.of(GRAPH_ONE, GRAPH_TWO));
-        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
+        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt(), anyInt()))
                 .thenReturn(List.of());
         when(userSuggestionRepository.countFreshFor(eq(VIEWER), any())).thenReturn(0);
 
@@ -124,7 +124,7 @@ class SuggestionServiceImplTest {
         when(gorseNeighbourSource.neighbours(eq(VIEWER), anyInt())).thenReturn(List.of());
         when(userSuggestionRepository.findTwoHopCandidates(eq(VIEWER), anyInt()))
                 .thenReturn(List.of());
-        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
+        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt(), anyInt()))
                 .thenReturn(List.of());
 
         assertThat(service.rebuildFor(VIEWER)).isZero();
@@ -140,7 +140,7 @@ class SuggestionServiceImplTest {
         when(gorseNeighbourSource.neighbours(eq(VIEWER), anyInt())).thenReturn(List.of(GRAPH_TWO));
         when(userSuggestionRepository.findTwoHopCandidates(eq(VIEWER), anyInt()))
                 .thenReturn(List.of(GRAPH_ONE, GRAPH_TWO));
-        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt()))
+        when(userSuggestionRepository.findAffinityCandidates(eq(VIEWER), anyInt(), anyInt()))
                 .thenReturn(List.of(GRAPH_TWO));
 
         service.rebuildFor(VIEWER);
