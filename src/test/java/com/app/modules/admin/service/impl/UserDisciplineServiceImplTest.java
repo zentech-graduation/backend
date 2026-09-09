@@ -41,6 +41,7 @@ import com.app.modules.admin.repository.UserStrikeRepository;
 import com.app.modules.admin.repository.UserWarningRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
 import com.app.modules.admin.service.AdminAuthorizationService;
+import com.app.modules.support.service.VerificationService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -63,6 +64,7 @@ class UserDisciplineServiceImplTest {
     @Mock private UserDisciplineMapper userDisciplineMapper;
     @Mock private OutboxService outboxService;
     @Mock private AdminAuthorizationService adminAuthorizationService;
+    @Mock private VerificationService verificationService;
 
     private UserDisciplineServiceImpl service;
 
@@ -78,7 +80,8 @@ class UserDisciplineServiceImplTest {
                         adminActionRecorder,
                         userDisciplineMapper,
                         outboxService,
-                        adminAuthorizationService);
+                        adminAuthorizationService,
+                        verificationService);
         lenient()
                 .when(reportReasonConfigReader.findEnabledByReasonKey("spam"))
                 .thenReturn(Optional.of(true));
@@ -206,6 +209,48 @@ class UserDisciplineServiceImplTest {
         assertThat(target.getStatus()).isEqualTo(UserStatus.SUSPENDED);
         assertThat(target.getSuspendedUntil()).isCloseTo(daysFromNow(7), within10Minutes());
         assertThat(capturedStrike().getStrikeNumber()).isEqualTo((short) 1);
+    }
+
+    @Test
+    void issueWarning_strikeOneSuspension_withdrawsTheVerifiedBadge() {
+        // The ladder is the second writer of users.status. The badge withdrawal was wired into the
+        // administrator's own endpoint only, so a laddered suspension used to leave the badge
+        // standing while a directly-issued one withdrew it: same account, same resulting status,
+        // opposite badge outcome.
+        User target = stubTarget(UserRole.USER, UserStatus.ACTIVE, null);
+        stubActiveWarnings(3);
+        stubActiveStrikes(0);
+
+        service.issueWarning(ACTOR_ID, TARGET_ID, REQUEST);
+
+        verify(verificationService).applyStatusChange(TARGET_ID, UserStatus.SUSPENDED);
+    }
+
+    @Test
+    void issueWarning_thirdStrikeBan_withdrawsTheVerifiedBadge() {
+        // A three-strike ban is the strongest action in the system and was the one leaving the
+        // platform's identity claim intact.
+        User target = stubTarget(UserRole.USER, UserStatus.ACTIVE, null);
+        stubActiveWarnings(3);
+        stubActiveStrikes(2);
+
+        service.issueWarning(ACTOR_ID, TARGET_ID, REQUEST);
+
+        verify(verificationService).applyStatusChange(TARGET_ID, UserStatus.BANNED);
+    }
+
+    @Test
+    void issueWarning_consequenceNotStrongerThanCurrent_leavesTheBadgeAlone() {
+        // No status transition happened, so there is nothing for the badge to follow. Calling the
+        // revocation here would withdraw a badge on an account whose penalty did not change.
+        OffsetDateTime existingUntil = daysFromNow(30);
+        User target = stubTarget(UserRole.USER, UserStatus.SUSPENDED, existingUntil);
+        stubActiveWarnings(3);
+        stubActiveStrikes(0);
+
+        service.issueWarning(ACTOR_ID, TARGET_ID, REQUEST);
+
+        verify(verificationService, never()).applyStatusChange(any(), any());
     }
 
     @Test
