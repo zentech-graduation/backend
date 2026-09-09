@@ -106,6 +106,7 @@ public class AdminHashtagServiceImpl implements AdminHashtagService {
     @Override
     @Transactional
     public AdminActionResponse pinHashtag(UUID actorId, UUID hashtagId, String note) {
+        adminAuthorizationService.assertActorIsAdministrator(actorId);
         HashtagLifecycleResult result = hashtagLifecycleService.pin(actorId, hashtagId);
         return record(actorId, AdminActionType.PIN_HASHTAG, result, note);
     }
@@ -113,6 +114,7 @@ public class AdminHashtagServiceImpl implements AdminHashtagService {
     @Override
     @Transactional
     public AdminActionResponse unpinHashtag(UUID actorId, UUID hashtagId, String note) {
+        adminAuthorizationService.assertActorIsAdministrator(actorId);
         HashtagLifecycleResult result = hashtagLifecycleService.unpin(actorId, hashtagId);
         return record(actorId, AdminActionType.UNPIN_HASHTAG, result, note);
     }
