@@ -179,16 +179,65 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(ApiErrorCode.MALFORMED_REQUEST_BODY));
     }
 
+    /**
+     * Domain codes for the unique constraints that guard a race the service cannot pre-empt.
+     *
+     * <p>A service-layer check answers the ordinary case with a named code, but two transactions
+     * can both pass that check before either commits, and then the constraint is what refuses the
+     * second. Without this mapping the loser received {@code BAD_REQUEST} alongside HTTP 409 - an
+     * envelope whose own code contradicted its status line - and staff surfaces that render the
+     * message showed "the request conflicts with an existing resource" instead of saying what
+     * actually happened.
+     *
+     * <p>Keyed on constraint name rather than caught per service, because catching it at each call
+     * site is how the generic answer spread in the first place.
+     */
+    private static final Map<String, ApiErrorCode> CONSTRAINT_ERROR_CODES =
+            Map.of(
+                    "uq_user_verifications_active", ApiErrorCode.VERIFICATION_ALREADY_VERIFIED,
+                    "uq_support_tickets_one_open_support_per_user",
+                            ApiErrorCode.SUPPORT_TICKET_ALREADY_OPEN,
+                    "uq_support_tickets_one_open_verification_per_user",
+                            ApiErrorCode.SUPPORT_TICKET_ALREADY_OPEN);
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<?>> handleDataIntegrityViolation(
             DataIntegrityViolationException ex) {
-        log.warn("Database constraint violation: {}", ex.getMostSpecificCause().getMessage());
+        String cause = ex.getMostSpecificCause().getMessage();
+        log.warn("Database constraint violation: {}", cause);
+
+        ApiErrorCode mapped = mappedConstraintCode(cause);
+        if (mapped != null) {
+            return ResponseEntity.status(mapped.getHttpStatus()).body(ApiResponse.failure(mapped));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(
                         ApiResponse.failure(
                                 ApiErrorCode.BAD_REQUEST,
                                 "The request conflicts with an existing resource",
                                 null));
+    }
+
+    /**
+     * Finds the domain code for whichever known constraint the driver named, if any.
+     *
+     * <p>The constraint name is only available inside the driver's message, so this matches on it
+     * rather than on a structured field. A name that is not mapped falls through to the generic
+     * conflict, which is the correct answer for a constraint nobody has assigned a meaning to.
+     *
+     * @param causeMessage the most specific cause's message, may be null
+     * @return the mapped code, or null when the constraint is unknown
+     */
+    private static ApiErrorCode mappedConstraintCode(String causeMessage) {
+        if (causeMessage == null) {
+            return null;
+        }
+        for (Map.Entry<String, ApiErrorCode> entry : CONSTRAINT_ERROR_CODES.entrySet()) {
+            if (causeMessage.contains(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     @ExceptionHandler(Exception.class)

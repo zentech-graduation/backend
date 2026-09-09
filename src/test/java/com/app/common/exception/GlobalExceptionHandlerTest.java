@@ -13,6 +13,8 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -167,5 +169,46 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().getCode()).isEqualTo("BAD_REQUEST");
         assertThat(response.getBody().getMessage()).contains("conflicts");
+    }
+
+    // A service check answers the ordinary case with a named code, but two transactions can both
+    // pass it before either commits and then the constraint refuses the second. The loser used to
+    // receive BAD_REQUEST alongside HTTP 409 - an envelope contradicting its own status line - and
+    // staff surfaces rendered "the request conflicts with an existing resource" to a moderator.
+    @ParameterizedTest
+    @CsvSource({
+        "uq_user_verifications_active,VERIFICATION_ALREADY_VERIFIED",
+        "uq_support_tickets_one_open_support_per_user,SUPPORT_TICKET_ALREADY_OPEN",
+        "uq_support_tickets_one_open_verification_per_user,SUPPORT_TICKET_ALREADY_OPEN"
+    })
+    void handleDataIntegrityViolation_knownConstraint_answersItsDomainCode(
+            String constraint, String expectedCode) {
+        ResponseEntity<ApiResponse<?>> response =
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException(
+                                "could not execute statement",
+                                new RuntimeException(
+                                        "ERROR: duplicate key value violates unique constraint \""
+                                                + constraint
+                                                + "\"")));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().getCode()).isEqualTo(expectedCode);
+    }
+
+    // A constraint nobody has assigned a meaning to must keep the generic conflict rather than be
+    // guessed at.
+    @Test
+    void handleDataIntegrityViolation_unmappedConstraint_keepsTheGenericConflict() {
+        ResponseEntity<ApiResponse<?>> response =
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException(
+                                "could not execute statement",
+                                new RuntimeException(
+                                        "ERROR: duplicate key value violates unique constraint"
+                                                + " \"uq_something_unmapped\"")));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().getCode()).isEqualTo("BAD_REQUEST");
     }
 }
