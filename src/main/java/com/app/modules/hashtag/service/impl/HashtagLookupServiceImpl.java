@@ -55,7 +55,11 @@ public class HashtagLookupServiceImpl implements HashtagLookupService {
         return new HashtagDetailResponse(
                 hashtag.getId(),
                 hashtag.getName(),
-                hashtag.getPostCount(),
+                // Not hashtag.getPostCount(): that counts associations ever made, including posts
+                // since removed or soft-deleted, and it is rendered immediately above a grid that
+                // lists only published, non-deleted ones. The two were answering different
+                // questions in the same visual unit - goldprice read "40 posts" over 36 tiles.
+                hashtagRepository.countListablePosts(hashtag.getId()),
                 hashtag.getStatus(),
                 hashtag.getCreatedAt(),
                 hashtag.getPinnedAt() != null);

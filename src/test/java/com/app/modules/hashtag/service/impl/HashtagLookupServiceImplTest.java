@@ -64,6 +64,22 @@ class HashtagLookupServiceImplTest {
         assertThat(result.status()).isEqualTo(HashtagStatus.ACTIVE);
     }
 
+    // hashtags.post_count counts associations ever made: removing or soft-deleting a post leaves
+    // its post_hashtags row behind. Printed above a grid that lists only published, non-deleted
+    // posts, it read "40 posts" over 36 tiles on the seeded goldprice page.
+    @Test
+    void getByName_reportsListablePostsRatherThanTheTriggerMaintainedAssociationCount() {
+        Hashtag hashtag = hashtag(HashtagStatus.ACTIVE);
+        hashtag.setPostCount(40);
+        when(hashtagService.normalize("devlife")).thenReturn("devlife");
+        when(hashtagRepository.findByName("devlife")).thenReturn(Optional.of(hashtag));
+        when(hashtagRepository.countListablePosts(HASHTAG_ID)).thenReturn(37);
+
+        HashtagDetailResponse result = service.getByName("devlife");
+
+        assertThat(result.postCount()).isEqualTo(37);
+    }
+
     // The whole point of delegating to HashtagService.normalize is that the read path and the
     // caption write path agree on what a raw name resolves to. Asserting the lookup is performed
     // with the normalized form, never the raw input, is what pins that.
