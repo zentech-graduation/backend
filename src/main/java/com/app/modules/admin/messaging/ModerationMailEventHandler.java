@@ -12,6 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.modules.admin.enums.AdminActionType;
@@ -135,14 +137,35 @@ public class ModerationMailEventHandler {
             delivery.setSentAt(OffsetDateTime.now(ZoneOffset.UTC));
             emailDeliveryRepository.save(delivery);
         } catch (RuntimeException ex) {
+            delivery.setAttemptCount(delivery.getAttemptCount() + 1);
+            if (isRecipientSuppressed(ex)) {
+                // A deliberate configuration outcome, not a failure. Recorded so the suppression is
+                // visible rather than silent, then swallowed: rethrowing would dead-letter a
+                // message this deployment was configured never to send, and fill the DLQ with
+                // decisions the operator already made.
+                delivery.setStatus(EmailDeliveryStatus.SKIPPED);
+                delivery.setErrorText(ex.getMessage());
+                emailDeliveryRepository.save(delivery);
+                return;
+            }
             // Recorded before rethrowing so the failure survives the consumer's retry and
             // dead-letter handling rather than existing only in a log line.
             delivery.setStatus(EmailDeliveryStatus.FAILED);
             delivery.setErrorText(ex.getMessage());
-            delivery.setAttemptCount(delivery.getAttemptCount() + 1);
             emailDeliveryRepository.save(delivery);
             throw ex;
         }
+    }
+
+    /**
+     * Whether the send was refused by the recipient allowlist rather than by the provider.
+     *
+     * @param ex the failure raised by the sender
+     * @return true when this deployment is configured not to send to that recipient
+     */
+    private static boolean isRecipientSuppressed(RuntimeException ex) {
+        return ex instanceof AppException appException
+                && appException.getErrorCode() == ApiErrorCode.MAIL_RECIPIENT_NOT_ALLOWED;
     }
 
     private boolean emailVerified(UUID userId) {

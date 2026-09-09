@@ -1,8 +1,12 @@
 package com.app.modules.mail.service.impl;
 
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.enums.MailTemplate;
 import com.app.modules.mail.enums.ModerationMailTemplate;
@@ -34,9 +38,11 @@ public abstract class AbstractTemplateMailSender implements MailSender {
     /**
      * Delivers an already rendered message through the concrete transport.
      *
-     * <p>Implementations must translate every transport failure into {@code
-     * ApiErrorCode.SERVICE_UNAVAILABLE} so callers observe one failure shape, and must never log
-     * the recipient address or any raw token.
+     * <p>Implementations must translate a transport failure the provider may recover from into
+     * {@code ApiErrorCode.SERVICE_UNAVAILABLE}, and one the provider has permanently refused into
+     * {@code ApiErrorCode.MAIL_PERMANENTLY_REJECTED}, so a consumer's retry classifier can tell a
+     * temporary outage from a message that will be rejected identically for ever. Implementations
+     * must never log the recipient address or any raw token.
      *
      * @param toEmail recipient email address
      * @param subject message subject line
@@ -45,6 +51,51 @@ public abstract class AbstractTemplateMailSender implements MailSender {
      *     none; the send log stores it so a delivery can be traced at the provider afterwards
      */
     protected abstract String deliver(String toEmail, String subject, String htmlBody);
+
+    /**
+     * Applies the recipient allowlist, then hands the message to the transport.
+     *
+     * <p>Every send routes through here rather than calling {@link #deliver} directly, so a lane
+     * added later cannot bypass the check by construction. Campaign mail matters most: it addresses
+     * many recipients at once.
+     *
+     * @param toEmail recipient email address
+     * @param subject message subject line
+     * @param htmlBody rendered HTML body
+     * @return the provider's identifier for the accepted message, or null when it has none
+     */
+    private String dispatch(String toEmail, String subject, String htmlBody) {
+        if (!recipientAllowed(toEmail)) {
+            // Not logged with the address, per the contract above. The caller records the
+            // suppression against the delivery row, which already holds the recipient.
+            throw new AppException(ApiErrorCode.MAIL_RECIPIENT_NOT_ALLOWED);
+        }
+        return deliver(toEmail, subject, htmlBody);
+    }
+
+    /**
+     * Whether this deployment may send to the given address.
+     *
+     * @param toEmail recipient email address
+     * @return true when unrestricted, or when the address's domain is on the allowlist
+     */
+    private boolean recipientAllowed(String toEmail) {
+        List<String> allowed = mailProperties.getAllowedRecipientDomains();
+        if (allowed == null || allowed.isEmpty()) {
+            return true;
+        }
+        if (toEmail == null) {
+            return false;
+        }
+        int at = toEmail.lastIndexOf('@');
+        if (at < 0 || at == toEmail.length() - 1) {
+            return false;
+        }
+        String domain = toEmail.substring(at + 1).toLowerCase(Locale.ROOT);
+        return allowed.stream()
+                .filter(entry -> entry != null && !entry.isBlank())
+                .anyMatch(entry -> entry.trim().toLowerCase(Locale.ROOT).equals(domain));
+    }
 
     /**
      * Builds the {@code From} header value shared by every transport.
@@ -102,7 +153,7 @@ public abstract class AbstractTemplateMailSender implements MailSender {
 
     private void render(MailTemplate template, Map<String, Object> variables, String toEmail) {
         String html = mailTemplateRenderer.render(template, variables);
-        deliver(toEmail, template.getDefaultSubject(), html);
+        dispatch(toEmail, template.getDefaultSubject(), html);
     }
 
     /**
@@ -128,13 +179,13 @@ public abstract class AbstractTemplateMailSender implements MailSender {
         variables.put("appName", mailProperties.getAppName());
         variables.put("bodyHtml", bodyHtml);
         variables.put("unsubscribeUrl", unsubscribeUrl);
-        return deliver(toEmail, subject, mailTemplateRenderer.renderCampaign(variables));
+        return dispatch(toEmail, subject, mailTemplateRenderer.renderCampaign(variables));
     }
 
     public String sendSupportConfirmation(Map<String, Object> variables, String toEmail) {
         String html =
                 mailTemplateRenderer.render(SupportMailTemplate.CONFIRM_SUPPORT_REQUEST, variables);
-        return deliver(
+        return dispatch(
                 toEmail, SupportMailTemplate.CONFIRM_SUPPORT_REQUEST.getDefaultSubject(), html);
     }
 
@@ -150,6 +201,6 @@ public abstract class AbstractTemplateMailSender implements MailSender {
     public String sendModerationNotice(
             ModerationMailTemplate template, Map<String, Object> variables, String toEmail) {
         String html = mailTemplateRenderer.render(template, variables);
-        return deliver(toEmail, template.getDefaultSubject(), html);
+        return dispatch(toEmail, template.getDefaultSubject(), html);
     }
 }

@@ -34,6 +34,9 @@ public enum ApiErrorCode {
     // recipient, a rejected payload. Retrying reproduces the same rejection for ever, so consumers
     // treat this as permanent and dead-letter on the first attempt rather than burning the ladder.
     MAIL_PERMANENTLY_REJECTED("MAIL_PERMANENTLY_REJECTED", "The mail provider permanently rejected this message. It will not be retried.", HttpStatus.UNPROCESSABLE_ENTITY),
+    // This deployment is configured not to send to the recipient's domain. Permanent by nature:
+    // the address will not become allowed by retrying, so the message is recorded and dropped.
+    MAIL_RECIPIENT_NOT_ALLOWED("MAIL_RECIPIENT_NOT_ALLOWED", "This deployment is not permitted to send mail to that recipient domain.", HttpStatus.UNPROCESSABLE_ENTITY),
 
     // Auth
     AUTH_INVALID_CREDENTIALS("AUTH_INVALID_CREDENTIALS", "Invalid email or password", HttpStatus.UNAUTHORIZED),

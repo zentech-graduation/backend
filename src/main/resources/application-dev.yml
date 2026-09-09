@@ -81,12 +81,22 @@ app:
       enabled: true
     # Local development sends real mail through Resend by default: there is no local sink.
     # Every send consumes Resend quota, and a fabricated or seeded recipient produces a bounce
-    # that raises the sending domain's bounce rate, which can get the domain suspended. Only
-    # trigger mail flows (register, forgot-password, and so on) against real mailboxes you
-    # control. To run the application without sending real mail, set APP_MAIL_TRANSPORT=noop in
-    # .env and restart; noop is refused outside this profile by MailTransportGuard. See
-    # .env.example and CONTRIBUTING.md for the full warning.
+    # that raises the sending domain's bounce rate, which can get the domain suspended. To run
+    # the application without sending real mail at all, set APP_MAIL_TRANSPORT=noop in .env and
+    # restart; noop is refused outside this profile by MailTransportGuard. See .env.example and
+    # CONTRIBUTING.md for the full warning.
     transport: ${APP_MAIL_TRANSPORT:resend}
+    # Which recipient domains this machine may send to. Defaults to a reserved domain that cannot
+    # receive mail, so a local run sends nothing outward until an operator names their own domain
+    # in APP_MAIL_ALLOWED_RECIPIENT_DOMAINS. The seeded dataset carries fabricated addresses at
+    # gmail.com and outlook.com - real, deliverable domains belonging to whoever holds those
+    # mailboxes - and an ordinary moderation action against a seeded account is all it takes to
+    # write to them. Disabling the consumer protects the seeding run only, not the far longer
+    # period during which the seeded rows are used, which is when this fires instead.
+    #
+    # Absent in production, which means unrestricted: a deployment that forgot this property must
+    # not silently stop sending all mail.
+    allowed-recipient-domains: ${APP_MAIL_ALLOWED_RECIPIENT_DOMAINS:example.invalid}
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:
