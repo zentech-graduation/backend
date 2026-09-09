@@ -219,7 +219,14 @@ public class HashtagTrendingServiceImpl implements HashtagTrendingService {
                                 new HashtagTrendingResponse(
                                         h.getId(),
                                         h.getName(),
-                                        h.getPostCount(),
+                                        // Null, not h.getPostCount(). This hashtag is not in the
+                                        // snapshot, so it has no window count. Substituting the
+                                        // lifetime association count put two different
+                                        // measurements in one column: "#fnblife 1 posts" (one post
+                                        // this window) read as smaller than "#goldprice 40 posts"
+                                        // (forty associations since 2025), which is a comparison
+                                        // the reader cannot make and is not told they are making.
+                                        null,
                                         0,
                                         latest,
                                         periodEnd,

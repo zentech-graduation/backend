@@ -15,8 +15,17 @@ public record HashtagTrendingResponse(
                         example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
                 UUID hashtagId,
         @Schema(description = "Hashtag name without the # prefix", example = "spring") String name,
-        @Schema(description = "Number of posts tagged during the trending window", example = "87")
-                int postCount,
+        @Schema(
+                        description =
+                                "Number of posts tagged during the trending window. Null when this"
+                                        + " hashtag is not in the current snapshot and therefore"
+                                        + " has no window count; render it as new rather than"
+                                        + " substituting a lifetime total, which is a different"
+                                        + " measurement and not comparable with the others in the"
+                                        + " list.",
+                        example = "87",
+                        nullable = true)
+                Integer postCount,
         @Schema(
                         description = "Rank within this trending snapshot; 1 is the most popular",
                         example = "1")

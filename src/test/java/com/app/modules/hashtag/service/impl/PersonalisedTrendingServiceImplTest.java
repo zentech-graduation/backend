@@ -96,6 +96,51 @@ class PersonalisedTrendingServiceImplTest {
         verifyNoInteractions(affinityRepository);
     }
 
+    // One column in one list must mean one thing. Entries reaching the list through the novelty or
+    // affinity path have no snapshot row, so they carry no window count; filling the gap with the
+    // lifetime association count made "#fnblife 1 posts" read as smaller than "#goldprice 40
+    // posts" when the two numbers were measuring different things over different spans.
+    @Test
+    void getPersonalisedTrending_entryWithNoSnapshotRow_carriesNoWindowCount() {
+        UUID adjacentId = UUID.randomUUID();
+        List<HashtagTrendingResponse> platformList = new java.util.ArrayList<>();
+        List<UserHashtagAffinity> affinities = new java.util.ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            UUID id = UUID.randomUUID();
+            platformList.add(platformEntry(id, "known" + i, i + 1));
+            affinities.add(affinity(id));
+        }
+        platform(platformList);
+        when(hashtagAffinityService.findTopForUser(VIEWER_ID, 50)).thenReturn(affinities);
+        when(affinityRepository.findAdjacentHashtagIds(VIEWER_ID, 50))
+                .thenReturn(List.of(adjacentId));
+        when(hashtagTrendingService.describeHashtags(any()))
+                .thenReturn(
+                        List.of(
+                                new HashtagTrendingResponse(
+                                        adjacentId,
+                                        "newthing",
+                                        null,
+                                        0,
+                                        null,
+                                        null,
+                                        false,
+                                        TrendingSource.PLATFORM)));
+
+        PageResponse<HashtagTrendingResponse> result =
+                service.getPersonalisedTrending(VIEWER_ID, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .filteredOn(e -> e.hashtagId().equals(adjacentId))
+                .singleElement()
+                .extracting(HashtagTrendingResponse::postCount)
+                .isNull();
+        // The snapshot-backed entries keep theirs, so the distinction is real and not blanket.
+        assertThat(result.getContent())
+                .filteredOn(e -> !e.hashtagId().equals(adjacentId))
+                .allSatisfy(e -> assertThat(e.postCount()).isNotNull());
+    }
+
     // A cache must answer the same question the same way. The entry used to store only the page's
     // rows, so the total was rebuilt as the page's own length and the same request reported a
     // different totalElements, totalPages and last depending on cache state. A client paging on
