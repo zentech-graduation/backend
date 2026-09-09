@@ -7,6 +7,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import jakarta.annotation.PreDestroy;
 
@@ -35,6 +37,14 @@ import com.resend.services.emails.model.CreateEmailResponse;
 public class ResendMailSender extends AbstractTemplateMailSender {
 
     private static final Logger log = LoggerFactory.getLogger(ResendMailSender.class);
+
+    /**
+     * The first HTTP status in a provider error message, e.g. {@code "... email: 422 {...}"}.
+     *
+     * <p>Anchored on a word boundary so a three-digit run inside an id or a byte count cannot be
+     * mistaken for a status.
+     */
+    private static final Pattern PROVIDER_STATUS = Pattern.compile("\\b([45]\\d{2})\\b");
 
     private final Resend resend;
     private final ResendProperties resendProperties;
@@ -96,9 +106,62 @@ public class ResendMailSender extends AbstractTemplateMailSender {
             throw new AppException(ApiErrorCode.SERVICE_UNAVAILABLE);
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
+            String message = cause.getMessage();
+            boolean permanent = isPermanentRejection(message);
             log.error(
-                    "Failed to send email | subject: {} | error: {}", subject, cause.getMessage());
-            throw new AppException(ApiErrorCode.SERVICE_UNAVAILABLE);
+                    "Failed to send email | subject: {} | permanent: {} | error: {}",
+                    subject,
+                    permanent,
+                    message);
+            // A 422 about a malformed recipient and a 503 about the provider being down arrive
+            // through this same branch. Collapsing both to SERVICE_UNAVAILABLE made the consumers'
+            // retry classifier treat a permanent rejection as a transient outage: the message
+            // burned the whole retry ladder, held a consumer thread behind it, and then landed in
+            // the DLQ labelled "temporarily unavailable", which invites a replay that can only
+            // fail identically.
+            // The provider's own text is carried through deliberately. It becomes the DLQ's
+            // x-dead-letter-reason header and the error_text column on email_deliveries, and an
+            // operator reading either needs the real cause rather than a generic classification.
+            // Both are internal operational records, not anything a caller is shown.
+            throw new AppException(
+                    permanent
+                            ? ApiErrorCode.MAIL_PERMANENTLY_REJECTED
+                            : ApiErrorCode.SERVICE_UNAVAILABLE,
+                    (permanent
+                                    ? "Mail provider permanently rejected the message: "
+                                    : "Mail provider was unavailable: ")
+                            + message);
         }
+    }
+
+    /**
+     * Whether the provider refused the message itself rather than being unable to accept it now.
+     *
+     * <p>The Resend SDK does not expose the HTTP status as a field; it is only in the exception
+     * message, which begins {@code "Failed to send email: 422 {...}"}. Parsing a message is fragile
+     * and would not normally be acceptable, but the alternative is replacing the SDK with a client
+     * that surfaces the status, which is far larger than this warrants. The parse is kept here, in
+     * one small directly-tested method, and replacing the SDK is recorded as debt.
+     *
+     * <p>4xx is permanent except 408 and 429, which are the two the provider expects a client to
+     * retry. Anything unparseable is treated as transient, because retrying a message that would
+     * have succeeded is recoverable while dropping one that would have is not.
+     *
+     * @param message the provider exception's message, may be null
+     * @return true when the message must not be retried
+     */
+    static boolean isPermanentRejection(String message) {
+        if (message == null) {
+            return false;
+        }
+        Matcher matcher = PROVIDER_STATUS.matcher(message);
+        if (!matcher.find()) {
+            return false;
+        }
+        int status = Integer.parseInt(matcher.group(1));
+        if (status == 408 || status == 429) {
+            return false;
+        }
+        return status >= 400 && status < 500;
     }
 }

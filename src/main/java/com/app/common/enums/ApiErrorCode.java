@@ -30,6 +30,10 @@ public enum ApiErrorCode {
     // so the message must not attribute it to the system being busy.
     TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "Too many requests. Please wait before trying again.", HttpStatus.TOO_MANY_REQUESTS),
     SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", "External service temporarily unavailable. Please try again later.", HttpStatus.SERVICE_UNAVAILABLE),
+    // The provider refused the message itself, not the connection: a malformed or undeliverable
+    // recipient, a rejected payload. Retrying reproduces the same rejection for ever, so consumers
+    // treat this as permanent and dead-letter on the first attempt rather than burning the ladder.
+    MAIL_PERMANENTLY_REJECTED("MAIL_PERMANENTLY_REJECTED", "The mail provider permanently rejected this message. It will not be retried.", HttpStatus.UNPROCESSABLE_ENTITY),
 
     // Auth
     AUTH_INVALID_CREDENTIALS("AUTH_INVALID_CREDENTIALS", "Invalid email or password", HttpStatus.UNAUTHORIZED),
