@@ -19,12 +19,13 @@ public class VocabularyServiceImpl implements VocabularyService {
     @Override
     @Transactional(readOnly = true)
     public VocabularyResponse getVocabularies() {
-        // One transaction over three reads rather than three, so a client cannot observe the three
-        // tables mid-change: an administrator disabling a reason and its notification type in one
+        // One transaction over four reads rather than four, so a client cannot observe the tables
+        // mid-change: an administrator disabling a reason and its notification type in one
         // migration would otherwise be visible half-applied.
         return new VocabularyResponse(
                 vocabularyRepository.findReportReasons(),
                 vocabularyRepository.findNotificationTypes(),
-                vocabularyRepository.findModerationActions());
+                vocabularyRepository.findModerationActions(),
+                vocabularyRepository.findSupportCategories());
     }
 }

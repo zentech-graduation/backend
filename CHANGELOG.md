@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+<!-- p1 -->
+### Added
+- Support ticket categories are now published through the shared vocabulary endpoint alongside report reasons, notification types and moderation actions, so a client no longer has to hardcode the list.
+- An email opt-out that suppresses campaign mail only; account and security mail ignore it, and the send path records who was skipped and why.
+- Campaign bodies are rendered by one server-side pipeline and filtered against an allowlist, so a body carrying a script tag, an event handler or a javascript link is neutralised before it reaches anyone.
+- Administrators can compose and schedule custom mail campaigns from read-only Markdown samples, with a server-rendered preview that cannot diverge from the mail that is actually sent.
+- Every punitive moderation notice now carries a single-use appeal link that works without signing in, which is what makes the notice actionable for an account that cannot authenticate.
+- A public support form gated by Cloudflare Turnstile and an email confirmation step, so a submission reaches staff only after the submitter proves control of the address.
+- An appeal opened from a moderation notice redeems a single-use link that authorises exactly one ticket and mints no session.
+- A support centre with three entry paths, so a banned or suspended account - which cannot reach any authenticated endpoint - now has a route to contest a decision, which it previously did not.
+
+### Fixed
+- The unsubscribe token column is now varchar rather than char, which is what the entity maps to; as char it failed schema validation and the application did not start at all.
+- Campaign personalisation tokens are now substituted correctly; the sanitizer rewrites double braces as a template-injection defence, which would otherwise have left every placeholder visible to recipients.
+- A stalled mail provider can no longer hold a consumer thread indefinitely; each send is bounded by a configurable call timeout, which is the only HTTP bound the Resend SDK permits from outside it.
+- Every read path that reaches comments or stories through native SQL now hides administratively removed rows, including the report target lookup, the platform statistics gauges and the development seed pipeline.
+- Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
+
 ### Added
 - Posts carrying a hashtag are now readable through a dedicated cursor-paginated endpoint, served from Elasticsearch and degrading to a PostgreSQL join when the search tier is unavailable.
 - A hashtag can be resolved by name, so a shared or deep-linked hashtag address reaches the same record the post write path created.
@@ -30,6 +48,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `sonarcloud.yml` now runs the duplicate Flyway migration version pre-check before the build, a step formerly unique to `ci-test.yml`.
 
 ### Added
+- Each of the nine moderation actions that affect a person now raises its notice inside the same transaction as the moderation write, so an action cannot commit without its notice enqueued nor send one for a change that rolled back.
+- A per-recipient hourly budget now bounds moderation mail, the first send throttle of any kind on this path.
+- Moderation notices now reach banned, suspended and deactivated accounts, which the existing mail path refused by design and which were therefore the only population never told what had happened to them.
+- Every outbound email is now recorded with its recipient, template, status and the provider's message identifier, which was previously discarded at the point of the call.
+- Nine moderation notice email templates covering account bans, reinstatements, suspensions, warnings and the four content removals, each stating the action, the date and, for a fixed-term suspension, when it ends.
+- Comments and stories now carry an administrative removal tombstone independent of the owner's own deletion, so restoring administratively removed content no longer undoes a deletion its author performed.
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
 - A batched post-impression endpoint that records what a viewer actually saw, how long it stayed visible, and which surface it appeared on; resubmitting a batch after a network failure records nothing twice, and the call never affects a post's public view count.
@@ -42,6 +66,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
 
 ### Changed
+- The pull request lint allowlist now accepts the support scope, ahead of the support ticket module.
+- Content administratively removed before this release keeps its existing deletion timestamp and now reads as an owner deletion, so it stays hidden but can no longer be restored by an administrator; there is no way to tell those rows apart retrospectively and no backfill was attempted.
 - Personalized recommendations no longer resurface already-seen posts until the unread catalogue is genuinely exhausted, and only at the tail, replacing the previous score-based replacement mechanism.
 - Personalized recommendations are now ranked by a factorization machine over a merged candidate list combining collaborative filtering, post-to-post and viewer-to-viewer neighbours, and trending, rather than by collaborative filtering alone.
 - Posts a viewer has already seen now return to their recommendations at reduced weight instead of being excluded permanently, which on a catalogue of this size would otherwise empty every recommendation surface within a few sessions.
@@ -251,6 +277,9 @@ A write into an uncovered month never failed; it was absorbed silently and made 
 - The error code for a missing report resolution note, which no path had been able to raise since the requirement moved behind a mandatory field. An error code nothing can produce is a promise the API cannot keep.
 
 ### Security
+- A staff member cannot act on a ticket appealing a decision they made themselves.
+- Only an administrator can decide an appeal; a moderator may read and escalate one but cannot record a verdict they have no capability to execute.
+- The eleven administrator-only endpoints now enforce the administrator role in the service layer as well as in their endpoint annotations, so removing an annotation no longer opens an endpoint.
 - The administrative surface now enforces a per-caller request budget. None of its thirty-three operations carried one, so two hundred requests a second from a single token were accepted; the four most expensive reads carry tighter budgets than the rest.
 - Every administrative read now rejects a query parameter it does not understand instead of ignoring it. A misspelled filter previously returned a full unfiltered page, which a client then displayed as though the filter had been applied.
 - A pagination cursor whose identifier has been truncated is now rejected. Removing characters from it previously produced a different, valid position, so the caller silently received the wrong page instead of an error.
@@ -265,6 +294,8 @@ Sessions already open when this ships stay valid; an ordinary logout still ends 
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Tests
+- Added coverage for the support authorization matrix, the conflict-of-interest rule and the claim race.
+- Added coverage for the new service-layer administrator gate, including the warning and strike revocations that previously read no actor role at all.
 - Every administrative controller now asserts that its endpoints refuse a request carrying no token at all. The suite previously checked only that a revoked token was refused.
 - The permitted-operations payload is checked by agreeing with the component that enforces the rules, for every combination of actor role and target role, rather than by restating the rules a third time.
 - The report queue's plan is asserted directly, so neither adding a status to the queue without extending the index nor removing the apparently redundant cursor bound can silently return it to a full scan.
@@ -427,6 +458,9 @@ A conversation that already has messages in it is kept, because unfollowing some
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
 ### Documentation
+- Added the support module data rules and brought the reference schema up to the migrations it describes.
+- Added the mail module data rules, which did not exist, and corrected the project structure documents against the code they describe.
+- The mail queue now records why it carries no broker-level dead-letter argument, and which queue in the topology is the genuine outlier.
 - Recorded why a small number of harmless startup proxy warnings and one non-JSON error response for an over-long request remain as accepted, understood gaps rather than unexplained rough edges.
 - Recorded that follower and following counts are visible to everyone regardless of the viewer's own blocks, so comparing a count against a filtered list can reveal that a block exists somewhere in that list, as a known and accepted tradeoff rather than an oversight.
 - Corrected internal module documentation for the hashtag module, which was still marked as unimplemented scaffolding despite being fully implemented.

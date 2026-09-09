@@ -53,6 +53,38 @@ public interface AdminAuthorizationService {
             boolean canChangeStatus, boolean canChangeRole, List<UserRole> assignableRoles) {}
 
     /**
+     * Classifies an action that requires the administrator role and names no target account.
+     *
+     * <p>The reports, hashtag registry, statistics and activity-log surfaces act on the platform
+     * rather than on one account, so the shared actor-and-target rules do not apply to them. Only
+     * the first of those rules does: the actor must be an administrator.
+     *
+     * @param actorRole the actor's role as read from the source of truth, never from a token claim
+     * @return {@link Outcome#ALLOWED} for an administrator, {@link Outcome#ACTOR_NOT_ADMIN}
+     *     otherwise
+     */
+    Outcome evaluateAdministratorAction(UserRole actorRole);
+
+    /**
+     * Asserts that the actor holds the administrator role, resolving that role from the source of
+     * truth.
+     *
+     * <p>This is the second gate behind the {@code @PreAuthorize} annotations on the administrator
+     * surface. Those annotations are the only gate the eleven administrator-only endpoints had, and
+     * the {@code SecurityConfig} matcher covering their paths is the broad {@code /api/v1/admin/**}
+     * rule, which admits a moderator. Deleting or mistyping one annotation therefore opened the
+     * endpoint with nothing else to catch it.
+     *
+     * <p>The role lookup lives here rather than at each call site because the same four-line read
+     * was already repeated across this module, and a rule that is copied is a rule that drifts.
+     *
+     * @param actorId the account performing the action
+     * @throws AppException {@code FORBIDDEN} when the actor is not an administrator, or when no
+     *     live account exists for {@code actorId}
+     */
+    void assertActorIsAdministrator(UUID actorId);
+
+    /**
      * Classifies a requested status change without throwing.
      *
      * @param actorId the account performing the action

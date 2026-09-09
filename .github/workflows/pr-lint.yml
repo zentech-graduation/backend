@@ -41,6 +41,7 @@ jobs:
             report
             admin
             recommendation
+            support
             common
             db
             ci

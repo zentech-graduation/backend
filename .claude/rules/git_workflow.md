@@ -48,7 +48,7 @@ Rules enforced by `pr-lint` workflow:
 
 ### Allowed scopes (pr-lint enforced)
 
-`auth` · `mail` · `users` · `social` · `media` · `post` · `comment` · `hashtag` · `story` · `notification` · `message` · `report` · `admin` · `recommendation` · `common` · `db` · `ci`
+`auth` · `mail` · `users` · `social` · `media` · `post` · `comment` · `hashtag` · `story` · `notification` · `message` · `report` · `admin` · `recommendation` · `support` · `common` · `db` · `ci`
 
 > **Discrepancies found in git history** — the following scopes appear in existing commits but are **not** in the pr-lint allowlist and will fail CI if used:
 > `config`, `security`, `environment`, `changelog`, `database` (use `db`), `modules`, `build`, `log`

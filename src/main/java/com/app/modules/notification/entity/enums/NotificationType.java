@@ -17,6 +17,10 @@ public enum NotificationType {
     STORY_VIEW,
     MESSAGE,
     WARNING,
+    // Answered, rejected or escalated. The mail carries the response text; this is the
+    // in-product half, and like WARNING it is not user-toggleable: an account that could switch it
+    // off would ask a question and never be told it had been answered.
+    SUPPORT_TICKET_UPDATE,
     POST_REMOVED,
     REPORT_POST_REMOVED,
     POST_RESTORED,

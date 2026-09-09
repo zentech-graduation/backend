@@ -108,6 +108,20 @@
             <artifactId>resend-java</artifactId>
             <version>3.1.0</version>
         </dependency>
+        <!-- Campaign bodies are Markdown. CommonMark renders them to HTML and the OWASP sanitizer
+             filters that HTML against an allowlist. Both run server-side, in one pipeline shared by
+             the preview endpoint and the send path, so a preview cannot diverge from the mail that
+             is actually sent and there is no second sanitization surface in the browser. -->
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>0.24.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+            <artifactId>owasp-java-html-sanitizer</artifactId>
+            <version>20240325.1</version>
+        </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>

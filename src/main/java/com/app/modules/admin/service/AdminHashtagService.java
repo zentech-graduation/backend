@@ -24,25 +24,29 @@ public interface AdminHashtagService {
     /**
      * Lists hashtags newest first, spanning every status unless one is named.
      *
+     * @param actorId the acting administrator, checked against the source of truth
      * @param status status to match, or null for every status
      * @param cursor opaque cursor from the prior page
      * @param limit requested page size
      * @return matching hashtags with their lifecycle state
+     * @throws AppException {@code FORBIDDEN} when the actor is not an administrator
      */
     CursorPageResponse<HashtagAdminResponse> listHashtags(
-            HashtagStatus status, String cursor, int limit);
+            UUID actorId, HashtagStatus status, String cursor, int limit);
 
     /**
      * Searches hashtags by case-insensitive substring, spanning every status unless one is named.
      *
+     * @param actorId the acting administrator, checked against the source of truth
      * @param query search text
      * @param status status to match, or null for every status
      * @param cursor opaque cursor from the prior page
      * @param limit requested page size
      * @return matching hashtags with their lifecycle state
+     * @throws AppException {@code FORBIDDEN} when the actor is not an administrator
      */
     CursorPageResponse<HashtagAdminResponse> searchHashtags(
-            String query, HashtagStatus status, String cursor, int limit);
+            UUID actorId, String query, HashtagStatus status, String cursor, int limit);
 
     /**
      * Creates a hashtag directly in the requested state and records one {@code create_hashtag} row.

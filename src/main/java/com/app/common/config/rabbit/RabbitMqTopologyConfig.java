@@ -26,6 +26,11 @@ public class RabbitMqTopologyConfig {
     public static final String MAIL_DEAD_LETTER_QUEUE = "mail.dlq";
     public static final String MAIL_DEAD_LETTER_ROUTING_KEY = "mail.dead-letter";
 
+    public static final String MODERATION_MAIL_QUEUE = "moderation.mail.queue";
+    public static final String MODERATION_MAIL_DEAD_LETTER_QUEUE = "moderation.mail.dlq";
+    public static final String MODERATION_MAIL_DEAD_LETTER_ROUTING_KEY =
+            "moderation.mail.dead-letter";
+
     public static final String NOTIFICATION_QUEUE = "notification.queue";
     public static final String NOTIFICATION_DEAD_LETTER_QUEUE = "notification.dlq";
     public static final String NOTIFICATION_DEAD_LETTER_ROUTING_KEY = "notification.dead-letter";
@@ -85,6 +90,20 @@ public class RabbitMqTopologyConfig {
                 .build();
     }
 
+    // No x-dead-letter-exchange argument, deliberately. The broker argument only routes a message
+    // that is rejected with requeue=false, expires on a TTL, or is dropped on queue overflow.
+    // AuthMailEventConsumer never rejects: it publishes the failed message to social.events.dlx
+    // itself through DeadLetterPublisher and then acks, and nacks with requeue=true only when that
+    // publish fails. The argument would therefore never fire on this queue.
+    //
+    // This is the consistent rule across the topology rather than an exception to it. Every queue
+    // whose consumer rejects with requeue=false carries the argument (comment, message,
+    // recommendation and story notification); every queue whose consumer publishes to the
+    // dead-letter exchange itself omits it (mail, notification, hashtag.index.sync,
+    // post.index.sync). The one queue that breaks the rule is adminNotificationQueue below, which
+    // carries the argument while AdminNotificationConsumer uses the application-level route, so
+    // the argument is inert there. It is left in place because changing the arguments of an
+    // existing durable queue fails redeclaration with PRECONDITION_FAILED against a live broker.
     @Bean
     Queue mailQueue() {
         return QueueBuilder.durable(MAIL_QUEUE).build();
@@ -101,6 +120,33 @@ public class RabbitMqTopologyConfig {
         return BindingBuilder.bind(mailDeadLetterQueue)
                 .to(socialEventsDeadLetterExchange)
                 .with(MAIL_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    // Moderation notices travel on their own queue rather than sharing mail.queue. The auth mail
+    // handler refuses any account that is not ACTIVE, which is correct for auth mail and is exactly
+    // the population a moderation notice has to reach, so the two cannot share a consumer. A
+    // separate queue also lets moderation mail be disabled on its own, which matters most in the
+    // seed profile where a replay would otherwise send real provider mail to fabricated addresses.
+    //
+    // No x-dead-letter-exchange argument, following mailQueue above: this queue's consumer
+    // publishes to the dead-letter exchange itself and never rejects, so the broker argument would
+    // never fire.
+    @Bean
+    Queue moderationMailQueue() {
+        return QueueBuilder.durable(MODERATION_MAIL_QUEUE).build();
+    }
+
+    @Bean
+    Queue moderationMailDeadLetterQueue() {
+        return QueueBuilder.durable(MODERATION_MAIL_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    Binding moderationMailDeadLetterBinding(
+            Queue moderationMailDeadLetterQueue, TopicExchange socialEventsDeadLetterExchange) {
+        return BindingBuilder.bind(moderationMailDeadLetterQueue)
+                .to(socialEventsDeadLetterExchange)
+                .with(MODERATION_MAIL_DEAD_LETTER_ROUTING_KEY);
     }
 
     @Bean

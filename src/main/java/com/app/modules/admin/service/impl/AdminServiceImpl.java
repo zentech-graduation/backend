@@ -236,7 +236,8 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public EscalatedReportCountResponse countEscalatedReports() {
+    public EscalatedReportCountResponse countEscalatedReports(UUID actorId) {
+        adminAuthorizationService.assertActorIsAdministrator(actorId);
         return new EscalatedReportCountResponse(
                 reportRepository.countByStatus(ReportStatus.ESCALATED));
     }
@@ -349,8 +350,16 @@ public class AdminServiceImpl implements AdminService {
         // administrator has already handled.
         user.setSuspendedUntil(targetStatus == UserStatus.SUSPENDED ? suspendedUntil : null);
         userRepository.save(user);
+        // The suspension end date is a server-derived fact, so it belongs on the audit row, and the
+        // suspension notice is the one template that has to state a date. Passing it through the
+        // metadata map is what lets the recorder build the notice payload without this method
+        // knowing that a notice exists.
+        Map<String, Object> metadata =
+                targetStatus == UserStatus.SUSPENDED && suspendedUntil != null
+                        ? Map.of(AdminActionRecorder.SUSPENDED_UNTIL_KEY, suspendedUntil.toString())
+                        : null;
         return adminActionRecorder.record(
-                actorId, actionType, userId, "user", userId, null, reason, null);
+                actorId, actionType, userId, "user", userId, null, reason, metadata);
     }
 
     // The mutation itself is deliberately not performed here. PostService owns every side effect
@@ -433,12 +442,14 @@ public class AdminServiceImpl implements AdminService {
                 commentRepository
                         .findOwnerIdIncludingDeleted(commentId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
-        boolean deleted =
+        // Reads admin_removed_at and not deleted_at, so a comment its author deleted is not
+        // mistaken for one a moderator removed and a restore cannot undo the author's deletion.
+        boolean removed =
                 commentRepository
-                        .isDeletedIncludingDeleted(commentId)
+                        .isAdminRemoved(commentId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.COMMENT_NOT_FOUND));
         boolean restore = actionType == AdminActionType.RESTORE_COMMENT;
-        if (restore != deleted) {
+        if (restore != removed) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
         Report linkedReport =
@@ -469,12 +480,13 @@ public class AdminServiceImpl implements AdminService {
                 storyRepository
                         .findOwnerIdIncludingDeleted(storyId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.STORY_NOT_FOUND));
-        boolean deleted =
+        // Reads admin_removed_at and not deleted_at, for the same reason moderateComment does.
+        boolean removed =
                 storyRepository
-                        .isDeletedIncludingDeleted(storyId)
+                        .isAdminRemoved(storyId)
                         .orElseThrow(() -> new AppException(ApiErrorCode.STORY_NOT_FOUND));
         boolean restore = actionType == AdminActionType.RESTORE_STORY;
-        if (restore != deleted) {
+        if (restore != removed) {
             throw new AppException(ApiErrorCode.ADMIN_INVALID_TRANSITION);
         }
         Report linkedReport =

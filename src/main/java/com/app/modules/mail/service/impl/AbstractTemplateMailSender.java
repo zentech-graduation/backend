@@ -5,6 +5,8 @@ import java.util.Map;
 
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.enums.MailTemplate;
+import com.app.modules.mail.enums.ModerationMailTemplate;
+import com.app.modules.mail.enums.SupportMailTemplate;
 import com.app.modules.mail.service.MailSender;
 import com.app.modules.mail.util.MailTemplateRenderer;
 
@@ -39,8 +41,10 @@ public abstract class AbstractTemplateMailSender implements MailSender {
      * @param toEmail recipient email address
      * @param subject message subject line
      * @param htmlBody rendered HTML body
+     * @return the provider's identifier for the accepted message, or null when the transport has
+     *     none; the send log stores it so a delivery can be traced at the provider afterwards
      */
-    protected abstract void deliver(String toEmail, String subject, String htmlBody);
+    protected abstract String deliver(String toEmail, String subject, String htmlBody);
 
     /**
      * Builds the {@code From} header value shared by every transport.
@@ -99,5 +103,53 @@ public abstract class AbstractTemplateMailSender implements MailSender {
     private void render(MailTemplate template, Map<String, Object> variables, String toEmail) {
         String html = mailTemplateRenderer.render(template, variables);
         deliver(toEmail, template.getDefaultSubject(), html);
+    }
+
+    /**
+     * Renders and delivers the public-form confirmation link.
+     *
+     * @param variables Thymeleaf variables for the confirmation template
+     * @param toEmail the unproven address the submitter gave
+     * @return the provider's identifier for the accepted message, or null
+     */
+    /**
+     * Renders and delivers one campaign mail.
+     *
+     * @param subject the administrator-authored subject
+     * @param bodyHtml the already-sanitized body from {@code CampaignBodyRenderer}
+     * @param unsubscribeUrl the recipient's opt-out link, supplied by the application
+     * @param toEmail recipient email address
+     * @return the provider's identifier for the accepted message, or null
+     */
+    public String sendCampaign(
+            String subject, String bodyHtml, String unsubscribeUrl, String toEmail) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("subject", subject);
+        variables.put("appName", mailProperties.getAppName());
+        variables.put("bodyHtml", bodyHtml);
+        variables.put("unsubscribeUrl", unsubscribeUrl);
+        return deliver(toEmail, subject, mailTemplateRenderer.renderCampaign(variables));
+    }
+
+    public String sendSupportConfirmation(Map<String, Object> variables, String toEmail) {
+        String html =
+                mailTemplateRenderer.render(SupportMailTemplate.CONFIRM_SUPPORT_REQUEST, variables);
+        return deliver(
+                toEmail, SupportMailTemplate.CONFIRM_SUPPORT_REQUEST.getDefaultSubject(), html);
+    }
+
+    /**
+     * Renders and delivers one moderation notice, returning the provider identifier.
+     *
+     * @param template the moderation template to render
+     * @param variables Thymeleaf variables for that template
+     * @param toEmail recipient email address
+     * @return the provider's identifier for the accepted message, or null when the transport has
+     *     none
+     */
+    public String sendModerationNotice(
+            ModerationMailTemplate template, Map<String, Object> variables, String toEmail) {
+        String html = mailTemplateRenderer.render(template, variables);
+        return deliver(toEmail, template.getDefaultSubject(), html);
     }
 }
