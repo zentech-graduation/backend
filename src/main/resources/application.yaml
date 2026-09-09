@@ -263,6 +263,19 @@ app:
     read-set-window: ${RECOMMENDATION_READ_SET_WINDOW:P90D}
     read-set-max-rows: ${RECOMMENDATION_READ_SET_MAX_ROWS:2000}
     top-up-overfetch-multiplier: ${RECOMMENDATION_TOPUP_OVERFETCH_MULTIPLIER:3}
+    affinity:
+      enabled: ${AFFINITY_JOB_ENABLED:true}
+      # 90 days matches the read-set window above and the span the seeded dataset covers. It is
+      # also the bound that makes the user_events read prune to the two or three partitions it
+      # covers instead of scanning all twenty-four.
+      window: ${AFFINITY_WINDOW:P90D}
+      # Three half-lives across the window: the far edge still contributes about an eighth rather
+      # than falling off a cliff, while last week clearly outranks last month. A 7-day half-life
+      # would make the 90-day window pointless; 60 days would barely separate the two ends.
+      half-life: ${AFFINITY_HALF_LIFE:P30D}
+      top-limit: ${AFFINITY_TOP_LIMIT:50}
+      interval: ${AFFINITY_INTERVAL:PT12H}
+      initial-delay: ${AFFINITY_INITIAL_DELAY:PT2M}
   websocket:
     revocation:
       interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
@@ -344,6 +357,24 @@ app:
         window-seconds: 60
       "[/api/v1/admin/hashtags/search]":
         max-attempts: 60
+        window-seconds: 60
+      # Single indexed row read behind the /tags/{name} deep link, so it is cheap, but it is the
+      # entry point a shared URL lands on and must not fall through to a broad default.
+      "[/api/v1/hashtags/name/*]":
+        max-attempts: 60
+        window-seconds: 60
+      # One Elasticsearch query per call plus a PostgreSQL hydration of the page, so it costs
+      # meaningfully more than the name lookup above and is budgeted lower.
+      "[/api/v1/hashtags/*/posts]":
+        max-attempts: 40
+        window-seconds: 60
+      # Cached in Redis for ten minutes per caller and page, so the budget covers cache misses
+      # and tab switching rather than the fusion cost itself.
+      "[/api/v1/hashtags/trending/for-you]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/*/pin]":
+        max-attempts: 30
         window-seconds: 60
 
 management:

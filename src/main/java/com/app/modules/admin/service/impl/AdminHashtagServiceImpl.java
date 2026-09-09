@@ -94,6 +94,20 @@ public class AdminHashtagServiceImpl implements AdminHashtagService {
         };
     }
 
+    @Override
+    @Transactional
+    public AdminActionResponse pinHashtag(UUID actorId, UUID hashtagId, String note) {
+        HashtagLifecycleResult result = hashtagLifecycleService.pin(actorId, hashtagId);
+        return record(actorId, AdminActionType.PIN_HASHTAG, result, note);
+    }
+
+    @Override
+    @Transactional
+    public AdminActionResponse unpinHashtag(UUID actorId, UUID hashtagId, String note) {
+        HashtagLifecycleResult result = hashtagLifecycleService.unpin(actorId, hashtagId);
+        return record(actorId, AdminActionType.UNPIN_HASHTAG, result, note);
+    }
+
     // Every value here is a fact this transaction established, which is the only thing
     // AdminActionRecorder accepts. No hashtag has a target user, so target_user_id stays null; the
     // hashtag itself is the target entity. No report can name a hashtag either - report_type covers

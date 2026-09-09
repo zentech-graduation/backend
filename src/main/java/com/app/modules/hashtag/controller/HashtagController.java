@@ -16,11 +16,15 @@ import com.app.common.enums.ApiSuccessCode;
 import com.app.common.response.ApiResponse;
 import com.app.common.response.CursorPageResponse;
 import com.app.common.response.PageResponse;
+import com.app.common.security.util.SecurityUtils;
 import com.app.modules.hashtag.api.HashtagApi;
+import com.app.modules.hashtag.dto.response.HashtagDetailResponse;
 import com.app.modules.hashtag.dto.response.HashtagResponse;
 import com.app.modules.hashtag.dto.response.HashtagTrendingResponse;
+import com.app.modules.hashtag.service.HashtagLookupService;
 import com.app.modules.hashtag.service.HashtagSearchService;
 import com.app.modules.hashtag.service.HashtagTrendingService;
+import com.app.modules.hashtag.service.PersonalisedTrendingService;
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 
@@ -30,12 +34,18 @@ public class HashtagController extends BaseController implements HashtagApi {
 
     private final HashtagSearchService hashtagSearchService;
     private final HashtagTrendingService hashtagTrendingService;
+    private final HashtagLookupService hashtagLookupService;
+    private final PersonalisedTrendingService personalisedTrendingService;
 
     public HashtagController(
             HashtagSearchService hashtagSearchService,
-            HashtagTrendingService hashtagTrendingService) {
+            HashtagTrendingService hashtagTrendingService,
+            HashtagLookupService hashtagLookupService,
+            PersonalisedTrendingService personalisedTrendingService) {
         this.hashtagSearchService = hashtagSearchService;
         this.hashtagTrendingService = hashtagTrendingService;
+        this.hashtagLookupService = hashtagLookupService;
+        this.personalisedTrendingService = personalisedTrendingService;
     }
 
     /** Fuzzy hashtag name search; falls back to pg_trgm when Elasticsearch is unavailable. */
@@ -45,6 +55,28 @@ public class HashtagController extends BaseController implements HashtagApi {
     public ResponseEntity<ApiResponse<CursorPageResponse<HashtagResponse>>> search(
             String q, String cursor, int limit) {
         CursorPageResponse<HashtagResponse> result = hashtagSearchService.search(q, cursor, limit);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, result));
+    }
+
+    /** Resolves a hashtag name to its record; 404s when the hashtag is out of circulation. */
+    @Override
+    @GetMapping(ApiConstants.Hashtags.BY_NAME)
+    @RateLimiter(name = "highTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<HashtagDetailResponse>> getByName(String name) {
+        HashtagDetailResponse result = hashtagLookupService.getByName(name);
+        return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, result));
+    }
+
+    /** Returns trending hashtags ranked for the caller; falls back to the platform list. */
+    @Override
+    @GetMapping(ApiConstants.Hashtags.TRENDING_FOR_YOU)
+    @RateLimiter(name = "mediumTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<PageResponse<HashtagTrendingResponse>>> trendingForYou(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        PageResponse<HashtagTrendingResponse> result =
+                personalisedTrendingService.getPersonalisedTrending(
+                        SecurityUtils.getCurrentUserId(), PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, result));
     }
 

@@ -134,6 +134,24 @@ app:
       "[/api/v1/admin/hashtags/search]":
         max-attempts: 40
         window-seconds: 60
+      # Single indexed row read behind the /tags/{name} deep link. Sized above the posts listing
+      # below because it is cheaper and because a shared link is the first request of a session.
+      "[/api/v1/hashtags/name/*]":
+        max-attempts: 60
+        window-seconds: 60
+      # One Elasticsearch query per call plus a PostgreSQL hydration of the page. Matched to the
+      # admin trigram search budget above, which carries a comparable per-call cost.
+      "[/api/v1/hashtags/*/posts]":
+        max-attempts: 40
+        window-seconds: 60
+      # Cached per caller and page, so a miss is the only call that reaches the fusion.
+      "[/api/v1/hashtags/trending/for-you]":
+        max-attempts: 60
+        window-seconds: 60
+      # Administrative write, sized like the other moderation actions on this surface.
+      "[/api/v1/admin/hashtags/*/pin]":
+        max-attempts: 20
+        window-seconds: 60
       "[/api/v1/recommendations/**]":
         max-attempts: 60
         window-seconds: 60

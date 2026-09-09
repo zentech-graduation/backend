@@ -13,6 +13,11 @@ public enum ApiErrorCode {
     VALIDATION_ERROR("VALIDATION_ERROR", "Request validation failed", HttpStatus.BAD_REQUEST),
     BAD_REQUEST("BAD_REQUEST", "Invalid request", HttpStatus.BAD_REQUEST),
     INVALID_CURSOR("INVALID_CURSOR", "Malformed pagination cursor", HttpStatus.BAD_REQUEST),
+    // Distinct from INVALID_CURSOR: the cursor is well formed, the requested depth is simply
+    // past what either storage tier will serve. Reported explicitly rather than left to fail as
+    // an Elasticsearch result-window error, which the availability classifier cannot tell from a
+    // genuine outage and would therefore charge to a shared circuit breaker.
+    PAGINATION_DEPTH_EXCEEDED("PAGINATION_DEPTH_EXCEEDED", "Requested pagination depth is beyond the maximum this endpoint serves", HttpStatus.BAD_REQUEST),
     MALFORMED_REQUEST_BODY("MALFORMED_REQUEST_BODY", "Request body could not be read", HttpStatus.BAD_REQUEST),
     MISSING_REQUIRED_PARAMETER("MISSING_REQUIRED_PARAMETER", "A required request parameter is missing", HttpStatus.BAD_REQUEST),
     UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", "Content-Type is not supported", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
@@ -73,6 +78,11 @@ public enum ApiErrorCode {
     // Hashtag
     HASHTAG_NOT_FOUND("HASHTAG_NOT_FOUND", "Hashtag not found", HttpStatus.NOT_FOUND),
     HASHTAG_ALREADY_EXISTS("HASHTAG_ALREADY_EXISTS", "Hashtag already exists", HttpStatus.CONFLICT),
+    // Distinct from HASHTAG_NOT_FOUND, which means no row carries the name or id at all. This one
+    // means the row exists but an administrator took the term out of circulation, so a client can
+    // word "this hashtag is not available" differently from "this hashtag has no posts yet".
+    // Returning an empty page instead would make those two states indistinguishable.
+    HASHTAG_UNAVAILABLE("HASHTAG_UNAVAILABLE", "Hashtag is no longer available", HttpStatus.NOT_FOUND),
 
     // Post
     POST_NOT_FOUND("POST_NOT_FOUND", "Post not found", HttpStatus.NOT_FOUND),
