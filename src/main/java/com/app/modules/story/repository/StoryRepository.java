@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.app.modules.story.entity.Story;
@@ -63,14 +64,22 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
      *
      * <p>Native because it must see hidden rows past the {@code @SQLRestriction} filter. {@code
      * story_views} rows follow via {@code ON DELETE CASCADE}.
+     *
+     * <p>Takes the cutoff as a parameter rather than reading the database clock. {@code expires_at}
+     * is written by the service from the JVM clock and the three JPQL reads above compare it
+     * against a JVM value, so this statement calling {@code NOW()} put one column in two clock
+     * domains inside one repository: with the database clock ahead of the JVM, a story the reads
+     * still treated as live was already purgeable here.
+     *
+     * @param now the cutoff, from the same clock that wrote {@code expires_at}
      */
     @Modifying
     @Query(
             value =
                     "DELETE FROM stories WHERE (deleted_at IS NOT NULL OR admin_removed_at IS NOT"
-                            + " NULL) AND expires_at < NOW()",
+                            + " NULL) AND expires_at < :now",
             nativeQuery = true)
-    int purgeSoftDeletedExpired();
+    int purgeSoftDeletedExpired(@Param("now") OffsetDateTime now);
 
     /**
      * Reads the owner of a story whatever its soft-delete state, for the moderation path.
