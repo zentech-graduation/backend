@@ -10,7 +10,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.generator.EventType;
 
 import com.app.modules.support.converter.SupportCategoryConverter;
 import com.app.modules.support.converter.SupportSourceConverter;
@@ -122,9 +124,14 @@ public class SupportTicket {
     @Column(name = "escalation_reason", columnDefinition = "TEXT")
     private String escalationReason;
 
+    // Read back after the insert, because the column is a database default the entity never sets.
+    // Without this the create responses - the appeal path especially, which has no follow-up read
+    // to correct it - answer with createdAt null for a ticket that plainly has a creation time.
+    @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @Generated(event = EventType.INSERT)
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
 }
