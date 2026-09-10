@@ -25,6 +25,7 @@ import com.app.modules.hashtag.dto.response.HashtagTrendingResponse;
 import com.app.modules.hashtag.entity.Hashtag;
 import com.app.modules.hashtag.entity.HashtagTrending;
 import com.app.modules.hashtag.entity.HashtagTrendingId;
+import com.app.modules.hashtag.enums.HashtagStatus;
 import com.app.modules.hashtag.enums.TrendingSource;
 import com.app.modules.hashtag.mapper.HashtagMapper;
 import com.app.modules.hashtag.repository.HashtagRepository;
@@ -61,6 +62,34 @@ class HashtagTrendingServiceImplTest {
 
         assertThat(page.getContent()).isEmpty();
         verifyNoInteractions(hashtagTrendingRepository, hashtagRepository);
+    }
+
+    // P7-BE-008. A hashtag outside the current snapshot has no window count, so postCount is null
+    // rather than the lifetime association total. The two are different measurements and putting
+    // them in one column makes "1 posts" this window read as smaller than "40 posts" since 2025 -
+    // a comparison the reader cannot make and is not told they are making. The wire type is
+    // Integer for exactly this reason, and every consumer needs a null branch, so the contract is
+    // pinned here rather than left to a renderer to discover.
+    @Test
+    void describeHashtags_hashtagOutsideTheSnapshot_hasNoWindowCount() {
+        UUID hashtagId = UUID.randomUUID();
+        Hashtag hashtag =
+                Hashtag.builder()
+                        .id(hashtagId)
+                        .name("goldprice")
+                        .status(HashtagStatus.ACTIVE)
+                        // The lifetime total, which must not be substituted for a window count.
+                        .postCount(40)
+                        .build();
+        when(jdbcTemplate.queryForObject(anyString(), eq(OffsetDateTime.class))).thenReturn(null);
+        when(hashtagRepository.findAllById(List.of(hashtagId))).thenReturn(List.of(hashtag));
+
+        List<HashtagTrendingResponse> described = service.describeHashtags(List.of(hashtagId));
+
+        assertThat(described).hasSize(1);
+        assertThat(described.get(0).postCount()).isNull();
+        assertThat(described.get(0).rank()).isZero();
+        assertThat(described.get(0).name()).isEqualTo("goldprice");
     }
 
     @Test

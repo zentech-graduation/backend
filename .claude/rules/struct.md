@@ -41,7 +41,7 @@ app/
 │   │   │   ├── modules/            # 14 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
-│   │       ├── db/migration/       # Flyway V01-V103 SQL migrations
+│   │       ├── db/migration/       # Flyway V01-V111 SQL migrations
 │   │       ├── elasticsearch/
 │   │       │   └── settings/       # hashtags.json, posts.json (Elasticsearch index settings)
 │   │       ├── resilience/
@@ -322,7 +322,7 @@ hand-maintained roster.
 ### Database
 
 - Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 103 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71, V72, V73, V74, V81, V82, V91, V100 and V103 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`; those thirteen sidecars are the only ones in the tree. Every other migration from V75 onward adds no index and runs in the ordinary transactional mode:
+- Migration: **Flyway** (`out-of-order: false`); 111 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71, V72, V73, V74, V81, V82, V91, V100, V103, V107, V109 and V110 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`; those sixteen sidecars are the only ones in the tree. Every other migration adds no index and runs in the ordinary transactional mode. The numbering has no gaps: V01 through V111 all exist.
 
 | Migration | Description |
 |-----------|-------------|
@@ -449,6 +449,28 @@ hand-maintained roster.
 | V101 | create_mail_campaigns |
 | V102 | add_campaign_config_row |
 | V103 | add_campaign_indexes |
+| V104 | add_verification_enum_values |
+| V105 | add_verification_config_rows |
+| V106 | create_verification_tables |
+| V107 | narrow_one_open_ticket_guard |
+| V108 | create_suggestion_tables |
+| V109 | add_verification_and_suggestion_indexes |
+| V110 | add_user_hashtag_affinity_hashtag_index |
+| V111 | add_campaign_recipient_suppressed_status |
+| V90 | create_user_hashtag_affinity |
+| V91 | add_user_hashtag_affinity_user_score_index |
+| V92 | add_hashtags_pin_columns |
+| V93 | add_admin_action_type_hashtag_pin |
+| V94 | add_moderation_action_configs_hashtag_pin |
+| V95 | add_comments_stories_admin_removed_at |
+| V96 | create_email_deliveries |
+| V97 | create_support_tickets |
+| V98 | add_support_enum_values |
+| V99 | add_support_config_rows |
+| V100 | add_support_indexes |
+| V101 | create_mail_campaigns |
+| V102 | add_campaign_config_row |
+| V103 | add_campaign_indexes |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
@@ -491,6 +513,15 @@ PostgreSQL enum types:
 | `auth:token:password-reset:user:{userId}` | 15m (reverse index) | `TokenServiceImpl` |
 | `auth:oauth2:exchange:{code}` | 120s | `OAuth2ExchangeCodeServiceImpl` |
 | `auth:ratelimit:mail:moderation:{sha256(email)}` | 1h sliding | `ModerationMailThrottleImpl` |
+| `support:token:appeal:{sha256}` | 30d | `SupportTokenServiceImpl` |
+| `support:token:appeal:subject:{adminActionId}` | 30d (reverse index) | `SupportTokenServiceImpl` |
+| `support:token:confirmation:{sha256}` | 24h | `SupportTokenServiceImpl` |
+| `support:token:confirmation:subject:{ticketId}` | 24h (reverse index) | `SupportTokenServiceImpl` |
+
+The two support token families are keyed on the audit row and the ticket respectively rather than on
+the account, because one account may hold appealable decisions against several actions at once and
+issuing the second link must not invalidate the first.
+The appeal window is thirty days because the notice arrives unannounced and is routinely read late.
 
 ### Message Broker — RabbitMQ
 
