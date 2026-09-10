@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - An appeal or confirmation link is no longer destroyed by a refusal it had nothing to do with; both paths now run every check that can refuse while the token is still spendable, and redeem it only once the write has succeeded.
 - A recipient the deployment was configured never to mail is now recorded as skipped by every mail lane alike, instead of being dead-lettered by one, counted as a delivery failure by another and swallowed by a third.
+- The public support form now advertises and accepts exactly the same category set, because both read the category configuration table; disabling a category previously hid it from the form while the server kept accepting it.
+- A provider error is no longer misread as permanent because a three-digit run appeared in a request id, which dead-lettered a retryable failure on its first attempt.
+- The mail provider's own error text no longer carries a recipient address into the delivery log or the dead-letter reason.
+- The anonymous category list is now rate limited per client and served from a short-lived cache, so a signed-out read no longer reaches the database on every call.
 
 ### Tests
 - The people-you-may-know affinity bound is now covered by tests that pin what it costs the ranking, so a future change to its depth is a measured decision rather than a guess.

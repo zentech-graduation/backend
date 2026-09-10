@@ -115,6 +115,11 @@ app:
       "[/api/v1/support/public/confirm]":
         max-attempts: 20
         window-seconds: 3600
+      # The public form's category list. See application.yaml for why this rule exists; the
+      # handler's own limiter is a JVM-wide backstop rather than a per-caller budget.
+      "[/api/v1/support/public/categories]":
+        max-attempts: 60
+        window-seconds: 3600
       "[/api/v1/auth/register]":
         max-attempts: 5
         window-seconds: 60

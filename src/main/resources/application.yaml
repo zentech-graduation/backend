@@ -330,6 +330,14 @@ app:
       "[/api/v1/support/public/confirm]":
         max-attempts: 20
         window-seconds: 3600
+      # The public form's category list. The only anonymous support route that previously carried
+      # no per-client rule at all: the highTraffic limiter on the handler is a JVM-wide overload
+      # backstop, not a per-caller budget. Generous, because the form legitimately loads this once
+      # or twice per submission and the rows are cached in process, so a caller inside this bound
+      # does not reach PostgreSQL at all.
+      "[/api/v1/support/public/categories]":
+        max-attempts: 60
+        window-seconds: 3600
       "[/api/v1/auth/login]":
         max-attempts: 10
         window-seconds: 900
