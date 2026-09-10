@@ -9,6 +9,7 @@ import com.app.modules.support.dto.request.EscalateSupportTicketRequest;
 import com.app.modules.support.dto.request.PublicSupportTicketRequest;
 import com.app.modules.support.dto.request.RespondSupportTicketRequest;
 import com.app.modules.support.dto.request.SignedAppealRequest;
+import com.app.modules.support.dto.response.AppealLinkResponse;
 import com.app.modules.support.dto.response.SupportTicketResponse;
 import com.app.modules.support.dto.response.SupportTicketStaffResponse;
 import com.app.modules.support.enums.SupportTicketStatus;
@@ -46,6 +47,24 @@ public interface SupportTicketService {
      *     a non-terminal ticket
      */
     SupportTicketResponse createFromSignedLink(SignedAppealRequest request);
+
+    /**
+     * Reports what an appeal link authorises, without redeeming it.
+     *
+     * <p>Exists so the landing screen can refuse a dead link before the reader writes their appeal
+     * rather than after. Presence of a token string is not validity, and the screen previously had
+     * nothing else to check: it rendered the whole form for any string at all, and the reader
+     * learned the link was dead only on submit, with their text lost.
+     *
+     * <p>Must not consume the token. Redemption stays with {@link #createFromSignedLink}, which is
+     * the one call that spends it.
+     *
+     * @param rawToken the token from the link
+     * @return the appeal category the link authorises
+     * @throws AppException {@code SUPPORT_TOKEN_INVALID} when the token is unknown, expired or
+     *     already redeemed
+     */
+    AppealLinkResponse describeSignedLink(String rawToken);
 
     /**
      * Accepts a public submission, holding it invisible to staff until the address is confirmed.

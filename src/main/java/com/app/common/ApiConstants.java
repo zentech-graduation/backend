@@ -179,6 +179,10 @@ public final class ApiConstants {
         // Anonymous. Redeems the single-use token from a moderation notice and creates exactly one
         // ticket; it mints no session, so it sits outside the authenticated tree entirely.
         public static final String APPEAL = "/appeal";
+        // Anonymous. Reports whether an appeal link is still redeemable, WITHOUT redeeming it, so
+        // the landing screen can show a dead-link state before the reader writes their appeal
+        // rather than after. Read-only by construction: it must never consume the token.
+        public static final String APPEAL_VALIDATE = "/appeal/validate";
         // Anonymous, Turnstile-gated and IP rate-limited.
         public static final String PUBLIC_TICKET = "/public/tickets";
         // Anonymous. Confirms the address a public submission was made from.

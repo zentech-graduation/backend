@@ -327,6 +327,12 @@ app:
       "[/api/v1/support/appeal]":
         max-attempts: 10
         window-seconds: 3600
+      # Reading whether an appeal link is still valid, which the landing screen does on
+      # mount. Generous relative to the appeal itself: a reader may open the link, reload it
+      # and come back to a restored tab, and none of that redeems anything.
+      "[/api/v1/support/appeal/validate]":
+        max-attempts: 30
+        window-seconds: 3600
       "[/api/v1/support/public/confirm]":
         max-attempts: 20
         window-seconds: 3600

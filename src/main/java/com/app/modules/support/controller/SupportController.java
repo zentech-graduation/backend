@@ -30,6 +30,7 @@ import com.app.common.web.StrictQueryParameters;
 import com.app.modules.support.dto.request.CreateSupportTicketRequest;
 import com.app.modules.support.dto.request.PublicSupportTicketRequest;
 import com.app.modules.support.dto.request.SignedAppealRequest;
+import com.app.modules.support.dto.response.AppealLinkResponse;
 import com.app.modules.support.dto.response.SupportTicketResponse;
 import com.app.modules.support.service.SupportTicketService;
 
@@ -130,6 +131,27 @@ public class SupportController extends BaseController {
             HttpServletRequest servletRequest) {
         supportTicketService.createPublic(request, ipExtractor.extract(servletRequest));
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, null));
+    }
+
+    /**
+     * Reports whether an appeal link is still redeemable, without redeeming it.
+     *
+     * <p>Anonymous for the same reason as the appeal itself. Read-only by construction: the landing
+     * screen calls this on mount, so redeeming here would spend the link merely by opening the page
+     * - and a mail client prefetching the URL would spend it before the reader saw it at all.
+     *
+     * <p>Answers the appeal category and nothing else. A caller holding the token learns only what
+     * the form was going to tell them anyway; a caller without one learns nothing, because the
+     * token is 32 random bytes and this route carries its own per-client rate limit.
+     */
+    @GetMapping(ApiConstants.Support.ROOT + ApiConstants.Support.APPEAL_VALIDATE)
+    @StrictQueryParameters
+    @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
+    public ResponseEntity<ApiResponse<AppealLinkResponse>> validateAppealLink(
+            @RequestParam("token") @NotBlank String token) {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        ApiSuccessCode.OK, supportTicketService.describeSignedLink(token)));
     }
 
     /**

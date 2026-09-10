@@ -26,6 +26,7 @@ import com.app.modules.support.dto.request.EscalateSupportTicketRequest;
 import com.app.modules.support.dto.request.PublicSupportTicketRequest;
 import com.app.modules.support.dto.request.RespondSupportTicketRequest;
 import com.app.modules.support.dto.request.SignedAppealRequest;
+import com.app.modules.support.dto.response.AppealLinkResponse;
 import com.app.modules.support.dto.response.SupportTicketResponse;
 import com.app.modules.support.dto.response.SupportTicketStaffResponse;
 import com.app.modules.support.entity.SupportTicket;
@@ -153,6 +154,15 @@ public class SupportTicketServiceImpl implements SupportTicketService {
         // insert rolls back with the transaction.
         supportTokenService.consumeAppealToken(request.token());
         return supportTicketMapper.toOwnerResponse(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AppealLinkResponse describeSignedLink(String rawToken) {
+        // Peek, never consume. This is the read the landing screen makes on mount, so redeeming
+        // here would spend the link merely by opening it - and an email client prefetching the URL
+        // would spend it before the reader ever saw the page.
+        return new AppealLinkResponse(supportTokenService.peekAppealToken(rawToken).category());
     }
 
     @Override

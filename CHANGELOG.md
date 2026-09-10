@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The public identity summary embedded in every response that names an account now carries the account's verification category, so a client can render which category a badge is for.
 - The support and moderation mail schema changes now apply after the hashtag interest work rather than colliding with it; the full migration set applies cleanly to an empty database and the application starts against it under schema validation.
 
+### Added
+- An appeal link can be checked for validity without being redeemed, so the appeal screen can show a dead link before the reader writes their appeal rather than after.
+
 ### Fixed
 - An appeal or confirmation link is no longer destroyed by a refusal it had nothing to do with; both paths now run every check that can refuse while the token is still spendable, and redeem it only once the write has succeeded.
 - A recipient the deployment was configured never to mail is now recorded as skipped by every mail lane alike, instead of being dead-lettered by one, counted as a delivery failure by another and swallowed by a third.

@@ -253,6 +253,17 @@ public class SecurityConfig {
                         ApiConstants.Support.ROOT + ApiConstants.Support.PUBLIC_CATEGORIES)
                 .permitAll();
 
+        // Whether an appeal link is still redeemable, read without redeeming it. Anonymous for the
+        // same reason the appeal POST is: the account it concerns is banned or suspended and cannot
+        // authenticate. It widens nothing - a caller must already hold a 32-byte random token, and
+        // it answers only the appeal category, which the form itself would have shown them. It
+        // exists so the landing screen can refuse a dead link before the reader writes their
+        // appeal instead of after, and it must never consume the token.
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.APPEAL_VALIDATE)
+                .permitAll();
+
         auth.requestMatchers(PUBLIC_INFRA_PATHS).permitAll();
         auth.requestMatchers("/actuator/**").hasRole("ADMIN");
     }
