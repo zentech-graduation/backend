@@ -82,6 +82,7 @@ public class UserSettings {
      * <p>Auth mail and moderation mail ignore it entirely. A password reset and a ban notice are
      * not marketing, and an account cannot opt out of being told it has been banned.
      */
+    @Builder.Default
     @Column(name = "email_opt_out", nullable = false)
     private boolean emailOptOut = false;
 
