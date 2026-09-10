@@ -90,19 +90,26 @@ public class SupportTokenServiceImpl implements SupportTokenService {
 
     @Override
     public AppealGrant consumeAppealToken(String rawToken) {
-        String value = consume(APPEAL_PREFIX, rawToken);
+        AppealGrant grant = parseAppealValue(consume(APPEAL_PREFIX, rawToken));
+        redisTemplate.delete(APPEAL_PREFIX + INDEX_INFIX + grant.adminActionId());
+        return grant;
+    }
+
+    @Override
+    public AppealGrant peekAppealToken(String rawToken) {
+        return parseAppealValue(peek(APPEAL_PREFIX, rawToken));
+    }
+
+    private static AppealGrant parseAppealValue(String value) {
         String[] parts = value.split("\\" + VALUE_SEPARATOR);
         if (parts.length != 3) {
             throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
         }
         try {
-            AppealGrant grant =
-                    new AppealGrant(
-                            UUID.fromString(parts[0]),
-                            UUID.fromString(parts[1]),
-                            SupportCategory.valueOf(parts[2]));
-            redisTemplate.delete(APPEAL_PREFIX + INDEX_INFIX + grant.adminActionId());
-            return grant;
+            return new AppealGrant(
+                    UUID.fromString(parts[0]),
+                    UUID.fromString(parts[1]),
+                    SupportCategory.valueOf(parts[2]));
         } catch (IllegalArgumentException ex) {
             throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
         }
@@ -116,11 +123,19 @@ public class SupportTokenServiceImpl implements SupportTokenService {
 
     @Override
     public UUID consumeConfirmationToken(String rawToken) {
-        String value = consume(CONFIRMATION_PREFIX, rawToken);
+        UUID ticketId = parseTicketId(consume(CONFIRMATION_PREFIX, rawToken));
+        redisTemplate.delete(CONFIRMATION_PREFIX + INDEX_INFIX + ticketId);
+        return ticketId;
+    }
+
+    @Override
+    public UUID peekConfirmationToken(String rawToken) {
+        return parseTicketId(peek(CONFIRMATION_PREFIX, rawToken));
+    }
+
+    private static UUID parseTicketId(String value) {
         try {
-            UUID ticketId = UUID.fromString(value);
-            redisTemplate.delete(CONFIRMATION_PREFIX + INDEX_INFIX + ticketId);
-            return ticketId;
+            return UUID.fromString(value);
         } catch (IllegalArgumentException ex) {
             throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
         }
@@ -142,14 +157,30 @@ public class SupportTokenServiceImpl implements SupportTokenService {
     }
 
     private String consume(String prefix, String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
-        }
-        String value = redisTemplate.execute(consumeScript, List.of(prefix + sha256(rawToken)));
+        String value =
+                redisTemplate.execute(consumeScript, List.of(prefix + hashOrRefuse(rawToken)));
         if (value == null) {
             throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
         }
         return value;
+    }
+
+    // Reads the token without spending it, so a caller can refuse a request while the token is
+    // still redeemable. Deliberately a plain GET rather than the consume script: nothing here may
+    // delete, because the whole point is that a refusal leaves the credential intact.
+    private String peek(String prefix, String rawToken) {
+        String value = redisTemplate.opsForValue().get(prefix + hashOrRefuse(rawToken));
+        if (value == null) {
+            throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
+        }
+        return value;
+    }
+
+    private static String hashOrRefuse(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
+        }
+        return sha256(rawToken);
     }
 
     private static String sha256(String value) {

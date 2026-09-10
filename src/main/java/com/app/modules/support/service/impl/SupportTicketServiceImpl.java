@@ -120,8 +120,13 @@ public class SupportTicketServiceImpl implements SupportTicketService {
     public SupportTicketResponse createFromSignedLink(SignedAppealRequest request) {
         // Redeeming the token mints nothing. No session, no refresh token row, no security context.
         // It authorises exactly one write: this ticket, against the audit row the token names.
+        //
+        // Read without spending, so every refusal below leaves the token redeemable. The appeal
+        // link is the only credential a banned account holds and it arrives in a mail they cannot
+        // cause to be resent, so an ordinary refusal - already holding an open ticket, say - must
+        // not cost them the whole thirty-day window. Consumption happens last, below.
         SupportTokenService.AppealGrant grant =
-                supportTokenService.consumeAppealToken(request.token());
+                supportTokenService.peekAppealToken(request.token());
         User user = requireUser(grant.userId());
         requireNoOpenTicket(grant.userId());
         SupportTicket ticket =
@@ -137,7 +142,13 @@ public class SupportTicketServiceImpl implements SupportTicketService {
                         .source(SupportSource.SIGNED_LINK)
                         .adminActionId(grant.adminActionId())
                         .build();
-        return supportTicketMapper.toOwnerResponse(supportTicketRepository.save(ticket));
+        // Flushed here so a constraint violation surfaces while the token is still unspent.
+        SupportTicket saved = supportTicketRepository.saveAndFlush(ticket);
+        // Spent last, once nothing above can still refuse. The consume is atomic, so two requests
+        // racing this line still create exactly one ticket: the loser is refused here and its
+        // insert rolls back with the transaction.
+        supportTokenService.consumeAppealToken(request.token());
+        return supportTicketMapper.toOwnerResponse(saved);
     }
 
     @Override
@@ -193,12 +204,19 @@ public class SupportTicketServiceImpl implements SupportTicketService {
     @Override
     @Transactional
     public void confirmPublic(String rawToken) {
-        UUID ticketId = supportTokenService.consumeConfirmationToken(rawToken);
+        // Read without spending, for the same reason as the appeal path: a link that refuses must
+        // stay usable, because this is the only thing that moves the submission out of
+        // PENDING_CONFIRMATION and staff cannot see it until it does.
+        UUID ticketId = supportTokenService.peekConfirmationToken(rawToken);
         // The guard is in the UPDATE predicate, so replaying a link cannot resurrect a ticket that
-        // has since been answered or rejected.
+        // has since been answered or rejected. Refusing here leaves the token intact.
         if (supportTicketRepository.confirmIfPending(ticketId) == 0) {
             throw new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID);
         }
+        // Spent last, once the ticket is confirmed. A second visit - a mail client prefetching the
+        // link, or the reader opening it twice - is refused by the UPDATE predicate above rather
+        // than by a missing token, so it still answers with a reason.
+        supportTokenService.consumeConfirmationToken(rawToken);
     }
 
     @Override

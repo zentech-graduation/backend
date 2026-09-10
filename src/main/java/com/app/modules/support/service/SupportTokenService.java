@@ -51,6 +51,22 @@ public interface SupportTokenService {
     AppealGrant consumeAppealToken(String rawToken);
 
     /**
+     * Reads an appeal token without redeeming it.
+     *
+     * <p>Exists so every check that can refuse a request runs while the token is still spendable. A
+     * token is the only credential a banned account holds, so a refusal the submitter can act on
+     * must not also remove their ability to act on it. Callers validate against this, then call
+     * {@link #consumeAppealToken} last, as the final step before the write commits; consumption
+     * stays atomic, so a double submit still redeems exactly once.
+     *
+     * @param rawToken the token from the link
+     * @return what the token authorises
+     * @throws AppException {@code SUPPORT_TOKEN_INVALID} when the token is unknown, expired or
+     *     already redeemed
+     */
+    AppealGrant peekAppealToken(String rawToken);
+
+    /**
      * Issues the token that confirms a public submitter controls the address they gave.
      *
      * @param ticketId the ticket held in {@code PENDING_CONFIRMATION}
@@ -67,4 +83,18 @@ public interface SupportTokenService {
      *     already redeemed
      */
     UUID consumeConfirmationToken(String rawToken);
+
+    /**
+     * Reads a confirmation token without redeeming it.
+     *
+     * <p>Same reason as {@link #peekAppealToken}: the confirmation link is the only thing that
+     * moves a public submission out of {@code PENDING_CONFIRMATION}, so a refusal that spends it
+     * strands the ticket where staff cannot see it.
+     *
+     * @param rawToken the token from the link
+     * @return the ticket the token confirms
+     * @throws AppException {@code SUPPORT_TOKEN_INVALID} when the token is unknown, expired or
+     *     already redeemed
+     */
+    UUID peekConfirmationToken(String rawToken);
 }

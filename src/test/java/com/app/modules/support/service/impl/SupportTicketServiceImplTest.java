@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -89,6 +91,16 @@ class SupportTicketServiceImplTest {
                             }
                             return ticket;
                         });
+        lenient()
+                .when(supportTicketRepository.saveAndFlush(any()))
+                .thenAnswer(
+                        invocation -> {
+                            SupportTicket ticket = invocation.getArgument(0);
+                            if (ticket.getId() == null) {
+                                ticket.setId(UUID.randomUUID());
+                            }
+                            return ticket;
+                        });
     }
 
     @Test
@@ -132,7 +144,7 @@ class SupportTicketServiceImplTest {
     void createFromSignedLink_mintsNoSession() {
         stubUser();
         when(supportTicketRepository.hasOpenTicket(USER_ID)).thenReturn(false);
-        when(supportTokenService.consumeAppealToken("tok"))
+        when(supportTokenService.peekAppealToken("tok"))
                 .thenReturn(
                         new SupportTokenService.AppealGrant(
                                 USER_ID, ACTION_ID, SupportCategory.APPEAL_BAN));
@@ -141,7 +153,7 @@ class SupportTicketServiceImplTest {
                 service.createFromSignedLink(new SignedAppealRequest("tok", "Subject", "Body"));
 
         assertThat(response.source()).isEqualTo(SupportSource.SIGNED_LINK);
-        assertThat(capturedTicket().getAdminActionId()).isEqualTo(ACTION_ID);
+        assertThat(capturedFlushedTicket().getAdminActionId()).isEqualTo(ACTION_ID);
         // The collaborators that would mint a session are not even wired into this service, so the
         // property is structural: there is nothing here that could issue one.
         verify(notificationService, never()).create(any(), any(), any(), any(), any(), any());
@@ -153,20 +165,20 @@ class SupportTicketServiceImplTest {
     void createFromSignedLink_takesTheCategoryFromTheToken() {
         stubUser();
         when(supportTicketRepository.hasOpenTicket(USER_ID)).thenReturn(false);
-        when(supportTokenService.consumeAppealToken("tok"))
+        when(supportTokenService.peekAppealToken("tok"))
                 .thenReturn(
                         new SupportTokenService.AppealGrant(
                                 USER_ID, ACTION_ID, SupportCategory.APPEAL_CONTENT_REMOVAL));
 
         service.createFromSignedLink(new SignedAppealRequest("tok", "Subject", "Body"));
 
-        assertThat(capturedTicket().getCategory())
+        assertThat(capturedFlushedTicket().getCategory())
                 .isEqualTo(SupportCategory.APPEAL_CONTENT_REMOVAL);
     }
 
     @Test
     void createFromSignedLink_alreadyRedeemedToken_writesNothing() {
-        when(supportTokenService.consumeAppealToken("tok"))
+        when(supportTokenService.peekAppealToken("tok"))
                 .thenThrow(new AppException(ApiErrorCode.SUPPORT_TOKEN_INVALID));
 
         assertThatThrownBy(
@@ -276,9 +288,76 @@ class SupportTicketServiceImplTest {
         verify(turnstileVerifier, never()).verify(any(), any());
     }
 
+    // P7-BE-003. The appeal link is the only credential a banned account holds and arrives in a
+    // mail they cannot cause to be resent, so a refusal the submitter can act on must leave the
+    // token spendable. This asserts the ordering rule, not one refusal: any check that can refuse
+    // must run while the token is still intact.
+    @Test
+    void createFromSignedLink_refusedByAnOpenTicket_leavesTheTokenUnspent() {
+        stubUser();
+        when(supportTicketRepository.hasOpenTicket(USER_ID)).thenReturn(true);
+        when(supportTokenService.peekAppealToken("tok"))
+                .thenReturn(
+                        new SupportTokenService.AppealGrant(
+                                USER_ID, ACTION_ID, SupportCategory.APPEAL_BAN));
+
+        assertThatThrownBy(
+                        () ->
+                                service.createFromSignedLink(
+                                        new SignedAppealRequest("tok", "Subject", "Body")))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.SUPPORT_TICKET_ALREADY_OPEN);
+
+        verify(supportTokenService, never()).consumeAppealToken(any());
+        verify(supportTicketRepository, never()).saveAndFlush(any());
+    }
+
+    // The other half of the same rule: the success path must still spend it exactly once, which is
+    // the property single-use exists to protect.
+    @Test
+    void createFromSignedLink_success_spendsTheTokenAfterTheWrite() {
+        stubUser();
+        when(supportTicketRepository.hasOpenTicket(USER_ID)).thenReturn(false);
+        when(supportTokenService.peekAppealToken("tok"))
+                .thenReturn(
+                        new SupportTokenService.AppealGrant(
+                                USER_ID, ACTION_ID, SupportCategory.APPEAL_BAN));
+
+        service.createFromSignedLink(new SignedAppealRequest("tok", "Subject", "Body"));
+
+        InOrder order = inOrder(supportTicketRepository, supportTokenService);
+        order.verify(supportTicketRepository).saveAndFlush(any());
+        order.verify(supportTokenService).consumeAppealToken("tok");
+    }
+
+    // Same rule on the confirmation lane: a replayed or spent link must answer with a reason
+    // rather than silently burning the only thing that can confirm the address.
+    @Test
+    void confirmPublic_refusedByThePredicate_leavesTheTokenUnspent() {
+        when(supportTokenService.peekConfirmationToken("tok")).thenReturn(ACTION_ID);
+        when(supportTicketRepository.confirmIfPending(ACTION_ID)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.confirmPublic("tok")).isInstanceOf(AppException.class);
+
+        verify(supportTokenService, never()).consumeConfirmationToken(any());
+    }
+
+    @Test
+    void confirmPublic_success_spendsTheTokenAfterTheUpdate() {
+        when(supportTokenService.peekConfirmationToken("tok")).thenReturn(ACTION_ID);
+        when(supportTicketRepository.confirmIfPending(ACTION_ID)).thenReturn(1);
+
+        service.confirmPublic("tok");
+
+        InOrder order = inOrder(supportTicketRepository, supportTokenService);
+        order.verify(supportTicketRepository).confirmIfPending(ACTION_ID);
+        order.verify(supportTokenService).consumeConfirmationToken("tok");
+    }
+
     @Test
     void confirmPublic_replayedToken_isRefused() {
-        when(supportTokenService.consumeConfirmationToken("tok")).thenReturn(ACTION_ID);
+        when(supportTokenService.peekConfirmationToken("tok")).thenReturn(ACTION_ID);
         when(supportTicketRepository.confirmIfPending(ACTION_ID)).thenReturn(0);
 
         assertThatThrownBy(() -> service.confirmPublic("tok"))
@@ -318,6 +397,14 @@ class SupportTicketServiceImplTest {
     private SupportTicket capturedTicket() {
         ArgumentCaptor<SupportTicket> captor = ArgumentCaptor.forClass(SupportTicket.class);
         verify(supportTicketRepository).save(captor.capture());
+        return captor.getValue();
+    }
+
+    // The signed-link path flushes rather than saves, so a constraint violation surfaces while the
+    // token is still unspent.
+    private SupportTicket capturedFlushedTicket() {
+        ArgumentCaptor<SupportTicket> captor = ArgumentCaptor.forClass(SupportTicket.class);
+        verify(supportTicketRepository).saveAndFlush(captor.capture());
         return captor.getValue();
     }
 
