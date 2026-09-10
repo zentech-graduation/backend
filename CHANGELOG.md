@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - An appeal or confirmation link is no longer destroyed by a refusal it had nothing to do with; both paths now run every check that can refuse while the token is still spendable, and redeem it only once the write has succeeded.
+- A recipient the deployment was configured never to mail is now recorded as skipped by every mail lane alike, instead of being dead-lettered by one, counted as a delivery failure by another and swallowed by a third.
 - A newly opened support ticket now answers with the time it was created rather than a null, because the ticket timestamps are read back after the insert that sets them.
 
 <!-- p1 -->

@@ -23,6 +23,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.app.common.enums.ApiErrorCode;
+import com.app.common.exception.AppException;
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.modules.admin.enums.AdminActionType;
@@ -227,6 +229,26 @@ class ModerationMailEventHandlerTest {
                             assertThat(delivery.getStatus()).isEqualTo(EmailDeliveryStatus.FAILED);
                             assertThat(delivery.getErrorText()).isEqualTo("provider down");
                         });
+    }
+
+    // P7-BE-002. The suppression branch had no test at all, which is how the three mail lanes
+    // drifted into three different answers for the same refusal. This pins the contract that all
+    // of them now share: recorded as SKIPPED, and never rethrown, because rethrowing dead-letters
+    // a message the deployment was configured never to send.
+    @Test
+    void handle_suppressedRecipient_recordsSkippedAndDoesNotRethrow() {
+        stubEligibleUser(UserStatus.BANNED);
+        when(mailSender.sendModerationNotice(any(), any(), anyString()))
+                .thenThrow(new AppException(ApiErrorCode.MAIL_RECIPIENT_NOT_ALLOWED));
+
+        handler.handle(event(AdminActionType.BAN_USER, null));
+
+        assertThat(capturedDeliveries())
+                .last()
+                .satisfies(
+                        delivery ->
+                                assertThat(delivery.getStatus())
+                                        .isEqualTo(EmailDeliveryStatus.SKIPPED));
     }
 
     @Test

@@ -27,6 +27,7 @@ import com.app.modules.mail.repository.EmailDeliveryRepository;
 import com.app.modules.mail.repository.MailCampaignRecipientRepository;
 import com.app.modules.mail.repository.MailCampaignRepository;
 import com.app.modules.mail.service.MailUnsubscribeService;
+import com.app.modules.mail.util.MailSuppression;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.entity.UserSettings;
 import com.app.modules.users.repository.UserRepository;
@@ -173,9 +174,17 @@ public class MailCampaignSenderJob {
             delivery.setSentAt(OffsetDateTime.now(ZoneOffset.UTC));
             recipient.setStatus(MailCampaignRecipientStatus.QUEUED);
         } catch (RuntimeException ex) {
-            delivery.setStatus(EmailDeliveryStatus.FAILED);
+            if (MailSuppression.isRecipientSuppressed(ex)) {
+                // Never attempted, so not a failure. Recording it as FAILED reported the
+                // operator's own allowlist as broken delivery and made every campaign summary on a
+                // machine running the dev allowlist read as a mass failure.
+                delivery.setStatus(EmailDeliveryStatus.SKIPPED);
+                recipient.setStatus(MailCampaignRecipientStatus.SKIPPED_NOT_ALLOWED);
+            } else {
+                delivery.setStatus(EmailDeliveryStatus.FAILED);
+                recipient.setStatus(MailCampaignRecipientStatus.FAILED);
+            }
             delivery.setErrorText(ex.getMessage());
-            recipient.setStatus(MailCampaignRecipientStatus.FAILED);
         }
         delivery.setAttemptCount(delivery.getAttemptCount() + 1);
         emailDeliveryRepository.save(delivery);

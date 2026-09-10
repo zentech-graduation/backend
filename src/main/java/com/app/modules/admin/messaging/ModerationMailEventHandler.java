@@ -12,8 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.app.common.enums.ApiErrorCode;
-import com.app.common.exception.AppException;
 import com.app.common.messaging.exception.PermanentMessageException;
 import com.app.common.outbox.model.DomainEventEnvelope;
 import com.app.modules.admin.enums.AdminActionType;
@@ -25,6 +23,7 @@ import com.app.modules.mail.enums.ModerationMailTemplate;
 import com.app.modules.mail.repository.EmailDeliveryRepository;
 import com.app.modules.mail.service.ModerationMailThrottle;
 import com.app.modules.mail.service.impl.AbstractTemplateMailSender;
+import com.app.modules.mail.util.MailSuppression;
 import com.app.modules.support.enums.SupportCategory;
 import com.app.modules.support.service.SupportTokenService;
 import com.app.modules.users.entity.User;
@@ -138,7 +137,7 @@ public class ModerationMailEventHandler {
             emailDeliveryRepository.save(delivery);
         } catch (RuntimeException ex) {
             delivery.setAttemptCount(delivery.getAttemptCount() + 1);
-            if (isRecipientSuppressed(ex)) {
+            if (MailSuppression.isRecipientSuppressed(ex)) {
                 // A deliberate configuration outcome, not a failure. Recorded so the suppression is
                 // visible rather than silent, then swallowed: rethrowing would dead-letter a
                 // message this deployment was configured never to send, and fill the DLQ with
@@ -163,11 +162,6 @@ public class ModerationMailEventHandler {
      * @param ex the failure raised by the sender
      * @return true when this deployment is configured not to send to that recipient
      */
-    private static boolean isRecipientSuppressed(RuntimeException ex) {
-        return ex instanceof AppException appException
-                && appException.getErrorCode() == ApiErrorCode.MAIL_RECIPIENT_NOT_ALLOWED;
-    }
-
     private boolean emailVerified(UUID userId) {
         return userCredentialRepository
                 .findByUserId(userId)

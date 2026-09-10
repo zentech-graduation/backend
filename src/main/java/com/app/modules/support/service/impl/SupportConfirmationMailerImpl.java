@@ -10,6 +10,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import com.app.modules.mail.config.MailProperties;
 import com.app.modules.mail.service.impl.AbstractTemplateMailSender;
+import com.app.modules.mail.util.MailSuppression;
 import com.app.modules.support.service.SupportConfirmationMailer;
 
 @Service
@@ -40,6 +41,14 @@ public class SupportConfirmationMailerImpl implements SupportConfirmationMailer 
             // Never logs the address or the token. A failure here leaves the ticket in
             // pending_confirmation, where it is invisible to staff and expires with its token, so
             // the safe outcome is simply that the submitter resubmits.
+            if (MailSuppression.isRecipientSuppressed(ex)) {
+                // Classified like every other lane, so a deployment that was configured never to
+                // mail this address does not read as a provider failure in the log.
+                log.info(
+                        "Suppressed a support confirmation: recipient outside the configured"
+                                + " allowlist");
+                return;
+            }
             log.warn("Failed to send a support confirmation: {}", ex.getMessage());
         }
     }

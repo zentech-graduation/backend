@@ -9,6 +9,7 @@ package com.app.modules.mail.enums;
 public enum MailCampaignRecipientStatus {
     PENDING,
     QUEUED,
-    SKIPPED_OPTED_OUT,
+    SKIPPED_OPTED_OUT, // The recipient's own decision
+    SKIPPED_NOT_ALLOWED, // The deployment's decision: outside the configured recipient allowlist
     FAILED
 }
