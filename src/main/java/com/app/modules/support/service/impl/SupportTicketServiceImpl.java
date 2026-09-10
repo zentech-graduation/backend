@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
 import com.app.common.security.service.RateLimiterService;
+import com.app.common.vocabulary.service.VocabularyService;
 import com.app.modules.admin.enums.AdminActionType;
 import com.app.modules.admin.repository.AdminActionRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
@@ -68,6 +69,7 @@ public class SupportTicketServiceImpl implements SupportTicketService {
     private final AdminActionRecorder adminActionRecorder;
     private final NotificationService notificationService;
     private final RateLimiterService rateLimiterService;
+    private final VocabularyService vocabularyService;
 
     public SupportTicketServiceImpl(
             SupportTicketRepository supportTicketRepository,
@@ -80,7 +82,8 @@ public class SupportTicketServiceImpl implements SupportTicketService {
             AdminActionRepository adminActionRepository,
             AdminActionRecorder adminActionRecorder,
             NotificationService notificationService,
-            RateLimiterService rateLimiterService) {
+            RateLimiterService rateLimiterService,
+            VocabularyService vocabularyService) {
         this.supportTicketRepository = supportTicketRepository;
         this.supportAuthorizationService = supportAuthorizationService;
         this.supportTokenService = supportTokenService;
@@ -92,6 +95,7 @@ public class SupportTicketServiceImpl implements SupportTicketService {
         this.adminActionRecorder = adminActionRecorder;
         this.notificationService = notificationService;
         this.rateLimiterService = rateLimiterService;
+        this.vocabularyService = vocabularyService;
     }
 
     @Override
@@ -154,17 +158,23 @@ public class SupportTicketServiceImpl implements SupportTicketService {
     @Override
     @Transactional
     public void createPublic(PublicSupportTicketRequest request, String clientIp) {
-        // Appeals need an audit row to appeal against, which only a signed link supplies. Allowing
-        // one here would let anybody open an appeal about an account they do not hold.
-        if (request.category().isAppeal()) {
+        // support_category_configs is the authority for what this form may carry, and it is read
+        // from the same rows the form's own selector is built from, so the advertised set and the
+        // accepted set cannot disagree. They previously came from two sources and agreed only by
+        // coincidence of maintenance: disabling a category hid it from the selector while this
+        // path kept accepting it from any client that posted the key directly.
+        if (!vocabularyService.allowsPublicForm(
+                request.category().name().toLowerCase(java.util.Locale.ROOT))) {
             throw new AppException(ApiErrorCode.SUPPORT_CATEGORY_NOT_PUBLIC);
         }
-        // Verification is not an appeal, so isAppeal() does not exclude it and it has to be named.
-        // A verification request carries structured evidence and a public-figure category in a
-        // verification_requests row that only the authenticated submit path writes; created here it
-        // would be a verification ticket with no request behind it, which the moderator console
-        // cannot render and no decision path can act on.
-        if (request.category() == SupportCategory.VERIFICATION_REQUEST) {
+        // Defence in depth, not the rule. The table above is authoritative; these two assertions
+        // restate the invariants a config edit must never violate, so a row that set
+        // allows_public_form on an appeal or on verification_request fails here rather than
+        // creating a ticket no decision path can act on. An appeal needs an audit row to appeal
+        // against, which only a signed link supplies. A verification request needs its structured
+        // child row, which only the authenticated submit path writes.
+        if (request.category().isAppeal()
+                || request.category() == SupportCategory.VERIFICATION_REQUEST) {
             throw new AppException(ApiErrorCode.SUPPORT_CATEGORY_NOT_PUBLIC);
         }
         // Verified before anything is written, so a failed challenge leaves no row behind.

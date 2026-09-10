@@ -63,6 +63,7 @@ class SupportTicketServiceImplTest {
     @Mock private AdminActionRecorder adminActionRecorder;
     @Mock private NotificationService notificationService;
     @Mock private RateLimiterService rateLimiterService;
+    @Mock private com.app.common.vocabulary.service.VocabularyService vocabularyService;
 
     private SupportTicketServiceImpl service;
 
@@ -80,7 +81,8 @@ class SupportTicketServiceImplTest {
                         adminActionRepository,
                         adminActionRecorder,
                         notificationService,
-                        rateLimiterService);
+                        rateLimiterService,
+                        vocabularyService);
         lenient()
                 .when(supportTicketRepository.save(any()))
                 .thenAnswer(
@@ -91,6 +93,10 @@ class SupportTicketServiceImplTest {
                             }
                             return ticket;
                         });
+        // The config table is the authority and permits the ordinary categories by default; the
+        // tests that care about a category being refused override this or rely on the
+        // defence-in-depth assertion behind it.
+        lenient().when(vocabularyService.allowsPublicForm(anyString())).thenReturn(true);
         lenient()
                 .when(supportTicketRepository.saveAndFlush(any()))
                 .thenAnswer(
@@ -190,6 +196,26 @@ class SupportTicketServiceImplTest {
                 .isEqualTo(ApiErrorCode.SUPPORT_TOKEN_INVALID);
 
         verify(supportTicketRepository, never()).save(any());
+    }
+
+    // P7-BE-004. support_category_configs is the authority for what the public form may carry.
+    // Before this, the endpoint filtered on is_enabled and allows_public_form while the submit path
+    // read Java enum properties and neither column, so disabling a category hid it from the form
+    // and left it accepted by any client that posted the key directly.
+    @Test
+    void createPublic_categoryTheConfigTableDisallows_isRefusedBeforeTurnstile() {
+        when(vocabularyService.allowsPublicForm("bug_report")).thenReturn(false);
+
+        assertThatThrownBy(
+                        () ->
+                                service.createPublic(
+                                        publicRequest(SupportCategory.BUG_REPORT), "1.2.3.4"))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.SUPPORT_CATEGORY_NOT_PUBLIC);
+
+        verify(supportTicketRepository, never()).save(any());
+        verify(turnstileVerifier, never()).verify(any(), any());
     }
 
     // Turnstile runs before anything is written, so a failed challenge leaves no row behind.

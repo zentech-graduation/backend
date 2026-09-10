@@ -29,4 +29,21 @@ public interface VocabularyService {
      */
     java.util.List<com.app.common.vocabulary.dto.response.SupportCategoryVocabularyResponse>
             getPublicSupportCategories();
+
+    /**
+     * Whether the public form may carry this category.
+     *
+     * <p>The authority for that question. {@code support_category_configs} is where the rule lives,
+     * because {@code allows_public_form} is behavioural policy rather than display metadata and a
+     * policy with two readers has two answers. The submit path previously decided it from Java enum
+     * properties instead, so disabling a category hid it from the form while the service kept
+     * accepting it from any client that posted the key directly.
+     *
+     * <p>Reads the same cached rows the form is built from, so the advertised set and the accepted
+     * set cannot disagree.
+     *
+     * @param categoryKey the category key a submission carries
+     * @return true when the row exists and is both enabled and permitted on the public form
+     */
+    boolean allowsPublicForm(String categoryKey);
 }
