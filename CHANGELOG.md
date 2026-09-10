@@ -25,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A provider error is no longer misread as permanent because a three-digit run appeared in a request id, which dead-lettered a retryable failure on its first attempt.
 - The mail provider's own error text no longer carries a recipient address into the delivery log or the dead-letter reason.
 - The anonymous category list is now rate limited per client and served from a short-lived cache, so a signed-out read no longer reaches the database on every call.
+- Story expiry and suspension expiry are now decided by one clock rather than two, so whether a story is live or a suspension is over no longer depends on which of the application and the database is ahead.
+- A database constraint violation is now mapped by the constraint's own name rather than by finding that name anywhere in the driver's message, which could answer with a different constraint's error.
 
 ### Tests
 - The people-you-may-know affinity bound is now covered by tests that pin what it costs the ranking, so a future change to its depth is a measured decision rather than a guess.

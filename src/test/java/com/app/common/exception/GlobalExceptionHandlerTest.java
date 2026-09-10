@@ -211,4 +211,59 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().getCode()).isEqualTo("BAD_REQUEST");
     }
+
+    // P7-BE-S03. The driver's message is not only the constraint name: it carries the failing
+    // statement and a DETAIL line too. Matching a mapped name anywhere in that text let a different
+    // constraint's violation borrow its domain code as soon as the statement mentioned it - and an
+    // insert naming a column or an index in its own SQL is enough to do that.
+    @Test
+    void handleDataIntegrityViolation_mappedNameOnlyInTheStatementText_isNotBorrowed() {
+        ResponseEntity<ApiResponse<?>> response =
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException(
+                                "could not execute statement",
+                                new RuntimeException(
+                                        "ERROR: duplicate key value violates unique constraint"
+                                                + " \"uq_something_else\"\n"
+                                                + "  Detail: Key (id)=(1) already exists.\n"
+                                                + "  Statement: INSERT INTO notes(body) VALUES"
+                                                + " ('see uq_user_verifications_active for context')")));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        // The violated constraint is unmapped, so the generic conflict is the correct answer.
+        assertThat(response.getBody().getCode()).isEqualTo("BAD_REQUEST");
+    }
+
+    // The name is matched exactly, so a longer constraint name that merely contains a mapped one
+    // does not inherit its meaning either.
+    @Test
+    void handleDataIntegrityViolation_nameContainingAMappedName_isNotBorrowed() {
+        ResponseEntity<ApiResponse<?>> response =
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException(
+                                "could not execute statement",
+                                new RuntimeException(
+                                        "ERROR: duplicate key value violates unique constraint"
+                                                + " \"uq_user_verifications_active_archive\"")));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().getCode()).isEqualTo("BAD_REQUEST");
+    }
+
+    // Hibernate exposes the constraint name as a field, which is the source that cannot be confused
+    // by anything else in the message.
+    @Test
+    void handleDataIntegrityViolation_hibernateNamesTheConstraint_isReadFromTheField() {
+        ResponseEntity<ApiResponse<?>> response =
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException(
+                                "could not execute statement",
+                                new org.hibernate.exception.ConstraintViolationException(
+                                        "could not execute statement",
+                                        new java.sql.SQLException("duplicate key"),
+                                        "uq_support_tickets_one_open_support_per_user")));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().getCode()).isEqualTo("SUPPORT_TICKET_ALREADY_OPEN");
+    }
 }
