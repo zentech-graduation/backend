@@ -132,7 +132,6 @@ public class SupportController extends BaseController {
         return ResponseEntity.ok(ApiResponse.success(ApiSuccessCode.OK, null));
     }
 
-    /** Confirms a public submission and moves it into the staff queue. */
     /**
      * Lists the categories the public form may offer, without a session.
      *
@@ -153,6 +152,7 @@ public class SupportController extends BaseController {
                         ApiSuccessCode.OK, vocabularyService.getPublicSupportCategories()));
     }
 
+    /** Confirms a public submission and moves it into the staff queue. */
     @PostMapping(ApiConstants.Support.ROOT + ApiConstants.Support.CONFIRM)
     @RateLimiter(name = "lowTraffic", fallbackMethod = "rateLimit")
     public ResponseEntity<ApiResponse<Void>> confirmPublicTicket(
