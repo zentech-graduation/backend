@@ -65,9 +65,19 @@ public class SuggestionServiceImpl implements SuggestionService {
     /**
      * How many of the viewer's hashtags the affinity source matches on.
      *
-     * <p>Bounds the self-join's fan-out. The affinity profile's tail is near-zero scores that
-     * contribute almost nothing to the overlap sum while carrying most of the join width, so
-     * cutting it costs little ranking signal and removes an O(viewers x table size) shape.
+     * <p>Bounds the self-join's fan-out, removing an O(viewers x table size) shape. That is the
+     * reason it exists and it is a real one.
+     *
+     * <p>It is not free, and an earlier version of this comment said it was. Measured on the seeded
+     * data, this bound discards 49.4 percent of the viewer's affinity score mass, cuts between two
+     * adjacent scores differing by 0.06 percent, and changes 7 of 60 candidates in each direction
+     * while leaving only 1 of 60 in the same position and none of the top 10. The measurement is
+     * against a near-uniform seeded distribution, which is the worst case for a flat cut, so the
+     * cost is refuted as negligible on available data and unverified on real data. {@code
+     * UserSuggestionRepository.findAffinityCandidates} carries the full figures.
+     *
+     * <p>Changing this value is a ranking decision that needs a production score distribution, not
+     * a tuning knob.
      */
     private static final int AFFINITY_PROFILE_DEPTH = 32;
 

@@ -125,9 +125,26 @@ public interface UserSuggestionRepository extends JpaRepository<UserSuggestion, 
      * viewer held 142 of the 147 distinct hashtags and the join produced 8,987 of 12,117 rows. The
      * bound is what removes that shape; the hashtag_id index makes what remains index-only.
      *
-     * <p>Ordering the profile by score means the bound keeps the signal that actually discriminates
-     * and drops the long tail of near-zero affinities, which contribute almost nothing to
-     * LEAST(a1.score, a2.score) but carry most of the fan-out.
+     * <p>Ordering the profile by score means the bound keeps the strongest hashtags first. It is a
+     * deliberate ranking tradeoff of measured size, not a near-free truncation, and an earlier
+     * version of this comment claimed the opposite. Measured on the seeded data for a viewer
+     * holding 142 affinity rows: the kept top 32 carry 0.50613581 of the score mass and the
+     * discarded tail of 110 carries 0.49386414, so the bound drops 49.4 percent of the viewer's
+     * total affinity mass. The cut is not a natural break either - rank 32 scores 0.01107289 and
+     * rank 33 scores 0.01106574, adjacent values differing by 0.06 percent.
+     *
+     * <p>The effect on the output, comparing the bounded and unbounded forms at 60 candidates each:
+     * 7 of 60 accounts appear only in the bounded list and 7 only in the unbounded one, just 1 of
+     * 60 holds the same position in both, and none of the top 10 positions is held by the same
+     * account.
+     *
+     * <p>Both measurements are against the seeded distribution, which the paragraph above describes
+     * as near-uniform across roughly 134 hashtags. A near-uniform profile is the worst case for a
+     * flat cut, because no prefix dominates. The honest reading is therefore that the
+     * near-zero-tail premise is refuted on the available data and unverified on production data. Do
+     * not raise or lower this bound, or replace it with a score-mass threshold, without a
+     * production score distribution in hand; the bound is kept at its current value because the
+     * fan-out it prevents is real, not because the signal it drops is small.
      *
      * @param viewerId the account to build candidates for
      * @param profileDepth how many of the viewer's strongest hashtags to match on

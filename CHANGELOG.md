@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - An appeal or confirmation link is no longer destroyed by a refusal it had nothing to do with; both paths now run every check that can refuse while the token is still spendable, and redeem it only once the write has succeeded.
 - A recipient the deployment was configured never to mail is now recorded as skipped by every mail lane alike, instead of being dead-lettered by one, counted as a delivery failure by another and swallowed by a third.
+
+### Tests
+- The people-you-may-know affinity bound is now covered by tests that pin what it costs the ranking, so a future change to its depth is a measured decision rather than a guess.
+- Both mail consumers now cover the suppressed-recipient branch, which is the gap that let the three mail lanes drift into three different answers for the same refusal.
 - A newly opened support ticket now answers with the time it was created rather than a null, because the ticket timestamps are read back after the insert that sets them.
 
 <!-- p1 -->
