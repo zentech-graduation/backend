@@ -44,6 +44,12 @@ public abstract class AbstractTemplateMailSender implements MailSender {
      * temporary outage from a message that will be rejected identically for ever. Implementations
      * must never log the recipient address or any raw token.
      *
+     * <p>That obligation extends to text the implementation did not write. A provider's own error
+     * body is not under this codebase's control and a validation error can echo the offending
+     * address, so an implementation that carries provider text into a log line, an exception
+     * message or a stored column must redact an address-shaped run first. The delivery row already
+     * holds the recipient; nothing downstream needs a second copy of it.
+     *
      * @param toEmail recipient email address
      * @param subject message subject line
      * @param htmlBody rendered HTML body

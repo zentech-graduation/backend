@@ -38,9 +38,11 @@ public class SupportConfirmationMailerImpl implements SupportConfirmationMailer 
         try {
             mailSender.sendSupportConfirmation(variables, contactEmail);
         } catch (RuntimeException ex) {
-            // Never logs the address or the token. A failure here leaves the ticket in
-            // pending_confirmation, where it is invisible to staff and expires with its token, so
-            // the safe outcome is simply that the submitter resubmits.
+            // Logs neither the address nor the token. The message is the sender's, and the
+            // transport redacts address-shaped runs out of provider text before it gets here, so
+            // this holds for a string this class does not itself compose. A failure here leaves
+            // the ticket in pending_confirmation, where it is invisible to staff and expires with
+            // its token, so the safe outcome is simply that the submitter resubmits.
             if (MailSuppression.isRecipientSuppressed(ex)) {
                 // Classified like every other lane, so a deployment that was configured never to
                 // mail this address does not read as a provider failure in the log.
