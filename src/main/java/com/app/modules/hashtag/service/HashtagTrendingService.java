@@ -2,6 +2,7 @@ package com.app.modules.hashtag.service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 
@@ -35,4 +36,18 @@ public interface HashtagTrendingService {
      * @return the offset-paginated trending response
      */
     PageResponse<HashtagTrendingResponse> getTrending(Pageable pageable);
+
+    /**
+     * Describes hashtags that are not in the current trending snapshot, for a list that mixes
+     * snapshot entries with entries drawn from elsewhere.
+     *
+     * <p>Carries the current snapshot's window boundaries on every entry, so a personalised list
+     * reports one consistent window rather than leaving the period null on the entries that came
+     * from affinity or adjacency. Rank is left at zero; the caller assigns position in its own
+     * list.
+     *
+     * @param hashtagIds hashtags to describe; ids that do not resolve are omitted
+     * @return one entry per resolvable hashtag, in no particular order
+     */
+    List<HashtagTrendingResponse> describeHashtags(List<UUID> hashtagIds);
 }

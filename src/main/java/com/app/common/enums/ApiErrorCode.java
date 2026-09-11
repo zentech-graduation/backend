@@ -13,6 +13,11 @@ public enum ApiErrorCode {
     VALIDATION_ERROR("VALIDATION_ERROR", "Request validation failed", HttpStatus.BAD_REQUEST),
     BAD_REQUEST("BAD_REQUEST", "Invalid request", HttpStatus.BAD_REQUEST),
     INVALID_CURSOR("INVALID_CURSOR", "Malformed pagination cursor", HttpStatus.BAD_REQUEST),
+    // Distinct from INVALID_CURSOR: the cursor is well formed, the requested depth is simply
+    // past what either storage tier will serve. Reported explicitly rather than left to fail as
+    // an Elasticsearch result-window error, which the availability classifier cannot tell from a
+    // genuine outage and would therefore charge to a shared circuit breaker.
+    PAGINATION_DEPTH_EXCEEDED("PAGINATION_DEPTH_EXCEEDED", "Requested pagination depth is beyond the maximum this endpoint serves", HttpStatus.BAD_REQUEST),
     MALFORMED_REQUEST_BODY("MALFORMED_REQUEST_BODY", "Request body could not be read", HttpStatus.BAD_REQUEST),
     MISSING_REQUIRED_PARAMETER("MISSING_REQUIRED_PARAMETER", "A required request parameter is missing", HttpStatus.BAD_REQUEST),
     UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", "Content-Type is not supported", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
@@ -25,6 +30,13 @@ public enum ApiErrorCode {
     // so the message must not attribute it to the system being busy.
     TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "Too many requests. Please wait before trying again.", HttpStatus.TOO_MANY_REQUESTS),
     SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", "External service temporarily unavailable. Please try again later.", HttpStatus.SERVICE_UNAVAILABLE),
+    // The provider refused the message itself, not the connection: a malformed or undeliverable
+    // recipient, a rejected payload. Retrying reproduces the same rejection for ever, so consumers
+    // treat this as permanent and dead-letter on the first attempt rather than burning the ladder.
+    MAIL_PERMANENTLY_REJECTED("MAIL_PERMANENTLY_REJECTED", "The mail provider permanently rejected this message. It will not be retried.", HttpStatus.UNPROCESSABLE_ENTITY),
+    // This deployment is configured not to send to the recipient's domain. Permanent by nature:
+    // the address will not become allowed by retrying, so the message is recorded and dropped.
+    MAIL_RECIPIENT_NOT_ALLOWED("MAIL_RECIPIENT_NOT_ALLOWED", "This deployment is not permitted to send mail to that recipient domain.", HttpStatus.UNPROCESSABLE_ENTITY),
 
     // Auth
     AUTH_INVALID_CREDENTIALS("AUTH_INVALID_CREDENTIALS", "Invalid email or password", HttpStatus.UNAUTHORIZED),
@@ -73,6 +85,11 @@ public enum ApiErrorCode {
     // Hashtag
     HASHTAG_NOT_FOUND("HASHTAG_NOT_FOUND", "Hashtag not found", HttpStatus.NOT_FOUND),
     HASHTAG_ALREADY_EXISTS("HASHTAG_ALREADY_EXISTS", "Hashtag already exists", HttpStatus.CONFLICT),
+    // Distinct from HASHTAG_NOT_FOUND, which means no row carries the name or id at all. This one
+    // means the row exists but an administrator took the term out of circulation, so a client can
+    // word "this hashtag is not available" differently from "this hashtag has no posts yet".
+    // Returning an empty page instead would make those two states indistinguishable.
+    HASHTAG_UNAVAILABLE("HASHTAG_UNAVAILABLE", "Hashtag is no longer available", HttpStatus.NOT_FOUND),
 
     // Post
     POST_NOT_FOUND("POST_NOT_FOUND", "Post not found", HttpStatus.NOT_FOUND),
@@ -149,7 +166,46 @@ public enum ApiErrorCode {
     // constant here maps to 403, and one that did not would make the naming stop predicting the
     // status. The status is right as it is - the caller has the authority, the transition is the
     // problem - so the name moved rather than the code.
-    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT);
+    ADMIN_ROLE_TRANSITION_NOT_ALLOWED("ADMIN_ROLE_TRANSITION_NOT_ALLOWED", "The requested role transition is not permitted", HttpStatus.CONFLICT),
+
+    // Support
+    SUPPORT_TICKET_NOT_FOUND("SUPPORT_TICKET_NOT_FOUND", "Support ticket not found", HttpStatus.NOT_FOUND),
+    SUPPORT_TICKET_ALREADY_OPEN("SUPPORT_TICKET_ALREADY_OPEN", "You already have an open support ticket", HttpStatus.CONFLICT),
+    SUPPORT_TICKET_INVALID_TRANSITION("SUPPORT_TICKET_INVALID_TRANSITION", "The ticket cannot move to the requested state", HttpStatus.CONFLICT),
+    SUPPORT_TICKET_ALREADY_CLAIMED("SUPPORT_TICKET_ALREADY_CLAIMED", "Another staff member has already claimed this ticket", HttpStatus.CONFLICT),
+    SUPPORT_TICKET_NOT_CLAIMED("SUPPORT_TICKET_NOT_CLAIMED", "Claim this ticket before acting on it", HttpStatus.CONFLICT),
+    // A moderator may read an appeal and may escalate it, but may not answer or close one. Unban,
+    // unsuspend, revoke_warning and revoke_strike are all administrator-only, so a moderator
+    // closing an appeal would be issuing a verdict they have no capability to carry out.
+    SUPPORT_APPEAL_REQUIRES_ADMIN("SUPPORT_APPEAL_REQUIRES_ADMIN", "Only an administrator can decide an appeal", HttpStatus.FORBIDDEN),
+    // Distinct from a plain 403 so the client can explain the refusal rather than showing a generic
+    // permission error for something the staff member could otherwise do.
+    SUPPORT_CONFLICT_OF_INTEREST("SUPPORT_CONFLICT_OF_INTEREST", "You cannot act on a ticket appealing a decision you made", HttpStatus.FORBIDDEN),
+    SUPPORT_CATEGORY_NOT_PUBLIC("SUPPORT_CATEGORY_NOT_PUBLIC", "This category cannot be used on the public form", HttpStatus.BAD_REQUEST),
+    SUPPORT_TOKEN_INVALID("SUPPORT_TOKEN_INVALID", "This link is invalid or has already been used", HttpStatus.BAD_REQUEST),
+    SUPPORT_CAPTCHA_FAILED("SUPPORT_CAPTCHA_FAILED", "The verification challenge was not accepted", HttpStatus.BAD_REQUEST),
+    SUPPORT_DAILY_LIMIT_REACHED("SUPPORT_DAILY_LIMIT_REACHED", "Too many support requests from this address today", HttpStatus.TOO_MANY_REQUESTS),
+
+    // Verification
+    // Its own code rather than a generic validation failure, because the three-field rule is a
+    // policy the client has to explain before submission rather than a malformed-input error.
+    VERIFICATION_INSUFFICIENT_EVIDENCE("VERIFICATION_INSUFFICIENT_EVIDENCE", "Fill at least three evidence fields before submitting", HttpStatus.UNPROCESSABLE_ENTITY),
+    VERIFICATION_CATEGORY_NOT_FOUND("VERIFICATION_CATEGORY_NOT_FOUND", "Verification category not found", HttpStatus.NOT_FOUND),
+    VERIFICATION_ALREADY_VERIFIED("VERIFICATION_ALREADY_VERIFIED", "This account already holds a verified badge", HttpStatus.CONFLICT),
+    VERIFICATION_NOT_ACTIVE("VERIFICATION_NOT_ACTIVE", "This account holds no verified badge to revoke", HttpStatus.CONFLICT),
+    VERIFICATION_REQUEST_NOT_FOUND("VERIFICATION_REQUEST_NOT_FOUND", "Verification request not found", HttpStatus.NOT_FOUND),
+
+    // Mail campaigns
+    CAMPAIGN_NOT_FOUND("CAMPAIGN_NOT_FOUND", "Campaign not found", HttpStatus.NOT_FOUND),
+    CAMPAIGN_NOT_EDITABLE("CAMPAIGN_NOT_EDITABLE", "A campaign can only be edited while it is a draft", HttpStatus.CONFLICT),
+    CAMPAIGN_INVALID_TRANSITION("CAMPAIGN_INVALID_TRANSITION", "The campaign cannot move to the requested state", HttpStatus.CONFLICT),
+    CAMPAIGN_TOO_MANY_RECIPIENTS("CAMPAIGN_TOO_MANY_RECIPIENTS", "A campaign may not exceed ten recipients", HttpStatus.BAD_REQUEST),
+    CAMPAIGN_NO_RECIPIENTS("CAMPAIGN_NO_RECIPIENTS", "A campaign needs at least one recipient", HttpStatus.BAD_REQUEST),
+    // Raised at save time, never at send time, and names the offending token so the author can fix
+    // it: a campaign that saved must never fail later with the mail half-sent.
+    CAMPAIGN_UNKNOWN_VARIABLE("CAMPAIGN_UNKNOWN_VARIABLE", "The campaign body uses an unknown variable", HttpStatus.BAD_REQUEST),
+    CAMPAIGN_TEMPLATE_NOT_FOUND("CAMPAIGN_TEMPLATE_NOT_FOUND", "Mail template not found", HttpStatus.NOT_FOUND),
+    UNSUBSCRIBE_TOKEN_INVALID("UNSUBSCRIBE_TOKEN_INVALID", "This unsubscribe link is not valid", HttpStatus.BAD_REQUEST);
 
     // spotless:on
 

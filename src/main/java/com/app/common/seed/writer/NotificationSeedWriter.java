@@ -529,6 +529,7 @@ public class NotificationSeedWriter {
         List<Object[]> comments = new ArrayList<>();
         jdbc.query(
                 "SELECT id, user_id, post_id, created_at FROM comments WHERE deleted_at IS NULL"
+                        + " AND admin_removed_at IS NULL"
                         + " AND moderation_status = 'approved'",
                 rs -> {
                     comments.add(

@@ -326,7 +326,8 @@ CREATE TABLE comments (
     -- Set by application code on a content edit only; NULL means never edited. Distinct from
     -- updated_at, which the row-level trigger moves whenever a counter changes.
     edited_at           TIMESTAMPTZ,
-    deleted_at          TIMESTAMPTZ
+    deleted_at          TIMESTAMPTZ,
+    admin_removed_at    TIMESTAMPTZ
 );
 
 -- Comment likes
@@ -397,7 +398,8 @@ CREATE TABLE stories (
     like_count          INT             NOT NULL DEFAULT 0 CHECK (like_count >= 0),
     expires_at          TIMESTAMPTZ     NOT NULL DEFAULT (NOW() + INTERVAL '24 hours'),
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    deleted_at          TIMESTAMPTZ
+    deleted_at          TIMESTAMPTZ,
+    admin_removed_at    TIMESTAMPTZ
 );
 
 -- Story views (deduplicated per viewer)
@@ -1468,9 +1470,97 @@ WHERE r.status = 'pending'
 ORDER BY r.created_at ASC;
 
 -- ============================================================
+-- V91: email_deliveries - the outbound mail send log.
+-- ============================================================
+
+CREATE TYPE email_delivery_status AS ENUM ('pending', 'sent', 'failed', 'throttled', 'skipped');
+
+CREATE TABLE email_deliveries (
+    id                  UUID                    PRIMARY KEY DEFAULT gen_random_uuid(),
+    recipient_user_id   UUID                    REFERENCES users(id) ON DELETE SET NULL,
+    recipient_email     VARCHAR(255)            NOT NULL,
+    template_key        VARCHAR(100)            NOT NULL,
+    admin_action_id     UUID                    REFERENCES admin_actions(id),
+    status              email_delivery_status   NOT NULL DEFAULT 'pending',
+    provider_message_id VARCHAR(255),
+    error_text          TEXT,
+    attempt_count       INT                     NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    created_at          TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+    sent_at             TIMESTAMPTZ
+);
+
+-- ============================================================
+-- V92-V95: the support centre.
+-- ============================================================
+
+CREATE TYPE support_category AS ENUM (
+    'appeal_ban', 'appeal_suspension', 'appeal_warning_strike', 'appeal_content_removal',
+    'account_access', 'account_data', 'bug_report', 'safety_concern', 'other'
+);
+
+CREATE TYPE support_ticket_status AS ENUM (
+    'pending_confirmation', 'open', 'in_progress', 'escalated', 'answered', 'rejected'
+);
+
+CREATE TYPE support_source AS ENUM ('authenticated', 'signed_link', 'public_form');
+
+CREATE TABLE support_tickets (
+    id                  UUID                    PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID                    REFERENCES users(id) ON DELETE SET NULL,
+    contact_email       VARCHAR(255)            NOT NULL,
+    category            support_category        NOT NULL,
+    subject             VARCHAR(200)            NOT NULL,
+    body                TEXT                    NOT NULL,
+    status              support_ticket_status   NOT NULL DEFAULT 'open',
+    source              support_source          NOT NULL,
+    admin_action_id     UUID                    REFERENCES admin_actions(id) ON DELETE SET NULL,
+    assigned_to         UUID                    REFERENCES users(id) ON DELETE SET NULL,
+    assigned_at         TIMESTAMPTZ,
+    staff_response      TEXT,
+    internal_note       TEXT,
+    responded_by        UUID                    REFERENCES users(id) ON DELETE SET NULL,
+    responded_at        TIMESTAMPTZ,
+    escalated_by        UUID                    REFERENCES users(id) ON DELETE SET NULL,
+    escalated_at        TIMESTAMPTZ,
+    escalation_reason   TEXT,
+    created_at          TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ             NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE support_category_configs (
+    category_key        VARCHAR(100)    PRIMARY KEY,
+    display_name        VARCHAR(100)    NOT NULL,
+    description         TEXT,
+    is_appeal           BOOLEAN         NOT NULL DEFAULT FALSE,
+    allows_public_form  BOOLEAN         NOT NULL DEFAULT TRUE,
+    is_enabled          BOOLEAN         NOT NULL DEFAULT TRUE,
+    sort_order          SMALLINT        NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+-- The one-open-ticket invariant. Partial and unique: terminal statuses are excluded so an answered
+-- ticket does not stop the account opening another, and pending_confirmation is excluded so an
+-- unconfirmed public submission cannot block the account's genuine ticket. The user_id IS NOT NULL
+-- clause is required as well as implied, because NULL never equals NULL and the public form writes
+-- rows with no user.
+CREATE UNIQUE INDEX uq_support_tickets_one_open_per_user
+    ON support_tickets (user_id)
+    WHERE user_id IS NOT NULL AND status IN ('open', 'in_progress', 'escalated');
+
+CREATE INDEX idx_support_tickets_status_created
+    ON support_tickets (status, created_at DESC, id DESC);
+CREATE INDEX idx_support_tickets_user_created
+    ON support_tickets (user_id, created_at DESC, id DESC) WHERE user_id IS NOT NULL;
+CREATE INDEX idx_support_tickets_admin_action
+    ON support_tickets (admin_action_id) WHERE admin_action_id IS NOT NULL;
+CREATE INDEX idx_support_tickets_assigned
+    ON support_tickets (assigned_to, created_at DESC, id DESC) WHERE assigned_to IS NOT NULL;
+
+-- ============================================================
 -- REFERENCE ARTIFACT
--- This file is auto-synced from Flyway migrations V01–V24.
+-- This file is a reference rendering, not the authoritative schema source.
+-- Synced through Flyway migration V95.
 -- Do NOT use this file as the authoritative schema source.
 -- Authoritative source: src/main/resources/db/migration/
--- Last synced: 2026-06-30
+-- Last synced: 2026-08-30
 -- ============================================================

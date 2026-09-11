@@ -648,7 +648,8 @@ public class SocialServiceImpl implements SocialService {
                 user.getUsername(),
                 user.getDisplayName(),
                 user.getAvatarUrl(),
-                user.isVerified());
+                user.isVerified(),
+                user.getVerifiedCategory());
     }
 
     private UserListItemResponse toUserListItemResponse(

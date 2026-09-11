@@ -2,6 +2,8 @@ package com.app.common.exception;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import jakarta.validation.ConstraintViolationException;
 
@@ -179,16 +181,107 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(ApiErrorCode.MALFORMED_REQUEST_BODY));
     }
 
+    /**
+     * Domain codes for the unique constraints that guard a race the service cannot pre-empt.
+     *
+     * <p>A service-layer check answers the ordinary case with a named code, but two transactions
+     * can both pass that check before either commits, and then the constraint is what refuses the
+     * second. Without this mapping the loser received {@code BAD_REQUEST} alongside HTTP 409 - an
+     * envelope whose own code contradicted its status line - and staff surfaces that render the
+     * message showed "the request conflicts with an existing resource" instead of saying what
+     * actually happened.
+     *
+     * <p>Keyed on constraint name rather than caught per service, because catching it at each call
+     * site is how the generic answer spread in the first place.
+     */
+    // PostgreSQL names the constraint in its own message as: violates unique constraint "name".
+    // Anchored to that wording so the name is read from where it is, not found anywhere in the
+    // statement text the message also carries.
+    private static final Pattern CONSTRAINT_NAME =
+            Pattern.compile("violates [a-z ]*constraint \"([^\"]+)\"");
+
+    private static final Map<String, ApiErrorCode> CONSTRAINT_ERROR_CODES =
+            Map.of(
+                    "uq_user_verifications_active", ApiErrorCode.VERIFICATION_ALREADY_VERIFIED,
+                    "uq_support_tickets_one_open_support_per_user",
+                            ApiErrorCode.SUPPORT_TICKET_ALREADY_OPEN,
+                    "uq_support_tickets_one_open_verification_per_user",
+                            ApiErrorCode.SUPPORT_TICKET_ALREADY_OPEN);
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<?>> handleDataIntegrityViolation(
             DataIntegrityViolationException ex) {
-        log.warn("Database constraint violation: {}", ex.getMostSpecificCause().getMessage());
+        String cause = ex.getMostSpecificCause().getMessage();
+        log.warn("Database constraint violation: {}", cause);
+
+        ApiErrorCode mapped = mappedConstraintCode(constraintNameOf(ex, cause));
+        if (mapped != null) {
+            return ResponseEntity.status(mapped.getHttpStatus()).body(ApiResponse.failure(mapped));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(
                         ApiResponse.failure(
                                 ApiErrorCode.BAD_REQUEST,
                                 "The request conflicts with an existing resource",
                                 null));
+    }
+
+    /**
+     * The name of the constraint that was violated.
+     *
+     * <p>Taken from Hibernate's structured field where there is one, because the driver's message
+     * is not only the constraint name: it carries the failing statement and a {@code DETAIL} line
+     * as well. Matching a mapped name anywhere in that text maps a different constraint's violation
+     * to the wrong domain code as soon as the statement text happens to mention one - an insert
+     * naming a column or an index in its own SQL is enough.
+     *
+     * <p>Falls back to reading the quoted name out of PostgreSQL's own {@code violates ...
+     * constraint "name"} wording, which is still a parse but is anchored to where the name is
+     * rather than scanning the whole message. The driver is a runtime dependency, so its exception
+     * type cannot be named here at compile time; this is the same information without the coupling.
+     *
+     * @param ex the violation as Spring translated it
+     * @param causeMessage the most specific cause's message, may be null
+     * @return the constraint name, or null when neither source yields one
+     */
+    private static String constraintNameOf(
+            DataIntegrityViolationException ex, String causeMessage) {
+        for (Throwable current = ex; current != null; current = current.getCause()) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException violation) {
+                String name = violation.getConstraintName();
+                if (name != null && !name.isBlank()) {
+                    return name;
+                }
+            }
+        }
+        if (causeMessage == null) {
+            return null;
+        }
+        Matcher matcher = CONSTRAINT_NAME.matcher(causeMessage);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    /**
+     * Finds the domain code for the named constraint, if it has one.
+     *
+     * <p>Matched by exact name rather than by substring, so a constraint whose name merely contains
+     * a mapped one cannot borrow its meaning. A name that is not mapped falls through to the
+     * generic conflict, which is the correct answer for a constraint nobody has assigned a meaning
+     * to.
+     *
+     * @param constraintName the violated constraint's name, may be null
+     * @return the mapped code, or null when the constraint is unknown
+     */
+    private static ApiErrorCode mappedConstraintCode(String constraintName) {
+        if (constraintName == null) {
+            return null;
+        }
+        for (Map.Entry<String, ApiErrorCode> entry : CONSTRAINT_ERROR_CODES.entrySet()) {
+            if (constraintName.equals(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     @ExceptionHandler(Exception.class)

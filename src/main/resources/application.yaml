@@ -155,6 +155,9 @@ app:
       # Defaulted to empty so a developer running the noop transport needs no Resend credential.
       # ResendMailConfig rejects a blank key, so selecting resend without one still fails at startup.
       api-key: ${RESEND_API_KEY:}
+      # The only HTTP bound that can be imposed on the Resend SDK from outside it; see
+      # ResendProperties for why the SDK's own connect and read timeouts are not configurable.
+      call-timeout: ${RESEND_CALL_TIMEOUT:20s}
     from-address: ${MAIL_FROM_ADDRESS}
     from-name: ${MAIL_FROM_NAME}
     app-name: ${MAIL_APP_NAME}
@@ -222,6 +225,28 @@ app:
   admin:
     consumer:
       enabled: ${ADMIN_CONSUMER_ENABLED:false}
+    moderation-mail:
+      consumer:
+        enabled: ${MODERATION_MAIL_CONSUMER_ENABLED:false}
+
+  support:
+    campaign:
+      sender:
+        enabled: ${CAMPAIGN_SENDER_ENABLED:false}
+        initial-delay: ${CAMPAIGN_SENDER_INITIAL_DELAY:60s}
+        fixed-delay: ${CAMPAIGN_SENDER_FIXED_DELAY:60s}
+        batch-size: ${CAMPAIGN_SENDER_BATCH_SIZE:20}
+    turnstile:
+      # Empty by default, and SupportTurnstileVerifier refuses to verify with a blank secret, so a
+      # deployment that forgets to set TURNSTILE_SECRET_KEY fails the public form closed rather than
+      # silently admitting every submission. The dev profile defaults it to Cloudflare's test key.
+      secret-key: ${TURNSTILE_SECRET_KEY:}
+      verify-url: ${TURNSTILE_VERIFY_URL:https://challenges.cloudflare.com/turnstile/v0/siteverify}
+      # Bounds on the siteverify call. Cloudflare is a hard dependency of the public entry path, so
+      # the timeouts are short: a slow verifier must fail the submission quickly rather than hold a
+      # request thread.
+      connect-timeout: ${TURNSTILE_CONNECT_TIMEOUT:3s}
+      read-timeout: ${TURNSTILE_READ_TIMEOUT:5s}
 
   # Platform statistics collection and roll-up.
   #
@@ -263,11 +288,62 @@ app:
     read-set-window: ${RECOMMENDATION_READ_SET_WINDOW:P90D}
     read-set-max-rows: ${RECOMMENDATION_READ_SET_MAX_ROWS:2000}
     top-up-overfetch-multiplier: ${RECOMMENDATION_TOPUP_OVERFETCH_MULTIPLIER:3}
+    affinity:
+      enabled: ${AFFINITY_JOB_ENABLED:true}
+      # 90 days matches the read-set window above and the span the seeded dataset covers. It is
+      # also the bound that makes the user_events read prune to the two or three partitions it
+      # covers instead of scanning all twenty-four.
+      window: ${AFFINITY_WINDOW:P90D}
+      # Three half-lives across the window: the far edge still contributes about an eighth rather
+      # than falling off a cliff, while last week clearly outranks last month. A 7-day half-life
+      # would make the 90-day window pointless; 60 days would barely separate the two ends.
+      half-life: ${AFFINITY_HALF_LIFE:P30D}
+      top-limit: ${AFFINITY_TOP_LIMIT:50}
+      interval: ${AFFINITY_INTERVAL:PT12H}
+      initial-delay: ${AFFINITY_INITIAL_DELAY:PT2M}
   websocket:
     revocation:
       interval: ${WEBSOCKET_REVOCATION_INTERVAL:PT30S}
   rate-limit:
     endpoint-rules:
+      # Followed from a mail client, sometimes twice by a prefetcher, so this is bounded rather
+      # than tight. Opting out is idempotent, so a replay is harmless.
+      "[/api/v1/support/unsubscribe]":
+        max-attempts: 20
+        window-seconds: 3600
+      # The public support form. Three per hour keyed on the caller's IP, which is the hourly half
+      # of the bound; the daily half of ten is enforced in SupportTicketServiceImpl on the same
+      # Redis primitive, keyed on the submitted address, because a rule here carries one window.
+      #
+      # Deployment prerequisite: IpExtractor trusts X-Forwarded-For only when the direct peer
+      # matches app.security.trusted-proxy-cidrs, which is empty by default. Behind an
+      # unconfigured reverse proxy every caller presents the proxy's address and shares one
+      # bucket, which turns this rule into a global cap of three per hour.
+      "[/api/v1/support/public/tickets]":
+        max-attempts: 3
+        window-seconds: 3600
+      # The appeal link. Generous, because a legitimate appellant may fumble the form more than
+      # once and the token itself is single-use, so the token is the real control here.
+      "[/api/v1/support/appeal]":
+        max-attempts: 10
+        window-seconds: 3600
+      # Reading whether an appeal link is still valid, which the landing screen does on
+      # mount. Generous relative to the appeal itself: a reader may open the link, reload it
+      # and come back to a restored tab, and none of that redeems anything.
+      "[/api/v1/support/appeal/validate]":
+        max-attempts: 30
+        window-seconds: 3600
+      "[/api/v1/support/public/confirm]":
+        max-attempts: 20
+        window-seconds: 3600
+      # The public form's category list. The only anonymous support route that previously carried
+      # no per-client rule at all: the highTraffic limiter on the handler is a JVM-wide overload
+      # backstop, not a per-caller budget. Generous, because the form legitimately loads this once
+      # or twice per submission and the rows are cached in process, so a caller inside this bound
+      # does not reach PostgreSQL at all.
+      "[/api/v1/support/public/categories]":
+        max-attempts: 60
+        window-seconds: 3600
       "[/api/v1/auth/login]":
         max-attempts: 10
         window-seconds: 900
@@ -344,6 +420,24 @@ app:
         window-seconds: 60
       "[/api/v1/admin/hashtags/search]":
         max-attempts: 60
+        window-seconds: 60
+      # Single indexed row read behind the /tags/{name} deep link, so it is cheap, but it is the
+      # entry point a shared URL lands on and must not fall through to a broad default.
+      "[/api/v1/hashtags/name/*]":
+        max-attempts: 60
+        window-seconds: 60
+      # One Elasticsearch query per call plus a PostgreSQL hydration of the page, so it costs
+      # meaningfully more than the name lookup above and is budgeted lower.
+      "[/api/v1/hashtags/*/posts]":
+        max-attempts: 40
+        window-seconds: 60
+      # Cached in Redis for ten minutes per caller and page, so the budget covers cache misses
+      # and tab switching rather than the fusion cost itself.
+      "[/api/v1/hashtags/trending/for-you]":
+        max-attempts: 60
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/*/pin]":
+        max-attempts: 30
         window-seconds: 60
 
 management:

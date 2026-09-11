@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.app.common.enums.ApiErrorCode;
 import com.app.common.exception.AppException;
+import com.app.common.outbox.service.OutboxService;
 import com.app.modules.admin.dto.request.AdminActionRequest;
 import com.app.modules.admin.dto.request.AdminSuspendUserRequest;
 import com.app.modules.admin.dto.response.AdminActionResponse;
@@ -58,6 +59,7 @@ class AdminServiceImplTest {
 
     @Mock private AdminActionRepository adminActionRepository;
     @Mock private UserRepository userRepository;
+    @Mock private OutboxService outboxService;
     @Mock private PostRepository postRepository;
     @Mock private PostService postService;
     @Mock private CommentRepository commentRepository;
@@ -66,6 +68,7 @@ class AdminServiceImplTest {
     @Mock private ReportRepository reportRepository;
     @Mock private AdminActionMapper adminActionMapper;
     @Mock private NotificationService notificationService;
+    @Mock private com.app.modules.support.service.VerificationService verificationService;
 
     private AdminServiceImpl service;
 
@@ -82,9 +85,11 @@ class AdminServiceImplTest {
                         messageRepository,
                         reportRepository,
                         adminActionMapper,
-                        new AdminActionRecorder(adminActionRepository, adminActionMapper),
-                        new AdminAuthorizationServiceImpl(),
-                        notificationService);
+                        new AdminActionRecorder(
+                                adminActionRepository, adminActionMapper, outboxService),
+                        new AdminAuthorizationServiceImpl(userRepository),
+                        notificationService,
+                        verificationService);
     }
 
     private void stubActor(UUID actorId, UserRole role) {
@@ -452,11 +457,11 @@ class AdminServiceImplTest {
     }
 
     @Test
-    void restoreComment_deletedComment_clearsDeletedAtAndAudits() {
+    void restoreComment_removedComment_clearsAdminRemovedAtAndAudits() {
         UUID commentId = UUID.randomUUID();
         when(commentRepository.findOwnerIdIncludingDeleted(commentId))
                 .thenReturn(Optional.of(UUID.randomUUID()));
-        when(commentRepository.isDeletedIncludingDeleted(commentId)).thenReturn(Optional.of(true));
+        when(commentRepository.isAdminRemoved(commentId)).thenReturn(Optional.of(true));
         AdminActionResponse expected = response(AdminActionType.RESTORE_COMMENT);
         stubAudit(expected);
 
@@ -468,6 +473,49 @@ class AdminServiceImplTest {
 
         assertThat(result).isEqualTo(expected);
         verify(commentRepository).applyAdminModeration(commentId, null);
+    }
+
+    // The transition guard reads admin_removed_at, so a comment its author deleted is not a
+    // restorable moderation target. Before V95 both intents shared deleted_at and this restore
+    // would have succeeded, undoing the author's own deletion.
+    @Test
+    void restoreComment_authorDeletedButNotAdminRemoved_throwsInvalidTransition() {
+        UUID commentId = UUID.randomUUID();
+        when(commentRepository.findOwnerIdIncludingDeleted(commentId))
+                .thenReturn(Optional.of(UUID.randomUUID()));
+        when(commentRepository.isAdminRemoved(commentId)).thenReturn(Optional.of(false));
+
+        assertThatThrownBy(
+                        () ->
+                                service.restoreComment(
+                                        UUID.randomUUID(),
+                                        commentId,
+                                        new AdminActionRequest("Appeal accepted", null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
+
+        verify(commentRepository, never()).applyAdminModeration(any(), any());
+    }
+
+    @Test
+    void restoreStory_ownerDeletedButNotAdminRemoved_throwsInvalidTransition() {
+        UUID storyId = UUID.randomUUID();
+        when(storyRepository.findOwnerIdIncludingDeleted(storyId))
+                .thenReturn(Optional.of(UUID.randomUUID()));
+        when(storyRepository.isAdminRemoved(storyId)).thenReturn(Optional.of(false));
+
+        assertThatThrownBy(
+                        () ->
+                                service.restoreStory(
+                                        UUID.randomUUID(),
+                                        storyId,
+                                        new AdminActionRequest("Appeal accepted", null)))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.ADMIN_INVALID_TRANSITION);
+
+        verify(storyRepository, never()).applyAdminModeration(any(), any());
     }
 
     @Test
@@ -683,7 +731,7 @@ class AdminServiceImplTest {
         UUID storyId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         when(storyRepository.findOwnerIdIncludingDeleted(storyId)).thenReturn(Optional.of(ownerId));
-        when(storyRepository.isDeletedIncludingDeleted(storyId)).thenReturn(Optional.of(false));
+        when(storyRepository.isAdminRemoved(storyId)).thenReturn(Optional.of(false));
         AdminActionResponse expected = response(AdminActionType.REMOVE_STORY);
         stubAudit(expected);
 
@@ -700,7 +748,7 @@ class AdminServiceImplTest {
         UUID storyId = UUID.randomUUID();
         when(storyRepository.findOwnerIdIncludingDeleted(storyId))
                 .thenReturn(Optional.of(UUID.randomUUID()));
-        when(storyRepository.isDeletedIncludingDeleted(storyId)).thenReturn(Optional.of(true));
+        when(storyRepository.isAdminRemoved(storyId)).thenReturn(Optional.of(true));
         AdminActionResponse expected = response(AdminActionType.RESTORE_STORY);
         stubAudit(expected);
 
@@ -721,7 +769,7 @@ class AdminServiceImplTest {
         UUID storyId = UUID.randomUUID();
         when(storyRepository.findOwnerIdIncludingDeleted(storyId))
                 .thenReturn(Optional.of(UUID.randomUUID()));
-        when(storyRepository.isDeletedIncludingDeleted(storyId)).thenReturn(Optional.of(true));
+        when(storyRepository.isAdminRemoved(storyId)).thenReturn(Optional.of(true));
 
         assertThatThrownBy(
                         () ->

@@ -6,7 +6,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Accounts can request a verified badge in one of eight categories, choosing a category and the name they claim and supplying at least three pieces of evidence; the request is refused with its own error code below that floor. No identity documents are collected and the form has no file upload, deliberately.
+- Moderators as well as administrators can approve, reject and revoke verification. Every decision writes a moderation audit row, mails the requester through the outbox, and commits with the badge change in one transaction.
+- A verified badge is withdrawn automatically when an account is suspended or banned, and retained when it is deactivated. An automatic withdrawal is recorded as a system action so the audit log distinguishes it from a decision a moderator made, and it never creates a support ticket.
+- People you may know, blending the follow graph, the recommender's user-to-user neighbours and hashtag interest overlap on rank rather than on scores. An account with no follows and no history is served verified accounts instead of an empty list.
+- Suggestions can be dismissed permanently, which changes no other surface, and an account can opt out of being suggested to other people.
+
+### Changed
+- A pending verification request no longer blocks an account from opening a support ticket, and an open support ticket no longer blocks a verification request; the one-open-ticket guard now holds one ticket per lane instead of one across both.
+- The public identity summary embedded in every response that names an account now carries the account's verification category, so a client can render which category a badge is for.
+- The support and moderation mail schema changes now apply after the hashtag interest work rather than colliding with it; the full migration set applies cleanly to an empty database and the application starts against it under schema validation.
+
+### Added
+- An appeal link can be checked for validity without being redeemed, so the appeal screen can show a dead link before the reader writes their appeal rather than after.
+
 ### Fixed
+- An appeal or confirmation link is no longer destroyed by a refusal it had nothing to do with; both paths now run every check that can refuse while the token is still spendable, and redeem it only once the write has succeeded.
+- A recipient the deployment was configured never to mail is now recorded as skipped by every mail lane alike, instead of being dead-lettered by one, counted as a delivery failure by another and swallowed by a third.
+- The public support form now advertises and accepts exactly the same category set, because both read the category configuration table; disabling a category previously hid it from the form while the server kept accepting it.
+- A provider error is no longer misread as permanent because a three-digit run appeared in a request id, which dead-lettered a retryable failure on its first attempt.
+- The mail provider's own error text no longer carries a recipient address into the delivery log or the dead-letter reason.
+- The anonymous category list is now rate limited per client and served from a short-lived cache, so a signed-out read no longer reaches the database on every call.
+- Story expiry and suspension expiry are now decided by one clock rather than two, so whether a story is live or a suspension is over no longer depends on which of the application and the database is ahead.
+- A database constraint violation is now mapped by the constraint's own name rather than by finding that name anywhere in the driver's message, which could answer with a different constraint's error.
+
+### Tests
+- The people-you-may-know affinity bound is now covered by tests that pin what it costs the ranking, so a future change to its depth is a measured decision rather than a guess.
+- Both mail consumers now cover the suppressed-recipient branch, which is the gap that let the three mail lanes drift into three different answers for the same refusal.
+- A newly opened support ticket now answers with the time it was created rather than a null, because the ticket timestamps are read back after the insert that sets them.
+
+<!-- p1 -->
+### Added
+- Support ticket categories are now published through the shared vocabulary endpoint alongside report reasons, notification types and moderation actions, so a client no longer has to hardcode the list.
+- An email opt-out that suppresses campaign mail only; account and security mail ignore it, and the send path records who was skipped and why.
+- Campaign bodies are rendered by one server-side pipeline and filtered against an allowlist, so a body carrying a script tag, an event handler or a javascript link is neutralised before it reaches anyone.
+- Administrators can compose and schedule custom mail campaigns from read-only Markdown samples, with a server-rendered preview that cannot diverge from the mail that is actually sent.
+- Every punitive moderation notice now carries a single-use appeal link that works without signing in, which is what makes the notice actionable for an account that cannot authenticate.
+- A public support form gated by Cloudflare Turnstile and an email confirmation step, so a submission reaches staff only after the submitter proves control of the address.
+- An appeal opened from a moderation notice redeems a single-use link that authorises exactly one ticket and mints no session.
+- A support centre with three entry paths, so a banned or suspended account - which cannot reach any authenticated endpoint - now has a route to contest a decision, which it previously did not.
+
+### Fixed
+- The unsubscribe token column is now varchar rather than char, which is what the entity maps to; as char it failed schema validation and the application did not start at all.
+- Campaign personalisation tokens are now substituted correctly; the sanitizer rewrites double braces as a template-injection defence, which would otherwise have left every placeholder visible to recipients.
+- A stalled mail provider can no longer hold a consumer thread indefinitely; each send is bounded by a configurable call timeout, which is the only HTTP bound the Resend SDK permits from outside it.
+- Every read path that reaches comments or stories through native SQL now hides administratively removed rows, including the report target lookup, the platform statistics gauges and the development seed pipeline.
+- Live post fanout is now enabled in production; the /ws/posts endpoint was reachable while nothing published to it.
+
+### Added
+- Posts carrying a hashtag are now readable through a dedicated cursor-paginated endpoint, served from Elasticsearch and degrading to a PostgreSQL join when the search tier is unavailable.
+- A hashtag can be resolved by name, so a shared or deep-linked hashtag address reaches the same record the post write path created.
+- A per-user hashtag affinity model, recomputed on a twelve-hour cycle from bounded reads of the behavioural event log, weighted by intent and decayed over its window.
+- Trending hashtags ranked for the caller, blending the platform snapshot with the caller's own affinity and reserving a share of the list for hashtags adjacent to their interests.
+- Administrators can pin a hashtag platform-wide so it leads the trending list, and unpin it again; both actions are recorded in the moderation audit log.
+
+### Changed
+- The trending response now reports whether a hashtag is pinned and why it appears in the list, and orders pinned hashtags first.
+- Banning or deleting a hashtag now clears any pin it holds.
+
+### Fixed
+- A request for a banned or deleted hashtag now answers `404` with its own error code rather than an empty page, so a client can distinguish an unavailable hashtag from one with no posts yet.
+- Pagination depth on the posts-by-hashtag read is now bounded with its own error code; previously an over-deep request degraded silently and charged a failure to a circuit breaker shared with two other search surfaces.
 - The recommendation feed pipeline now logs a warning and records a counter metric when a batch of recommender candidates resolves to no visible posts, and when a request falls all the way back to the chronological feed; previously this degraded silently behind a normal `200` response.
 
 ### Removed
@@ -17,6 +78,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `sonarcloud.yml` now runs the duplicate Flyway migration version pre-check before the build, a step formerly unique to `ci-test.yml`.
 
 ### Added
+- Each of the nine moderation actions that affect a person now raises its notice inside the same transaction as the moderation write, so an action cannot commit without its notice enqueued nor send one for a change that rolled back.
+- A per-recipient hourly budget now bounds moderation mail, the first send throttle of any kind on this path.
+- Moderation notices now reach banned, suspended and deactivated accounts, which the existing mail path refused by design and which were therefore the only population never told what had happened to them.
+- Every outbound email is now recorded with its recipient, template, status and the provider's message identifier, which was previously discarded at the point of the call.
+- Nine moderation notice email templates covering account bans, reinstatements, suspensions, warnings and the four content removals, each stating the action, the date and, for a fixed-term suspension, when it ends.
+- Comments and stories now carry an administrative removal tombstone independent of the owner's own deletion, so restoring administratively removed content no longer undoes a deletion its author performed.
 - An Explore variant of the personalized feed that excludes posts from accounts the viewer already follows.
 - Per-caller rate limits on every recommendation endpoint, including a tighter budget for impression ingestion; none existed before.
 - A batched post-impression endpoint that records what a viewer actually saw, how long it stayed visible, and which surface it appeared on; resubmitting a batch after a network failure records nothing twice, and the call never affects a post's public view count.
@@ -29,6 +96,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A non-network `noop` mail transport, selectable locally via `APP_MAIL_TRANSPORT=noop`, that captures outbound mail instead of sending it; used automatically for the entire automated test suite so it never reaches the real provider.
 
 ### Changed
+- The pull request lint allowlist now accepts the support scope, ahead of the support ticket module.
+- Content administratively removed before this release keeps its existing deletion timestamp and now reads as an owner deletion, so it stays hidden but can no longer be restored by an administrator; there is no way to tell those rows apart retrospectively and no backfill was attempted.
 - Personalized recommendations no longer resurface already-seen posts until the unread catalogue is genuinely exhausted, and only at the tail, replacing the previous score-based replacement mechanism.
 - Personalized recommendations are now ranked by a factorization machine over a merged candidate list combining collaborative filtering, post-to-post and viewer-to-viewer neighbours, and trending, rather than by collaborative filtering alone.
 - Posts a viewer has already seen now return to their recommendations at reduced weight instead of being excluded permanently, which on a catalogue of this size would otherwise empty every recommendation surface within a few sessions.
@@ -238,6 +307,9 @@ A write into an uncovered month never failed; it was absorbed silently and made 
 - The error code for a missing report resolution note, which no path had been able to raise since the requirement moved behind a mandatory field. An error code nothing can produce is a promise the API cannot keep.
 
 ### Security
+- A staff member cannot act on a ticket appealing a decision they made themselves.
+- Only an administrator can decide an appeal; a moderator may read and escalate one but cannot record a verdict they have no capability to execute.
+- The eleven administrator-only endpoints now enforce the administrator role in the service layer as well as in their endpoint annotations, so removing an annotation no longer opens an endpoint.
 - The administrative surface now enforces a per-caller request budget. None of its thirty-three operations carried one, so two hundred requests a second from a single token were accepted; the four most expensive reads carry tighter budgets than the rest.
 - Every administrative read now rejects a query parameter it does not understand instead of ignoring it. A misspelled filter previously returned a full unfiltered page, which a client then displayed as though the filter had been applied.
 - A pagination cursor whose identifier has been truncated is now rejected. Removing characters from it previously produced a different, valid position, so the caller silently received the wrong page instead of an error.
@@ -252,6 +324,8 @@ Sessions already open when this ships stay valid; an ordinary logout still ends 
 - WebSocket connections now authenticate with a single-use ticket that expires in 30 seconds, so an access token no longer travels in a URL where proxies and content delivery networks record it in their access logs.
 
 ### Tests
+- Added coverage for the support authorization matrix, the conflict-of-interest rule and the claim race.
+- Added coverage for the new service-layer administrator gate, including the warning and strike revocations that previously read no actor role at all.
 - Every administrative controller now asserts that its endpoints refuse a request carrying no token at all. The suite previously checked only that a revoked token was refused.
 - The permitted-operations payload is checked by agreeing with the component that enforces the rules, for every combination of actor role and target role, rather than by restating the rules a third time.
 - The report queue's plan is asserted directly, so neither adding a status to the queue without extending the index nor removing the apparently redundant cursor bound can silently return it to a full scan.
@@ -414,6 +488,9 @@ A conversation that already has messages in it is kept, because unfollowing some
 - Resolved a rare failure in a WebSocket revocation sweep test caused by a benign race in the test's own teardown, unrelated to the behavior under test.
 
 ### Documentation
+- Added the support module data rules and brought the reference schema up to the migrations it describes.
+- Added the mail module data rules, which did not exist, and corrected the project structure documents against the code they describe.
+- The mail queue now records why it carries no broker-level dead-letter argument, and which queue in the topology is the genuine outlier.
 - Recorded why a small number of harmless startup proxy warnings and one non-JSON error response for an over-long request remain as accepted, understood gaps rather than unexplained rough edges.
 - Recorded that follower and following counts are visible to everyone regardless of the viewer's own blocks, so comparing a count against a filtered list can reveal that a block exists somewhere in that list, as a known and accepted tradeoff rather than an oversight.
 - Corrected internal module documentation for the hashtag module, which was still marked as unimplemented scaffolding despite being fully implemented.

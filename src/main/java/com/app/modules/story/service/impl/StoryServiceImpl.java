@@ -204,6 +204,8 @@ public class StoryServiceImpl implements StoryService {
                     new StoryFeedItemResponse(
                             author.getId(),
                             author.getUsername(),
+                            author.isVerified(),
+                            author.getVerifiedCategory(),
                             author.getDisplayName(),
                             author.getAvatarUrl(),
                             hasUnseen,

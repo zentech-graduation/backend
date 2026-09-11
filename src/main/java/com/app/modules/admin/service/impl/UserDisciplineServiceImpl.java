@@ -35,7 +35,9 @@ import com.app.modules.admin.repository.ReportReasonConfigReader;
 import com.app.modules.admin.repository.UserStrikeRepository;
 import com.app.modules.admin.repository.UserWarningRepository;
 import com.app.modules.admin.service.AdminActionRecorder;
+import com.app.modules.admin.service.AdminAuthorizationService;
 import com.app.modules.admin.service.UserDisciplineService;
+import com.app.modules.support.service.VerificationService;
 import com.app.modules.users.entity.User;
 import com.app.modules.users.enums.UserRole;
 import com.app.modules.users.enums.UserStatus;
@@ -82,6 +84,8 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
     private final AdminActionRecorder adminActionRecorder;
     private final UserDisciplineMapper userDisciplineMapper;
     private final OutboxService outboxService;
+    private final AdminAuthorizationService adminAuthorizationService;
+    private final VerificationService verificationService;
 
     public UserDisciplineServiceImpl(
             UserWarningRepository userWarningRepository,
@@ -91,7 +95,9 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
             ReportReasonConfigReader reportReasonConfigReader,
             AdminActionRecorder adminActionRecorder,
             UserDisciplineMapper userDisciplineMapper,
-            OutboxService outboxService) {
+            OutboxService outboxService,
+            AdminAuthorizationService adminAuthorizationService,
+            VerificationService verificationService) {
         this.userWarningRepository = userWarningRepository;
         this.userStrikeRepository = userStrikeRepository;
         this.adminUserRepository = adminUserRepository;
@@ -100,6 +106,8 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
         this.adminActionRecorder = adminActionRecorder;
         this.userDisciplineMapper = userDisciplineMapper;
         this.outboxService = outboxService;
+        this.adminAuthorizationService = adminAuthorizationService;
+        this.verificationService = verificationService;
     }
 
     @Override
@@ -295,6 +303,11 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
     @Transactional
     public AdminActionResponse revokeWarning(
             UUID actorId, UUID warningId, AdminActionRequest request) {
+        // Revoking a warning erases a rung of the discipline ladder, and a strike is the record
+        // behind a ban, so both revocations are administrator-only. Until now the sole gate was the
+        // per-method annotation narrowing the controller's wider moderator-and-administrator class
+        // annotation, and neither revocation read the actor's role at all.
+        adminAuthorizationService.assertActorIsAdministrator(actorId);
         UserWarning warning =
                 userWarningRepository
                         .findById(warningId)
@@ -323,6 +336,7 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
     @Transactional
     public AdminActionResponse revokeStrike(
             UUID actorId, UUID strikeId, AdminActionRequest request) {
+        adminAuthorizationService.assertActorIsAdministrator(actorId);
         UserStrike strike =
                 userStrikeRepository
                         .findById(strikeId)
@@ -496,6 +510,11 @@ public class UserDisciplineServiceImpl implements UserDisciplineService {
         target.setStatus(intendedStatus);
         target.setSuspendedUntil(intendedStatus == UserStatus.SUSPENDED ? intendedUntil : null);
         adminUserRepository.save(target);
+        // The ladder is the second writer of users.status. The badge withdrawal was wired into the
+        // administrator's own endpoint only, so a three-strike ban - the strongest action in the
+        // system - used to leave the platform's identity claim standing. Same transaction as the
+        // save, so the status and the badge can never be observed disagreeing.
+        verificationService.applyStatusChange(target.getId(), intendedStatus);
         return true;
     }
 

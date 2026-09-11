@@ -227,6 +227,43 @@ public class SecurityConfig {
     private void configureInfrastructureEndpoints(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
                     auth) {
+        // The three anonymous support paths, and the campaign unsubscribe link.
+        //
+        // Anonymous by necessity rather than by convenience. TokenPrincipalResolverImpl admits only
+        // ACTIVE accounts, so a banned or suspended user cannot authenticate at all, and they are
+        // exactly the population an appeal path exists for. Each carries its own control instead of
+        // a session: a single-use Redis token for the appeal and the confirmation, Turnstile plus
+        // email confirmation for the public form, and a per-user stored secret for the unsubscribe
+        // link. None of them issues a session, a token pair or a refresh token row.
+        //
+        // Each also carries its own entry in app.rate-limit.endpoint-rules in all three profiles.
+        auth.requestMatchers(
+                        HttpMethod.POST,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.APPEAL,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.PUBLIC_TICKET,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.CONFIRM,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.UNSUBSCRIBE)
+                .permitAll();
+
+        // The public form's category list, read before the form can be filled in. GET only, and it
+        // answers strictly less than the authenticated config vocabulary: enabled, public-form
+        // support categories, which is display metadata and no account data.
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.PUBLIC_CATEGORIES)
+                .permitAll();
+
+        // Whether an appeal link is still redeemable, read without redeeming it. Anonymous for the
+        // same reason the appeal POST is: the account it concerns is banned or suspended and cannot
+        // authenticate. It widens nothing - a caller must already hold a 32-byte random token, and
+        // it answers only the appeal category, which the form itself would have shown them. It
+        // exists so the landing screen can refuse a dead link before the reader writes their
+        // appeal instead of after, and it must never consume the token.
+        auth.requestMatchers(
+                        HttpMethod.GET,
+                        ApiConstants.Support.ROOT + ApiConstants.Support.APPEAL_VALIDATE)
+                .permitAll();
+
         auth.requestMatchers(PUBLIC_INFRA_PATHS).permitAll();
         auth.requestMatchers("/actuator/**").hasRole("ADMIN");
     }
@@ -250,6 +287,10 @@ public class SecurityConfig {
         // implementations, but the ADMIN-only guarantee for the account list should not rest
         // on that detail surviving a future matcher change.
         auth.requestMatchers("/api/v1/admin/users", "/api/v1/admin/users/**").hasRole("ADMIN");
+        // Mail campaigns are administrator-only, and this must be registered before the broad
+        // "/api/v1/admin/**" rule below, which admits a moderator. MailCampaignServiceImpl enforces
+        // the same narrowing independently, so neither gate is load-bearing alone.
+        auth.requestMatchers("/api/v1/admin/mail/**").hasRole("ADMIN");
         auth.requestMatchers("/api/v1/admin/**").hasAnyRole("MODERATOR", "ADMIN");
         auth.requestMatchers(
                         HttpMethod.GET,

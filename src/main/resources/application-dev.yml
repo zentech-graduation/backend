@@ -48,9 +48,23 @@ app:
       enabled: true
     live:
       enabled: true
+  support:
+    campaign:
+      sender:
+        enabled: true
+    turnstile:
+      # Cloudflare's published always-passes test key, defaulted the same way
+      # app.security.cookie-signing-secret is: TURNSTILE_SECRET_KEY still outranks it, so a real key
+      # configured in the environment wins, while a checkout with no .env boots and the test suite
+      # makes no outbound call. It verifies every token it is given, so it must never reach
+      # production, which is why the base profile defaults it to empty instead.
+      secret-key: ${TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA}
   admin:
     consumer:
       enabled: true
+    moderation-mail:
+      consumer:
+        enabled: true
   story:
     consumer:
       enabled: true
@@ -67,12 +81,22 @@ app:
       enabled: true
     # Local development sends real mail through Resend by default: there is no local sink.
     # Every send consumes Resend quota, and a fabricated or seeded recipient produces a bounce
-    # that raises the sending domain's bounce rate, which can get the domain suspended. Only
-    # trigger mail flows (register, forgot-password, and so on) against real mailboxes you
-    # control. To run the application without sending real mail, set APP_MAIL_TRANSPORT=noop in
-    # .env and restart; noop is refused outside this profile by MailTransportGuard. See
-    # .env.example and CONTRIBUTING.md for the full warning.
+    # that raises the sending domain's bounce rate, which can get the domain suspended. To run
+    # the application without sending real mail at all, set APP_MAIL_TRANSPORT=noop in .env and
+    # restart; noop is refused outside this profile by MailTransportGuard. See .env.example and
+    # CONTRIBUTING.md for the full warning.
     transport: ${APP_MAIL_TRANSPORT:resend}
+    # Which recipient domains this machine may send to. Defaults to a reserved domain that cannot
+    # receive mail, so a local run sends nothing outward until an operator names their own domain
+    # in APP_MAIL_ALLOWED_RECIPIENT_DOMAINS. The seeded dataset carries fabricated addresses at
+    # gmail.com and outlook.com - real, deliverable domains belonging to whoever holds those
+    # mailboxes - and an ordinary moderation action against a seeded account is all it takes to
+    # write to them. Disabling the consumer protects the seeding run only, not the far longer
+    # period during which the seeded rows are used, which is when this fires instead.
+    #
+    # Absent in production, which means unrestricted: a deployment that forgot this property must
+    # not silently stop sending all mail.
+    allowed-recipient-domains: ${APP_MAIL_ALLOWED_RECIPIENT_DOMAINS:example.invalid}
     app-name: ${MAIL_APP_NAME}
     frontend-base-url: ${FRONTEND_BASE_URL}
   security:
@@ -94,6 +118,41 @@ app:
       secure: false
   rate-limit:
     endpoint-rules:
+      # Followed from a mail client, sometimes twice by a prefetcher, so this is bounded rather
+      # than tight. Opting out is idempotent, so a replay is harmless.
+      "[/api/v1/support/unsubscribe]":
+        max-attempts: 20
+        window-seconds: 3600
+      # The public support form. Three per hour keyed on the caller's IP, which is the hourly half
+      # of the bound; the daily half of ten is enforced in SupportTicketServiceImpl on the same
+      # Redis primitive, keyed on the submitted address, because a rule here carries one window.
+      #
+      # Deployment prerequisite: IpExtractor trusts X-Forwarded-For only when the direct peer
+      # matches app.security.trusted-proxy-cidrs, which is empty by default. Behind an
+      # unconfigured reverse proxy every caller presents the proxy's address and shares one
+      # bucket, which turns this rule into a global cap of three per hour.
+      "[/api/v1/support/public/tickets]":
+        max-attempts: 3
+        window-seconds: 3600
+      # The appeal link. Generous, because a legitimate appellant may fumble the form more than
+      # once and the token itself is single-use, so the token is the real control here.
+      "[/api/v1/support/appeal]":
+        max-attempts: 10
+        window-seconds: 3600
+      # Reading whether an appeal link is still valid, which the landing screen does on
+      # mount. Generous relative to the appeal itself: a reader may open the link, reload it
+      # and come back to a restored tab, and none of that redeems anything.
+      "[/api/v1/support/appeal/validate]":
+        max-attempts: 30
+        window-seconds: 3600
+      "[/api/v1/support/public/confirm]":
+        max-attempts: 20
+        window-seconds: 3600
+      # The public form's category list. See application.yaml for why this rule exists; the
+      # handler's own limiter is a JVM-wide backstop rather than a per-caller budget.
+      "[/api/v1/support/public/categories]":
+        max-attempts: 60
+        window-seconds: 3600
       "[/api/v1/auth/login]":
         max-attempts: 10
         window-seconds: 60
@@ -155,6 +214,21 @@ app:
         window-seconds: 60
       "[/api/v1/admin/hashtags/search]":
         max-attempts: 60
+        window-seconds: 60
+      # Deliberately looser than prod: a browser walking the hashtag detail page across several
+      # viewports issues these back to back, and throttling that would fail the run for a reason
+      # unrelated to what is being tested.
+      "[/api/v1/hashtags/name/*]":
+        max-attempts: 300
+        window-seconds: 60
+      "[/api/v1/hashtags/*/posts]":
+        max-attempts: 300
+        window-seconds: 60
+      "[/api/v1/hashtags/trending/for-you]":
+        max-attempts: 300
+        window-seconds: 60
+      "[/api/v1/admin/hashtags/*/pin]":
+        max-attempts: 300
         window-seconds: 60
       # Deliberately looser than prod so local scroll/impression testing is not throttled, but
       # still a real ceiling.
