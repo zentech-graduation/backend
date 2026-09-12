@@ -20,25 +20,28 @@ User roles: `user`, `moderator`, `admin`. Architecture: **Modular Monolith**.
 ```text
 app/
 ├── .agents/
-│   ├── rules/                      # BASE.md, CHANGELOG_RULE.md, COMMENT_STYLE.md, DOC_FIRST.md, STRUCT.md
+│   ├── rules/                      # base.md, changelog_rule.md, comment_style.md, doc_first.md,
+│   │                               # git_workflow.md, struct.md, testing.md, workspace.md
 │   └── skills/                     # Skill definitions
 ├── .github/
-│   ├── workflows/                  # pr-lint.yml (Conventional Commits), pr-size.yml (PR size labels)
+│   ├── workflows/                  # pr-lint.yml (Conventional Commits), pr-size.yml (PR size
+│   │                               # labels), sonarcloud.yml (static analysis)
 │   ├── ISSUE_TEMPLATE/             # bug_report.yml, feature_request.yml, config.yml
 │   ├── CODEOWNERS                  # Per-module review ownership
 │   └── pull_request_template.md
 ├── database/
 │   └── schema.sql                  # Reference PostgreSQL final-state schema (not applied by Flyway)
-├── docker/                         # Scaffolded (.gitkeep)
+├── docker/
+│   └── postgres/                   # Dockerfile (postgres:latest + tz alias) and first-boot init SQL
 ├── docs/
 │   └── modules/
 │       ├── GLOBAL_RULES.md         # Cross-module data rules (enum/config table contracts)
-│       └── {module}/DATA_RULES.md  # Per-module data access and write rules (14 modules)
+│       └── {module}/DATA_RULES.md  # Per-module data access and write rules (15 modules)
 ├── src/
 │   ├── main/
 │   │   ├── java/com/app/
 │   │   │   ├── common/             # Cross-cutting infrastructure (see §2)
-│   │   │   ├── modules/            # 14 domain modules (see §2)
+│   │   │   ├── modules/            # 15 domain modules (see §2)
 │   │   │   └── Application.java    # @SpringBootApplication @ConfigurationPropertiesScan
 │   │   └── resources/
 │   │       ├── db/migration/       # Flyway V01-V111 SQL migrations
@@ -50,7 +53,8 @@ app/
 │   │       │   └── retry/          # resilience4j-dev.yml, resilience4j-prod.yml
 │   │       ├── templates/mail/     # email-verification.html, oauth-account-no-password.html,
 │   │       │                       # password-changed.html, password-reset.html, welcome.html,
-│   │       │                       # moderation/ (layout.html + 9 notice variants)
+│   │       │                       # moderation/ (layout.html + 13 notice variants),
+│   │       │                       # campaign/layout.html, support/confirm-support-request.html
 │   │       ├── application.yaml    # Core config (active profile: dev)
 │   │       ├── application-dev.yml # Dev: JPA show-sql, Swagger at /api-docs, relaxed rate limits
 │   │       ├── application-prod.yml# Prod: show-sql off, Swagger disabled
@@ -66,10 +70,12 @@ app/
 │           ├── common/outbox/{repository,service/impl}/                 # Outbox repo IT, publisher/service tests
 │           ├── common/response/                                         # ApiResponse tests
 │           ├── common/security/{filter,jwt,service/impl,util}/          # Security unit tests
-│           └── modules/{admin,auth,comment,hashtag,media,message,notification,post,recommendation,report,social,story,users}/  # Module tests (see §2)
-├── docker-compose.yaml             # Local dev: PostgreSQL, RabbitMQ, Redis, Elasticsearch
+│           └── modules/{admin,auth,comment,hashtag,mail,media,message,notification,post,recommendation,report,social,story,support,users}/  # Module tests (see §2)
+├── docker-compose.yaml             # Local dev: PostgreSQL, RabbitMQ, Redis, Elasticsearch, Gorse
 ├── pom.xml
 ├── mvnw / mvnw.cmd
+├── scripts/                        # regenerate_struct_figures.sh, regenerate_schema_sql.sh,
+│                                   # normalise_schema_dump.py, seed and media helpers
 ├── AGENTS.md                       # Agent instructions (root-level)
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
@@ -172,7 +178,8 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 | `message` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `report` | **Implemented** | api, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 | `admin` | **Implemented** | api, config, controller, converter, dto/{request,response}, entity, enums, mapper, messaging, repository, service/impl |
-| `recommendation` | **Implemented** | api, client/{dto,impl}, config, consumer, controller, converter, dto/response, entity, enums, messaging, repository, service/impl/feed |
+| `recommendation` | **Implemented** | api, client/{dto,impl}, config, consumer, controller, converter, dto/{request,response}, entity, enums, messaging, observability, repository, service/impl/feed |
+| `support` | **Implemented** | config, controller, converter, dto/{request,response}, entity, enums, mapper, repository, service/impl |
 
 **Module responsibilities:**
 - **`auth`**: Login, register, OAuth2 (Google), JWT refresh, password reset, email verification, forgot-password timing equalization, OAuth2 code exchange.
@@ -186,6 +193,7 @@ Extra sub-packages (e.g. `oauth2/`, `validation/`, `storage/`) follow the same p
 - **`comment`**: Threaded comment CRUD (create with idempotency, edit, soft-delete subtree), likes, moderation, and real-time live fanout via WebSocket (STOMP over SockJS); `CommentNotificationConsumer` handles `comment.created.v1` and `comment.liked.v1` for notifications; `CommentLiveFanoutConsumer` fans out all `comment.*` events to connected WebSocket sessions; `CommentMaintenanceScheduler` performs periodic pruning tasks.
 - **`report`**: User-submitted content flag lifecycle (submit, list, triage, status transitions); `ReportServiceImpl` enforces self-report prevention, duplicate suppression, entity existence validation, valid status-machine transitions, and resolution-note requirements for terminal states.
 - **`admin`**: Immutable moderation audit log, atomic moderation actions, the warning and strike discipline ladder, report escalation, the report-anchored moderation view of a reported entity, the administrative hashtag registry, the behavioural activity log read surface, and platform statistics; `AdminServiceImpl` handles ban/unban, suspend/unsuspend, post/comment remove/restore, and report resolve/dismiss, and `AdminHashtagServiceImpl` handles hashtag create/ban/unban/delete — each writing an `admin_actions` row and mutating the target entity in the same transaction. `AdminAuthorizationServiceImpl` holds every actor-and-target rule for both status and role changes. `StatsCollectionJob` fills `platform_stats` one completed bucket at a time and `StatsRollupJob` compacts fine buckets into daily rows and enforces retention; `AdminStatsServiceImpl` and `AdminUserEventServiceImpl` are the administrator-only read paths.
+- **`support`**: The support ticket lifecycle, the appeal route a disciplined account reaches without a session, and account verification requests. `SupportTokenServiceImpl` mints the two single-use link families (`support:token:appeal:`, `support:token:confirmation:`) that authorise exactly one ticket against one audit row without ever minting a session; `SupportTicketServiceImpl` enforces the one-open-ticket guard (V107) and the per-client daily cap on the anonymous public form. See `docs/modules/support/DATA_RULES.md`.
 - **`recommendation`**: Owns `user_events` and the personalized ranked feed. The feed is backed by the external Gorse recommender, reached over REST through `GorseClient`; `RecommendationFeedServiceImpl` runs a Source → Hydrator → Filter → Scorer → Selector pipeline with a `gorse` circuit breaker and degrades to the popularity ranking then the chronological feed. `user_events` has two writers with opposite durability contracts: `UserEventRecorder` produces `session_start`, `search`, and `profile_view` off the request thread, dropping rows rather than failing or extending the caller's request; `RecommendationFeedbackConsumer` turns `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, and `comment.created.v1` into idempotent append-only rows plus Gorse feedback, because those are the canonical record Gorse is rebuilt from. `UserEventsPartitionJob` maintains a rolling window of monthly partitions covering the current month and the next two. See `docs/modules/recommendation/README.md`.
 
 ### Transactional Outbox / Inbox Pattern
@@ -209,9 +217,9 @@ All domain events flow through shared outbox/inbox infrastructure in `common/out
 
 ### Test Coverage
 
-Regenerated from `git ls-files` via `.workspace/scripts/regenerate_struct_md.sh`; 247 test
-classes total. The table below is the script's output verified against the filesystem, not a
-hand-maintained roster.
+Generated by `./scripts/regenerate_struct_figures.sh tests`, which counts what `git ls-files`
+reports under `src/test/java` rather than what this table last said; 264 test classes total.
+Re-run it and paste the output back here whenever a test class is added, moved or renamed.
 
 | Package | Test Classes |
 |---------|-------------|
@@ -247,9 +255,10 @@ hand-maintained roster.
 | `common/web` | `StrictQueryParameterInterceptorTest` |
 | `modules/admin/controller` | `AdminContentControllerIT`, `AdminControllerIT`, `AdminDisciplineControllerIT`, `AdminHashtagControllerIT`, `AdminStatsControllerIT`, `AdminUserControllerIT`, `AdminUserEventControllerIT` |
 | `modules/admin/dto/request` | `AdminUpdateHashtagRequestDeserializationTest` |
+| `modules/admin/messaging` | `ModerationMailEventHandlerTest` |
 | `modules/admin/repository` | `AdminActionKeysetRowLossIT`, `AdminActionRepositoryTest`, `AdminContentMediaStatementCountIT`, `UserWarningRepositoryIT` |
-| `modules/admin/service` | `StatsBucketsTest` |
-| `modules/admin/service/impl` | `AdminAuthorizationServiceImplTest`, `AdminServiceImplTest`, `AdminUserEventServiceImplTest`, `AdminUserServiceImplTest`, `PlatformStatsIT`, `StatsCollectionJobTest`, `SuspensionExpiryServiceImplTest`, `UserDisciplineServiceImplTest` |
+| `modules/admin/service` | `AdminActionRecorderTest`, `StatsBucketsTest` |
+| `modules/admin/service/impl` | `AdminAuthorizationServiceImplTest`, `AdminHashtagServiceImplTest`, `AdminServiceImplTest`, `AdminUserEventServiceImplTest`, `AdminUserServiceImplTest`, `PlatformStatsIT`, `StatsCollectionJobTest`, `SuspensionExpiryServiceImplTest`, `UserDisciplineServiceImplTest` |
 | `modules/auth/controller` | `AuthControllerIT`, `PasswordPolicyIT` |
 | `modules/auth/converter` | `OAuthProviderConverterTest` |
 | `modules/auth/cookie` | `RefreshTokenCookieManagerTest` |
@@ -267,7 +276,8 @@ hand-maintained roster.
 | `modules/hashtag/consumer` | `HashtagIndexSyncConsumerIT`, `HashtagIndexSyncConsumerTest` |
 | `modules/hashtag/controller` | `HashtagControllerIT` |
 | `modules/hashtag/repository` | `HashtagRepositoryIT` |
-| `modules/hashtag/service/impl` | `HashtagLifecycleServiceImplTest`, `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT` |
+| `modules/hashtag/service/impl` | `HashtagLifecycleServiceImplTest`, `HashtagLookupServiceImplTest`, `HashtagPinLifecycleTest`, `HashtagSearchServiceImplTest`, `HashtagServiceImplTest`, `HashtagTrendingServiceImplTest`, `HashtagTrendingSnapshotIT`, `PersonalisedTrendingServiceImplTest` |
+| `modules/mail/service/impl` | `CampaignBodyRendererTest`, `MailRecipientAllowlistTest`, `ModerationMailThrottleImplTest`, `ResendMailSenderTest` |
 | `modules/media/controller` | `MediaControllerIT` |
 | `modules/media/repository` | `MediaAssetRepositoryIT` |
 | `modules/media/service/impl` | `MediaAssetRegistrarTest`, `MediaEventServiceImplTest`, `MediaServiceImplTest` |
@@ -293,15 +303,20 @@ hand-maintained roster.
 | `modules/post/dto/response` | `FeedPostResponseTest` |
 | `modules/post/live` | `PostLikeLiveDeliveryIT`, `PostOnlyWebSocketConfigIT` |
 | `modules/post/repository` | `PostKeysetRowLossIT` |
-| `modules/post/service/impl` | `PostAuthorEmbeddingIT`, `PostLikeEventPublishingIT`, `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostViewerStateIT`, `PostViewerStateServiceImplTest`, `PostViewServiceImplTest`, `PostVisibilityServiceImplTest` |
+| `modules/post/service/impl` | `PostAuthorEmbeddingIT`, `PostByHashtagSearchReaderTest`, `PostByHashtagServiceImplTest`, `PostLikeEventPublishingIT`, `PostLikeServiceImplTest`, `PostResponseAssemblerTest`, `PostSaveServiceImplTest`, `PostSearchServiceImplTest`, `PostServiceImplTest`, `PostViewServiceImplTest`, `PostViewerStateIT`, `PostViewerStateServiceImplTest`, `PostVisibilityServiceImplTest` |
 | `modules/post/validation` | `PostTypeFilterTest` |
 | `modules/recommendation/client/impl` | `GorseClientImplTest` |
+| `modules/recommendation/config` | `RecommendationPropertiesTest` |
 | `modules/recommendation/consumer` | `RecommendationFeedbackConsumerTest` |
+| `modules/recommendation/controller` | `ImpressionIngestIT`, `RecommendationControllerIT` |
+| `modules/recommendation/dto/request` | `ImpressionRequestValidationTest` |
+| `modules/recommendation/repository` | `AffinityProfileDepthIT`, `SuggestionReadFilterIT`, `UserEventRepositoryImplIT`, `UserHashtagAffinityRepositoryIT` |
 | `modules/recommendation/service` | `UserEventRecordingIT` |
-| `modules/recommendation/service/impl` | `RecommendationFeedServiceImplTest`, `UserEventsPartitionJobTest` |
+| `modules/recommendation/service/impl` | `RecommendationFeedServiceImplTest`, `SuggestionServiceImplTest`, `UserEventsPartitionJobTest` |
+| `modules/recommendation/service/impl/feed` | `RecommendationSourceTest` |
 | `modules/report/controller` | `ReportControllerIT` |
 | `modules/report/repository` | `ReportKeysetRowLossIT`, `ReportQueueIndexIT`, `ReportRepositoryIT` |
-| `modules/report/service/impl` | `ReportedTargetServiceImplTest`, `ReportedViewerStateIT`, `ReportServiceImplTest` |
+| `modules/report/service/impl` | `ReportServiceImplTest`, `ReportedTargetServiceImplTest`, `ReportedViewerStateIT` |
 | `modules/social/controller` | `SocialControllerIT` |
 | `modules/social/converter` | `FollowStatusConverterTest` |
 | `modules/social/repository` | `FollowKeysetRowLossIT`, `FollowRepositoryIT` |
@@ -310,10 +325,12 @@ hand-maintained roster.
 | `modules/story/controller` | `StoryControllerIT` |
 | `modules/story/repository` | `StoryViewKeysetRowLossIT` |
 | `modules/story/service/impl` | `StoryLikeServiceImplTest`, `StoryServiceImplTest`, `StoryViewServiceImplTest`, `StoryVisibilityServiceImplTest` |
+| `modules/support/repository` | `SupportTicketConcurrencyIT` |
+| `modules/support/service/impl` | `SupportAuthorizationServiceImplTest`, `SupportTicketServiceImplTest`, `VerificationServiceImplTest` |
 | `modules/users/controller` | `UserControllerIT` |
 | `modules/users/mapper` | `UserMapperTest` |
 | `modules/users/repository` | `UserRepositorySurfaceTest` |
-| `modules/users/service/impl` | `UsernameLookupIT`, `UserProfileViewerStateIT`, `UserSearchIT`, `UserSearchServiceImplTest`, `UserServiceImplTest`, `UserSummaryServiceImplTest`, `UserSummaryServiceIT` |
+| `modules/users/service/impl` | `UserProfileViewerStateIT`, `UserSearchIT`, `UserSearchServiceImplTest`, `UserServiceImplTest`, `UserSummaryServiceIT`, `UserSummaryServiceImplTest`, `UsernameLookupIT` |
 
 ---
 
@@ -321,8 +338,8 @@ hand-maintained roster.
 
 ### Database
 
-- Engine: **PostgreSQL** (docker-compose: `postgres:latest`)
-- Migration: **Flyway** (`out-of-order: false`); 111 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71, V72, V73, V74, V81, V82, V91, V100, V103, V107, V109 and V110 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`; those sixteen sidecars are the only ones in the tree. Every other migration adds no index and runs in the ordinary transactional mode. The numbering has no gaps: V01 through V111 all exist.
+- Engine: **PostgreSQL** (docker-compose builds `./docker/postgres` on the `postgres:latest` base)
+- Migration: **Flyway** (`out-of-order: false`); 111 migrations at `src/main/resources/db/migration/`. V57, V63, V66, V68, V71, V72, V73, V74, V81, V82, V91, V100, V103, V107, V109 and V110 build their indexes `CONCURRENTLY` and carry a `.sql.conf` sidecar setting `executeInTransaction=false`; those sixteen sidecars are the only ones in the tree. Regenerate this paragraph and the table below with `./scripts/regenerate_struct_figures.sh migrations`. Every other migration adds no index and runs in the ordinary transactional mode. The numbering has no gaps: V01 through V111 all exist.
 
 | Migration | Description |
 |-----------|-------------|
@@ -372,45 +389,25 @@ hand-maintained roster.
 | V44 | add_email_case_insensitive_index |
 | V45 | add_comment_edited_at |
 | V46 | add_post_likes_user_keyset_index |
-
 | V47 | add_notification_post_id |
-
 | V48 | add_users_banner_url |
-
 | V49 | add_story_likes |
-
 | V50 | remove_group_conversations |
-
 | V51 | order_follow_counter_locks |
-
 | V52 | add_conversation_participant_customization |
-
 | V53 | add_conversation_manual_unread_flag |
-
 | V54 | add_admin_action_type_values |
-
 | V55 | add_moderation_action_configs_rows |
-
 | V56 | add_users_admin_visibility_columns |
-
 | V57 | add_users_admin_visibility_indexes |
-
 | V58 | add_users_token_epoch |
-
 | V59 | add_posts_status_before_moderation |
-
 | V60 | add_notification_type_warning |
-
 | V61 | add_notification_type_configs_warning_row |
-
 | V62 | create_user_discipline_tables |
-
 | V63 | create_user_discipline_indexes |
-
 | V64 | add_report_status_escalated |
-
 | V65 | add_reports_escalation_columns |
-
 | V66 | add_reports_escalated_index |
 | V67 | add_hashtag_status |
 | V68 | add_hashtag_status_indexes |
@@ -457,50 +454,47 @@ hand-maintained roster.
 | V109 | add_verification_and_suggestion_indexes |
 | V110 | add_user_hashtag_affinity_hashtag_index |
 | V111 | add_campaign_recipient_suppressed_status |
-| V90 | create_user_hashtag_affinity |
-| V91 | add_user_hashtag_affinity_user_score_index |
-| V92 | add_hashtags_pin_columns |
-| V93 | add_admin_action_type_hashtag_pin |
-| V94 | add_moderation_action_configs_hashtag_pin |
-| V95 | add_comments_stories_admin_removed_at |
-| V96 | create_email_deliveries |
-| V97 | create_support_tickets |
-| V98 | add_support_enum_values |
-| V99 | add_support_config_rows |
-| V100 | add_support_indexes |
-| V101 | create_mail_campaigns |
-| V102 | add_campaign_config_row |
-| V103 | add_campaign_indexes |
 
 - Reference schema: `database/schema.sql` (authoritative final-state; not applied by Flyway)
 - Extensions: `pgcrypto` (UUID gen), `pg_trgm` (fuzzy username search), `btree_gin` (composite GIN indexes)
 
 PostgreSQL enum types:
 
+Generated by `./scripts/regenerate_struct_figures.sh enums`, and reproduced from
+`database/schema.sql`, which is itself regenerated from the migration set. Adding a value
+means a migration: these are domain primitives, not configuration.
+
 | Enum | Values |
 |------|--------|
-| `user_role` | `user`, `moderator`, `admin` |
-| `user_status` | `active`, `suspended`, `deactivated`, `banned` |
-| `post_status` | `draft`, `published`, `archived`, `removed` |
-| `post_type` | `image`, `video`, `carousel`, `text` |
-| `media_type` | `image`, `video` |
-| `follow_status` | `pending`, `accepted` |
-| `hashtag_status` | `active`, `banned`, `deleted` (V67) |
-| `stat_granularity` | `half_hour`, `day` (V70) |
-| `story_type` | `image`, `video` |
-| `message_type` | `text`, `image`, `video`, `post_share`, `story_share` |
-| `report_type` | `post`, `comment`, `user`, `story`, `message` |
-| `report_status` | `pending`, `reviewing`, `resolved`, `dismissed`, `escalated` (V64) |
-| `report_reason` | `spam`, `nudity`, `violence`, `hate_speech`, `harassment`, `false_information`, `scam`, `other` |
-| `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message`, `warning` (V60) |
-| `oauth_provider` | `google`, `facebook`, `apple` |
-| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `force_logout`, `revoke_session` (V79), `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag` (V54), `remove_story`, `restore_story`, `remove_message`, `restore_message` (V75); 27 values, every value has a caller. `revoke_session` ends exactly one session, distinct from `force_logout` which ends every session on the account |
-| `event_type` | `post_view`, `post_like`, `post_unlike`, `post_save`, `post_unsave`, `post_share`, `post_comment`, `story_view`, `story_reply`, `profile_view`, `profile_follow`, `profile_unfollow`, `search`, `hashtag_click`, `comment_like`, `comment_reply`, `message_send`, `session_start`, `session_end`, `app_open` |
+| `admin_action_type` | `ban_user`, `unban_user`, `suspend_user`, `unsuspend_user`, `remove_post`, `restore_post`, `remove_comment`, `restore_comment`, `resolve_report`, `dismiss_report`, `change_user_role`, `warn_user`, `revoke_warning`, `issue_strike`, `revoke_strike`, `escalate_report`, `force_logout`, `create_hashtag`, `edit_hashtag`, `ban_hashtag`, `unban_hashtag`, `delete_hashtag`, `remove_story`, `restore_story`, `remove_message`, `restore_message`, `revoke_session`, `pin_hashtag`, `unpin_hashtag`, `respond_support_ticket`, `reject_support_ticket`, `escalate_support_ticket`, `send_mail_campaign`, `grant_verification`, `reject_verification`, `revoke_verification` (36 values). Every value has a caller. `revoke_session` ends exactly one session, distinct from `force_logout`, which ends every session on the account. |
+| `email_delivery_status` | `pending`, `sent`, `failed`, `throttled`, `skipped` (5 values). |
+| `event_type` | `post_view`, `post_like`, `post_unlike`, `post_save`, `post_unsave`, `post_share`, `post_comment`, `story_view`, `story_reply`, `profile_view`, `profile_follow`, `profile_unfollow`, `search`, `hashtag_click`, `comment_like`, `comment_reply`, `message_send`, `session_start`, `session_end`, `app_open` (20 values). |
+| `follow_status` | `pending`, `accepted` (2 values). |
+| `hashtag_status` | `active`, `banned`, `deleted` (3 values). |
+| `mail_campaign_recipient_status` | `pending`, `queued`, `skipped_opted_out`, `failed`, `skipped_not_allowed` (5 values). |
+| `mail_campaign_status` | `draft`, `scheduled`, `sending`, `sent`, `cancelled`, `failed` (6 values). |
+| `media_type` | `image`, `video` (2 values). |
+| `message_type` | `text`, `image`, `video`, `post_share`, `story_share` (5 values). |
+| `notification_type` | `like_post`, `like_comment`, `comment_post`, `reply_comment`, `follow`, `follow_request`, `mention_post`, `mention_comment`, `story_view`, `message`, `warning`, `post_removed`, `report_post_removed`, `post_restored`, `report_dismissed`, `support_ticket_update` (16 values). |
+| `oauth_provider` | `google`, `facebook`, `apple` (3 values). |
+| `post_status` | `draft`, `published`, `archived`, `removed` (4 values). |
+| `post_type` | `image`, `video`, `carousel`, `text` (4 values). |
+| `report_reason` | `spam`, `nudity`, `violence`, `hate_speech`, `harassment`, `false_information`, `scam`, `other` (8 values). |
+| `report_status` | `pending`, `reviewing`, `resolved`, `dismissed`, `escalated` (5 values). |
+| `report_type` | `post`, `comment`, `user`, `story`, `message` (5 values). |
+| `stat_granularity` | `half_hour`, `day` (2 values). |
+| `story_type` | `image`, `video` (2 values). |
+| `support_category` | `appeal_ban`, `appeal_suspension`, `appeal_warning_strike`, `appeal_content_removal`, `account_access`, `account_data`, `bug_report`, `safety_concern`, `other`, `verification_request` (10 values). |
+| `support_source` | `authenticated`, `signed_link`, `public_form` (3 values). |
+| `support_ticket_status` | `pending_confirmation`, `open`, `in_progress`, `escalated`, `answered`, `rejected` (6 values). |
+| `user_role` | `user`, `moderator`, `admin` (3 values). |
+| `user_status` | `active`, `suspended`, `deactivated`, `banned` (4 values). |
+| `verification_revocation_actor` | `moderator`, `system` (2 values). |
 
 ### Cache — Redis
 
 - docker-compose: `redis:7-alpine`
-- Implemented: `RedisConfig`, `RateLimitProperties`, `TokenBlacklistServiceImpl`, `RefreshTokenServiceImpl`, `RateLimiterServiceImpl`, `OAuth2ExchangeCodeServiceImpl` (Lua scripts for atomic ops)
+- Implemented: `RedisConfig`, `RateLimitProperties`, `TokenBlacklistServiceImpl`, `RefreshTokenServiceImpl`, `RateLimiterServiceImpl`, `OAuth2ExchangeCodeServiceImpl`, `WebSocketTicketServiceImpl`, `CommentPresenceServiceImpl`, `PersonalisedTrendingServiceImpl`, `ModerationMailThrottleImpl`, `SupportTokenServiceImpl`, `SupportTicketServiceImpl` (Lua scripts for atomic ops)
 - Key patterns in use:
 
 | Key pattern | TTL | Owner |
@@ -517,6 +511,15 @@ PostgreSQL enum types:
 | `support:token:appeal:subject:{adminActionId}` | 30d (reverse index) | `SupportTokenServiceImpl` |
 | `support:token:confirmation:{sha256}` | 24h | `SupportTokenServiceImpl` |
 | `support:token:confirmation:subject:{ticketId}` | 24h (reverse index) | `SupportTokenServiceImpl` |
+| `auth:ratelimit:support:public:daily:{email}` | 24h sliding, 10 per address | `SupportTicketServiceImpl` |
+| `comment:watchers:{postId}` | 300s | `CommentPresenceServiceImpl` |
+| `comment:slowmode:{postId}:{userId}` | the post's slow-mode interval | `CommentServiceImpl` |
+| `hashtag:trending:personalised:{userId}:{page}:{size}` | 10m | `PersonalisedTrendingServiceImpl` |
+| `auth:ws-ticket:{ticket}` | 30s | `WebSocketTicketServiceImpl` |
+
+`./scripts/regenerate_struct_figures.sh redis` lists every key literal declared under
+`src/main/java` and the class that declares it, so a new prefix added without a row here shows up
+as a difference. It cannot derive a TTL; read that from the declaring class.
 
 The two support token families are keyed on the audit row and the ticket respectively rather than on
 the account, because one account may hold appealable decisions against several actions at once and
@@ -525,7 +528,7 @@ The appeal window is thirty days because the notice arrives unannounced and is r
 
 ### Message Broker — RabbitMQ
 
-- docker-compose: `rabbitmq:latest` (port 5672)
+- docker-compose: `rabbitmq:4-management` (5672 broker, 15672 management UI, both bound to loopback)
 - Topology declared in `RabbitMqTopologyConfig`; publisher customized in `RabbitMqPublisherConfig`
 
 **Exchanges:**
@@ -535,6 +538,7 @@ The appeal window is thirty days because the notice arrives unannounced and is r
 | `social.events` | Topic | yes | Primary event bus for all domain events |
 | `social.events.dlx` | Topic | yes | Dead-letter exchange for failed messages |
 | `comment.live.events` | Fanout | yes | Live comment fanout tier; receives all `comment.*` events via exchange-to-exchange binding from `social.events` |
+| `message.live.events` | Fanout | yes | Live message fanout tier; receives all `message.*` events via exchange-to-exchange binding from `social.events` |
 | `notification.live.events` | Fanout | yes | Live notification fanout tier; receives all `notification.*` events via exchange-to-exchange binding from `social.events` |
 | `post.live.events` | Fanout | yes | Live post fanout tier; receives all `post.live.*` events via exchange-to-exchange binding from `social.events` |
 
@@ -550,8 +554,12 @@ The appeal window is thirty days because the notice arrives unannounced and is r
 | `comment.notification.queue` | `comment.notification.dlq` | `comment.notification.dead-letter` |
 | `story.notification.queue` | `story.notification.dlq` | `story.notification.dead-letter` |
 | `recommendation.feedback.queue` | `recommendation.feedback.dlq` | `recommendation.feedback.dead-letter` |
-
+| `message.notification.queue` | `message.notification.dlq` | `message.notification.dead-letter` |
 | `admin.notification.queue` | `admin.notification.dlq` | `admin.notification.dead-letter` |
+
+`AUDIT_LOG_QUEUE`, `MODERATION_QUEUE` and `SEARCH_INDEX_QUEUE` are name constants only: they are
+declared in `RabbitMqTopologyConfig` and reserved, and no `@Bean` declares them, so the broker
+never sees them.
 
 **Bindings (queue → `social.events`):**
 
@@ -570,9 +578,11 @@ The appeal window is thirty days because the notice arrives unannounced and is r
 | `comment.notification.queue` | `comment.liked.v1` | `CommentRabbitBindingConfig` |
 | `story.notification.queue` | `story.viewed.v1` | `StoryRabbitBindingConfig` |
 | `recommendation.feedback.queue` | `post.liked.v1`, `post.saved.v1`, `post.viewed.v1`, `comment.created.v1` | `RecommendationRabbitBindingConfig` |
+| `message.notification.queue` | `message.sent.v1` | `MessageRabbitBindingConfig` |
 | `admin.notification.queue` | `user.warned.v1` | `AdminRabbitBindingConfig` |
 | `moderation.mail.queue` | `admin.moderation-notice.requested.v1` | `AdminRabbitBindingConfig` |
 | `comment.live.events` (exchange) | `comment.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
+| `message.live.events` (exchange) | `message.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `notification.live.events` (exchange) | `notification.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 | `post.live.events` (exchange) | `post.live.#` (wildcard, exchange-to-exchange) | `RabbitMqTopologyConfig` |
 
@@ -649,7 +659,7 @@ buckets on the key that matched rather than on the concrete request path.
 | Observability | Micrometer + Prometheus, datasource-micrometer 2.2.1, Spring Actuator |
 | Formatting | Spotless 2.46.1 (Google AOSP); run `./mvnw spotless:apply` |
 | Testing | JUnit 5, Testcontainers 1.21.4 (postgresql, elasticsearch), Spring Boot test starters |
-| CI/CD | GitHub Actions (`.github/workflows/pr-lint.yml`, `pr-size.yml`) |
+| CI/CD | GitHub Actions (`.github/workflows/pr-lint.yml`, `pr-size.yml`, `sonarcloud.yml`) |
 
 ---
 
