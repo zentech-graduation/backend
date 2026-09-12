@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `scripts/regenerate_schema_sql.sh`, which rebuilds `database/schema.sql` from a clean Flyway run and proves the result by replaying it into a second database and comparing both catalogs.
+- `scripts/regenerate_struct_figures.sh`, which regenerates the migration table, the module list, the test-class table, the RabbitMQ topology, the Redis key prefixes and the declared versions from `git ls-files`.
 - Accounts can request a verified badge in one of eight categories, choosing a category and the name they claim and supplying at least three pieces of evidence; the request is refused with its own error code below that floor. No identity documents are collected and the form has no file upload, deliberately.
 - Moderators as well as administrators can approve, reject and revoke verification. Every decision writes a moderation audit row, mails the requester through the outbox, and commits with the badge change in one transaction.
 - A verified badge is withdrawn automatically when an account is suspended or banned, and retained when it is deactivated. An automatic withdrawal is recorded as a system action so the audit log distinguishes it from a decision a moderator made, and it never creates a support ticket.
@@ -14,6 +16,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Suggestions can be dismissed permanently, which changes no other surface, and an account can opt out of being suggested to other people.
 
 ### Changed
+- `database/schema.sql` is regenerated from the V01-V111 migration set and carries the nine tables it was missing, including the mail campaign, verification and suggestion tables; its header states that it is generated, from what, and at which migration version.
+- The structure document's migration table, enum table, test-class table, RabbitMQ topology and Redis key table are generated from the tree rather than maintained by hand, and it no longer cites a regeneration script that does not exist.
+- The backend now carries the same single-line commit rule the frontend had, and the scope block in `git_workflow.md` states what `pr-lint` actually checks - the pull request title, not commit messages - in place of a dated audit snapshot.
+- `comment_style.md` drops an "AI Module Specifics" section describing cache keys for a module this project does not have, and names GitHub issues as the `TODO` reference format in place of an unused `VR-NNN` tracker prefix.
+- `CONTRIBUTING.md` describes what the `pr-size` workflow does, which is label a pull request and warn on it, rather than claiming it blocks above 1000 changed lines.
+- The Flyway comments in `application.yaml` name the V01-V111 range and all sixteen migrations that build indexes concurrently, while still pointing at the V57 incident the lock setting exists for.
 - A pending verification request no longer blocks an account from opening a support ticket, and an open support ticket no longer blocks a verification request; the one-open-ticket guard now holds one ticket per lane instead of one across both.
 - The public identity summary embedded in every response that names an account now carries the account's verification category, so a client can render which category a badge is for.
 - The support and moderation mail schema changes now apply after the hashtag interest work rather than colliding with it; the full migration set applies cleanly to an empty database and the application starts against it under schema validation.
