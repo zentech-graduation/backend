@@ -689,7 +689,7 @@ Implemented in `common/security/` and `modules/auth/`:
 - **Responses**: wrap all responses in `ApiResponse<T>`; use `PageResponse<T>` for offset pagination, `CursorPageResponse<T>` for cursor pagination
 - **Async**: virtual threads enabled globally
 - **Logging**: `timestamp | level | thread | traceId | logger | message`; rolling file 50 MB, 10 files, 500 MB cap
-- **Comments**: English only; see `.agents/rules/COMMENT_STYLE.md`
+- **Comments**: English only; see `.claude/rules/comment_style.md` (mirrored at `.agents/rules/comment_style.md`)
 
 ---
 
