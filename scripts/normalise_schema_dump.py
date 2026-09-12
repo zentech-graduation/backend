@@ -337,7 +337,7 @@ def split_columns(body: str) -> "tuple[str, list[str], str]":
 
 
 COLUMN_SPLIT = re.compile(
-    r"^(?P<name>[a-z_0-9]+)\s+(?P<type>(?:VARCHAR|CHAR)\(\d+\)|[A-Za-z_][A-Za-z_ ]*?(?:\[\])?(?:\(\d+(?:,\s*\d+)?\))?)(?P<rest>\s+.*)?$"
+    r"^(?P<name>\"?[a-z_0-9]+\"?)\s+(?P<type>(?:VARCHAR|CHAR)\(\d+\)|[A-Za-z_][A-Za-z_ ]*?(?:\[\])?(?:\(\d+(?:,\s*\d+)?\))?)(?P<rest>\s+.*)?$"
 )
 
 

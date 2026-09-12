@@ -466,7 +466,7 @@ CREATE TABLE post_media (
     id             UUID        NOT NULL DEFAULT gen_random_uuid(),
     post_id        UUID        NOT NULL,
     media_asset_id UUID        NOT NULL,
-    "position" SMALLINT DEFAULT 0 NOT NULL,
+    "position"     SMALLINT    NOT NULL DEFAULT 0,
     alt_text       TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (id),
